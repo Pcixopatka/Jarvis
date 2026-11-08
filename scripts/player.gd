@@ -351,6 +351,8 @@ func add_xp(value: int) -> void:
 		skill_points += Data.SKILL_POINTS_PER_LEVEL
 		perk_points += Data.PERK_POINTS_PER_LEVEL
 		heal(max_hp * 0.25)
+		main.audio.play("levelup", 0.0)
+		main.fx.ring(global_position, Color(1.0, 0.85, 0.3), 32, 420, 6, 0.6)
 		leveled_up.emit(level)
 
 
@@ -433,6 +435,9 @@ func attack() -> void:
 	swing_time = 0.18
 	swing_duration = 0.18
 	swing_full = false
+	main.audio.play("swing", 0.15, -4.0)
+	var hits := 0
+	var crit_any := false
 	for e in _alive_enemies():
 		var to: Vector2 = e.global_position - global_position
 		var dist := to.length()
@@ -441,7 +446,13 @@ func attack() -> void:
 		if dist < 1.0 or absf(facing.angle_to(to)) <= attack_arc * 0.5:
 			var r := _roll(1.0)
 			hit(e, r[0], to.normalized() * 280.0 * weapon["kb"], r[1])
-	main.shake(2.0 * weapon["kb"])
+			hits += 1
+			crit_any = crit_any or r[1]
+	if hits > 0:
+		main.audio.play("crit" if crit_any else "hit", 0.12)
+		main.shake(2.5 * weapon["kb"])
+		if crit_any:
+			main.hitstop(0.05)
 
 
 func dodge() -> void:
@@ -453,6 +464,8 @@ func dodge() -> void:
 	dodge_time_left = 0.18
 	dodge_hits.clear()
 	invuln = maxf(invuln, 0.32)
+	main.audio.play("dodge", 0.1)
+	main.fx.burst(global_position + Vector2(0, 16), Color(0.75, 0.7, 0.55, 0.7), 10, 160, 7, 0.45, 0, (-dodge_dir).angle(), 1.4)
 
 
 func _dash_strike() -> void:
@@ -519,6 +532,8 @@ func _whirl() -> bool:
 	else:
 		_whirl_hit(1.0, 480.0)
 	main.float_text(global_position + Vector2(0, -60), "Буревій!" if storm else "Вихор!", Color(0.6, 0.85, 1.0))
+	main.audio.play("whirl")
+	main.fx.ring(global_position, Color(0.7, 0.9, 1.0, 0.8), 28, whirl_reach() * 2.2, 5, 0.35)
 	return true
 
 
@@ -552,6 +567,9 @@ func _lightning() -> bool:
 			e.slow_timer = 2.0
 	main.spawn_bolt(pts)
 	main.shake(5.0)
+	main.audio.play("lightning")
+	for i in range(1, pts.size()):
+		main.fx.burst(pts[i], Color(0.75, 0.9, 1.0), 8, 260, 3.5, 0.3)
 	return true
 
 
@@ -567,6 +585,9 @@ func _musket() -> bool:
 		var r := _roll(m * (0.6 if angles.size() > 1 else 1.0))
 		main.spawn_bullet(global_position + Vector2(0, -10) + dir * 30.0, dir.rotated(a), r[0], r[1])
 	main.shake(4.0)
+	main.audio.play("musket")
+	main.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(0.85, 0.85, 0.8, 0.6), 14, 140, 9, 0.8, -40, dir.angle(), 0.9)
+	main.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(1.0, 0.8, 0.3), 6, 300, 4, 0.15, 0, dir.angle(), 0.6)
 	return true
 
 
@@ -582,6 +603,8 @@ func take_damage(amount: float, source = null) -> void:
 	hurt_flash = 0.2
 	invuln = 0.35
 	main.shake(7.0)
+	main.audio.play("hurt", 0.1)
+	main.on_player_hurt()
 	main.float_text(global_position + Vector2(0, -50), str(int(amount)), Color(1.0, 0.35, 0.3))
 	if hp <= 0.0:
 		if pk("unbreak") > 0 and unbreak_ready:
@@ -602,6 +625,8 @@ func heal(amount: float, show: bool = true) -> void:
 	var gained := int(hp - before)
 	if show and gained > 0:
 		main.float_text(global_position + Vector2(0, -50), "+%d" % gained, Color(0.4, 1.0, 0.45))
+		main.audio.play("heal", 0.05, -4.0)
+		main.fx.burst(global_position + Vector2(0, -10), Color(0.5, 1.0, 0.5), 10, 90, 4, 0.7, -80)
 
 
 # ================= Малювання козака (без зовнішніх спрайтів) =================

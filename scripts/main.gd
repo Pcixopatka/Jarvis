@@ -20,6 +20,16 @@ const BoltScript := preload("res://scripts/bolt.gd")
 const GroundScript := preload("res://scripts/ground.gd")
 const JoystickScript := preload("res://scripts/joystick.gd")
 const ActionButtonScript := preload("res://scripts/action_button.gd")
+const AudioScript := preload("res://scripts/audio.gd")
+const FxScript := preload("res://scripts/fx.gd")
+const AmbientScript := preload("res://scripts/ambient.gd")
+const SETTINGS_PATH := "user://settings.cfg"
+
+# Тон освітлення для кожного ландшафту (CanvasModulate)
+const BIOME_TINT := {
+	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
+	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
+}
 
 enum State { MENU, MAP, CITY, PLAYING, CHARACTER, PAUSED, DEAD }
 
@@ -32,6 +42,20 @@ var ground
 var entities: Node2D
 var effects: Node2D
 var companion_nodes := []
+var audio
+var fx
+var ambient
+var canvas_mod: CanvasModulate
+var lights: Node2D
+var torch: PointLight2D
+var light_tex: GradientTexture2D
+var _hitstop_active := false
+var _time := 0.0
+
+# Очищення дикої місцевості
+var field_kills := 0
+var field_goal := 0
+var field_cleared := false
 
 # Поточна локація
 var loc_id := ""
@@ -69,6 +93,10 @@ var map_btn: Button
 var map_view
 var map_panel: PanelContainer
 var screen_root: Control = null
+var vignette: TextureRect
+var hint_panel: PanelContainer
+var hint_label: Label
+var _hint_tween: Tween
 var overlay: ColorRect
 var overlay_box: VBoxContainer
 
@@ -85,6 +113,13 @@ var smith_msg_color := Color.WHITE
 func _ready() -> void:
 	randomize()
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	audio = AudioScript.new()
+	add_child(audio)
+	_load_settings()
+	# Клацання для всіх кнопок інтерфейсу
+	get_tree().node_added.connect(func(n):
+		if n is BaseButton:
+			n.pressed.connect(func(): audio.play("click", 0.05, -6.0)))
 	_build_world()
 	_build_hud()
 	get_viewport().size_changed.connect(_layout)
@@ -106,6 +141,32 @@ func _build_world() -> void:
 	effects.z_index = 10
 	effects.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(effects)
+	lights = Node2D.new()
+	lights.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(lights)
+	fx = FxScript.new()
+	fx.z_index = 11
+	fx.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(fx)
+	ambient = AmbientScript.new()
+	ambient.main = self
+	ambient.z_index = 12
+	ambient.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(ambient)
+	canvas_mod = CanvasModulate.new()
+	canvas_mod.color = Color.WHITE
+	add_child(canvas_mod)
+	light_tex = GradientTexture2D.new()
+	light_tex.width = 256
+	light_tex.height = 256
+	light_tex.fill = GradientTexture2D.FILL_RADIAL
+	light_tex.fill_from = Vector2(0.5, 0.5)
+	light_tex.fill_to = Vector2(1.0, 0.5)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	g.add_point(0.45, Color(1, 1, 1, 0.55))
+	light_tex.gradient = g
 	camera = Camera2D.new()
 	camera.process_mode = Node.PROCESS_MODE_PAUSABLE
 	camera.position_smoothing_enabled = true
@@ -123,6 +184,14 @@ func _new_hero(data: Dictionary) -> void:
 	if not data.is_empty():
 		player.from_dict(data)
 	entities.add_child(player)
+	torch = PointLight2D.new()
+	torch.texture = light_tex
+	torch.texture_scale = 4.5
+	torch.color = Color(1.0, 0.8, 0.55)
+	torch.energy = 1.2
+	torch.enabled = false
+	torch.position = Vector2(0, -20)
+	player.add_child(torch)
 	player.died.connect(_on_player_died)
 	player.leveled_up.connect(_on_level_up)
 
@@ -131,6 +200,10 @@ func _set_world_visible(v: bool) -> void:
 	ground.visible = v
 	entities.visible = v
 	effects.visible = v
+	fx.visible = v
+	ambient.visible = v
+	lights.visible = v
+	canvas_mod.visible = v
 
 
 func _new_game() -> void:
@@ -174,6 +247,8 @@ func enter_map() -> void:
 	_clear_screen()
 	_close_overlay()
 	state = State.MAP
+	Engine.time_scale = 1.0
+	audio.play_music("calm")
 	get_tree().paused = true
 	_set_world_visible(false)
 	controls.visible = false
@@ -188,12 +263,15 @@ func enter_map() -> void:
 	_build_map_panel()
 	_update_hud(0.0)
 	save_game()
+	hint("map", "Торкнись місця на мапі. «!» позначає твоє завдання. Почни з Дикого Поля поруч із Січчю.")
 
 
 func enter_city(id: String) -> void:
 	_clear_combat()
 	_close_overlay()
 	state = State.CITY
+	Engine.time_scale = 1.0
+	audio.play_music("calm")
 	get_tree().paused = true
 	city_id = id
 	map_here = id
@@ -209,6 +287,7 @@ func enter_city(id: String) -> void:
 	smith_msg = ""
 	_build_city()
 	save_game()
+	hint("city", "Це місто. На вкладці «Завдання» візьми доручення, у «Крамниці» купи спорядження, а потім натисни «На мапу».")
 
 
 func leave_city() -> void:
@@ -234,6 +313,11 @@ func enter_location(id: String) -> void:
 	get_tree().paused = false
 	player.unbreak_ready = true
 	spawn_timer = 1.0
+	field_kills = 0
+	field_goal = 20 + loc["level"] * 3
+	field_cleared = false
+	audio.play_music("battle")
+	hint("combat", "Ліва частина екрана — рух. Тримай «Удар» — козак сам б'є найближчу нечисть. Коли ворог червоніє — він замахується: тисни «Перекид»!")
 	if loc["type"] == "dungeon":
 		_spawn_room()
 	else:
@@ -254,6 +338,7 @@ func _setup_arena() -> void:
 		arena = Rect2(-1400, -1400, 2800, 2800)
 		player.position = Vector2.ZERO
 	ground.setup(arena, loc["biome"], hash(loc_id) + room * 31)
+	_setup_atmosphere(loc["biome"])
 	camera.limit_left = int(arena.position.x - 120)
 	camera.limit_top = int(arena.position.y - 160)
 	camera.limit_right = int(arena.end.x + 120)
@@ -274,6 +359,7 @@ func _clear_combat() -> void:
 	for c in effects.get_children():
 		c.queue_free()
 	portal = null
+	fx.clear()
 
 
 func _spawn_companions() -> void:
@@ -312,8 +398,16 @@ func on_companion_down(c) -> void:
 # ======================= Бій =======================
 
 func _process(delta: float) -> void:
+	_time += delta
+	if vignette:
+		var low: float = 0.0
+		if state == State.PLAYING and player and player.alive and player.hp < player.max_hp * 0.3:
+			low = 0.25 + 0.15 * sin(_time * 6.0)
+		vignette.modulate.a = maxf(move_toward(vignette.modulate.a, 0.0, delta * 1.5), low)
 	if state != State.PLAYING:
 		return
+	if torch.enabled:
+		torch.energy = 1.15 + sin(_time * 13.0) * 0.05 + randf() * 0.06
 	camera.global_position = player.global_position
 	if shake_strength > 0.0:
 		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_strength
@@ -334,6 +428,9 @@ func _process(delta: float) -> void:
 
 
 func _update_field(delta: float) -> void:
+	if field_cleared:
+		_check_portal()
+		return
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		spawn_timer = maxf(0.6, 1.5 - loc["level"] * 0.05)
@@ -364,6 +461,7 @@ func _update_dungeon() -> void:
 		else:
 			_dungeon_complete()
 	if portal != null and is_instance_valid(portal) and player.global_position.distance_to(portal.global_position) < 60.0:
+		audio.play("portal", 0.0)
 		_collect_all()
 		if room < loc["rooms"]:
 			room += 1
@@ -371,6 +469,32 @@ func _update_dungeon() -> void:
 			_spawn_room()
 		else:
 			enter_map()
+
+
+func _check_portal() -> void:
+	if portal != null and is_instance_valid(portal) and player.global_position.distance_to(portal.global_position) < 60.0:
+		audio.play("portal", 0.0)
+		_collect_all()
+		enter_map()
+
+
+func _field_cleared() -> void:
+	field_cleared = true
+	world.cleared[loc_id] = world.cleared.get(loc_id, 0) + 1
+	var g: int = 25 * loc["level"]
+	player.add_gold(g)
+	audio.play("quest", 0.0)
+	show_banner("%s очищено!\n+%d дукатів і скарб" % [loc["name"], g], UI.GOLD)
+	var pos: Vector2 = player.global_position + Vector2(0, -120)
+	for i in 2:
+		spawn_pickup(pos, "item", 0, Data.gen_item(loc["level"], Data.roll_rarity(loc["level"], 1)))
+	for i in 6:
+		spawn_pickup(pos, "coin", loc["level"] * 2)
+	portal = PortalScript.new()
+	portal.label = "На мапу"
+	portal.position = (player.global_position + Vector2(0, -260)).clamp(arena.position + Vector2(80, 120), arena.end - Vector2(80, 60))
+	entities.add_child(portal)
+	hint("cleared", "Місцевість очищено! Збери скарб і зайди в портал, щоб повернутися на мапу.")
 
 
 func _spawn_portal(text: String) -> void:
@@ -385,6 +509,7 @@ func _dungeon_complete() -> void:
 	var g: int = 40 * loc["level"]
 	player.add_gold(g)
 	show_banner("%s очищено!\n+%d дукатів" % [loc["name"], g], UI.GOLD)
+	audio.play("quest", 0.0)
 	_spawn_portal("Вихід")
 
 
@@ -413,6 +538,10 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	e.position = pos
 	e.setup(kind, level, boss)
 	entities.add_child(e)
+	if e.is_boss:
+		audio.play("roar", 0.0)
+		shake(10.0)
+		hint("boss", "Бос! Червоні зони на землі — місця його удару. Виходь із них, поки вони не заповнились!")
 
 
 func _new_projectile(pos: Vector2, vel: Vector2, dmg: float):
@@ -486,6 +615,17 @@ func alive_enemy_count() -> int:
 
 
 func on_enemy_killed(e) -> void:
+	audio.play("enemy_die", 0.15, -3.0)
+	fx.burst(e.global_position + Vector2(0, -10), Color(0.25, 0.2, 0.25, 0.8), 12 if not e.is_boss else 40, 180 if not e.is_boss else 320, 9, 0.6, -60)
+	if e.is_boss:
+		fx.ring(e.global_position, Color(1.0, 0.8, 0.3), 40, 600, 8, 0.7)
+		hitstop(0.15)
+	else:
+		hitstop(0.03)
+	if loc.get("type", "") == "field" and not field_cleared:
+		field_kills += 1
+		if field_kills >= field_goal:
+			_field_cleared()
 	for m in world.on_kill(e.kind):
 		float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
 	var pos: Vector2 = e.global_position
@@ -511,6 +651,8 @@ func on_item_picked(item: Dictionary) -> void:
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	if player.add_item(item):
 		float_text(player.global_position + Vector2(0, -70), item["name"], col)
+		audio.play("item", 0.0)
+		hint("item", "Знайдено річ! Вдягни її: кнопка «Козак» → вкладка «Спорядження».")
 	else:
 		var g := Data.sell_price(item)
 		player.gold += g
@@ -581,6 +723,7 @@ func _try_leave() -> void:
 
 func _on_level_up(lvl: int) -> void:
 	show_banner("Рівень %d!\nВідкрий «Козак», щоб прокачатися" % lvl, UI.GOLD)
+	hint("levelup", "Новий рівень! Натисни «Козак» угорі: вклади очки в характеристики, вміння й перки.")
 
 
 func _on_player_died() -> void:
@@ -742,6 +885,42 @@ func _build_hud() -> void:
 	banner.z_index = 5
 	ui_root.add_child(banner)
 
+	vignette = TextureRect.new()
+	var vg := GradientTexture2D.new()
+	vg.width = 256
+	vg.height = 256
+	vg.fill = GradientTexture2D.FILL_RADIAL
+	vg.fill_from = Vector2(0.5, 0.5)
+	vg.fill_to = Vector2(1.25, 0.5)
+	var vgrad := Gradient.new()
+	vgrad.set_color(0, Color(0.8, 0.0, 0.0, 0.0))
+	vgrad.set_color(1, Color(0.75, 0.0, 0.0, 0.75))
+	vgrad.add_point(0.72, Color(0.75, 0.0, 0.0, 0.0))
+	vg.gradient = vgrad
+	vignette.texture = vg
+	vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vignette.modulate.a = 0.0
+	ui_root.add_child(vignette)
+	ui_root.move_child(vignette, 0)
+
+	hint_panel = PanelContainer.new()
+	hint_panel.anchor_left = 0.5
+	hint_panel.anchor_right = 0.5
+	hint_panel.offset_left = -330
+	hint_panel.offset_right = 330
+	hint_panel.offset_top = 84
+	hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_panel.visible = false
+	hint_panel.z_index = 5
+	hint_panel.add_theme_stylebox_override("panel", UI.style(Color(0.1, 0.08, 0.06, 0.9), Color(1.0, 0.8, 0.3)))
+	hint_label = UI.label("", 20, UI.TEXT, false)
+	hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint_label.custom_minimum_size = Vector2(620, 0)
+	hint_panel.add_child(hint_label)
+	ui_root.add_child(hint_panel)
+
 	overlay = ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0.72)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -827,7 +1006,12 @@ func _update_hud(delta: float) -> void:
 	quest_label.text = "\n".join(ql)
 	if state == State.PLAYING:
 		loc_label.text = loc["name"]
-		sub_label.text = ("Кімната %d/%d" % [room, loc["rooms"]]) if loc["type"] == "dungeon" else ("Рівень місцевості %d" % loc["level"])
+		if loc["type"] == "dungeon":
+			sub_label.text = "Кімната %d/%d" % [room, loc["rooms"]]
+		elif field_cleared:
+			sub_label.text = "Очищено! Портал веде на мапу"
+		else:
+			sub_label.text = "Рівень %d  •  Зачистка: %d/%d" % [loc["level"], field_kills, field_goal]
 	else:
 		loc_label.text = ""
 		sub_label.text = ""
@@ -959,6 +1143,7 @@ func city_do(action: String, arg) -> void:
 			if not q.is_empty():
 				player.gold += q["gold"]
 				player.add_xp(q["xp"])
+				audio.play("quest", 0.0)
 				var up: bool = world.add_loyalty(q["city"], q["loyalty"])
 				if up:
 					show_banner("Лояльність зросла!\n%s: %s" % [Data.place_name(q["city"]), Data.LOYALTY_NAMES[world.loyalty_level(q["city"])]], UI.GOOD)
@@ -975,6 +1160,7 @@ func city_do(action: String, arg) -> void:
 					var price := buy_price(city_id, it)
 					if player.gold >= price and player.add_item(it):
 						player.gold -= price
+						audio.play("coin", 0.0)
 						stock.remove_at(i)
 					break
 		"sell":
@@ -991,12 +1177,15 @@ func city_do(action: String, arg) -> void:
 			var before: int = player.find_item(arg).get("up", 0)
 			match player.sharpen(arg):
 				"ok":
+					audio.play("sharpen_ok", 0.03)
 					smith_msg = "Успіх! Тепер +%d" % (before + 1)
 					smith_msg_color = UI.GOOD
 				"fail":
+					audio.play("sharpen_fail")
 					smith_msg = "Не вдалося... Заточка лишилась +%d" % before
 					smith_msg_color = UI.MUTED
 				"down":
+					audio.play("sharpen_fail")
 					smith_msg = "Лезо тріснуло! Заточка впала до +%d" % (before - 1)
 					smith_msg_color = UI.BAD
 				"nogold":
@@ -1108,6 +1297,7 @@ func _add_button(text: String, cb: Callable, min_size := Vector2(480, 80)) -> Bu
 
 func _show_main_menu() -> void:
 	state = State.MENU
+	audio.play_music("calm")
 	_hud_mode(false, false)
 	_open_overlay()
 	_add_title("Козацька Звитяга", 72)
@@ -1117,6 +1307,7 @@ func _show_main_menu() -> void:
 		_add_button("Нова гра", _confirm_new_game)
 	else:
 		_add_button("Нова гра", _new_game)
+	_add_sound_toggles(_show_main_menu)
 	_add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
 
 
@@ -1150,8 +1341,88 @@ func _show_pause() -> void:
 	_add_button(leave_text, func():
 		_collect_all()
 		enter_map())
+	_add_sound_toggles(_show_pause)
 	_add_button("Головне меню", func():
 		save_game()
 		_clear_combat()
 		_set_world_visible(false)
 		_show_main_menu())
+
+
+# ======================= Відчуття, атмосфера, підказки, налаштування =======================
+
+## Коротке «завмирання» гри від сильного удару.
+func hitstop(dur: float) -> void:
+	if _hitstop_active or state != State.PLAYING:
+		return
+	_hitstop_active = true
+	Engine.time_scale = 0.08
+	await get_tree().create_timer(dur, true, false, true).timeout
+	Engine.time_scale = 1.0
+	_hitstop_active = false
+
+
+func on_player_hurt() -> void:
+	vignette.modulate.a = 0.6
+
+
+func _setup_atmosphere(biome: String) -> void:
+	canvas_mod.color = BIOME_TINT.get(biome, Color.WHITE)
+	torch.enabled = biome == "cave"
+	for c in lights.get_children():
+		c.queue_free()
+	if biome == "cave":
+		for c in ground.crystals:
+			var l := PointLight2D.new()
+			l.texture = light_tex
+			l.texture_scale = 1.6
+			l.color = c[1]
+			l.energy = 1.1
+			l.position = c[0]
+			lights.add_child(l)
+	ambient.setup(biome)
+
+
+## Показує підказку один раз за всю гру.
+func hint(id: String, text: String) -> void:
+	if world.hints.has(id):
+		return
+	world.hints[id] = true
+	hint_label.text = text
+	hint_panel.visible = true
+	hint_panel.modulate.a = 1.0
+	if _hint_tween:
+		_hint_tween.kill()
+	_hint_tween = hint_panel.create_tween()
+	_hint_tween.tween_interval(8.0)
+	_hint_tween.tween_property(hint_panel, "modulate:a", 0.0, 0.6)
+	_hint_tween.tween_callback(func(): hint_panel.visible = false)
+
+
+func _load_settings() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK:
+		audio.set_sound(cfg.get_value("audio", "sound", true))
+		audio.set_music(cfg.get_value("audio", "music", true))
+
+
+func _save_settings() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("audio", "sound", audio.sound_on)
+	cfg.set_value("audio", "music", audio.music_on)
+	cfg.save(SETTINGS_PATH)
+
+
+func _add_sound_toggles(refresh: Callable) -> void:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	row.add_child(UI.button("Звук: " + ("так" if audio.sound_on else "ні"), func():
+		audio.set_sound(not audio.sound_on)
+		_save_settings()
+		refresh.call(), Vector2(232, 64), 22))
+	row.add_child(UI.button("Музика: " + ("так" if audio.music_on else "ні"), func():
+		audio.set_music(not audio.music_on)
+		_save_settings()
+		refresh.call(), Vector2(232, 64), 22))
+	overlay_box.add_child(row)

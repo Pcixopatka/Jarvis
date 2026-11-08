@@ -4,6 +4,7 @@ extends Node2D
 var arena := Rect2()
 var biome := "steppe"
 var seed_value := 1648
+var crystals := []  # [позиція, колір] — у печері біля них ставиться світло
 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
@@ -15,6 +16,13 @@ func setup(rect: Rect2, b: String, s: int) -> void:
 	arena = rect
 	biome = b
 	seed_value = s
+	crystals.clear()
+	if biome == "cave":
+		var rng := RandomNumberGenerator.new()
+		rng.seed = s + 99
+		for i in 7:
+			var p := Vector2(rng.randf_range(arena.position.x + 60, arena.end.x - 60), rng.randf_range(arena.position.y + 60, arena.end.y - 60))
+			crystals.append([p, Color(0.4, 0.8, 1.0) if rng.randf() < 0.5 else Color(0.75, 0.45, 1.0)])
 	queue_redraw()
 
 
@@ -59,7 +67,7 @@ func _draw() -> void:
 			_pines(rng, int(90 * area))
 		"cave":
 			_cave_floor(rng, int(220 * area))
-			_crystals(rng, int(30 * area))
+			_crystals()
 	if biome == "cave" or biome == "mountain":
 		_rock_wall()
 	else:
@@ -198,10 +206,10 @@ func _cave_floor(rng: RandomNumberGenerator, n: int) -> void:
 		draw_colored_polygon(PackedVector2Array([p + Vector2(-12, 0), p + Vector2(12, 0), p + Vector2(0, -h)]), Color(0.38, 0.32, 0.27))
 
 
-func _crystals(rng: RandomNumberGenerator, n: int) -> void:
-	for i in n:
-		var p := _pt(rng)
-		var col := Color(0.4, 0.8, 1.0) if rng.randf() < 0.5 else Color(0.7, 0.45, 1.0)
+func _crystals() -> void:
+	for c in crystals:
+		var p: Vector2 = c[0]
+		var col: Color = c[1]
 		draw_circle(p, 30.0, Color(col, 0.12))
 		draw_colored_polygon(PackedVector2Array([p + Vector2(-6, 0), p + Vector2(0, -22), p + Vector2(6, 0), p + Vector2(0, 6)]), col)
 

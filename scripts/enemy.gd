@@ -1,6 +1,8 @@
 extends Node2D
 ## Нечисть: мавка, упир, болотяник, вовкулака; боси — Змій або велетенські різновиди інших.
 
+const TelegraphScript := preload("res://scripts/telegraph.gd")
+
 var main
 var kind := "mavka"
 var level := 1
@@ -25,6 +27,11 @@ var lunge_timer := 0.0
 var phase := randf() * TAU
 var facing := Vector2.LEFT
 var dead := false
+var dying := 0.0  # анімація смерті
+var windup := 0.0  # замах перед ударом: червоніє — час ухилятися
+var windup_max := 0.35
+var ability_timer := 4.0
+var ability_step := 0
 
 
 func setup(k: String, lvl: int, boss: bool = false) -> void:
@@ -64,6 +71,10 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			radius *= 2.0
 			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
+	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zmii": 0.5}.get(k, 0.35)
+	if is_boss:
+		windup_max = 0.55
+		ability_timer = 3.0
 	hp = max_hp
 	add_to_group("enemies")
 
@@ -82,6 +93,12 @@ func _pick_target():
 
 func _process(delta: float) -> void:
 	if dead:
+		dying -= delta
+		var k := clampf(dying / 0.35, 0.0, 1.0)
+		modulate = Color(1.6, 1.6, 1.6, k)
+		scale = Vector2.ONE * (2.0 if is_boss and kind != "zmii" else 1.0) * (0.6 + 0.4 * k)
+		if dying <= 0.0:
+			queue_free()
 		return
 	var p = _pick_target()
 	flash = maxf(0.0, flash - delta)
@@ -120,16 +137,27 @@ func _process(delta: float) -> void:
 		if l < min_d and l > 0.01:
 			sep += d / l * (min_d - l) / min_d
 
-	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0)
+	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0) * (0.15 if windup > 0.0 else 1.0)
 	var vel := desired * spd + sep * speed * 1.5 + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	position += vel * delta
 	var pad := Vector2(radius, radius)
 	position = position.clamp(main.arena.position + pad, main.arena.end - pad)
 
-	if p != null and dist < radius + p.radius + 4.0 and contact_cd <= 0.0:
-		p.take_damage(damage, self)
-		contact_cd = 0.9
+	# Ближня атака із замахом: ворог червоніє, і за мить б'є, якщо ціль досі поруч
+	if windup > 0.0:
+		windup -= delta
+		if windup <= 0.0:
+			contact_cd = 1.0
+			if p != null and dist < radius + p.radius + 24.0:
+				p.take_damage(damage, self)
+	elif p != null and dist < radius + p.radius + 10.0 and contact_cd <= 0.0:
+		windup = windup_max
+
+	if is_boss and p != null:
+		ability_timer -= delta
+		if ability_timer <= 0.0:
+			_boss_ability(p)
 
 	if ranged and p != null:
 		shoot_timer -= delta * (0.5 if slow_timer > 0.0 else 1.0)
@@ -154,17 +182,92 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	knockback += kb * (0.15 if is_boss else 1.0)
 	var col := Color(1.0, 0.85, 0.2) if crit else Color.WHITE
 	main.float_text(global_position + Vector2(0, -radius - 14), str(int(amount)) + ("!" if crit else ""), col)
+	var blood: Color = {"mavka": Color(0.75, 1.0, 0.75), "upyr": Color(0.55, 0.05, 0.08), "bolotianyk": Color(0.45, 0.55, 0.2),
+		"vovkulaka": Color(0.7, 0.1, 0.1), "zmii": Color(0.3, 0.8, 0.3)}.get(kind, Color.WHITE)
+	main.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
+	if crit:
+		main.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
 	if hp <= 0.0:
 		dead = true
+		dying = 0.35
 		remove_from_group("enemies")
 		main.on_enemy_killed(self)
-		queue_free()
+
+
+# --- Особливі атаки босів ---
+
+func _telegraph(shape: String, pos: Vector2, dur: float, dmg: float):
+	var t = TelegraphScript.new()
+	t.main = main
+	t.source = self
+	t.shape = shape
+	t.position = pos
+	t.duration = dur
+	t.damage = dmg
+	main.effects.add_child(t)
+	return t
+
+
+func _summon(kinds: Array, count: int) -> void:
+	for i in count:
+		var pos := global_position + Vector2.from_angle(randf() * TAU) * randf_range(90, 160)
+		main.fx.burst(pos, Color(0.3, 0.25, 0.3), 14, 140, 8, 0.6)
+		main.spawn_enemy(kinds[randi() % kinds.size()], maxi(1, level - 1), false, pos)
+
+
+func _boss_ability(target) -> void:
+	var to_t: Vector2 = (target.global_position - global_position).normalized()
+	ability_step += 1
+	match kind:
+		"zmii":
+			# Вогняний подих конусом
+			ability_timer = 5.5
+			var t = _telegraph("cone", global_position, 1.0, damage * 1.3)
+			t.dir = to_t
+			t.length = 420.0
+			t.half_angle = 0.42
+			t.color = Color(1.0, 0.45, 0.1)
+			main.audio.play("roar", 0.05, -3.0)
+		"upyr":
+			ability_timer = 6.0
+			if ability_step % 2 == 1:
+				# Стрибок-удар у місце, де стоїть ціль
+				var t = _telegraph("circle", target.global_position, 1.0, damage * 1.4)
+				t.radius = 120.0
+				t.on_fire = func():
+					if not dead:
+						global_position = t.global_position
+			else:
+				main.audio.play("roar", 0.05, -4.0)
+				_summon(["upyr", "mavka"], 3)
+		"vovkulaka":
+			ability_timer = 5.0
+			if ability_step % 2 == 1:
+				# Ривок по прямій
+				var t = _telegraph("line", global_position, 0.75, damage * 1.3)
+				t.dir = to_t
+				t.length = 480.0
+				t.width = 90.0
+				t.on_fire = func():
+					if not dead:
+						knockback = to_t * 1900.0
+			else:
+				main.audio.play("roar", 0.05, -2.0)
+				_summon(["vovkulaka"], 2)
+		_:
+			ability_timer = 6.0
+			var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
+			t.radius = 110.0
 
 
 # --- Малювання ---
 
 func _c(c: Color) -> Color:
-	return Color(1, 1, 1, c.a) if flash > 0.0 else c
+	if flash > 0.0:
+		return Color(1, 1, 1, c.a)
+	if windup > 0.0:
+		return c.lerp(Color(1.0, 0.25, 0.2, c.a), 0.55 * (1.0 - windup / windup_max))
+	return c
 
 
 func _draw() -> void:
@@ -172,6 +275,9 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, r_draw * 1.1, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
+	if windup > 0.0:
+		var w := 1.0 - windup / windup_max
+		draw_circle(Vector2(0, -r_draw * 0.4), r_draw * (1.3 + 0.4 * w), Color(1.0, 0.15, 0.1, 0.18 + 0.3 * w))
 	match kind:
 		"mavka":
 			_draw_mavka(side)

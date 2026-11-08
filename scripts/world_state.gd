@@ -12,6 +12,7 @@ var last_city := "sich"
 var next_quest_id := 1
 var shops := {}  # місто -> товари (не зберігаються, оновлюються після походів)
 var shop_dirty := {}
+var hints := {}  # які підказки вже показано
 
 
 # ---------- Лояльність ----------
@@ -182,7 +183,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -193,3 +194,4 @@ func from_dict(d: Dictionary) -> void:
 	cleared = d.get("cleared", {})
 	last_city = d.get("last_city", "sich")
 	next_quest_id = d.get("next_quest_id", 1)
+	hints = d.get("hints", {})
