@@ -54,6 +54,9 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 		"vovkulaka":
 			radius = 19.0; max_hp = 55.0; speed = 175.0; damage = 12.0; xp_value = 5
 			color = Color(0.45, 0.43, 0.42)
+		"zarazhenyi":
+			radius = 20.0; max_hp = 70.0; speed = 100.0; damage = 13.0; xp_value = 6
+			color = Color(0.45, 0.16, 0.13)
 		"zmii":
 			radius = 52.0; max_hp = 60.0; speed = 70.0; damage = 17.0; xp_value = 6
 			color = Color(0.2, 0.55, 0.25)
@@ -73,7 +76,7 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			radius *= 2.0
 			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
-	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zmii": 0.5}.get(k, 0.35)
+	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zarazhenyi": 0.5, "zmii": 0.5}.get(k, 0.35)
 	if is_boss:
 		windup_max = 0.55
 		ability_timer = 3.0
@@ -185,7 +188,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	var col := Color(1.0, 0.85, 0.2) if crit else Color.WHITE
 	combat.float_text(global_position + Vector2(0, -radius - 14), str(int(amount)) + ("!" if crit else ""), col)
 	var blood: Color = {"mavka": Color(0.75, 1.0, 0.75), "upyr": Color(0.55, 0.05, 0.08), "bolotianyk": Color(0.45, 0.55, 0.2),
-		"vovkulaka": Color(0.7, 0.1, 0.1), "zmii": Color(0.3, 0.8, 0.3)}.get(kind, Color.WHITE)
+		"vovkulaka": Color(0.7, 0.1, 0.1), "zarazhenyi": Color(0.25, 0.4, 0.1), "zmii": Color(0.3, 0.8, 0.3)}.get(kind, Color.WHITE)
 	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
 		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
@@ -193,6 +196,8 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 		dead = true
 		dying = 0.35
 		remove_from_group("enemies")
+		if kind == "zarazhenyi":
+			combat.spawn_plague(global_position, damage * 0.6)
 		Events.enemy_killed.emit(self)
 
 
@@ -289,6 +294,8 @@ func _draw() -> void:
 			_draw_bolotianyk(side)
 		"vovkulaka":
 			_draw_vovkulaka(side)
+		"zarazhenyi":
+			_draw_zarazhenyi(side)
 		"zmii":
 			_draw_zmii()
 	if slow_timer > 0.0:
@@ -346,6 +353,35 @@ func _draw_bolotianyk(side: float) -> void:
 	draw_circle(Vector2(side * 6 + 5, -8), 4.0, Color(1, 0.95, 0.4))
 	draw_circle(Vector2(side * 7 - 4, -8), 1.8, Color.BLACK)
 	draw_circle(Vector2(side * 7 + 5, -8), 1.8, Color.BLACK)
+
+
+func _draw_zarazhenyi(side: float) -> void:
+	var step := sin(phase) * 2.0
+	var skin := Color(0.55, 0.62, 0.5)
+	# Ноги в чоботях
+	draw_rect(Rect2(Vector2(-8, 8 + step), Vector2(6, 10)), _c(Color(0.15, 0.12, 0.1)))
+	draw_rect(Rect2(Vector2(2, 8 - step), Vector2(6, 10)), _c(Color(0.15, 0.12, 0.1)))
+	# Довгий каптан стрільця
+	draw_colored_polygon(PackedVector2Array([Vector2(-11, -16), Vector2(11, -16), Vector2(15, 12), Vector2(-15, 12)]), _c(color))
+	draw_line(Vector2(0, -16), Vector2(0, 12), _c(color.darkened(0.4)), 2.0)
+	draw_line(Vector2(-13, 2), Vector2(13, 2), _c(Color(0.3, 0.25, 0.1)), 3.0)
+	# Бердиш
+	var hand := Vector2(side * 13, -4)
+	draw_line(hand + Vector2(0, 16), hand + Vector2(0, -30), _c(Color(0.4, 0.28, 0.15)), 3.0)
+	draw_colored_polygon(PackedVector2Array([hand + Vector2(0, -30), hand + Vector2(side * 12, -24), hand + Vector2(side * 10, -8), hand + Vector2(0, -12)]), _c(Color(0.6, 0.62, 0.6)))
+	# Голова: сіро-зелена шкіра, чорні жили, світлі очі
+	var h := Vector2(0, -24)
+	draw_circle(h, 9.0, _c(skin))
+	draw_line(h + Vector2(-6, 2), h + Vector2(-2, 8), Color(0.1, 0.15, 0.05), 1.5)
+	draw_line(h + Vector2(5, -4), h + Vector2(7, 4), Color(0.1, 0.15, 0.05), 1.5)
+	var glow := 0.6 + 0.4 * sin(phase * 2.0)
+	draw_circle(h + Vector2(side * 3 - 3, -1), 2.2, Color(0.6, 1.0, 0.2, glow))
+	draw_circle(h + Vector2(side * 3 + 3, -1), 2.2, Color(0.6, 1.0, 0.2, glow))
+	# Висока шапка
+	draw_colored_polygon(PackedVector2Array([h + Vector2(-9, -5), h + Vector2(9, -5), h + Vector2(7, -18), h + Vector2(-7, -18)]), _c(Color(0.35, 0.12, 0.1)))
+	draw_rect(Rect2(h + Vector2(-10, -7), Vector2(20, 4)), _c(Color(0.25, 0.2, 0.15)))
+	# Зелений сморід зарази
+	draw_circle(Vector2(sin(phase * 0.7) * 6.0, -38), 5.0, Color(0.4, 0.8, 0.2, 0.25))
 
 
 func _draw_vovkulaka(side: float) -> void:

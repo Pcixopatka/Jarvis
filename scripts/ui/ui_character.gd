@@ -18,7 +18,7 @@ static func build(game) -> Control:
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Перки" + _pts(p.perk_points), _perks(game)],
 	]
-	return UI.screen("Козак — рівень %d   •   Дукати: %d" % [p.level, p.gold], "Назад", game.close_character,
+	return UI.screen("Козак — рівень %d   •   Гривні: %d" % [p.level, p.gold], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i)
 
 
@@ -68,7 +68,7 @@ static func _stats(game) -> Control:
 		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
 		["Відновлення", "%.1f / с" % p.regen],
 		["Вампіризм", "%.1f%%" % (p.lifesteal * 100)],
-		["Бонус досвіду / дукатів", "+%d%% / +%d%%" % [roundi((p.xp_mult - 1.0) * 100), roundi((p.gold_mult - 1.0) * 100)]],
+		["Бонус досвіду / гривень", "+%d%% / +%d%%" % [roundi((p.xp_mult - 1.0) * 100), roundi((p.gold_mult - 1.0) * 100)]],
 	]
 	for l in lines:
 		var row := HBoxContainer.new()

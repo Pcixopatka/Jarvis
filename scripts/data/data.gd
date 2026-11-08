@@ -9,7 +9,7 @@ const ENEMY_HP_MULT := 1.5  # загальна «товщина» нечисті
 const ENEMY_HP_PER_LEVEL := 0.25  # +25% здоров'я ворога за рівень місцевості
 const ENEMY_DMG_PER_LEVEL := 0.12  # +12% шкоди ворога за рівень
 const ENEMY_XP_PER_LEVEL := 0.25  # +25% досвіду з ворога за рівень
-const COIN_GOLD_RATIO := 0.34  # скільки дукатів дає монета відносно її досвіду
+const COIN_GOLD_RATIO := 0.34  # скільки гривень дає монета відносно її досвіду
 const ITEM_DROP_CHANCE := 0.03  # шанс речі з рядового ворога
 const FIELD_GOAL_BASE := 40  # скільки нечисті треба знищити для зачистки
 const FIELD_GOAL_PER_LEVEL := 5
@@ -90,7 +90,7 @@ const PERK_BRANCHES := [
 	]},
 	{"name": "Запорожець", "tiers": [
 		[{"id": "boots", "name": "Легкі чоботи", "max": 3, "desc": "+5% швидкості\nбігу"},
-		 {"id": "purse", "name": "Жадібний гаманець", "max": 2, "desc": "+25% радіус\nзбору дукатів"}],
+		 {"id": "purse", "name": "Жадібний гаманець", "max": 2, "desc": "+25% радіус\nзбору гривень"}],
 		[{"id": "kobzar", "name": "Кобзарева наука", "max": 3, "desc": "+10% досвіду"},
 		 {"id": "focus", "name": "Зосередженість", "max": 3, "desc": "-6% перезарядки\nвмінь"}],
 		[{"id": "dash_strike", "name": "Удар з перекиду", "max": 1, "desc": "Перекид ранить\nворогів на шляху"},
@@ -168,7 +168,7 @@ const STAT_FMT := {
 	"crit": ["+%s%% шансу криту", 1], "aspd": ["+%s%% швидкості удару", 0], "hp": ["+%s здоров'я", 0],
 	"armor": ["+%s%% захисту", 1], "regen": ["+%s здоров'я/с", 1], "lifesteal": ["+%s%% вампіризму", 1],
 	"speed": ["+%s%% швидкості бігу", 0], "xp": ["+%s%% досвіду", 0], "skill_power": ["+%s%% сили вмінь", 0],
-	"skill_cd": ["-%s%% перезарядки вмінь", 0], "pickup": ["+%s%% радіусу збору", 0], "gold": ["+%s%% дукатів", 0],
+	"skill_cd": ["-%s%% перезарядки вмінь", 0], "pickup": ["+%s%% радіусу збору", 0], "gold": ["+%s%% гривень", 0],
 }
 const INT_STATS := ["str", "agi", "vit", "spi"]
 const AFFIX_POOL := ["str", "agi", "vit", "spi", "dmg_pct", "crit", "aspd", "hp", "armor", "regen",
@@ -305,14 +305,14 @@ const CITIES := {
 
 const LOCATIONS := {
 	"wild_field": {"name": "Дике Поле", "type": "field", "biome": "steppe", "pos": Vector2(37.6, 48.15), "level": 1,
-		"enemies": ["mavka", "upyr"], "desc": "Безкраї степи, де нечисть блукає ночами."},
+		"enemies": ["mavka", "upyr", "zarazhenyi"], "desc": "Безкраї степи, куди першими докотилися заражені загони з півночі."},
 	"rapids": {"name": "Дніпрові пороги", "type": "field", "biome": "river", "pos": Vector2(34.5, 48.75), "level": 2,
 		"enemies": ["mavka", "bolotianyk"], "desc": "Бурхливі пороги, де мавки заманюють у воду."},
 	"zmii_cave": {"name": "Змієва печера", "type": "dungeon", "biome": "cave", "pos": Vector2(33.6, 47.2), "level": 3,
 		"rooms": 4, "enemies": ["mavka", "upyr", "bolotianyk"], "boss": "zmii",
 		"desc": "Глибоке лігво під кручами. Там спить Триголовий Змій."},
 	"black_forest": {"name": "Чорний ліс", "type": "field", "biome": "forest", "pos": Vector2(32.2, 48.45), "level": 4,
-		"enemies": ["mavka", "vovkulaka", "upyr"], "desc": "Темна пуща, де виють вовкулаки."},
+		"enemies": ["mavka", "vovkulaka", "zarazhenyi"], "desc": "Темна пуща, де стали табором заражені московити і виють вовкулаки."},
 	"crypt": {"name": "Упирячий склеп", "type": "dungeon", "biome": "cave", "pos": Vector2(33.0, 50.85), "level": 6,
 		"rooms": 5, "enemies": ["upyr", "vovkulaka"], "boss": "upyr",
 		"desc": "Старі підземелля, де править Упир-володар."},
@@ -323,16 +323,16 @@ const LOCATIONS := {
 	"bilovezha": {"name": "Біловезька пуща", "type": "field", "biome": "forest", "pos": Vector2(23.9, 52.7), "level": 8,
 		"enemies": ["vovkulaka", "mavka", "upyr"], "desc": "Прадавня пуща на межі з Польщею. Тут водяться найлютіші вовкулаки."},
 	"bryansk_forest": {"name": "Брянські ліси", "type": "field", "biome": "forest", "pos": Vector2(34.0, 53.1), "level": 11,
-		"enemies": ["vovkulaka", "upyr", "bolotianyk"], "desc": "Глухі північні ліси, звідки сунуть зграї нечисті."},
+		"enemies": ["zarazhenyi", "vovkulaka", "upyr"], "desc": "Прикордонні ліси на московських землях — звідси розповзається зараза."},
 	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.2, 48.6), "level": 10,
 		"rooms": 6, "enemies": ["vovkulaka", "upyr", "bolotianyk"], "boss": "vovkulaka",
 		"desc": "Скарби опришків стереже Вовкулака-ватажок."},
 }
 
-const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zmii": "Змій"}
-const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zmii": "зміїв"}
+const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит", "zmii": "Змій"}
+const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених", "zmii": "зміїв"}
 const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок"}
-const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура"}
+const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази"}
 
 const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
 const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]

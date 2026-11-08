@@ -332,7 +332,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	hp_label.text = "Здоров'я %d / %d" % [roundi(player.hp), roundi(player.max_hp)]
 	xp_bar.max_value = player.xp_next
 	xp_bar.value = player.xp
-	level_label.text = "Рівень %d    Дукати: %d" % [player.level, player.gold]
+	level_label.text = "Рівень %d    Гривні: %d" % [player.level, player.gold]
 	var ql := []
 	if story_line != "":
 		ql.append(story_line)

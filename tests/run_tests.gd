@@ -181,7 +181,7 @@ func _suite_player() -> void:
 	p.gold = 0
 	var up_before: int = w["up"]
 	if up_before < Data.MAX_UPGRADE:
-		check(p.sharpen(w["uid"]) == "nogold" and w["up"] == up_before, "без дукатів не точить")
+		check(p.sharpen(w["uid"]) == "nogold" and w["up"] == up_before, "без гривень не точить")
 	# Серіалізація
 	var d = p.to_dict()
 	var q = _new_player()
@@ -323,7 +323,7 @@ func _suite_story() -> void:
 		names.append(it["name"])
 	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди в торбі")
 	check(w.loyalty_points("chyhyryn") >= 90 and w.story.get("choices", {}).get("potion", -1) == 0, "вибір у розмові з Мотрею враховано")
-	check(p.gold > gold0 and p.level > 1, "дукати й досвід за сюжет")
+	check(p.gold > gold0 and p.level > 1, "гривні й досвід за сюжет")
 	check(StoryService.objective_line(w) == "" and StoryService.target(w) == "", "після завершення — без мети")
 	var w2 = WorldState.new()
 	w2.from_dict(w.to_dict())
@@ -457,7 +457,7 @@ func _suite_gameplay() -> void:
 	game.player.take_damage(1e9)
 	await _frames(150)
 	check(game.state == game.State.DEAD, "смерть козака")
-	check(game.player.gold == gold_before - int(gold_before * 0.25), "втрата чверті дукатів")
+	check(game.player.gold == gold_before - int(gold_before * 0.25), "втрата чверті гривень")
 	game.enter_city(game.world.last_city)
 	check(game.player.alive and game.player.hp == game.player.max_hp, "козак отямився в місті")
 	game.queue_free()

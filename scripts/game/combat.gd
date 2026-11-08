@@ -12,6 +12,7 @@ const PickupScript := preload("res://scripts/entities/pickup.gd")
 const PortalScript := preload("res://scripts/entities/portal.gd")
 const FloatTextScript := preload("res://scripts/world/float_text.gd")
 const BoltScript := preload("res://scripts/world/bolt.gd")
+const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
 const GroundScript := preload("res://scripts/world/ground.gd")
 const FxScript := preload("res://scripts/world/fx.gd")
 const AmbientScript := preload("res://scripts/world/ambient.gd")
@@ -325,7 +326,7 @@ func _field_complete() -> void:
 	var g: int = 25 * int(loc["level"])
 	player.add_gold(g)
 	Audio.play("quest", 0.0)
-	Events.banner.emit("%s очищено!\n+%d дукатів і скарб" % [loc["name"], g], Color(1.0, 0.85, 0.3))
+	Events.banner.emit("%s очищено!\n+%d грн і скарб" % [loc["name"], g], Color(1.0, 0.85, 0.3))
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	for i in 2:
 		spawn_pickup(pos, "item", 0, Data.gen_item(loc["level"], Data.roll_rarity(loc["level"], 1)))
@@ -339,7 +340,7 @@ func _field_complete() -> void:
 func _dungeon_complete() -> void:
 	var g: int = 40 * int(loc["level"])
 	player.add_gold(g)
-	Events.banner.emit("%s очищено!\n+%d дукатів" % [loc["name"], g], Color(1.0, 0.85, 0.3))
+	Events.banner.emit("%s очищено!\n+%d грн" % [loc["name"], g], Color(1.0, 0.85, 0.3))
 	Audio.play("quest", 0.0)
 	_spawn_portal("Вихід", Vector2(0, arena.position.y + 110))
 	Events.dungeon_cleared.emit(loc_id)
@@ -406,7 +407,7 @@ func pick_item(item: Dictionary) -> void:
 	else:
 		var g := Data.sell_price(item)
 		player.gold += g
-		float_text(player.global_position + Vector2(0, -70), "Торба повна: +%d дук." % g, col)
+		float_text(player.global_position + Vector2(0, -70), "Торба повна: +%d грн" % g, col)
 
 
 func on_companion_down(c: Companion) -> void:
@@ -492,6 +493,14 @@ func spawn_bullet(pos: Vector2, dir: Vector2, dmg: float, crit: bool) -> void:
 	p.crit = crit
 	p.radius = 6.0
 	p.life = 0.9
+
+
+func spawn_plague(pos: Vector2, dps: float) -> void:
+	var c = PlagueScript.new()
+	c.combat = self
+	c.position = pos
+	c.dps = dps
+	effects.add_child(c)
 
 
 func spawn_bolt(points: PackedVector2Array) -> void:

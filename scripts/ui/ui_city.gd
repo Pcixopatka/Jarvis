@@ -18,7 +18,7 @@ static func build(game, city: String) -> Control:
 	var next := ""
 	if lvl < Data.LOYALTY_THRESHOLDS.size() - 1:
 		next = " (%d/%d)" % [pts, Data.LOYALTY_THRESHOLDS[lvl + 1]]
-	var title := "%s  •  Лояльність: %s%s  •  Дукати: %d" % [C["name"], Data.LOYALTY_NAMES[lvl], next, game.player.gold]
+	var title := "%s  •  Лояльність: %s%s  •  Гривні: %d" % [C["name"], Data.LOYALTY_NAMES[lvl], next, game.player.gold]
 	var pages := [
 		["Завдання", _quests(game, city)],
 		["Крамниця", _shop(game, city)],
@@ -30,7 +30,7 @@ static func build(game, city: String) -> Control:
 
 
 static func _reward_text(q: Dictionary) -> String:
-	return "Нагорода: %d дукатів, %d досвіду, +%d лояльності" % [q["gold"], q["xp"], q["loyalty"]]
+	return "Нагорода: %d грн, %d досвіду, +%d лояльності" % [q["gold"], q["xp"], q["loyalty"]]
 
 
 # ---------------- Завдання ----------------
@@ -103,7 +103,7 @@ static func _shop(game, city: String) -> Control:
 	left.add_child(UI.label("Товари" + (("  (знижка %d%%)" % roundi(disc * 100)) if disc > 0 else ""), 22, UI.GOLD, false))
 	var sg := UI.grid(2)
 	for it in stock:
-		sg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "%d дук." % game.buy_price(city, it)))
+		sg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "%d грн" % game.buy_price(city, it)))
 	if stock.is_empty():
 		left.add_child(UI.label("Усе розкупили.\nЗазирни після походу.", 17, UI.MUTED, false))
 	left.add_child(sg)
@@ -114,7 +114,7 @@ static func _shop(game, city: String) -> Control:
 	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), Data.INVENTORY_SIZE], 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d дук." % Data.sell_price(it)))
+		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d грн" % Data.sell_price(it)))
 	bag.add_child(bg)
 	bag.add_child(UI.button("Продати всі звичайні", _do(game, "sell_junk"), Vector2(300, 52), 18))
 	h.add_child(bag)
@@ -181,7 +181,7 @@ static func _smith(game) -> Control:
 		var cost := Data.sharpen_cost(it)
 		var chance := Data.sharpen_chance(it)
 		var risk := "  ризик -1" if it["up"] >= Data.SHARPEN_RISK_FROM else ""
-		det.add_child(UI.button("Заточити до +%d\n%d дук. • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(340, 80), 20, p.gold >= cost))
+		det.add_child(UI.button("Заточити до +%d\n%d грн • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(340, 80), 20, p.gold >= cost))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 22, game.smith_msg_color, false))
 	return h
@@ -223,6 +223,6 @@ static func _tavern(game, city: String) -> Control:
 		row.add_child(col)
 		var price: int = game.hire_price(city, type)
 		var ok: bool = lvl >= need and p.gold >= price and w.companions.size() < Data.MAX_COMPANIONS and not w.has_companion(type)
-		row.add_child(UI.button("Найняти\n%d дук." % price, _do(game, "hire", type), Vector2(190, 70), 18, ok))
+		row.add_child(UI.button("Найняти\n%d грн" % price, _do(game, "hire", type), Vector2(190, 70), 18, ok))
 		v.add_child(row)
 	return v

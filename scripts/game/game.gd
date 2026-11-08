@@ -313,7 +313,7 @@ func _on_player_died() -> void:
 	player.gold -= lost
 	_open_menu()
 	hud.add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
-	hud.add_title("Побратими винесли тебе з бою. Втрачено %d дукатів." % lost, 24, UI.TEXT)
+	hud.add_title("Побратими винесли тебе з бою. Втрачено %d грн." % lost, 24, UI.TEXT)
 	hud.add_button("Отямитися: %s" % Data.place_name(world.last_city), func(): enter_city(world.last_city))
 
 
@@ -376,7 +376,7 @@ func city_do(action: String, arg) -> void:
 				if r["loyalty_up"]:
 					hud.show_banner("Лояльність зросла!\n%s: %s" % [Data.place_name(q["city"]), Data.LOYALTY_NAMES[world.loyalty_level(q["city"])]], UI.GOOD)
 				else:
-					hud.show_banner("Завдання виконано!\n+%d дукатів, +%d досвіду" % [q["gold"], q["xp"]], UI.GOLD)
+					hud.show_banner("Завдання виконано!\n+%d грн, +%d досвіду" % [q["gold"], q["xp"]], UI.GOLD)
 		"select":
 			city_sel_uid = arg
 			smith_msg = ""
@@ -414,7 +414,7 @@ func _sharpen(uid: int) -> void:
 			smith_msg = "Лезо тріснуло! Заточка впала до +%d" % (before - 1)
 			smith_msg_color = UI.BAD
 		"nogold":
-			smith_msg = "Бракує дукатів."
+			smith_msg = "Бракує гривень."
 			smith_msg_color = UI.BAD
 
 
@@ -484,7 +484,7 @@ func _show_main_menu() -> void:
 	hud.set_mode(false, false)
 	_open_menu()
 	hud.add_title("Козацька Звитяга", 72)
-	hud.add_title("Нечисть сунеться на українські землі. Козаче, рушай у похід!", 24, UI.TEXT)
+	hud.add_title("З московських земель повзе чорна зараза. Козаче, рушай у похід!", 24, UI.TEXT)
 	if SaveSystem.exists(save_path):
 		hud.add_button("Продовжити", _continue_game)
 		hud.add_button("Нова гра", _confirm_new_game)
