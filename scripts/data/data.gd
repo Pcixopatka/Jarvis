@@ -3,6 +3,30 @@ extends RefCounted
 ## Щоб додати новий вузол — достатньо дописати його сюди та реалізувати ефект у player.gd.
 
 const STAT_BASE := 5
+
+# ======================= Баланс (усі ключові числа тут) =======================
+const ENEMY_HP_MULT := 1.5  # загальна «товщина» нечисті
+const ENEMY_HP_PER_LEVEL := 0.25  # +25% здоров'я ворога за рівень місцевості
+const ENEMY_DMG_PER_LEVEL := 0.12  # +12% шкоди ворога за рівень
+const ENEMY_XP_PER_LEVEL := 0.25  # +25% досвіду з ворога за рівень
+const COIN_GOLD_RATIO := 0.34  # скільки дукатів дає монета відносно її досвіду
+const ITEM_DROP_CHANCE := 0.03  # шанс речі з рядового ворога
+const FIELD_GOAL_BASE := 40  # скільки нечисті треба знищити для зачистки
+const FIELD_GOAL_PER_LEVEL := 5
+const BOSS_HP_MULT := 8.0  # бос у стільки разів «товстіший» за звичайного ворога
+const BOSS_XP_MULT := 8
+const DUNGEON_ROOM_BASE := 6  # ворогів у кімнаті печери: база + за номер кімнати
+const DUNGEON_ROOM_PER := 3
+
+
+## Досвід, потрібний, щоб перейти з рівня l на l+1.
+static func xp_for_level(l: int) -> int:
+	return 200 + 150 * l + 15 * l * l
+
+
+static func coin_gold(xp_value: int) -> int:
+	return maxi(1, roundi(xp_value * COIN_GOLD_RATIO))
+
 const STAT_POINTS_PER_LEVEL := 3
 const SKILL_POINTS_PER_LEVEL := 1
 const PERK_POINTS_PER_LEVEL := 1
@@ -248,7 +272,7 @@ static func item_stats(item: Dictionary) -> Dictionary:
 
 
 static func sharpen_cost(item: Dictionary) -> int:
-	return int(20 * (item["up"] + 1) * (1.0 + 0.5 * item["rarity"]) * (1.0 + 0.1 * item["ilvl"]))
+	return int(20 * (item["up"] + 1) * (1.0 + 0.5 * item["rarity"]) * (1.0 + 0.25 * item["ilvl"]))
 
 
 static func sharpen_chance(item: Dictionary) -> float:
@@ -256,7 +280,7 @@ static func sharpen_chance(item: Dictionary) -> float:
 
 
 static func sell_price(item: Dictionary) -> int:
-	return int(10 * (1 + item["rarity"]) * (1.0 + 0.1 * item["ilvl"]) + item["spent"] * 0.3)
+	return int(8 * (1 + item["rarity"]) * (1.0 + 0.35 * item["ilvl"]) + item["spent"] * 0.3)
 
 
 # ======================= Світ =======================

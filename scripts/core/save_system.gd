@@ -4,7 +4,8 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 3
+const SAVE_VERSION := 4
+const Data := preload("res://scripts/data/data.gd")
 const SAVE_PATH := "user://hero.save"
 const SETTINGS_PATH := "user://settings.cfg"
 
@@ -74,6 +75,13 @@ static func migrate(d: Dictionary) -> Dictionary:
 		if not w.has("hints"):
 			w["hints"] = {}
 		v = 3
+	if v == 3:
+		# v4: нова крива досвіду — перераховуємо поріг рівня, накопичене не губимо понад поріг
+		var p: Dictionary = d["player"]
+		var lvl: int = int(p.get("level", 1))
+		p["xp_next"] = Data.xp_for_level(lvl)
+		p["xp"] = mini(int(p.get("xp", 0)), p["xp_next"] - 1)
+		v = 4
 	d["version"] = v
 	return d
 

@@ -2,6 +2,7 @@ class_name Enemy
 extends Node2D
 ## Нечисть: мавка, упир, болотяник, вовкулака; боси — Змій або велетенські різновиди інших.
 
+const Data := preload("res://scripts/data/data.gd")
 const TelegraphScript := preload("res://scripts/world/telegraph.gd")
 
 var combat: Combat
@@ -38,7 +39,7 @@ var ability_step := 0
 func setup(k: String, lvl: int, boss: bool = false) -> void:
 	kind = k
 	level = lvl
-	var s := 1.0 + 0.18 * (lvl - 1)
+	var s := Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (lvl - 1))
 	match k:
 		"mavka":
 			radius = 16.0; max_hp = 30.0; speed = 150.0; damage = 8.0; xp_value = 3
@@ -47,26 +48,26 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			radius = 22.0; max_hp = 85.0; speed = 92.0; damage = 15.0; xp_value = 6
 			color = Color(0.5, 0.1, 0.14)
 		"bolotianyk":
-			radius = 20.0; max_hp = 45.0; speed = 85.0; damage = 10.0; xp_value = 5
+			radius = 20.0; max_hp = 45.0; speed = 85.0; damage = 7.0; xp_value = 5
 			color = Color(0.33, 0.45, 0.2)
-			ranged = true; keep_distance = 320.0; shoot_cd = 2.2
+			ranged = true; keep_distance = 320.0; shoot_cd = 2.8
 		"vovkulaka":
 			radius = 19.0; max_hp = 55.0; speed = 175.0; damage = 12.0; xp_value = 5
 			color = Color(0.45, 0.43, 0.42)
 		"zmii":
-			radius = 52.0; max_hp = 70.0; speed = 70.0; damage = 25.0; xp_value = 6
+			radius = 52.0; max_hp = 60.0; speed = 70.0; damage = 17.0; xp_value = 6
 			color = Color(0.2, 0.55, 0.25)
 			ranged = true; shoot_cd = 2.6
 	r_draw = radius
 	max_hp *= s
-	damage *= 1.0 + 0.12 * (lvl - 1)
-	xp_value = int(xp_value * (1.0 + 0.25 * (lvl - 1)))
+	damage *= 1.0 + Data.ENEMY_DMG_PER_LEVEL * (lvl - 1)
+	xp_value = int(xp_value * (1.0 + Data.ENEMY_XP_PER_LEVEL * (lvl - 1)))
 	speed *= minf(1.3, 1.0 + 0.02 * (lvl - 1))
 	if boss or k == "zmii":
 		is_boss = true
-		max_hp *= 10.0
+		max_hp *= Data.BOSS_HP_MULT
 		damage *= 1.5
-		xp_value *= 12
+		xp_value *= Data.BOSS_XP_MULT
 		if k != "zmii":
 			scale = Vector2.ONE * 2.0
 			radius *= 2.0
@@ -171,7 +172,7 @@ func _process(delta: float) -> void:
 				for a in [-0.25, 0.0, 0.25]:
 					combat.spawn_projectile(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
 			else:
-				combat.spawn_projectile(global_position, dir, 260.0, damage, Color(0.55, 0.85, 0.2), 9.0)
+				combat.spawn_projectile(global_position, dir, 220.0, damage, Color(0.55, 0.85, 0.2), 9.0)
 	queue_redraw()
 
 

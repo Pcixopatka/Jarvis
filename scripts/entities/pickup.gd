@@ -28,7 +28,7 @@ func _process(delta: float) -> void:
 	if dist < 22.0:
 		if kind == "coin":
 			p.add_xp(value)
-			p.add_gold(value)
+			p.add_gold(Data.coin_gold(value))
 			Audio.play("coin", 0.1, -6.0)
 			combat.fx.burst(global_position, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
 		elif kind == "item":

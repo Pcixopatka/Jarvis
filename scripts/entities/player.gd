@@ -12,7 +12,7 @@ var combat: Combat
 # --- Прогрес ---
 var level := 1
 var xp := 0
-var xp_next := 10
+var xp_next := Data.xp_for_level(1)
 var stats := {"str": Data.STAT_BASE, "agi": Data.STAT_BASE, "vit": Data.STAT_BASE, "spi": Data.STAT_BASE}
 var skills := {"whirl": 1}  # id -> ранг
 var perks := {}  # id -> ранг
@@ -352,7 +352,7 @@ func add_xp(value: int) -> void:
 	while xp >= xp_next:
 		xp -= xp_next
 		level += 1
-		xp_next = int(10 + (level - 1) * 7 + pow(level - 1, 1.5))
+		xp_next = Data.xp_for_level(level)
 		stat_points += Data.STAT_POINTS_PER_LEVEL
 		skill_points += Data.SKILL_POINTS_PER_LEVEL
 		perk_points += Data.PERK_POINTS_PER_LEVEL

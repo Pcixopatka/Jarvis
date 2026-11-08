@@ -104,6 +104,8 @@ scripts/
     hud.gd (усе поверх гри), world_map.gd, map_panel.gd, ui_city.gd,
     ui_character.gd, ui_kit.gd, joystick.gd, action_button.gd
 tests/         автотести (див. tests/README.md)
+tools/         симуляція балансу
+docs/          баланс: цілі, звіт симуляції
 ```
 
 **Принципи:**
@@ -120,6 +122,14 @@ godot --headless --path . -s res://tests/run_tests.gd --fixed-fps 60
 ```
 
 Понад 800 перевірок, включно з повним проходженням гри ботом. Займає кілька секунд. Детальніше — у `tests/README.md`. На GitHub запускаються автоматично.
+
+## Баланс
+
+Ключові числа зібрані на початку `scripts/data/data.gd`, а цілі й історію змін описано в `docs/balance.md`. Перевіряти баланс можна симуляцією: бот проходить усі місцевості на різних рівнях.
+
+```bash
+godot --headless --path . -s res://tools/balance_sim.gd --fixed-fps 60
+```
 
 ## Ідеї на майбутнє
 

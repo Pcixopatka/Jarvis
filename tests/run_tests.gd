@@ -213,7 +213,8 @@ func _suite_save() -> void:
 	# Міграції
 	var v2 = {"version": 2, "player": p.to_dict(), "world": {"loyalty": {}}}
 	var m = SaveSystem.migrate(v2)
-	check(m.get("version", 0) == 3 and m.has("meta") and m["world"].has("hints"), "міграція v2 → v3")
+	check(m.get("version", 0) == SaveSystem.SAVE_VERSION and m.has("meta") and m["world"].has("hints"), "міграція v2 → поточна")
+	check(m["player"]["xp_next"] == Data.xp_for_level(m["player"]["level"]), "міграція перераховує поріг досвіду")
 	check(SaveSystem.migrate({"version": 1, "player": {}, "world": {}}).is_empty(), "v1 не підтримується")
 	check(SaveSystem.migrate({"version": 99, "player": {}, "world": {}}).is_empty(), "майбутня версія відхиляється")
 	var w2 = WorldState.new()

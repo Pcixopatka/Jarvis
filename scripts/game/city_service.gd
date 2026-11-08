@@ -26,7 +26,7 @@ static func buy_price(world, city: String, item: Dictionary) -> int:
 
 
 static func hire_price(world, player: Player, city: String, type: String) -> int:
-	return int(Data.COMPANIONS[type]["cost"] * (1.0 - world.discount(city)) * (1.0 + 0.1 * (player.level - 1)))
+	return int(Data.COMPANIONS[type]["cost"] * (1.0 - world.discount(city)) * (1.0 + 0.3 * (player.level - 1)))
 
 
 static func can_hire(world, player: Player, city: String, type: String) -> bool:

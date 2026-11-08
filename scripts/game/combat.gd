@@ -131,7 +131,7 @@ func enter(id: String, companions: Array) -> void:
 	loc = Data.LOCATIONS[id]
 	room = 1 if loc["type"] == "dungeon" else 0
 	field_kills = 0
-	field_goal = 20 + int(loc["level"]) * 3
+	field_goal = Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL
 	field_cleared = false
 	spawn_timer = 1.0
 	player.unbreak_ready = true
@@ -260,9 +260,11 @@ func _update_field(delta: float) -> void:
 func _spawn_room() -> void:
 	room_cleared = false
 	var en: Array = loc["enemies"]
-	for i in 4 + room * 2:
+	# Рядова нечисть у печері на рівень нижча — головна загроза тут бос
+	var minion_level := maxi(1, int(loc["level"]) - 1)
+	for i in Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER:
 		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 80, arena.position.y + arena.size.y * 0.55))
-		spawn_enemy(en[randi() % en.size()], loc["level"], false, pos)
+		spawn_enemy(en[randi() % en.size()], minion_level, false, pos)
 	if room == int(loc["rooms"]):
 		spawn_enemy(loc["boss"], loc["level"], true, Vector2(0, arena.position.y + 220))
 		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
@@ -350,7 +352,7 @@ func collect_all() -> void:
 			match c.kind:
 				"coin":
 					player.add_xp(c.value)
-					player.add_gold(c.value)
+					player.add_gold(Data.coin_gold(c.value))
 				"item":
 					pick_item(c.item)
 			c.queue_free()
@@ -391,7 +393,7 @@ func _drop_loot(e: Node2D) -> void:
 		spawn_pickup(pos, "coin", e.xp_value)
 		if randf() < 0.05 * (1 + player.varenyk_bonus):
 			spawn_pickup(pos, "varenyk", heal_value)
-		if randf() < 0.05:
+		if randf() < Data.ITEM_DROP_CHANCE:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl)))
 
 
