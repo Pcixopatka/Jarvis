@@ -171,7 +171,10 @@ func _suite_player() -> void:
 	for i in 40:
 		p.sharpen(w["uid"])
 		check(w["up"] >= 0 and w["up"] <= Data.MAX_UPGRADE, "заточка в межах")
-	check(p.sharpen(w["uid"]) == "max" or w["up"] < Data.MAX_UPGRADE, "межа заточки")
+	w["up"] = Data.MAX_UPGRADE
+	check(p.sharpen(w["uid"]) == "max" and w["up"] == Data.MAX_UPGRADE, "межа заточки")
+	w["up"] = Data.SHARPEN_RISK_FROM - 1
+	p.recalc()
 	p.gold = 0
 	var up_before: int = w["up"]
 	if up_before < Data.MAX_UPGRADE:
