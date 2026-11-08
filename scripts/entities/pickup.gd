@@ -33,6 +33,12 @@ func _process(delta: float) -> void:
 			combat.fx.burst(global_position, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
 		elif kind == "item":
 			combat.pick_item(item)
+		elif kind == "potion":
+			if p.add_potion():
+				combat.float_text(global_position + Vector2(0, -30), "+1 зілля", Color(1.0, 0.45, 0.45))
+				Audio.play("item", 0.05, -6.0)
+			else:
+				p.add_gold(Data.potion_price(p.level) / 2)
 		else:
 			p.heal(value)
 		queue_free()
@@ -53,6 +59,13 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([Vector2(-6, -8), Vector2(6, -8), Vector2(0, -2)]), Color(0.45, 0.3, 0.15))
 		draw_line(Vector2(-7, -6), Vector2(7, -6), col, 3.0)
 		draw_circle(Vector2(6, -10), 2.5, Color(1, 1, 0.9))
+		return
+	if kind == "potion":
+		# Пляшечка з червоним зіллям
+		draw_circle(Vector2(0, 2), 9.0, Color(0.85, 0.12, 0.15))
+		draw_circle(Vector2(-3, -1), 3.0, Color(1, 0.6, 0.6, 0.8))
+		draw_rect(Rect2(-3, -12, 6, 6), Color(0.75, 0.8, 0.85))
+		draw_rect(Rect2(-4, -15, 8, 3), Color(0.5, 0.3, 0.15))
 		return
 	if kind == "coin":
 		var r := 6.0 + minf(value, 20) * 0.35

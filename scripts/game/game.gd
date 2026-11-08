@@ -11,6 +11,7 @@ const MapPanel := preload("res://scripts/ui/map_panel.gd")
 const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
+const Party := preload("res://scripts/game/party.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const PlayerScript := preload("res://scripts/entities/player.gd")
@@ -59,6 +60,7 @@ func _ready() -> void:
 	hud.attack_pressed.connect(func(): if state == State.PLAYING: player.attack())
 	hud.dodge_pressed.connect(func(): if state == State.PLAYING: player.dodge())
 	hud.skill_pressed.connect(func(id): if state == State.PLAYING: player.use_skill(id))
+	hud.potion_pressed.connect(func(): if state == State.PLAYING: player.use_potion())
 	hud.pause_pressed.connect(func(): if state == State.PLAYING: _show_pause())
 	hud.character_pressed.connect(open_character)
 	hud.map_pressed.connect(func(): if state == State.PLAYING: _try_leave())
@@ -144,6 +146,7 @@ func load_game() -> bool:
 	world.from_dict(d["world"])
 	meta = d.get("meta", meta)
 	_new_hero(d["player"])
+	Party.normalize(world, player.level)
 	return true
 
 
@@ -248,6 +251,8 @@ func _on_enemy_killed(e: Node2D) -> void:
 	for m in world.on_kill(e.kind):
 		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
 	_story_event("kill", e.kind)
+	for up in Party.gain_xp(world, player.level, e.xp_value):
+		combat.companion_level_up(up[0], up[1])
 
 
 ## Передає подію сюжету й показує гравцеві, що змінилося.
@@ -392,6 +397,9 @@ func city_do(action: String, arg) -> void:
 			_sharpen(arg)
 		"hire":
 			CityService.hire(world, player, city_id, arg)
+		"buy_potion":
+			if CityService.buy_potion(world, player, city_id):
+				Audio.play("coin", 0.0)
 		"dismiss":
 			CityService.dismiss(world, arg)
 	save_game()
@@ -557,6 +565,9 @@ func _input(event: InputEvent) -> void:
 		KEY_O, KEY_3:
 			if playing:
 				player.use_skill("musket")
+		KEY_H, KEY_4:
+			if playing:
+				player.use_potion()
 		KEY_C, KEY_TAB:
 			if state == State.CHARACTER:
 				close_character()

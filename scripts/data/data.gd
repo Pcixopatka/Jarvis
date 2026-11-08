@@ -17,6 +17,15 @@ const BOSS_HP_MULT := 8.0  # бос у стільки разів «товсті�
 const BOSS_XP_MULT := 8
 const DUNGEON_ROOM_BASE := 6  # ворогів у кімнаті печери: база + за номер кімнати
 const DUNGEON_ROOM_PER := 3
+const POTION_MAX := 5  # скільки зілля можна нести
+const POTION_HEAL := 0.4  # частка здоров'я, яку відновлює зілля
+const POTION_CD := 6.0  # секунд між ковтками
+const POTION_START := 2
+const POTION_DROP_CHANCE := 0.02
+
+
+static func potion_price(hero_level: int) -> int:
+	return 25 + 10 * hero_level
 
 
 ## Досвід, потрібний, щоб перейти з рівня l на l+1.

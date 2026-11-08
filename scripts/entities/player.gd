@@ -22,6 +22,8 @@ var perk_points := 0
 
 # --- Спорядження ---
 var gold := 0
+var potions := Data.POTION_START
+var potion_timer := 0.0
 var inventory := []  # речі в торбі
 var equipment := {}  # слот -> річ
 var next_uid := 1
@@ -207,7 +209,7 @@ func eq(id: String) -> float:
 func to_dict() -> Dictionary:
 	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
-		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid}
+		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -371,6 +373,7 @@ func _process(delta: float) -> void:
 		return
 	attack_timer = maxf(0.0, attack_timer - delta)
 	dodge_timer = maxf(0.0, dodge_timer - delta)
+	potion_timer = maxf(0.0, potion_timer - delta)
 	for id in skill_timers:
 		skill_timers[id] = maxf(0.0, skill_timers[id] - delta)
 	invuln = maxf(0.0, invuln - delta)
@@ -461,6 +464,23 @@ func attack() -> void:
 		combat.shake(2.5 * weapon["kb"])
 		if crit_any:
 			combat.hitstop(0.05)
+
+
+## Ковтнути зілля здоров'я. Повертає true, якщо вдалося.
+func use_potion() -> bool:
+	if not alive or potions <= 0 or potion_timer > 0.0 or hp >= max_hp:
+		return false
+	potions -= 1
+	potion_timer = Data.POTION_CD
+	heal(max_hp * Data.POTION_HEAL)
+	return true
+
+
+func add_potion() -> bool:
+	if potions >= Data.POTION_MAX:
+		return false
+	potions += 1
+	return true
 
 
 func dodge() -> void:

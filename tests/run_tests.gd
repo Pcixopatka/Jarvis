@@ -39,6 +39,7 @@ func _run() -> void:
 	_suite_save()
 	_suite_city()
 	_suite_story()
+	_suite_party()
 	await _suite_gameplay()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -336,7 +337,56 @@ func _suite_story() -> void:
 	p.free()
 
 
-# ======================= 6. Ігровий сценарій =======================
+# ======================= 6. Зілля і загін =======================
+
+func _suite_party() -> void:
+	suite("Зілля і загін")
+	var Party = load("res://scripts/game/party.gd")
+	var p = _new_player()
+	var w = WorldState.new()
+	check(p.potions == Data.POTION_START, "на старті є зілля")
+	check(not p.use_potion(), "із повним здоров'ям зілля не п'ється")
+	p.hp = p.max_hp * 0.3
+	var hp_before = p.hp
+	check(p.use_potion() and p.hp > hp_before and p.potions == Data.POTION_START - 1, "зілля лікує й витрачається")
+	p.hp = p.max_hp * 0.3
+	check(not p.use_potion(), "перезарядка між ковтками")
+	p.potion_timer = 0.0
+	p.potions = 0
+	check(not p.use_potion(), "без зілля не лікує")
+	p.gold = 10000
+	for i in 10:
+		CityService.buy_potion(w, p, "sich")
+	check(p.potions == Data.POTION_MAX, "купівля зілля до межі")
+	check(not p.add_potion(), "понад межу не набрати")
+	var q = _new_player()
+	q.from_dict(p.to_dict())
+	check(q.potions == Data.POTION_MAX, "зілля зберігається")
+	# Загін
+	p.add_xp(5000)
+	var hero_lvl = p.level
+	check(CityService.hire(w, p, "sich", "dzhura"), "найм джури")
+	var c = w.companions[0]
+	check(int(c["level"]) == maxi(1, hero_lvl - Party.HIRE_BELOW_HERO), "супутник приходить на 2 рівні нижче")
+	var st0 = Party.stats("dzhura", c["level"])
+	var ups = Party.gain_xp(w, hero_lvl, Party.xp_for_level(c["level"]) + 1)
+	check(ups.size() == 1 and int(c["level"]) == st0.size() * 0 + int(ups[0][1]), "рівень супутника росте від досвіду")
+	check(Party.stats("dzhura", c["level"])["hp"] > st0["hp"], "показники ростуть із рівнем")
+	Party.gain_xp(w, hero_lvl, 1000000)
+	check(int(c["level"]) == hero_lvl, "супутник не обганяє козака")
+	c["downed"] = true
+	var lvl_before = c["level"]
+	Party.gain_xp(w, hero_lvl + 5, 1000000)
+	check(c["level"] == lvl_before, "поранений не отримує досвіду")
+	var w2 = WorldState.new()
+	w2.companions = [{"type": "strilets", "downed": false}]
+	Party.normalize(w2, 7)
+	check(w2.companions[0]["level"] == 5 and w2.companions[0]["xp"] == 0, "старі збереження отримують рівень")
+	p.free()
+	q.free()
+
+
+# ======================= 7. Ігровий сценарій =======================
 
 func _bot_fight(game) -> void:
 	var p = game.player
@@ -457,6 +507,16 @@ func _suite_gameplay() -> void:
 	game.enter_location("rapids")
 	await _frames(30)
 	check(game.combat.companion_nodes.size() == 1, "джура вийшов у похід")
+	var comp = game.world.companions[0]
+	var clvl = comp["level"]
+	for i in 25:
+		game.combat.spawn_enemy("mavka", 20, true, game.player.global_position + Vector2(600, 0))
+	await _frames(2)
+	for e in game.combat.get_tree().get_nodes_in_group("enemies"):
+		e.take_damage(1e9, Vector2.ZERO)
+	await _frames(2)
+	check(comp["level"] > clvl or clvl >= game.player.level, "супутник підріс у бою")
+	check(game.combat.companion_nodes[0].level == comp["level"], "показники живого супутника оновились")
 	var gold_before: int = game.player.gold
 	game.player.invuln = 0.0
 	game.player.take_damage(1e9)

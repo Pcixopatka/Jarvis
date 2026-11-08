@@ -7,6 +7,7 @@ extends CanvasLayer
 signal attack_pressed
 signal dodge_pressed
 signal skill_pressed(id: String)
+signal potion_pressed
 signal pause_pressed
 signal character_pressed
 signal map_pressed
@@ -25,6 +26,7 @@ var joystick
 var btn_attack
 var btn_dodge
 var skill_buttons := {}
+var btn_potion
 var hp_bar: ProgressBar
 var xp_bar: ProgressBar
 var hp_label: Label
@@ -79,6 +81,8 @@ func _build() -> void:
 	btn_attack.triggered.connect(func(): attack_pressed.emit())
 	btn_dodge = _action_button("Перекид", 56.0, Color(0.2, 0.45, 0.75))
 	btn_dodge.triggered.connect(func(): dodge_pressed.emit())
+	btn_potion = _action_button("Зілля", 46.0, Color(0.75, 0.12, 0.2))
+	btn_potion.triggered.connect(func(): potion_pressed.emit())
 	var skill_colors := {"whirl": Color(0.55, 0.3, 0.8), "lightning": Color(0.25, 0.55, 0.9), "musket": Color(0.45, 0.4, 0.3)}
 	for id in Data.ACTIVE_SKILLS:
 		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0, skill_colors[id])
@@ -292,6 +296,7 @@ func layout() -> void:
 	skill_buttons["whirl"].position = Vector2(s.x - 120, s.y - 315)
 	skill_buttons["lightning"].position = Vector2(s.x - 275, s.y - 255)
 	skill_buttons["musket"].position = Vector2(s.x - 425, s.y - 105)
+	btn_potion.position = Vector2(s.x - 430, s.y - 250)
 	map_view.map_rect = Rect2(Vector2(8, 96), Vector2(s.x - 410, s.y - 104))
 
 
@@ -344,6 +349,11 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	_low_hp = not combat_info.is_empty() and player.alive and player.hp < player.max_hp * 0.3
 	if not combat_info.is_empty():
 		btn_dodge.set_cooldown(player.dodge_timer / player.dodge_cooldown)
+		btn_potion.set_cooldown(1.0 if player.potions <= 0 else player.potion_timer / Data.POTION_CD)
+		var pl := "Зілля %d" % player.potions
+		if btn_potion.label != pl:
+			btn_potion.label = pl
+			btn_potion.queue_redraw()
 		for id in skill_buttons:
 			var b = skill_buttons[id]
 			b.visible = player.sk(id) > 0

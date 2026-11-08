@@ -3,11 +3,14 @@ extends Node2D
 ## Супутник козака: джура (ближній бій), стрілець (рушниця) або знахарка (лікування).
 
 const Data := preload("res://scripts/data/data.gd")
+const Party := preload("res://scripts/game/party.gd")
 
 var combat: Combat
 var type := "dzhura"
 var info := {}
 var index := 0  # місце в загоні (для зсуву під час руху)
+var level := 1
+var heal_amount := 0.0
 var radius := 16.0
 var max_hp := 90.0
 var hp := 90.0
@@ -22,13 +25,22 @@ var walk := 0.0
 var swing := 0.0
 
 
-func setup(t: String, hero_level: int, idx: int) -> void:
+func setup(t: String, lvl: int, idx: int) -> void:
 	type = t
 	index = idx
 	info = Data.COMPANIONS[t]
-	max_hp = info["hp"] + info["hp_lvl"] * (hero_level - 1)
+	set_level(lvl)
 	hp = max_hp
-	damage = info["dmg"] + info["dmg_lvl"] * (hero_level - 1)
+
+
+## Новий рівень: показники ростуть, здоров'я відновлюється повністю.
+func set_level(lvl: int) -> void:
+	level = lvl
+	var st := Party.stats(type, lvl)
+	max_hp = st["hp"]
+	damage = st["dmg"]
+	heal_amount = st.get("heal", 0.0)
+	hp = max_hp
 
 
 func _process(delta: float) -> void:
@@ -66,7 +78,7 @@ func _process(delta: float) -> void:
 
 	if type == "znakhar" and heal_cd <= 0.0:
 		heal_cd = 4.0
-		var amount: float = info["heal"] + info["heal_lvl"] * (p.level - 1)
+		var amount: float = heal_amount
 		for a in combat.allies():
 			if a == self:
 				hp = minf(max_hp, hp + amount)

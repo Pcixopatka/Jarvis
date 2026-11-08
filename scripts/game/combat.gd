@@ -198,7 +198,7 @@ func _spawn_companions(companions: Array) -> void:
 			continue
 		var c: Companion = CompanionScript.new()
 		c.combat = self
-		c.setup(data["type"], player.level, data.get("index", i))
+		c.setup(data["type"], int(data.get("level", player.level)), data.get("index", i))
 		c.position = player.position + Vector2(-60 + 120 * (i % 2), 50)
 		entities.add_child(c)
 		companion_nodes.append(c)
@@ -310,7 +310,7 @@ func _companion_states() -> Array:
 	var out := []
 	for c in companion_nodes:
 		if is_instance_valid(c):
-			out.append({"type": c.type, "downed": not c.alive, "index": c.index})
+			out.append({"type": c.type, "downed": not c.alive, "index": c.index, "level": c.level})
 	out.sort_custom(func(a, b): return a["index"] < b["index"])
 	return out
 
@@ -391,10 +391,13 @@ func _drop_loot(e: Node2D) -> void:
 		for i in 2:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
+		spawn_pickup(pos, "potion", 1)
 	else:
 		spawn_pickup(pos, "coin", e.xp_value)
 		if randf() < 0.05 * (1 + player.varenyk_bonus):
 			spawn_pickup(pos, "varenyk", heal_value)
+		if randf() < Data.POTION_DROP_CHANCE:
+			spawn_pickup(pos, "potion", 1)
 		if randf() < Data.ITEM_DROP_CHANCE:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl)))
 
@@ -409,6 +412,15 @@ func pick_item(item: Dictionary) -> void:
 		var g := Data.sell_price(item)
 		player.gold += g
 		float_text(player.global_position + Vector2(0, -70), "Торба повна: +%d грн" % g, col)
+
+
+## Супутник підріс просто в бою: оновлюємо показники й радіємо разом.
+func companion_level_up(index: int, lvl: int) -> void:
+	for c in companion_nodes:
+		if is_instance_valid(c) and c.index == index and c.alive:
+			c.set_level(lvl)
+			float_text(c.global_position + Vector2(0, -50), "Рівень %d!" % lvl, Color(0.6, 1.0, 0.6))
+			fx.ring(c.global_position, Color(0.6, 1.0, 0.6), 20, 200, 4, 0.5)
 
 
 func on_companion_down(c: Companion) -> void:

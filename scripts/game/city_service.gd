@@ -3,6 +3,7 @@ extends RefCounted
 ## Чисті функції над станом світу й героя — їх легко тестувати і в майбутньому перенести на сервер.
 
 const Data := preload("res://scripts/data/data.gd")
+const Party := preload("res://scripts/game/party.gd")
 
 const SHOP_SIZE := 6
 const BUY_MARKUP := 4.0
@@ -72,7 +73,20 @@ static func hire(world, player: Player, city: String, type: String) -> bool:
 	if not can_hire(world, player, city, type):
 		return false
 	player.gold -= hire_price(world, player, city, type)
-	world.companions.append({"type": type, "downed": false})
+	world.companions.append(Party.new_member(type, player.level))
+	return true
+
+
+static func potion_price(world, player: Player, city: String) -> int:
+	return int(Data.potion_price(player.level) * (1.0 - world.discount(city)))
+
+
+static func buy_potion(world, player: Player, city: String) -> bool:
+	var price := potion_price(world, player, city)
+	if player.gold < price or player.potions >= Data.POTION_MAX:
+		return false
+	player.gold -= price
+	player.potions += 1
 	return true
 
 

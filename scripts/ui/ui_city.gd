@@ -109,6 +109,11 @@ static func _shop(game, city: String) -> Control:
 	left.add_child(sg)
 	h.add_child(left)
 
+	var pprice: int = game.CityService.potion_price(game.world, p, city)
+	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, Data.POTION_MAX], 20, UI.TEXT, false))
+	left.add_child(UI.label("Лікує %d%% здоров'я в бою" % roundi(Data.POTION_HEAL * 100), 15, UI.MUTED, false))
+	left.add_child(UI.button("Купити зілля • %d грн" % pprice, _do(game, "buy_potion"), Vector2(306, 56), 18, p.gold >= pprice and p.potions < Data.POTION_MAX))
+
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
 	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), Data.INVENTORY_SIZE], 22, UI.GOLD, false))
@@ -195,12 +200,16 @@ static func _tavern(game, city: String) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(UI.label("Твій загін (%d/%d). Поранені супутники одужують у будь-якому місті." % [w.companions.size(), Data.MAX_COMPANIONS], 22, UI.GOLD, false))
+	v.add_child(UI.label("Супутники отримують досвід за кожного ворога, вбитого в поході, і ростуть до рівня козака.", 16, UI.MUTED, false))
 	if w.companions.is_empty():
 		v.add_child(UI.label("Поки що ти сам.", 18, UI.MUTED, false))
 	for i in w.companions.size():
 		var c: Dictionary = w.companions[i]
 		var row := HBoxContainer.new()
-		var l := UI.label("%s%s" % [Data.COMPANIONS[c["type"]]["name"], "  (поранений)" if c["downed"] else ""], 22, UI.TEXT, false)
+		var clvl: int = int(c.get("level", 1))
+		var cst: Dictionary = game.Party.stats(c["type"], clvl)
+		var xp_text := "макс. (рівень козака)" if clvl >= p.level else "досвід %d/%d" % [c.get("xp", 0), game.Party.xp_for_level(clvl)]
+		var l := UI.label("%s — рівень %d • здоров'я %d, шкода %d • %s%s" % [Data.COMPANIONS[c["type"]]["name"], clvl, cst["hp"], cst["dmg"], xp_text, "  (поранений)" if c["downed"] else ""], 20, UI.TEXT, false)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(l)
 		row.add_child(UI.button("Відпустити", _do(game, "dismiss", i), Vector2(190, 54), 18))
@@ -213,9 +222,9 @@ static func _tavern(game, city: String) -> Control:
 		row.add_theme_constant_override("separation", 12)
 		var col := VBoxContainer.new()
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var hp: int = int(info["hp"] + info["hp_lvl"] * (p.level - 1))
-		var dmg: int = int(info["dmg"] + info["dmg_lvl"] * (p.level - 1))
-		col.add_child(UI.label("%s — здоров'я %d, шкода %d" % [info["name"], hp, dmg], 22, UI.TEXT, false))
+		var start_lvl: int = game.Party.new_member(type, p.level)["level"]
+		var st: Dictionary = game.Party.stats(type, start_lvl)
+		col.add_child(UI.label("%s — рівень %d • здоров'я %d, шкода %d" % [info["name"], start_lvl, st["hp"], st["dmg"]], 22, UI.TEXT, false))
 		col.add_child(UI.label(info["desc"].replace("\n", " "), 16, UI.MUTED, false))
 		var need: int = info["loyalty"]
 		if lvl < need:
