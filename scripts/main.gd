@@ -1389,6 +1389,10 @@ func hint(id: String, text: String) -> void:
 		return
 	world.hints[id] = true
 	hint_label.text = text
+	# На мапі праворуч бічна панель — зсуваємо підказку лівіше
+	var shift := -205.0 if state == State.MAP else 0.0
+	hint_panel.offset_left = -330 + shift
+	hint_panel.offset_right = 330 + shift
 	hint_panel.visible = true
 	hint_panel.modulate.a = 1.0
 	if _hint_tween:
