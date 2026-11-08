@@ -1,9 +1,10 @@
+class_name Enemy
 extends Node2D
 ## Нечисть: мавка, упир, болотяник, вовкулака; боси — Змій або велетенські різновиди інших.
 
-const TelegraphScript := preload("res://scripts/telegraph.gd")
+const TelegraphScript := preload("res://scripts/world/telegraph.gd")
 
-var main
+var combat: Combat
 var kind := "mavka"
 var level := 1
 var radius := 16.0
@@ -83,7 +84,7 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 func _pick_target():
 	var best = null
 	var best_d := INF
-	for a in main.allies():
+	for a in combat.allies():
 		var d: float = global_position.distance_squared_to(a.global_position)
 		if d < best_d:
 			best_d = d
@@ -142,7 +143,7 @@ func _process(delta: float) -> void:
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	position += vel * delta
 	var pad := Vector2(radius, radius)
-	position = position.clamp(main.arena.position + pad, main.arena.end - pad)
+	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
 
 	# Ближня атака із замахом: ворог червоніє, і за мить б'є, якщо ціль досі поруч
 	if windup > 0.0:
@@ -165,12 +166,12 @@ func _process(delta: float) -> void:
 			shoot_timer = shoot_cd
 			if kind == "zmii":
 				for a in [-0.35, 0.0, 0.35]:
-					main.spawn_projectile(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.6, Color(1.0, 0.5, 0.1), 13.0)
+					combat.spawn_projectile(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.6, Color(1.0, 0.5, 0.1), 13.0)
 			elif is_boss:
 				for a in [-0.25, 0.0, 0.25]:
-					main.spawn_projectile(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
+					combat.spawn_projectile(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
 			else:
-				main.spawn_projectile(global_position, dir, 260.0, damage, Color(0.55, 0.85, 0.2), 9.0)
+				combat.spawn_projectile(global_position, dir, 260.0, damage, Color(0.55, 0.85, 0.2), 9.0)
 	queue_redraw()
 
 
@@ -181,38 +182,38 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	flash = 0.12
 	knockback += kb * (0.15 if is_boss else 1.0)
 	var col := Color(1.0, 0.85, 0.2) if crit else Color.WHITE
-	main.float_text(global_position + Vector2(0, -radius - 14), str(int(amount)) + ("!" if crit else ""), col)
+	combat.float_text(global_position + Vector2(0, -radius - 14), str(int(amount)) + ("!" if crit else ""), col)
 	var blood: Color = {"mavka": Color(0.75, 1.0, 0.75), "upyr": Color(0.55, 0.05, 0.08), "bolotianyk": Color(0.45, 0.55, 0.2),
 		"vovkulaka": Color(0.7, 0.1, 0.1), "zmii": Color(0.3, 0.8, 0.3)}.get(kind, Color.WHITE)
-	main.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
+	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
-		main.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
+		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
 	if hp <= 0.0:
 		dead = true
 		dying = 0.35
 		remove_from_group("enemies")
-		main.on_enemy_killed(self)
+		Events.enemy_killed.emit(self)
 
 
 # --- Особливі атаки босів ---
 
 func _telegraph(shape: String, pos: Vector2, dur: float, dmg: float):
 	var t = TelegraphScript.new()
-	t.main = main
+	t.combat = combat
 	t.source = self
 	t.shape = shape
 	t.position = pos
 	t.duration = dur
 	t.damage = dmg
-	main.effects.add_child(t)
+	combat.effects.add_child(t)
 	return t
 
 
 func _summon(kinds: Array, count: int) -> void:
 	for i in count:
 		var pos := global_position + Vector2.from_angle(randf() * TAU) * randf_range(90, 160)
-		main.fx.burst(pos, Color(0.3, 0.25, 0.3), 14, 140, 8, 0.6)
-		main.spawn_enemy(kinds[randi() % kinds.size()], maxi(1, level - 1), false, pos)
+		combat.fx.burst(pos, Color(0.3, 0.25, 0.3), 14, 140, 8, 0.6)
+		combat.spawn_enemy(kinds[randi() % kinds.size()], maxi(1, level - 1), false, pos)
 
 
 func _boss_ability(target) -> void:
@@ -227,7 +228,7 @@ func _boss_ability(target) -> void:
 			t.length = 420.0
 			t.half_angle = 0.42
 			t.color = Color(1.0, 0.45, 0.1)
-			main.audio.play("roar", 0.05, -3.0)
+			Audio.play("roar", 0.05, -3.0)
 		"upyr":
 			ability_timer = 6.0
 			if ability_step % 2 == 1:
@@ -238,7 +239,7 @@ func _boss_ability(target) -> void:
 					if not dead:
 						global_position = t.global_position
 			else:
-				main.audio.play("roar", 0.05, -4.0)
+				Audio.play("roar", 0.05, -4.0)
 				_summon(["upyr", "mavka"], 3)
 		"vovkulaka":
 			ability_timer = 5.0
@@ -252,7 +253,7 @@ func _boss_ability(target) -> void:
 					if not dead:
 						knockback = to_t * 1900.0
 			else:
-				main.audio.play("roar", 0.05, -2.0)
+				Audio.play("roar", 0.05, -2.0)
 				_summon(["vovkulaka"], 2)
 		_:
 			ability_timer = 6.0

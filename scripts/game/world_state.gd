@@ -1,7 +1,7 @@
 extends RefCounted
 ## Стан світу: лояльність міст, дошки завдань, активні завдання, загін, крамниці.
 
-const Data := preload("res://scripts/data.gd")
+const Data := preload("res://scripts/data/data.gd")
 
 var loyalty := {}  # місто -> очки
 var boards := {}  # місто -> доступні завдання

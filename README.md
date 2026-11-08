@@ -80,26 +80,46 @@
 2. Встановіть Android SDK і JDK 17, потім вкажіть шляхи до них у **Editor Settings → Export → Android**.
 3. **Project → Export → Add… → Android → Export Project**. Або підключіть телефон через USB і натисніть іконку Android в редакторі.
 
-## Структура
+## Архітектура
 
 ```
-scripts/main.gd          менеджер гри: режими, бій, HUD, меню, збереження
-scripts/data.gd          усі дані й баланс: характеристики, вміння, перки, речі, міста, локації
-scripts/world_state.gd   лояльність, завдання, загін, крамниці
-scripts/world_map.gd     мапа (Україна та сусіди), масштаб і перетягування
-scripts/ui_city.gd       екран міста (завдання, крамниця, коваль, корчма)
-scripts/ui_character.gd  екран козака (характеристики, спорядження, вміння, перки)
-scripts/ui_kit.gd        спільні елементи інтерфейсу
-scripts/player.gd        козак
-scripts/companion.gd     супутники
-scripts/enemy.gd         нечисть і боси
-scripts/ground.gd        ландшафти: степ, річка, ліс, болото, гори, печера
-scripts/projectile.gd, pickup.gd, portal.gd, bolt.gd, float_text.gd   снаряди, здобич, проходи, ефекти
-scripts/audio.gd         синтез звуку й музики
-scripts/fx.gd, ambient.gd   частинки ударів і атмосфери
-scripts/telegraph.gd     червоні зони атак босів
-scripts/joystick.gd, action_button.gd   сенсорне керування
+scripts/
+  core/        фундамент, не залежить від гри
+    events.gd        шина подій (автозавантаження Events)
+    audio.gd         синтез звуку й музики (автозавантаження Audio)
+    save_system.gd   збереження з версіями, міграцією й резервною копією
+  data/
+    data.gd          усі дані й баланс: характеристики, вміння, перки, речі, міста, локації
+  game/        ігрова логіка
+    game.gd          диригент: режими (меню → мапа → місто → похід), збереження, екрани
+    combat.gd        бій і локації: арена, вороги, здобич, зачистка, печери
+    world_state.gd   стан світу: лояльність, завдання, загін, крамниці
+    city_service.gd  логіка міста без інтерфейсу: ціни, купівля, найм, здача завдань
+  entities/    персонажі й предмети на арені
+    player.gd, enemy.gd, companion.gd, projectile.gd, pickup.gd, portal.gd
+  world/       графіка світу
+    ground.gd (ландшафти), fx.gd (частинки), ambient.gd (атмосфера),
+    telegraph.gd (зони атак босів), bolt.gd, float_text.gd
+  ui/          інтерфейс
+    hud.gd (усе поверх гри), world_map.gd, map_panel.gd, ui_city.gd,
+    ui_character.gd, ui_kit.gd, joystick.gd, action_button.gd
+tests/         автотести (див. tests/README.md)
 ```
+
+**Принципи:**
+- **Події замість прямих викликів.** Сутності повідомляють, що сталося (`Events.enemy_killed`, `Events.player_hurt`, `Events.level_up`…), а `Game`, `Combat` і `Hud` самі вирішують, як реагувати. Вороги й козак не знають про меню та інтерфейс.
+- **Поділ відповідальності.** `Game` перемикає режими, `Combat` веде бій, `Hud` показує, `CityService` рахує.
+- **Логіка міста — чисті функції** над станом героя й світу. Їх легко тестувати, а для онлайну — перенести на сервер.
+- **Збереження з версіями.** При зміні формату додається крок міграції, тож старі збереження гравців не ламаються. Запис атомарний, з резервною копією.
+- **Типи** (`Player`, `Enemy`, `Companion`, `Combat`, `Hud`, `Game`) дозволяють ловити помилки ще до запуску.
+
+## Тести
+
+```bash
+godot --headless --path . -s res://tests/run_tests.gd --fixed-fps 60
+```
+
+Понад 800 перевірок, включно з повним проходженням гри ботом. Займає кілька секунд. Детальніше — у `tests/README.md`. На GitHub запускаються автоматично.
 
 ## Ідеї на майбутнє
 

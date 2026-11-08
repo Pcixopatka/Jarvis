@@ -1,35 +1,35 @@
 extends RefCounted
 ## Екран козака: характеристики, спорядження, дерево вмінь, дерево перків.
-## Усі дії йдуть через main.char_do(дія, аргумент), після чого екран перебудовується.
+## Усі дії йдуть через game.char_do(дія, аргумент), після чого екран перебудовується.
 
-const Data := preload("res://scripts/data.gd")
-const UI := preload("res://scripts/ui_kit.gd")
+const Data := preload("res://scripts/data/data.gd")
+const UI := preload("res://scripts/ui/ui_kit.gd")
 
 
 static func _pts(n: int) -> String:
 	return "  (+%d)" % n if n > 0 else ""
 
 
-static func build(main) -> Control:
-	var p = main.player
+static func build(game) -> Control:
+	var p = game.player
 	var pages := [
-		["Характеристики" + _pts(p.stat_points), _stats(main)],
-		["Спорядження", _gear(main)],
-		["Вміння" + _pts(p.skill_points), _skills(main)],
-		["Перки" + _pts(p.perk_points), _perks(main)],
+		["Характеристики" + _pts(p.stat_points), _stats(game)],
+		["Спорядження", _gear(game)],
+		["Вміння" + _pts(p.skill_points), _skills(game)],
+		["Перки" + _pts(p.perk_points), _perks(game)],
 	]
-	return UI.screen("Козак — рівень %d   •   Дукати: %d" % [p.level, p.gold], "Назад", main.close_character,
-		pages, main.char_tab, func(i: int): main.char_tab = i)
+	return UI.screen("Козак — рівень %d   •   Дукати: %d" % [p.level, p.gold], "Назад", game.close_character,
+		pages, game.char_tab, func(i: int): game.char_tab = i)
 
 
-static func _do(main, action: String, arg = null) -> Callable:
-	return main.char_do.bind(action, arg)
+static func _do(game, action: String, arg = null) -> Callable:
+	return game.char_do.bind(action, arg)
 
 
 # ---------------- Характеристики ----------------
 
-static func _stats(main) -> Control:
-	var p = main.player
+static func _stats(game) -> Control:
+	var p = game.player
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 40)
 	var left := VBoxContainer.new()
@@ -47,7 +47,7 @@ static func _stats(main) -> Control:
 		info.add_child(UI.label("%s: %d%s" % [st["name"], p.stat(st["id"]), extra], 28, UI.TEXT, false))
 		info.add_child(UI.label(st["desc"], 17, UI.MUTED, false))
 		row.add_child(info)
-		row.add_child(UI.button("+", _do(main, "stat", st["id"]), Vector2(90, 70), 0, p.stat_points > 0))
+		row.add_child(UI.button("+", _do(game, "stat", st["id"]), Vector2(90, 70), 0, p.stat_points > 0))
 		left.add_child(row)
 
 	var right := VBoxContainer.new()
@@ -82,11 +82,11 @@ static func _stats(main) -> Control:
 
 # ---------------- Спорядження ----------------
 
-static func _gear(main) -> Control:
-	var p = main.player
+static func _gear(game) -> Control:
+	var p = game.player
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 18)
-	var sel: int = main.char_sel_uid
+	var sel: int = game.char_sel_uid
 
 	var slots := VBoxContainer.new()
 	slots.add_theme_constant_override("separation", 6)
@@ -95,7 +95,7 @@ static func _gear(main) -> Control:
 	for slot in Data.SLOTS:
 		if p.equipment.has(slot):
 			var it: Dictionary = p.equipment[slot]
-			sg.add_child(UI.item_button(it, _do(main, "select", it["uid"]), it["uid"] == sel, Data.SLOT_NAMES[slot]))
+			sg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, Data.SLOT_NAMES[slot]))
 		else:
 			sg.add_child(UI.empty_slot_button("%s\n—" % Data.SLOT_NAMES[slot]))
 	slots.add_child(sg)
@@ -106,7 +106,7 @@ static func _gear(main) -> Control:
 	bag.add_child(UI.label("Торба %d/%d" % [p.inventory.size(), Data.INVENTORY_SIZE], 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(main, "select", it["uid"]), it["uid"] == sel))
+		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
 	if p.inventory.is_empty():
 		bag.add_child(UI.label("Порожньо. Речі падають з нечисті\nта продаються в містах.", 17, UI.MUTED, false))
 	bag.add_child(bg)
@@ -125,10 +125,10 @@ static func _gear(main) -> Control:
 	var cmp: Dictionary = {} if equipped else p.equipment.get(item["slot"], {})
 	det.add_child(UI.item_card(item, cmp))
 	if equipped:
-		det.add_child(UI.button("Зняти", _do(main, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
+		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
 	else:
-		det.add_child(UI.button("Вдягнути", _do(main, "equip", sel), Vector2(300, 60), 24))
-		det.add_child(UI.button("Викинути", _do(main, "drop", sel), Vector2(300, 52), 20))
+		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24))
+		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
 	return h
 
 
@@ -147,8 +147,8 @@ static func _tree_button(text: String, rank: int, max_rank: int, can: bool, lock
 	return b
 
 
-static func _skills(main) -> Control:
-	var p = main.player
+static func _skills(game) -> Control:
+	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	v.add_child(UI.label("Очки вмінь: %d   (+%d за рівень).  Активні вміння з'являються кнопками в бою." % [p.skill_points, Data.SKILL_POINTS_PER_LEVEL], 21, UI.GOLD if p.skill_points > 0 else UI.MUTED))
@@ -175,15 +175,15 @@ static func _skills(main) -> Control:
 				text += "\nПотрібно: " + ", ".join(reqs)
 			elif n.get("active", false):
 				text += "\nАктивне вміння"
-			col.add_child(_tree_button(text, rank, n["max"], p.can_learn_skill(n), not req_met, 17, Vector2(320, 120), _do(main, "skill", n["id"])))
+			col.add_child(_tree_button(text, rank, n["max"], p.can_learn_skill(n), not req_met, 17, Vector2(320, 120), _do(game, "skill", n["id"])))
 		h.add_child(col)
 	return v
 
 
 # ---------------- Перки ----------------
 
-static func _perks(main) -> Control:
-	var p = main.player
+static func _perks(game) -> Control:
+	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	v.add_child(UI.label("Очки перків: %d   (+%d за рівень).  Новий ярус відкривається за кожні %d очки, вкладені в гілку." % [p.perk_points, Data.PERK_POINTS_PER_LEVEL, Data.PERK_TIER_STEP], 21, UI.GOLD if p.perk_points > 0 else UI.MUTED))
@@ -210,7 +210,7 @@ static func _perks(main) -> Control:
 				var rank: int = p.pk(pk["id"])
 				var text := "%s  %d/%d\n%s" % [pk["name"], rank, pk["max"], pk["desc"]]
 				var w := 340.0 if tiers[ti].size() == 1 else 166.0
-				row.add_child(_tree_button(text, rank, pk["max"], p.can_learn_perk(pk["id"]), not open, 14, Vector2(w, 88), _do(main, "perk", pk["id"])))
+				row.add_child(_tree_button(text, rank, pk["max"], p.can_learn_perk(pk["id"]), not open, 14, Vector2(w, 88), _do(game, "perk", pk["id"])))
 			col.add_child(row)
 		h.add_child(col)
 	return v

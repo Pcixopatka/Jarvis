@@ -1,5 +1,5 @@
 extends Node
-## Звук без жодного файлу: усі ефекти та музика синтезуються кодом під час запуску.
+## Звук (автозавантаження «Audio»). Жодного файлу: усі ефекти та музика синтезуються кодом під час запуску.
 ## Музика — «бандура» (синтез щипкової струни Карплуса-Стронга) у гармонічному мінорі.
 
 const RATE := 22050
@@ -26,6 +26,10 @@ func _ready() -> void:
 	_music_player.volume_db = -9.0
 	add_child(_music_player)
 	_build_sfx()
+	# Клацання для всіх кнопок інтерфейсу
+	get_tree().node_added.connect(func(n):
+		if n is BaseButton:
+			n.pressed.connect(func(): play("click", 0.05, -6.0)))
 	_thread = Thread.new()
 	_thread.start(_build_music_thread)
 

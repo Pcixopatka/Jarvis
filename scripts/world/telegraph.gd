@@ -2,7 +2,7 @@ extends Node2D
 ## Попередження про удар боса: червона зона на землі заповнюється, а потім б'є всіх усередині.
 ## Форми: "circle" (коло), "cone" (конус вогню), "line" (ривок).
 
-var main
+var combat
 var source  # хто атакує; якщо загинув — атака скасовується
 var shape := "circle"
 var radius := 120.0
@@ -41,20 +41,20 @@ func contains(p: Vector2) -> bool:
 
 
 func _fire() -> void:
-	for a in main.allies():
+	for a in combat.allies():
 		if contains(a.global_position):
 			a.take_damage(damage, null)
-	main.shake(9.0)
-	main.audio.play("boom", 0.1, -4.0)
+	combat.shake(9.0)
+	Audio.play("boom", 0.1, -4.0)
 	match shape:
 		"cone":
 			for i in 5:
-				main.fx.burst(global_position + dir.rotated(randf_range(-half_angle, half_angle)) * randf_range(60, length), Color(1.0, 0.55, 0.1), 8, 180, 7, 0.6, -120)
+				combat.fx.burst(global_position + dir.rotated(randf_range(-half_angle, half_angle)) * randf_range(60, length), Color(1.0, 0.55, 0.1), 8, 180, 7, 0.6, -120)
 		"line":
 			for i in 6:
-				main.fx.burst(global_position + dir * length * i / 5.0, Color(0.7, 0.65, 0.6), 5, 160, 6, 0.5)
+				combat.fx.burst(global_position + dir * length * i / 5.0, Color(0.7, 0.65, 0.6), 5, 160, 6, 0.5)
 		_:
-			main.fx.ring(global_position, Color(0.75, 0.6, 0.45), 24, radius * 2.0, 8, 0.4)
+			combat.fx.ring(global_position, Color(0.75, 0.6, 0.45), 24, radius * 2.0, 8, 0.4)
 	if on_fire.is_valid():
 		on_fire.call()
 

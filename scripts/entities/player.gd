@@ -1,12 +1,13 @@
+class_name Player
 extends Node2D
 ## Козак — головний герой. Рух, бій, характеристики, вміння і перки.
 
 signal died
 signal leveled_up(level: int)
 
-const Data := preload("res://scripts/data.gd")
+const Data := preload("res://scripts/data/data.gd")
 
-var main
+var combat: Combat
 
 # --- Прогрес ---
 var level := 1
@@ -227,6 +228,11 @@ func revive() -> void:
 
 # ================= Прогресія =================
 
+## Чи козак зараз на арені (ефекти й звуки бою мають сенс лише там).
+func _in_combat() -> bool:
+	return combat != null and combat.active and is_inside_tree()
+
+
 func sk(id: String) -> int:
 	return skills.get(id, 0)
 
@@ -351,9 +357,11 @@ func add_xp(value: int) -> void:
 		skill_points += Data.SKILL_POINTS_PER_LEVEL
 		perk_points += Data.PERK_POINTS_PER_LEVEL
 		heal(max_hp * 0.25)
-		main.audio.play("levelup", 0.0)
-		main.fx.ring(global_position, Color(1.0, 0.85, 0.3), 32, 420, 6, 0.6)
+		if _in_combat():
+			Audio.play("levelup", 0.0)
+			combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 32, 420, 6, 0.6)
 		leveled_up.emit(level)
+		Events.level_up.emit(level)
 
 
 # ================= Цикл =================
@@ -376,7 +384,7 @@ func _process(delta: float) -> void:
 		if storm_timer < 0.0:
 			_whirl_hit(0.7, 480.0)
 
-	var input_vec: Vector2 = main.get_move_input()
+	var input_vec: Vector2 = combat.get_move_input()
 	moving = false
 	if dodge_time_left > 0.0:
 		dodge_time_left -= delta
@@ -392,7 +400,7 @@ func _process(delta: float) -> void:
 			walk_phase += delta * 14.0
 
 	var pad := Vector2(radius, radius)
-	position = position.clamp(main.arena.position + pad, main.arena.end - pad)
+	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
 
 	if attack_held and attack_timer <= 0.0:
 		attack()
@@ -429,13 +437,13 @@ func attack() -> void:
 		return
 	attack_timer = attack_cooldown
 	# Автонаведення — на телефоні цілитися пальцем незручно.
-	var target: Node2D = main.nearest_enemy(global_position, attack_range * 1.8)
+	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.8)
 	if target:
 		facing = (target.global_position - global_position).normalized()
 	swing_time = 0.18
 	swing_duration = 0.18
 	swing_full = false
-	main.audio.play("swing", 0.15, -4.0)
+	Audio.play("swing", 0.15, -4.0)
 	var hits := 0
 	var crit_any := false
 	for e in _alive_enemies():
@@ -449,23 +457,23 @@ func attack() -> void:
 			hits += 1
 			crit_any = crit_any or r[1]
 	if hits > 0:
-		main.audio.play("crit" if crit_any else "hit", 0.12)
-		main.shake(2.5 * weapon["kb"])
+		Audio.play("crit" if crit_any else "hit", 0.12)
+		combat.shake(2.5 * weapon["kb"])
 		if crit_any:
-			main.hitstop(0.05)
+			combat.hitstop(0.05)
 
 
 func dodge() -> void:
 	if not alive or dodge_timer > 0.0:
 		return
 	dodge_timer = dodge_cooldown
-	var input_vec: Vector2 = main.get_move_input()
+	var input_vec: Vector2 = combat.get_move_input()
 	dodge_dir = input_vec.normalized() if input_vec.length() > 0.1 else facing
 	dodge_time_left = 0.18
 	dodge_hits.clear()
 	invuln = maxf(invuln, 0.32)
-	main.audio.play("dodge", 0.1)
-	main.fx.burst(global_position + Vector2(0, 16), Color(0.75, 0.7, 0.55, 0.7), 10, 160, 7, 0.45, 0, (-dodge_dir).angle(), 1.4)
+	Audio.play("dodge", 0.1)
+	combat.fx.burst(global_position + Vector2(0, 16), Color(0.75, 0.7, 0.55, 0.7), 10, 160, 7, 0.45, 0, (-dodge_dir).angle(), 1.4)
 
 
 func _dash_strike() -> void:
@@ -531,9 +539,9 @@ func _whirl() -> bool:
 		_whirl_hit(1.0, 0.0)
 	else:
 		_whirl_hit(1.0, 480.0)
-	main.float_text(global_position + Vector2(0, -60), "Буревій!" if storm else "Вихор!", Color(0.6, 0.85, 1.0))
-	main.audio.play("whirl")
-	main.fx.ring(global_position, Color(0.7, 0.9, 1.0, 0.8), 28, whirl_reach() * 2.2, 5, 0.35)
+	combat.float_text(global_position + Vector2(0, -60), "Буревій!" if storm else "Вихор!", Color(0.6, 0.85, 1.0))
+	Audio.play("whirl")
+	combat.fx.ring(global_position, Color(0.7, 0.9, 1.0, 0.8), 28, whirl_reach() * 2.2, 5, 0.35)
 	return true
 
 
@@ -547,7 +555,7 @@ func _whirl_hit(mult: float, kb: float) -> void:
 	swing_time = 0.4
 	swing_duration = 0.4
 	swing_full = true
-	main.shake(9.0)
+	combat.shake(9.0)
 
 
 func _lightning() -> bool:
@@ -565,16 +573,16 @@ func _lightning() -> bool:
 		hit(e, r[0], Vector2.ZERO, r[1])
 		if sk("wrath") > 0 and not e.dead:
 			e.slow_timer = 2.0
-	main.spawn_bolt(pts)
-	main.shake(5.0)
-	main.audio.play("lightning")
+	combat.spawn_bolt(pts)
+	combat.shake(5.0)
+	Audio.play("lightning")
 	for i in range(1, pts.size()):
-		main.fx.burst(pts[i], Color(0.75, 0.9, 1.0), 8, 260, 3.5, 0.3)
+		combat.fx.burst(pts[i], Color(0.75, 0.9, 1.0), 8, 260, 3.5, 0.3)
 	return true
 
 
 func _musket() -> bool:
-	var target: Node2D = main.nearest_enemy(global_position, 750.0)
+	var target: Node2D = combat.nearest_enemy(global_position, 750.0)
 	var dir := facing
 	if target:
 		dir = (target.global_position - global_position).normalized()
@@ -583,11 +591,11 @@ func _musket() -> bool:
 	var angles := [-0.3, -0.15, 0.0, 0.15, 0.3] if sk("buckshot") > 0 else [0.0]
 	for a in angles:
 		var r := _roll(m * (0.6 if angles.size() > 1 else 1.0))
-		main.spawn_bullet(global_position + Vector2(0, -10) + dir * 30.0, dir.rotated(a), r[0], r[1])
-	main.shake(4.0)
-	main.audio.play("musket")
-	main.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(0.85, 0.85, 0.8, 0.6), 14, 140, 9, 0.8, -40, dir.angle(), 0.9)
-	main.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(1.0, 0.8, 0.3), 6, 300, 4, 0.15, 0, dir.angle(), 0.6)
+		combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 30.0, dir.rotated(a), r[0], r[1])
+	combat.shake(4.0)
+	Audio.play("musket")
+	combat.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(0.85, 0.85, 0.8, 0.6), 14, 140, 9, 0.8, -40, dir.angle(), 0.9)
+	combat.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(1.0, 0.8, 0.3), 6, 300, 4, 0.15, 0, dir.angle(), 0.6)
 	return true
 
 
@@ -602,31 +610,32 @@ func take_damage(amount: float, source = null) -> void:
 	hp -= amount
 	hurt_flash = 0.2
 	invuln = 0.35
-	main.shake(7.0)
-	main.audio.play("hurt", 0.1)
-	main.on_player_hurt()
-	main.float_text(global_position + Vector2(0, -50), str(int(amount)), Color(1.0, 0.35, 0.3))
+	combat.shake(7.0)
+	Audio.play("hurt", 0.1)
+	Events.player_hurt.emit()
+	combat.float_text(global_position + Vector2(0, -50), str(int(amount)), Color(1.0, 0.35, 0.3))
 	if hp <= 0.0:
 		if pk("unbreak") > 0 and unbreak_ready:
 			unbreak_ready = false
 			hp = 1.0
 			invuln = 1.5
-			main.show_banner("Незламний!", Color(1.0, 0.85, 0.3))
+			Events.banner.emit("Незламний!", Color(1.0, 0.85, 0.3))
 			return
 		hp = 0.0
 		alive = false
 		queue_redraw()
 		died.emit()
+		Events.player_died.emit()
 
 
 func heal(amount: float, show: bool = true) -> void:
 	var before := hp
 	hp = minf(max_hp, hp + amount)
 	var gained := int(hp - before)
-	if show and gained > 0:
-		main.float_text(global_position + Vector2(0, -50), "+%d" % gained, Color(0.4, 1.0, 0.45))
-		main.audio.play("heal", 0.05, -4.0)
-		main.fx.burst(global_position + Vector2(0, -10), Color(0.5, 1.0, 0.5), 10, 90, 4, 0.7, -80)
+	if show and gained > 0 and _in_combat():
+		combat.float_text(global_position + Vector2(0, -50), "+%d" % gained, Color(0.4, 1.0, 0.45))
+		Audio.play("heal", 0.05, -4.0)
+		combat.fx.burst(global_position + Vector2(0, -10), Color(0.5, 1.0, 0.5), 10, 90, 4, 0.7, -80)
 
 
 # ================= Малювання козака (без зовнішніх спрайтів) =================

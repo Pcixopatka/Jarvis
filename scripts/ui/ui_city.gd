@@ -1,32 +1,32 @@
 extends RefCounted
 ## Екран міста: дошка завдань, крамниця, коваль (заточка), корчма (супутники).
-## Дії йдуть через main.city_do(дія, аргумент).
+## Дії йдуть через game.city_do(дія, аргумент).
 
-const Data := preload("res://scripts/data.gd")
-const UI := preload("res://scripts/ui_kit.gd")
-
-
-static func _do(main, action: String, arg = null) -> Callable:
-	return main.city_do.bind(action, arg)
+const Data := preload("res://scripts/data/data.gd")
+const UI := preload("res://scripts/ui/ui_kit.gd")
 
 
-static func build(main, city: String) -> Control:
-	var w = main.world
+static func _do(game, action: String, arg = null) -> Callable:
+	return game.city_do.bind(action, arg)
+
+
+static func build(game, city: String) -> Control:
+	var w = game.world
 	var C: Dictionary = Data.CITIES[city]
 	var lvl: int = w.loyalty_level(city)
 	var pts: int = w.loyalty_points(city)
 	var next := ""
 	if lvl < Data.LOYALTY_THRESHOLDS.size() - 1:
 		next = " (%d/%d)" % [pts, Data.LOYALTY_THRESHOLDS[lvl + 1]]
-	var title := "%s  •  Лояльність: %s%s  •  Дукати: %d" % [C["name"], Data.LOYALTY_NAMES[lvl], next, main.player.gold]
+	var title := "%s  •  Лояльність: %s%s  •  Дукати: %d" % [C["name"], Data.LOYALTY_NAMES[lvl], next, game.player.gold]
 	var pages := [
-		["Завдання", _quests(main, city)],
-		["Крамниця", _shop(main, city)],
-		["Коваль", _smith(main)],
-		["Корчма", _tavern(main, city)],
+		["Завдання", _quests(game, city)],
+		["Крамниця", _shop(game, city)],
+		["Коваль", _smith(game)],
+		["Корчма", _tavern(game, city)],
 	]
-	return UI.screen(title, "На мапу", main.leave_city, pages, main.city_tab, func(i: int): main.city_tab = i,
-		[["Козак" + ((" +%d" % main.player.unspent_points()) if main.player.unspent_points() > 0 else ""), main.open_character]])
+	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int): game.city_tab = i,
+		[["Козак" + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
 
 
 static func _reward_text(q: Dictionary) -> String:
@@ -35,14 +35,14 @@ static func _reward_text(q: Dictionary) -> String:
 
 # ---------------- Завдання ----------------
 
-static func _quests(main, city: String) -> Control:
-	var w = main.world
+static func _quests(game, city: String) -> Control:
+	var w = game.world
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(UI.label("Лояльність міста дає знижки, кращий товар і нових супутників. Заробляй її завданнями.", 18, UI.MUTED, false))
 	v.add_child(UI.label("Дошка оголошень", 24, UI.GOLD, false))
 	for q in w.board(city):
-		v.add_child(_quest_row(main, q, "take"))
+		v.add_child(_quest_row(game, q, "take"))
 	var mine := []
 	for q in w.quests:
 		if q["city"] == city:
@@ -51,7 +51,7 @@ static func _quests(main, city: String) -> Control:
 	if mine.is_empty():
 		v.add_child(UI.label("Немає.", 18, UI.MUTED, false))
 	for q in mine:
-		v.add_child(_quest_row(main, q, "active"))
+		v.add_child(_quest_row(game, q, "active"))
 	var others := []
 	for q in w.quests:
 		if q["city"] != city:
@@ -63,8 +63,8 @@ static func _quests(main, city: String) -> Control:
 	return v
 
 
-static func _quest_row(main, q: Dictionary, mode: String) -> Control:
-	var w = main.world
+static func _quest_row(game, q: Dictionary, mode: String) -> Control:
+	var w = game.world
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
 	var info := VBoxContainer.new()
@@ -75,31 +75,31 @@ static func _quest_row(main, q: Dictionary, mode: String) -> Control:
 	info.add_child(UI.label(_reward_text(q), 16, UI.MUTED, false))
 	row.add_child(info)
 	if mode == "take":
-		row.add_child(UI.button("Взяти", _do(main, "take", q["id"]), Vector2(170, 58), 22, w.can_take()))
+		row.add_child(UI.button("Взяти", _do(game, "take", q["id"]), Vector2(170, 58), 22, w.can_take()))
 	else:
 		if done:
-			row.add_child(UI.button("Здати", _do(main, "turn_in", q["id"]), Vector2(170, 58), 22))
+			row.add_child(UI.button("Здати", _do(game, "turn_in", q["id"]), Vector2(170, 58), 22))
 		else:
-			row.add_child(UI.button("Відмовитись", _do(main, "abandon", q["id"]), Vector2(170, 58), 18))
+			row.add_child(UI.button("Відмовитись", _do(game, "abandon", q["id"]), Vector2(170, 58), 18))
 	return row
 
 
 # ---------------- Крамниця ----------------
 
-static func _shop(main, city: String) -> Control:
-	var p = main.player
+static func _shop(game, city: String) -> Control:
+	var p = game.player
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 18)
-	var sel: int = main.city_sel_uid
-	var stock: Array = main.shop_stock(city)
+	var sel: int = game.city_sel_uid
+	var stock: Array = game.shop_stock(city)
 
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 6)
-	var disc: float = main.world.discount(city)
+	var disc: float = game.world.discount(city)
 	left.add_child(UI.label("Товари" + (("  (знижка %d%%)" % roundi(disc * 100)) if disc > 0 else ""), 22, UI.GOLD, false))
 	var sg := UI.grid(2)
 	for it in stock:
-		sg.add_child(UI.item_button(it, _do(main, "select", it["uid"]), it["uid"] == sel, "%d дук." % main.buy_price(city, it)))
+		sg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "%d дук." % game.buy_price(city, it)))
 	if stock.is_empty():
 		left.add_child(UI.label("Усе розкупили.\nЗазирни після походу.", 17, UI.MUTED, false))
 	left.add_child(sg)
@@ -110,9 +110,9 @@ static func _shop(main, city: String) -> Control:
 	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), Data.INVENTORY_SIZE], 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(main, "select", it["uid"]), it["uid"] == sel, "+%d дук." % Data.sell_price(it)))
+		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d дук." % Data.sell_price(it)))
 	bag.add_child(bg)
-	bag.add_child(UI.button("Продати всі звичайні", _do(main, "sell_junk"), Vector2(300, 52), 18))
+	bag.add_child(UI.button("Продати всі звичайні", _do(game, "sell_junk"), Vector2(300, 52), 18))
 	h.add_child(bag)
 
 	var det := VBoxContainer.new()
@@ -125,13 +125,13 @@ static func _shop(main, city: String) -> Control:
 			shop_item = it
 	if not shop_item.is_empty():
 		det.add_child(UI.item_card(shop_item, p.equipment.get(shop_item["slot"], {})))
-		var price: int = main.buy_price(city, shop_item)
-		det.add_child(UI.button("Купити за %d" % price, _do(main, "buy", sel), Vector2(300, 60), 22, p.gold >= price and not p.bag_full()))
+		var price: int = game.buy_price(city, shop_item)
+		det.add_child(UI.button("Купити за %d" % price, _do(game, "buy", sel), Vector2(300, 60), 22, p.gold >= price and not p.bag_full()))
 	else:
 		var it: Dictionary = p.find_item(sel) if sel > 0 else {}
 		if not it.is_empty() and not p.is_equipped(sel):
 			det.add_child(UI.item_card(it, p.equipment.get(it["slot"], {})))
-			det.add_child(UI.button("Продати за %d" % Data.sell_price(it), _do(main, "sell", sel), Vector2(300, 60), 22))
+			det.add_child(UI.button("Продати за %d" % Data.sell_price(it), _do(game, "sell", sel), Vector2(300, 60), 22))
 		else:
 			det.add_child(UI.label("Торкнись товару або\nсвоєї речі.", 20, UI.MUTED, false))
 	return h
@@ -139,11 +139,11 @@ static func _shop(main, city: String) -> Control:
 
 # ---------------- Коваль ----------------
 
-static func _smith(main) -> Control:
-	var p = main.player
+static func _smith(game) -> Control:
+	var p = game.player
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 18)
-	var sel: int = main.city_sel_uid
+	var sel: int = game.city_sel_uid
 
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override("separation", 6)
@@ -152,12 +152,12 @@ static func _smith(main) -> Control:
 	for slot in Data.SLOTS:
 		if p.equipment.has(slot):
 			var it: Dictionary = p.equipment[slot]
-			eg.add_child(UI.item_button(it, _do(main, "select", it["uid"]), it["uid"] == sel))
+			eg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
 	list.add_child(eg)
 	list.add_child(UI.label("Торба", 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(main, "select", it["uid"]), it["uid"] == sel))
+		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
 	list.add_child(bg)
 	h.add_child(list)
 
@@ -177,17 +177,17 @@ static func _smith(main) -> Control:
 		var cost := Data.sharpen_cost(it)
 		var chance := Data.sharpen_chance(it)
 		var risk := "  ризик -1" if it["up"] >= Data.SHARPEN_RISK_FROM else ""
-		det.add_child(UI.button("Заточити до +%d\n%d дук. • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(main, "sharpen", sel), Vector2(340, 80), 20, p.gold >= cost))
-	if main.smith_msg != "":
-		det.add_child(UI.label(main.smith_msg, 22, main.smith_msg_color, false))
+		det.add_child(UI.button("Заточити до +%d\n%d дук. • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(340, 80), 20, p.gold >= cost))
+	if game.smith_msg != "":
+		det.add_child(UI.label(game.smith_msg, 22, game.smith_msg_color, false))
 	return h
 
 
 # ---------------- Корчма ----------------
 
-static func _tavern(main, city: String) -> Control:
-	var w = main.world
-	var p = main.player
+static func _tavern(game, city: String) -> Control:
+	var w = game.world
+	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(UI.label("Твій загін (%d/%d). Поранені супутники одужують у будь-якому місті." % [w.companions.size(), Data.MAX_COMPANIONS], 22, UI.GOLD, false))
@@ -199,7 +199,7 @@ static func _tavern(main, city: String) -> Control:
 		var l := UI.label("%s%s" % [Data.COMPANIONS[c["type"]]["name"], "  (поранений)" if c["downed"] else ""], 22, UI.TEXT, false)
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(l)
-		row.add_child(UI.button("Відпустити", _do(main, "dismiss", i), Vector2(190, 54), 18))
+		row.add_child(UI.button("Відпустити", _do(game, "dismiss", i), Vector2(190, 54), 18))
 		v.add_child(row)
 	v.add_child(UI.label("Найняти", 24, UI.GOLD, false))
 	var lvl: int = w.loyalty_level(city)
@@ -217,8 +217,8 @@ static func _tavern(main, city: String) -> Control:
 		if lvl < need:
 			col.add_child(UI.label("Потрібна лояльність міста: %s" % Data.LOYALTY_NAMES[need], 16, UI.BAD, false))
 		row.add_child(col)
-		var price: int = main.hire_price(city, type)
+		var price: int = game.hire_price(city, type)
 		var ok: bool = lvl >= need and p.gold >= price and w.companions.size() < Data.MAX_COMPANIONS and not w.has_companion(type)
-		row.add_child(UI.button("Найняти\n%d дук." % price, _do(main, "hire", type), Vector2(190, 70), 18, ok))
+		row.add_child(UI.button("Найняти\n%d дук." % price, _do(game, "hire", type), Vector2(190, 70), 18, ok))
 		v.add_child(row)
 	return v

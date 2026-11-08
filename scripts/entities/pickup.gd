@@ -1,9 +1,9 @@
 extends Node2D
 ## Здобич: дукат (досвід і гроші), вареник (лікування) або річ спорядження.
 
-const Data := preload("res://scripts/data.gd")
+const Data := preload("res://scripts/data/data.gd")
 
-var main
+var combat: Combat
 var kind := "coin"  # "coin", "varenyk" або "item"
 var item := {}
 var value := 1
@@ -16,7 +16,7 @@ func _process(delta: float) -> void:
 	phase += delta * 4.0
 	position += spawn_vel * delta
 	spawn_vel = spawn_vel.move_toward(Vector2.ZERO, 600.0 * delta)
-	var p = main.player
+	var p = combat.player
 	if not p.alive:
 		queue_redraw()
 		return
@@ -29,10 +29,10 @@ func _process(delta: float) -> void:
 		if kind == "coin":
 			p.add_xp(value)
 			p.add_gold(value)
-			main.audio.play("coin", 0.1, -6.0)
-			main.fx.burst(global_position, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
+			Audio.play("coin", 0.1, -6.0)
+			combat.fx.burst(global_position, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
 		elif kind == "item":
-			main.on_item_picked(item)
+			combat.pick_item(item)
 		else:
 			p.heal(value)
 		queue_free()

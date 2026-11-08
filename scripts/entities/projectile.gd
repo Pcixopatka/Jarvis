@@ -1,7 +1,8 @@
+class_name Projectile
 extends Node2D
 ## Снаряд: плювок болотяника, вогонь Змія або куля козацького самопала.
 
-var main
+var combat: Combat
 var velocity := Vector2.ZERO
 var damage := 10.0
 var color := Color.GREEN
@@ -21,14 +22,14 @@ func _process(delta: float) -> void:
 				continue
 			if global_position.distance_to(e.global_position) < radius + e.radius:
 				_hit_ids.append(e.get_instance_id())
-				main.player.hit(e, damage, velocity.normalized() * 160.0, crit)
+				combat.player.hit(e, damage, velocity.normalized() * 160.0, crit)
 	else:
-		for p in main.allies():
+		for p in combat.allies():
 			if global_position.distance_to(p.global_position) < radius + p.radius:
 				p.take_damage(damage)
 				queue_free()
 				return
-	if life <= 0.0 or not main.arena.has_point(global_position):
+	if life <= 0.0 or not combat.arena.has_point(global_position):
 		queue_free()
 		return
 	queue_redraw()

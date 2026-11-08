@@ -2,7 +2,7 @@ extends Node2D
 ## Атмосферні частинки навколо камери: світлячки в лісі, туман на болоті, сніг у горах,
 ## пилок у степу, бризки біля порогів, порох у печерах.
 
-var main
+var combat
 var biome := "steppe"
 var parts := []  # [позиція, швидкість, фаза, розмір]
 var _t := 0.0
@@ -20,7 +20,7 @@ func setup(b: String) -> void:
 
 func _view() -> Rect2:
 	var vp := get_viewport_rect().size
-	var c: Vector2 = main.camera.get_screen_center_position()
+	var c: Vector2 = combat.camera.get_screen_center_position()
 	return Rect2(c - vp / 2.0, vp).grow(80)
 
 

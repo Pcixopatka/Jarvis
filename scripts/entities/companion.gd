@@ -1,9 +1,10 @@
+class_name Companion
 extends Node2D
 ## Супутник козака: джура (ближній бій), стрілець (рушниця) або знахарка (лікування).
 
-const Data := preload("res://scripts/data.gd")
+const Data := preload("res://scripts/data/data.gd")
 
-var main
+var combat: Combat
 var type := "dzhura"
 var info := {}
 var index := 0  # місце в загоні (для зсуву під час руху)
@@ -37,8 +38,8 @@ func _process(delta: float) -> void:
 	heal_cd = maxf(0.0, heal_cd - delta)
 	flash = maxf(0.0, flash - delta)
 	swing = maxf(0.0, swing - delta)
-	var p = main.player
-	var target: Node2D = main.nearest_enemy(global_position, 450.0)
+	var p = combat.player
+	var target: Node2D = combat.nearest_enemy(global_position, 450.0)
 	var dest: Vector2 = p.global_position + Vector2(-70 if index == 0 else 70, 40)
 	var reach: float = info["range"]
 
@@ -66,12 +67,12 @@ func _process(delta: float) -> void:
 	if type == "znakhar" and heal_cd <= 0.0:
 		heal_cd = 4.0
 		var amount: float = info["heal"] + info["heal_lvl"] * (p.level - 1)
-		for a in main.allies():
+		for a in combat.allies():
 			if a == self:
 				hp = minf(max_hp, hp + amount)
 			elif a.hp < a.max_hp:
 				a.heal(amount)
-		main.float_text(global_position + Vector2(0, -40), "Зілля!", Color(0.5, 1.0, 0.5))
+		combat.float_text(global_position + Vector2(0, -40), "Зілля!", Color(0.5, 1.0, 0.5))
 	queue_redraw()
 
 
@@ -83,7 +84,7 @@ func _attack(target) -> void:
 		"dzhura":
 			target.take_damage(damage * randf_range(0.9, 1.1), dir * 160.0, false)
 		"strilets":
-			main.spawn_bullet(global_position + dir * 20.0, dir, damage, false)
+			combat.spawn_bullet(global_position + dir * 20.0, dir, damage, false)
 		"znakhar":
 			target.take_damage(damage, dir * 60.0, false)
 
@@ -100,7 +101,7 @@ func take_damage(amount: float, _source = null) -> void:
 	if hp <= 0.0:
 		alive = false
 		visible = false
-		main.on_companion_down(self)
+		combat.on_companion_down(self)
 
 
 func _draw() -> void:

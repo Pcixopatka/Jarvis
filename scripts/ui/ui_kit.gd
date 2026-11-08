@@ -1,7 +1,7 @@
 extends RefCounted
 ## Спільні будівельні блоки інтерфейсу: написи, кнопки, картки речей.
 
-const Data := preload("res://scripts/data.gd")
+const Data := preload("res://scripts/data/data.gd")
 const GOLD := Color(1.0, 0.85, 0.3)
 const TEXT := Color(0.95, 0.92, 0.85)
 const MUTED := Color(0.7, 0.7, 0.7)

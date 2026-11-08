@@ -4,7 +4,7 @@ extends Control
 
 signal location_selected(id: String)
 
-const Data := preload("res://scripts/data.gd")
+const Data := preload("res://scripts/data/data.gd")
 
 # Спрощений контур України (довгота, широта), за годинниковою стрілкою.
 const BORDER := [
@@ -104,7 +104,6 @@ const MAP_H := LAT1 - LAT0
 const MIN_ZOOM := 1.0
 const MAX_ZOOM := 4.0
 
-var main
 var selected := ""
 var current := ""  # де зараз козак
 var targets := {}  # місцевості з активними завданнями

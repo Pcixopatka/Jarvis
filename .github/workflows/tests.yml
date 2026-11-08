@@ -1,0 +1,30 @@
+name: Тести
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GODOT_VERSION: 4.3-stable
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Завантажити Godot
+        run: |
+          curl -sSL -o godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" godot
+          chmod +x godot
+
+      - name: Імпорт проєкту
+        run: ./godot --headless --import || true
+
+      - name: Перевірка компіляції скриптів
+        run: ./godot --headless --path . -s res://tests/check_scripts.gd
+
+      - name: Автотести
+        run: ./godot --headless --path . -s res://tests/run_tests.gd --fixed-fps 60
