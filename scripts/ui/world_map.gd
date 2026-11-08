@@ -107,6 +107,7 @@ const MAX_ZOOM := 4.0
 var selected := ""
 var current := ""  # де зараз козак
 var targets := {}  # місцевості з активними завданнями
+var story_target := ""  # куди веде сюжет (зірка)
 var hero_level := 1
 var map_rect := Rect2()  # область для мапи на екрані
 var zoom := 1.6
@@ -348,6 +349,15 @@ func _draw() -> void:
 			var c: Vector2 = _markers[id] + Vector2(16, -22) * k
 			draw_circle(c, 10 * k, Color(1.0, 0.8, 0.1))
 			_text(font, c + Vector2(0, 6 * k), "!", int(18 * k), Color(0.2, 0.1, 0.0), false)
+	# Сюжет — пульсуюча зірка
+	if _markers.has(story_target):
+		var sc: Vector2 = _markers[story_target] + Vector2(-18, -26) * k
+		var rr := (13.0 + sin(_pulse * 1.5) * 2.0) * k
+		var star := PackedVector2Array()
+		for i in 10:
+			star.append(sc + Vector2.from_angle(-PI / 2 + i * PI / 5) * (rr if i % 2 == 0 else rr * 0.45))
+		draw_colored_polygon(star, Color(1.0, 0.85, 0.2))
+		draw_polyline(star + PackedVector2Array([star[0]]), Color(0.4, 0.2, 0.0), 2.0, true)
 	# Де козак
 	if _markers.has(current):
 		var c: Vector2 = _markers[current] + Vector2(-20, -18) * k

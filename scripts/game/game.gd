@@ -10,6 +10,8 @@ const UiCity := preload("res://scripts/ui/ui_city.gd")
 const MapPanel := preload("res://scripts/ui/map_panel.gd")
 const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
+const StoryService := preload("res://scripts/game/story_service.gd")
+const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const PlayerScript := preload("res://scripts/entities/player.gd")
 const CombatScript := preload("res://scripts/game/combat.gd")
@@ -80,7 +82,7 @@ func _process(delta: float) -> void:
 		return
 	if state == State.PLAYING:
 		meta["playtime"] = float(meta.get("playtime", 0.0)) + delta
-	hud.update(player, world, _combat_info(), delta)
+	hud.update(player, world, _combat_info(), delta, StoryService.objective_line(world))
 
 
 func _combat_info() -> Dictionary:
@@ -125,8 +127,7 @@ func new_game() -> void:
 	_new_hero({})
 	player.gold = 60
 	map_here = "sich"
-	enter_city("sich")
-	hud.show_banner("Ласкаво просимо на Січ!\nВізьми завдання на дошці оголошень", UI.GOLD)
+	enter_city("sich")  # кошовий одразу зустріне розмовою
 
 
 func save_game() -> void:
@@ -157,6 +158,7 @@ func _continue_game() -> void:
 # ======================= Режими =======================
 
 func _leave_combat() -> void:
+	hud.close_dialogue()
 	if combat.active:
 		combat.collect_all()
 		combat.leave()
@@ -177,6 +179,7 @@ func enter_map() -> void:
 	mv.selected = map_sel
 	mv.hero_level = player.level
 	mv.targets = world.quest_targets()
+	mv.story_target = StoryService.target(world)
 	_build_map_panel()
 	save_game()
 	hint("map", "Торкнись місця на мапі. «!» позначає твоє завдання. Почни з Дикого Поля поруч із Січчю.")
@@ -198,6 +201,8 @@ func enter_city(id: String) -> void:
 	city_sel_uid = -1
 	smith_msg = ""
 	_build_city()
+	_story_event("visit", id)
+	_story_dialogue(id)
 	save_game()
 	hint("city", "Це місто. На вкладці «Завдання» візьми доручення, у «Крамниці» купи спорядження, а потім натисни «На мапу».")
 
@@ -211,6 +216,7 @@ func enter_location(id: String) -> void:
 	for cid in Data.CITIES:
 		world.shop_dirty[cid] = true
 	hud.clear_screen()
+	hud.close_dialogue()
 	hud.close_overlay()
 	hud.show_map(false)
 	combat.enter(id, world.companions)
@@ -241,6 +247,40 @@ func _resume_play() -> void:
 func _on_enemy_killed(e: Node2D) -> void:
 	for m in world.on_kill(e.kind):
 		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
+	_story_event("kill", e.kind)
+
+
+## Передає подію сюжету й показує гравцеві, що змінилося.
+func _story_event(type: String, arg: String) -> void:
+	for m in StoryService.on_event(world, player, type, arg):
+		if m["big"]:
+			hud.show_banner(m["text"], UI.GOLD)
+			Audio.play("quest", 0.0)
+		elif combat.active:
+			combat.float_text(player.global_position + Vector2(0, -110), m["text"], UI.GOLD)
+
+
+## Якщо в цьому місті на козака чекає сюжетна розмова — показує її (і наступну, якщо їх кілька поспіль).
+func _story_dialogue(city: String) -> void:
+	var d := StoryService.city_dialogue(world, city)
+	if d.is_empty():
+		return
+	var dlg = DialogueScript.new()
+	dlg.setup(d["lines"], d["choices"])
+	dlg.finished.connect(func(choice: int):
+		hud.close_dialogue()
+		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice)
+		var texts := []
+		for m in msgs:
+			texts.append(m["text"])
+		if not texts.is_empty():
+			hud.show_banner("\n".join(texts.slice(0, 3)), UI.GOLD)
+			Audio.play("quest", 0.0)
+		save_game()
+		if state == State.CITY and city_id == city:
+			_build_city()
+			_story_dialogue(city))
+	hud.show_dialogue(dlg)
 
 
 func _on_companion_down(index: int, _name: String) -> void:
@@ -250,10 +290,12 @@ func _on_companion_down(index: int, _name: String) -> void:
 
 func _on_location_cleared(loc_id: String) -> void:
 	world.cleared[loc_id] = world.cleared.get(loc_id, 0) + 1
+	_story_event("clear", loc_id)
 
 
 func _on_dungeon_cleared(loc_id: String) -> void:
 	world.on_dungeon(loc_id)
+	_story_event("dungeon", loc_id)
 
 
 func _on_level_up(lvl: int) -> void:
@@ -292,7 +334,7 @@ func _on_map_select(id: String) -> void:
 
 
 func _build_map_panel() -> void:
-	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to))
+	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world)))
 
 
 func _go_to(id: String) -> void:

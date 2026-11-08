@@ -39,6 +39,10 @@ static func _quests(game, city: String) -> Control:
 	var w = game.world
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
+	var story_line: String = game.StoryService.objective_line(w)
+	if story_line != "":
+		v.add_child(UI.label(game.StoryService.chapter_title(w), 22, UI.GOLD, false))
+		v.add_child(UI.label(story_line, 20, UI.TEXT, false))
 	v.add_child(UI.label("Лояльність міста дає знижки, кращий товар і нових супутників. Заробляй її завданнями.", 18, UI.MUTED, false))
 	v.add_child(UI.label("Дошка оголошень", 24, UI.GOLD, false))
 	for q in w.board(city):

@@ -39,6 +39,7 @@ var map_btn: Button
 var map_view
 var map_panel: PanelContainer
 var screen_root: Control = null
+var dialogue_root: Control = null
 var vignette: TextureRect
 var hint_panel: PanelContainer
 var hint_label: Label
@@ -325,7 +326,7 @@ func move_vector() -> Vector2:
 # ======================= Оновлення =======================
 
 ## combat_info: {"name", "sub"} для бою або порожній словник.
-func update(player: Player, world, combat_info: Dictionary, delta: float) -> void:
+func update(player: Player, world, combat_info: Dictionary, delta: float, story_line: String = "") -> void:
 	hp_bar.max_value = player.max_hp
 	hp_bar.value = player.hp
 	hp_label.text = "Здоров'я %d / %d" % [roundi(player.hp), roundi(player.max_hp)]
@@ -333,6 +334,8 @@ func update(player: Player, world, combat_info: Dictionary, delta: float) -> voi
 	xp_bar.value = player.xp
 	level_label.text = "Рівень %d    Дукати: %d" % [player.level, player.gold]
 	var ql := []
+	if story_line != "":
+		ql.append(story_line)
 	for q in world.quests:
 		ql.append("• %s %d/%d" % [q["text"], q["progress"], q["count"]] + ("  ✓" if world.is_done(q) else ""))
 	quest_label.text = "\n".join(ql)
@@ -398,6 +401,18 @@ func clear_screen() -> void:
 	if screen_root:
 		screen_root.queue_free()
 		screen_root = null
+
+
+func show_dialogue(d: Control) -> void:
+	close_dialogue()
+	dialogue_root = d
+	ui_root.add_child(d)
+
+
+func close_dialogue() -> void:
+	if dialogue_root:
+		dialogue_root.queue_free()
+		dialogue_root = null
 
 
 # ======================= Меню-оверлеї =======================

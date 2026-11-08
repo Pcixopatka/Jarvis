@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 4
+const SAVE_VERSION := 5
 const Data := preload("res://scripts/data/data.gd")
 const SAVE_PATH := "user://hero.save"
 const SETTINGS_PATH := "user://settings.cfg"
@@ -82,6 +82,11 @@ static func migrate(d: Dictionary) -> Dictionary:
 		p["xp_next"] = Data.xp_for_level(lvl)
 		p["xp"] = mini(int(p.get("xp", 0)), p["xp_next"] - 1)
 		v = 4
+	if v == 4:
+		# v5: сюжет. Наявні герої починають перший розділ спочатку.
+		if not d["world"].has("story"):
+			d["world"]["story"] = {}
+		v = 5
 	d["version"] = v
 	return d
 

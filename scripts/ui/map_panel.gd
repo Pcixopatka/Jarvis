@@ -6,13 +6,15 @@ const UI := preload("res://scripts/ui/ui_kit.gd")
 
 
 ## on_go(id) викликається кнопкою «Вирушити» / «Увійти до міста».
-static func build(sel: String, world, player: Player, on_go: Callable) -> Control:
+static func build(sel: String, world, player: Player, on_go: Callable, story_target: String = "", story_line: String = "") -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
+	if story_line != "" and (sel == "" or sel == story_target):
+		v.add_child(_wrapped(story_line, 18, UI.GOLD))
 	if sel == "":
 		v.add_child(UI.label("Мапа земель", 28, UI.GOLD, false))
 		v.add_child(UI.label("Торкнись місця на мапі.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
-		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Шаблі — дика місцевість", "Арка — печера з босом", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
+		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return v
 	if Data.CITIES.has(sel):

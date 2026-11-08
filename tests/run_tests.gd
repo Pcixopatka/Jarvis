@@ -16,6 +16,7 @@ const WorldState := preload("res://scripts/game/world_state.gd")
 # скрипт тестів компілюється раніше, ніж Godot їх реєструє.
 var CityService
 var PlayerScript
+var StoryService
 
 const TEST_SAVE := "user://test_hero.save"
 
@@ -27,6 +28,7 @@ var _suite = ""
 func _initialize() -> void:
 	CityService = load("res://scripts/game/city_service.gd")
 	PlayerScript = load("res://scripts/entities/player.gd")
+	StoryService = load("res://scripts/game/story_service.gd")
 	_run()
 
 
@@ -36,6 +38,7 @@ func _run() -> void:
 	_suite_player()
 	_suite_save()
 	_suite_city()
+	_suite_story()
 	await _suite_gameplay()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -43,7 +46,7 @@ func _run() -> void:
 
 func check(cond: bool, msg: String) -> void:
 	checks += 1
-	if OS.get_environment("TEST_VERBOSE") != "" and _suite == "Сценарій гри":
+	if OS.get_environment("TEST_VERBOSE") != "" and _suite in ["Сценарій гри", "Сюжет"]:
 		print("  %s %s" % ["✓" if cond else "✗", msg])
 	if not cond:
 		failures += 1
@@ -271,7 +274,64 @@ func _suite_city() -> void:
 	p.free()
 
 
-# ======================= 5. Ігровий сценарій =======================
+# ======================= 5. Сюжет =======================
+
+func _suite_story() -> void:
+	suite("Сюжет")
+	var p = _new_player()
+	var w = WorldState.new()
+	var gold0 = p.gold
+	check(StoryService.state(w)["stage"] == "offer", "сюжет чекає першої розмови")
+	check(StoryService.city_dialogue(w, "kyiv").is_empty(), "у чужому місті розмови немає")
+	check(StoryService.city_dialogue(w, "sich").get("kind", "") == "start", "розмова з кошовим на Січі")
+	check(StoryService.target(w) == "sich" and StoryService.objective_line(w) != "", "зірка й рядок мети")
+	var steps_done = 0
+	var guard = 0
+	while StoryService.state(w)["stage"] != "done" and guard < 60:
+		guard += 1
+		var st = StoryService.current(w)
+		var stage = StoryService.state(w)["stage"]
+		if stage == "offer":
+			var d = StoryService.city_dialogue(w, st["city"])
+			check(d.get("kind", "") == "start", "%s: стартова розмова" % st["id"])
+			StoryService.on_dialogue_done(w, p, "start")
+		elif stage == "active":
+			var obj = st["objective"]
+			check(StoryService.target(w) == obj["loc"], "%s: зірка веде до мети" % st["id"])
+			if obj["type"] in ["clear", "dungeon", "visit"]:
+				StoryService.on_event(w, p, "kill", "nobody")
+				check(StoryService.state(w)["stage"] == "active", "%s: чужа подія не зараховується" % st["id"])
+				StoryService.on_event(w, p, obj["type"], obj["loc"])
+			else:
+				var n = 0
+				while StoryService.state(w)["stage"] == "active" and StoryService.current(w)["id"] == st["id"] and n < 500:
+					StoryService.on_event(w, p, "kill", obj["enemy"])
+					n += 1
+				check(n >= int(obj["count"]), "%s: треба щонайменше %d" % [st["id"], obj["count"]])
+			if st["turn_in"] == "":
+				steps_done += 1
+		elif stage == "turnin":
+			check(StoryService.city_dialogue(w, "nowhere").is_empty(), "%s: здати можна лише у своєму місті" % st["id"])
+			var d = StoryService.city_dialogue(w, st["turn_in"])
+			check(d.get("kind", "") == "end", "%s: фінальна розмова" % st["id"])
+			StoryService.on_dialogue_done(w, p, "end", 0 if not d["choices"].is_empty() else -1)
+			steps_done += 1
+	check(StoryService.state(w)["stage"] == "done", "розділ пройдено до кінця")
+	check(steps_done == 6, "усі 6 кроків (пройдено %d)" % steps_done)
+	var names = []
+	for it in p.inventory:
+		names.append(it["name"])
+	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди в торбі")
+	check(w.loyalty_points("chyhyryn") >= 90 and w.story.get("choices", {}).get("potion", -1) == 0, "вибір у розмові з Мотрею враховано")
+	check(p.gold > gold0 and p.level > 1, "дукати й досвід за сюжет")
+	check(StoryService.objective_line(w) == "" and StoryService.target(w) == "", "після завершення — без мети")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.story["stage"] == "done", "сюжет зберігається")
+	p.free()
+
+
+# ======================= 6. Ігровий сценарій =======================
 
 func _bot_fight(game) -> void:
 	var p = game.player
@@ -296,6 +356,10 @@ func _suite_gameplay() -> void:
 	game.new_game()
 	await _frames(2)
 	check(game.state == game.State.CITY and game.city_id == "sich", "нова гра починається на Січі")
+	check(game.hud.dialogue_root != null, "на Січі одразу розмова з кошовим")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.world.story["stage"] == "active" and game.hud.map_view != null, "після розмови сюжет активний")
 	var p = game.player
 	# Сильний козак, щоб тест ішов швидко й стабільно
 	p.stats["str"] = 40
@@ -325,6 +389,8 @@ func _suite_gameplay() -> void:
 		frames += 1
 	check(game.state == game.State.MAP, "портал повертає на мапу")
 	check(game.world.cleared.get("wild_field", 0) == 1, "облік очищення")
+	check(game.world.story["stage"] == "turnin", "сюжет: Дике Поле зараховано")
+	check(game.hud.map_view.story_target == "sich", "зірка на мапі веде на Січ")
 
 	# Печера з босом
 	game.enter_location("zmii_cave")
@@ -342,6 +408,13 @@ func _suite_gameplay() -> void:
 
 	# Місто: здача, крамниця, коваль, найм
 	game.enter_city("sich")
+	check(game.hud.dialogue_root != null, "кошовий чекає зі звітом")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.world.story["step"] == 1 and game.hud.dialogue_root != null, "одразу далі — розмова з кобзарем")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.world.story["stage"] == "active" and game.hud.dialogue_root == null, "мета від кобзаря активна")
 	var done = 0
 	for q in game.world.quests.duplicate():
 		if game.world.is_done(q):
