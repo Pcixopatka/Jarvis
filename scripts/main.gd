@@ -180,6 +180,7 @@ func enter_map() -> void:
 	map_view.visible = true
 	map_panel.visible = true
 	map_view.current = map_here
+	map_view.focus_on(map_here)
 	map_view.selected = map_sel
 	map_view.hero_level = player.level
 	map_view.targets = world.quest_targets()
@@ -865,8 +866,8 @@ func _build_map_panel() -> void:
 	v.add_theme_constant_override("separation", 8)
 	map_panel.add_child(v)
 	if map_sel == "":
-		v.add_child(UI.label("Мапа України", 28, UI.GOLD, false))
-		v.add_child(UI.label("Торкнись місця на мапі.", 19, UI.TEXT, false))
+		v.add_child(UI.label("Мапа земель", 28, UI.GOLD, false))
+		v.add_child(UI.label("Торкнись місця на мапі.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
 		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Шаблі — дика місцевість", "Арка — печера з босом", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return
