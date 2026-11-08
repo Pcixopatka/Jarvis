@@ -23,12 +23,12 @@ func _process(delta: float) -> void:
 				_hit_ids.append(e.get_instance_id())
 				main.player.hit(e, damage, velocity.normalized() * 160.0, crit)
 	else:
-		var p = main.player
-		if p.alive and global_position.distance_to(p.global_position) < radius + p.radius:
-			p.take_damage(damage)
-			queue_free()
-			return
-	if life <= 0.0 or not main.ARENA.has_point(global_position):
+		for p in main.allies():
+			if global_position.distance_to(p.global_position) < radius + p.radius:
+				p.take_damage(damage)
+				queue_free()
+				return
+	if life <= 0.0 or not main.arena.has_point(global_position):
 		queue_free()
 		return
 	queue_redraw()

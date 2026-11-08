@@ -19,6 +19,16 @@ var stat_points := 0
 var skill_points := 0
 var perk_points := 0
 
+# --- Спорядження ---
+var gold := 0
+var inventory := []  # речі в торбі
+var equipment := {}  # слот -> річ
+var next_uid := 1
+var _eq := {}  # сумарні бонуси вдягнених речей
+var weapon := {"dmg": 1.0, "cd": 1.0, "range": 1.0, "arc": 1.0, "kb": 1.0}
+var weapon_type := "sabre"
+var gold_mult := 1.0
+
 # --- Обчислені показники (див. recalc) ---
 var radius := 22.0
 var max_hp := 100.0
@@ -63,8 +73,156 @@ var unbreak_ready := true
 
 
 func _ready() -> void:
+	if equipment.is_empty() and inventory.is_empty():
+		var starter := Data.gen_item(1, 0, "weapon", "sabre")
+		starter["name"] = "Стара шабля"
+		equip_new(starter)
 	recalc()
 	hp = max_hp
+
+
+# ================= Спорядження =================
+
+func assign_uid(item: Dictionary) -> Dictionary:
+	item["uid"] = next_uid
+	next_uid += 1
+	return item
+
+
+func equip_new(item: Dictionary) -> void:
+	assign_uid(item)
+	equipment[item["slot"]] = item
+
+
+func find_item(uid: int) -> Dictionary:
+	for it in inventory:
+		if it["uid"] == uid:
+			return it
+	for slot in equipment:
+		if equipment[slot]["uid"] == uid:
+			return equipment[slot]
+	return {}
+
+
+func is_equipped(uid: int) -> bool:
+	for slot in equipment:
+		if equipment[slot]["uid"] == uid:
+			return true
+	return false
+
+
+func bag_full() -> bool:
+	return inventory.size() >= Data.INVENTORY_SIZE
+
+
+## Додає річ у торбу. Повертає false, якщо місця немає.
+func add_item(item: Dictionary) -> bool:
+	if not item.has("uid"):
+		assign_uid(item)
+	if bag_full():
+		return false
+	inventory.append(item)
+	return true
+
+
+func equip(uid: int) -> bool:
+	for i in inventory.size():
+		var it: Dictionary = inventory[i]
+		if it["uid"] == uid:
+			inventory.remove_at(i)
+			var slot: String = it["slot"]
+			if equipment.has(slot):
+				inventory.append(equipment[slot])
+			equipment[slot] = it
+			recalc()
+			return true
+	return false
+
+
+func unequip(uid: int) -> bool:
+	if bag_full():
+		return false
+	for slot in equipment:
+		if equipment[slot]["uid"] == uid:
+			inventory.append(equipment[slot])
+			equipment.erase(slot)
+			recalc()
+			return true
+	return false
+
+
+func remove_from_bag(uid: int) -> Dictionary:
+	for i in inventory.size():
+		if inventory[i]["uid"] == uid:
+			var it: Dictionary = inventory[i]
+			inventory.remove_at(i)
+			return it
+	return {}
+
+
+func add_gold(v: int) -> void:
+	gold += maxi(v, roundi(v * gold_mult))
+
+
+## Заточка: повертає "ok", "fail", "down", "nogold" або "max".
+func sharpen(uid: int) -> String:
+	var it := find_item(uid)
+	if it.is_empty():
+		return "fail"
+	if it["up"] >= Data.MAX_UPGRADE:
+		return "max"
+	var cost := Data.sharpen_cost(it)
+	if gold < cost:
+		return "nogold"
+	gold -= cost
+	it["spent"] += cost
+	var res := "fail"
+	if randf() < Data.sharpen_chance(it):
+		it["up"] += 1
+		res = "ok"
+	elif it["up"] >= Data.SHARPEN_RISK_FROM:
+		it["up"] -= 1
+		res = "down"
+	recalc()
+	return res
+
+
+func _calc_equipment() -> void:
+	_eq = {}
+	for slot in equipment:
+		var st := Data.item_stats(equipment[slot])
+		for id in st:
+			_eq[id] = _eq.get(id, 0.0) + st[id]
+	weapon_type = equipment["weapon"]["type"] if equipment.has("weapon") else "sabre"
+	weapon = Data.WEAPON_TYPES[weapon_type]
+
+
+func eq(id: String) -> float:
+	return _eq.get(id, 0.0)
+
+
+# ================= Збереження =================
+
+func to_dict() -> Dictionary:
+	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
+		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
+		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid}
+
+
+func from_dict(d: Dictionary) -> void:
+	for k in d:
+		set(k, d[k])
+	recalc()
+	hp = max_hp
+
+
+func revive() -> void:
+	alive = true
+	hp = max_hp
+	invuln = 1.0
+	hurt_flash = 0.0
+	dodge_time_left = 0.0
+	queue_redraw()
 
 
 # ================= Прогресія =================
@@ -77,9 +235,9 @@ func pk(id: String) -> int:
 	return perks.get(id, 0)
 
 
-## Значення характеристики з урахуванням перків.
+## Значення характеристики з урахуванням перків і спорядження.
 func stat(id: String) -> int:
-	return stats[id] + (2 if pk("sich") > 0 else 0)
+	return stats[id] + (2 if pk("sich") > 0 else 0) + int(eq(id))
 
 
 func _bonus(id: String) -> int:
@@ -88,31 +246,33 @@ func _bonus(id: String) -> int:
 
 func recalc() -> void:
 	var old_max := max_hp
+	_calc_equipment()
 	var s_str := _bonus("str")
 	var s_agi := _bonus("agi")
 	var s_vit := _bonus("vit")
 	var s_spi := _bonus("spi")
 
-	damage = 20.0 * (1.0 + 0.06 * s_str + 0.08 * pk("sharp"))
-	attack_range = 95.0 * (1.0 + 0.08 * pk("reach"))
-	attack_arc = deg_to_rad(130.0 + 20.0 * pk("cleave"))
-	attack_cooldown = 0.42 / (1.0 + 0.04 * s_agi + 0.06 * pk("fury"))
-	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck"))
+	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_str + 0.08 * pk("sharp") + eq("dmg_pct") / 100.0)
+	attack_range = 95.0 * weapon["range"] * (1.0 + 0.08 * pk("reach"))
+	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
+	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + eq("aspd") / 100.0)
+	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + eq("crit") / 100.0)
 	crit_mult = 3.0 if pk("deadly") > 0 else 2.0
-	lifesteal = 0.02 * pk("thirst")
+	lifesteal = 0.02 * pk("thirst") + eq("lifesteal") / 100.0
 
-	max_hp = 100.0 + 12.0 * s_vit + 15.0 * pk("tough")
-	armor = clampf(0.01 * s_vit + 0.05 * pk("ward"), 0.0, 0.6)
-	regen = 0.6 * pk("regen")
+	max_hp = 100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + eq("armor") / 100.0, 0.0, 0.75)
+	regen = 0.6 * pk("regen") + eq("regen")
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll"))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
-	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots"))
-	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse"))
-	xp_mult = 1.0 + 0.1 * pk("kobzar")
-	skill_cd_mult = (1.0 - 0.06 * pk("focus")) / (1.0 + 0.04 * s_spi)
-	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit")
+	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0)
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0
+	gold_mult = 1.0 + eq("gold") / 100.0
+	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
+	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + eq("skill_power") / 100.0
 
 	if max_hp > old_max:
 		hp += max_hp - old_max
@@ -230,7 +390,7 @@ func _process(delta: float) -> void:
 			walk_phase += delta * 14.0
 
 	var pad := Vector2(radius, radius)
-	position = position.clamp(main.ARENA.position + pad, main.ARENA.end - pad)
+	position = position.clamp(main.arena.position + pad, main.arena.end - pad)
 
 	if attack_held and attack_timer <= 0.0:
 		attack()
@@ -280,8 +440,8 @@ func attack() -> void:
 			continue
 		if dist < 1.0 or absf(facing.angle_to(to)) <= attack_arc * 0.5:
 			var r := _roll(1.0)
-			hit(e, r[0], to.normalized() * 280.0, r[1])
-	main.shake(2.0)
+			hit(e, r[0], to.normalized() * 280.0 * weapon["kb"], r[1])
+	main.shake(2.0 * weapon["kb"])
 
 
 func dodge() -> void:
@@ -488,12 +648,19 @@ func _draw() -> void:
 	draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
 	draw_line(head + Vector2(side * 2, 4), head + Vector2(side * 10, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
 	draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
+	# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю
+	if equipment.has("head"):
+		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
+		draw_colored_polygon(PackedVector2Array([
+			head + Vector2(side * 6, -10), head + Vector2(-side * 4, -24), head + Vector2(-side * 14, -18), head + Vector2(-side * 8, -9)
+		]), hc.darkened(0.25) * tint)
+		draw_rect(Rect2(head + Vector2(-12, -14), Vector2(24, 8)), Color(0.25, 0.18, 0.12) * tint)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	if not alive:
 		return
 
-	# Шабля
+	# Зброя
 	var blade_angle := facing.angle()
 	if swing_time > 0.0:
 		var t := 1.0 - swing_time / swing_duration
@@ -503,11 +670,28 @@ func _draw() -> void:
 			blade_angle += lerpf(-attack_arc * 0.5, attack_arc * 0.5, t)
 	var hand := Vector2(side * 12, -4)
 	var dir := Vector2.from_angle(blade_angle)
-	var tip := hand + dir * 44.0
-	var curve := hand + dir * 26.0 + dir.orthogonal() * 5.0
-	draw_polyline(PackedVector2Array([hand, curve, tip]), Color(0.86, 0.9, 0.95), 4.0, true)
-	draw_line(hand - dir * 8.0, hand, Color(0.45, 0.28, 0.1), 5.0)
-	draw_line(hand + dir.orthogonal() * 6.0, hand - dir.orthogonal() * 6.0, Color(0.85, 0.7, 0.2), 3.0)
+	var rarity: int = equipment["weapon"]["rarity"] if equipment.has("weapon") else 0
+	var metal: Color = [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45)][rarity]
+	match weapon_type:
+		"mace":
+			var head_pos := hand + dir * 36.0
+			draw_line(hand - dir * 6.0, head_pos, Color(0.45, 0.28, 0.1), 5.0)
+			for k in 6:
+				var a := blade_angle + k * TAU / 6.0
+				draw_line(head_pos, head_pos + Vector2.from_angle(a) * 11.0, metal.darkened(0.2), 4.0)
+			draw_circle(head_pos, 8.0, metal)
+		"pike":
+			var tip := hand + dir * 70.0
+			draw_line(hand - dir * 22.0, tip - dir * 12.0, Color(0.5, 0.33, 0.15), 4.0)
+			draw_colored_polygon(PackedVector2Array([tip, tip - dir * 16.0 + dir.orthogonal() * 6.0, tip - dir * 16.0 - dir.orthogonal() * 6.0]), metal)
+		_:
+			var tip := hand + dir * 44.0
+			var curve := hand + dir * 26.0 + dir.orthogonal() * 5.0
+			draw_polyline(PackedVector2Array([hand, curve, tip]), metal, 4.0, true)
+			draw_line(hand - dir * 8.0, hand, Color(0.45, 0.28, 0.1), 5.0)
+			draw_line(hand + dir.orthogonal() * 6.0, hand - dir.orthogonal() * 6.0, Color(0.85, 0.7, 0.2), 3.0)
+	if rarity == 3:
+		draw_circle(hand + dir * 30.0, 14.0, Color(1.0, 0.7, 0.2, 0.18))
 
 	# Слід удару
 	if swing_time > 0.0:

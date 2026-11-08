@@ -1,74 +1,90 @@
 extends Node2D
-## Головний менеджер гри: світ, хвилі нечисті, інтерфейс, екран козака, меню, рекорд.
+## Головний менеджер гри: мапа України, міста, місцевості, печери, бій, інтерфейс, збереження.
 
-const ARENA := Rect2(-1400, -1400, 2800, 2800)
-const SAVE_PATH := "user://save.cfg"
+const SAVE_PATH := "user://hero.save"
 
 const Data := preload("res://scripts/data.gd")
+const UI := preload("res://scripts/ui_kit.gd")
+const UiCharacter := preload("res://scripts/ui_character.gd")
+const UiCity := preload("res://scripts/ui_city.gd")
+const WorldState := preload("res://scripts/world_state.gd")
+const WorldMap := preload("res://scripts/world_map.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const EnemyScript := preload("res://scripts/enemy.gd")
+const CompanionScript := preload("res://scripts/companion.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const PickupScript := preload("res://scripts/pickup.gd")
+const PortalScript := preload("res://scripts/portal.gd")
 const FloatTextScript := preload("res://scripts/float_text.gd")
 const BoltScript := preload("res://scripts/bolt.gd")
 const GroundScript := preload("res://scripts/ground.gd")
 const JoystickScript := preload("res://scripts/joystick.gd")
 const ActionButtonScript := preload("res://scripts/action_button.gd")
 
-const GOLD := Color(1.0, 0.85, 0.3)
-const TEXT := Color(0.95, 0.92, 0.85)
-const MUTED := Color(0.7, 0.7, 0.7)
-
-enum State { MENU, PLAYING, CHARACTER, PAUSED, GAMEOVER }
+enum State { MENU, MAP, CITY, PLAYING, CHARACTER, PAUSED, DEAD }
 
 var state := State.MENU
-var player
+var arena := Rect2(-1400, -1400, 2800, 2800)
+var player = null
+var world = WorldState.new()
 var camera: Camera2D
+var ground
 var entities: Node2D
 var effects: Node2D
+var companion_nodes := []
 
-var wave := 0
-var to_spawn := 0
+# Поточна локація
+var loc_id := ""
+var loc := {}
+var room := 0
+var room_cleared := false
+var portal = null
 var spawn_timer := 0.0
-var spawn_interval := 1.0
-var between_waves := -1.0
-var kills := 0
-var play_time := 0.0
+var city_id := ""
+var map_here := "sich"
+var map_sel := ""
+
 var shake_strength := 0.0
-var best_wave := 0
-var best_kills := 0
 var _pulse := 0.0
 
 # Інтерфейс
-var hud: CanvasLayer
 var ui_root: Control
 var stats_box: Control
 var controls: Node2D
 var joystick
 var btn_attack
 var btn_dodge
-var skill_buttons := {}  # id -> кнопка
+var skill_buttons := {}
 var hp_bar: ProgressBar
 var xp_bar: ProgressBar
 var hp_label: Label
 var level_label: Label
-var wave_label: Label
-var kills_label: Label
+var quest_label: Label
+var loc_label: Label
+var sub_label: Label
 var banner: Label
 var pause_btn: Button
 var char_btn: Button
+var map_btn: Button
+var map_view
+var map_panel: PanelContainer
+var screen_root: Control = null
 var overlay: ColorRect
-var overlay_center: CenterContainer
 var overlay_box: VBoxContainer
-var char_root: Control
+
+# Стан екранів
 var char_tab := 0
+var char_sel_uid := -1
+var char_return := State.MAP
+var city_tab := 0
+var city_sel_uid := -1
+var smith_msg := ""
+var smith_msg_color := Color.WHITE
 
 
 func _ready() -> void:
 	randomize()
-	# Менеджер працює і на паузі (меню, клавіші), а світ — ні.
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	_load_best()
 	_build_world()
 	_build_hud()
 	get_viewport().size_changed.connect(_layout)
@@ -76,41 +92,223 @@ func _ready() -> void:
 	_show_main_menu()
 
 
-# ============ Світ ============
+# ======================= Світ і герой =======================
 
 func _build_world() -> void:
-	var ground = GroundScript.new()
-	ground.arena = ARENA
+	ground = GroundScript.new()
 	ground.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(ground)
-
 	entities = Node2D.new()
 	entities.y_sort_enabled = true
 	entities.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(entities)
-
 	effects = Node2D.new()
 	effects.z_index = 10
 	effects.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(effects)
-
-	player = PlayerScript.new()
-	player.main = self
-	entities.add_child(player)
-	player.died.connect(_on_player_died)
-	player.leveled_up.connect(_on_level_up)
-
 	camera = Camera2D.new()
 	camera.process_mode = Node.PROCESS_MODE_PAUSABLE
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
-	camera.limit_left = int(ARENA.position.x - 120)
-	camera.limit_top = int(ARENA.position.y - 160)
-	camera.limit_right = int(ARENA.end.x + 120)
-	camera.limit_bottom = int(ARENA.end.y + 120)
 	add_child(camera)
 	camera.make_current()
+	_set_world_visible(false)
 
+
+func _new_hero(data: Dictionary) -> void:
+	if player:
+		player.queue_free()
+	player = PlayerScript.new()
+	player.main = self
+	if not data.is_empty():
+		player.from_dict(data)
+	entities.add_child(player)
+	player.died.connect(_on_player_died)
+	player.leveled_up.connect(_on_level_up)
+
+
+func _set_world_visible(v: bool) -> void:
+	ground.visible = v
+	entities.visible = v
+	effects.visible = v
+
+
+func _new_game() -> void:
+	world = WorldState.new()
+	_new_hero({})
+	player.gold = 60
+	map_here = "sich"
+	enter_city("sich")
+	show_banner("Ласкаво просимо на Січ!\nВізьми завдання на дошці оголошень", UI.GOLD)
+
+
+func save_game() -> void:
+	if player == null:
+		return
+	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if f:
+		f.store_var({"version": 2, "player": player.to_dict(), "world": world.to_dict()})
+		f.close()
+
+
+func load_game() -> bool:
+	if not FileAccess.file_exists(SAVE_PATH):
+		return false
+	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	if f == null:
+		return false
+	var d = f.get_var()
+	f.close()
+	if typeof(d) != TYPE_DICTIONARY or d.get("version", 0) != 2:
+		return false
+	world = WorldState.new()
+	world.from_dict(d["world"])
+	_new_hero(d["player"])
+	return true
+
+
+# ======================= Режими =======================
+
+func enter_map() -> void:
+	_clear_combat()
+	_clear_screen()
+	_close_overlay()
+	state = State.MAP
+	get_tree().paused = true
+	_set_world_visible(false)
+	controls.visible = false
+	map_view.visible = true
+	map_panel.visible = true
+	map_view.current = map_here
+	map_view.selected = map_sel
+	map_view.hero_level = player.level
+	map_view.targets = world.quest_targets()
+	_hud_mode(true, false)
+	_build_map_panel()
+	_update_hud(0.0)
+	save_game()
+
+
+func enter_city(id: String) -> void:
+	_clear_combat()
+	_close_overlay()
+	state = State.CITY
+	get_tree().paused = true
+	city_id = id
+	map_here = id
+	world.last_city = id
+	player.revive()
+	world.revive_companions()
+	_set_world_visible(false)
+	controls.visible = false
+	map_view.visible = false
+	map_panel.visible = false
+	_hud_mode(false, false)
+	city_sel_uid = -1
+	smith_msg = ""
+	_build_city()
+	save_game()
+
+
+func leave_city() -> void:
+	enter_map()
+
+
+func enter_location(id: String) -> void:
+	loc_id = id
+	loc = Data.LOCATIONS[id]
+	map_here = id
+	for cid in Data.CITIES:
+		world.shop_dirty[cid] = true
+	_clear_screen()
+	_close_overlay()
+	room = 1 if loc["type"] == "dungeon" else 0
+	_setup_arena()
+	map_view.visible = false
+	map_panel.visible = false
+	_set_world_visible(true)
+	controls.visible = true
+	_hud_mode(true, true)
+	state = State.PLAYING
+	get_tree().paused = false
+	player.unbreak_ready = true
+	spawn_timer = 1.0
+	if loc["type"] == "dungeon":
+		_spawn_room()
+	else:
+		show_banner(loc["name"])
+		var en: Array = loc["enemies"]
+		for i in 5:
+			var pos: Vector2 = player.position + Vector2.from_angle(randf() * TAU) * randf_range(450, 650)
+			spawn_enemy(en[randi() % en.size()], loc["level"], false, pos.clamp(arena.position + Vector2(60, 60), arena.end - Vector2(60, 60)))
+	_update_hud(0.0)
+
+
+func _setup_arena() -> void:
+	_clear_combat()
+	if loc["type"] == "dungeon":
+		arena = Rect2(-750, -550, 1500, 1100)
+		player.position = Vector2(0, arena.end.y - 160)
+	else:
+		arena = Rect2(-1400, -1400, 2800, 2800)
+		player.position = Vector2.ZERO
+	ground.setup(arena, loc["biome"], hash(loc_id) + room * 31)
+	camera.limit_left = int(arena.position.x - 120)
+	camera.limit_top = int(arena.position.y - 160)
+	camera.limit_right = int(arena.end.x + 120)
+	camera.limit_bottom = int(arena.end.y + 120)
+	camera.global_position = player.global_position
+	camera.reset_smoothing()
+	_spawn_companions()
+
+
+func _clear_combat() -> void:
+	for c in entities.get_children():
+		if c == player:
+			continue
+		if c.is_in_group("enemies"):
+			c.remove_from_group("enemies")
+		c.queue_free()
+	companion_nodes.clear()
+	for c in effects.get_children():
+		c.queue_free()
+	portal = null
+
+
+func _spawn_companions() -> void:
+	for c in companion_nodes:
+		if is_instance_valid(c):
+			c.queue_free()
+	companion_nodes.clear()
+	for i in world.companions.size():
+		var data: Dictionary = world.companions[i]
+		if data["downed"]:
+			continue
+		var c := CompanionScript.new()
+		c.main = self
+		c.setup(data["type"], player.level, i)
+		c.position = player.position + Vector2(-60 + 120 * (i % 2), 50)
+		entities.add_child(c)
+		companion_nodes.append(c)
+
+
+func allies() -> Array:
+	var out := []
+	if player and player.alive:
+		out.append(player)
+	for c in companion_nodes:
+		if is_instance_valid(c) and c.alive:
+			out.append(c)
+	return out
+
+
+func on_companion_down(c) -> void:
+	if c.index < world.companions.size():
+		world.companions[c.index]["downed"] = true
+	float_text(c.global_position + Vector2(0, -40), "%s поранений!" % Data.COMPANIONS[c.type]["name"], UI.BAD)
+
+
+# ======================= Бій =======================
 
 func _process(delta: float) -> void:
 	if state != State.PLAYING:
@@ -121,70 +319,98 @@ func _process(delta: float) -> void:
 		shake_strength = move_toward(shake_strength, 0.0, 40.0 * delta)
 	else:
 		camera.offset = Vector2.ZERO
-
-	play_time += delta
 	player.attack_held = btn_attack.held or Input.is_physical_key_pressed(KEY_J) or Input.is_physical_key_pressed(KEY_SPACE)
 	btn_dodge.set_cooldown(player.dodge_timer / player.dodge_cooldown)
 	for id in skill_buttons:
 		var b = skill_buttons[id]
 		b.visible = player.sk(id) > 0
 		b.set_cooldown(player.skill_ready_ratio(id))
-	_update_waves(delta)
+	if loc["type"] == "dungeon":
+		_update_dungeon()
+	else:
+		_update_field(delta)
 	_update_hud(delta)
 
 
-func _update_waves(delta: float) -> void:
-	if to_spawn > 0:
-		spawn_timer -= delta
-		if spawn_timer <= 0.0:
-			spawn_timer = spawn_interval
-			spawn_enemy(_pick_kind())
-			to_spawn -= 1
-	elif alive_enemy_count() == 0:
-		if between_waves < 0.0:
-			between_waves = 2.5
-			if wave > 0:
-				show_banner("Хвилю %d відбито!" % wave, Color(0.6, 1.0, 0.6))
-		else:
-			between_waves -= delta
-			if between_waves <= 0.0:
-				between_waves = -1.0
-				start_wave()
+func _update_field(delta: float) -> void:
+	spawn_timer -= delta
+	if spawn_timer <= 0.0:
+		spawn_timer = maxf(0.6, 1.5 - loc["level"] * 0.05)
+		if alive_enemy_count() < 7 + loc["level"]:
+			var en: Array = loc["enemies"]
+			spawn_enemy(en[randi() % en.size()], loc["level"] + (1 if randf() < 0.15 else 0))
 
 
-func start_wave() -> void:
-	wave += 1
-	to_spawn = 6 + wave * 4
-	spawn_interval = maxf(0.22, 1.1 - wave * 0.07)
-	spawn_timer = 0.5
-	player.unbreak_ready = true
-	if wave % 5 == 0:
-		show_banner("Хвиля %d\nЗмій наближається!" % wave, Color(1.0, 0.55, 0.2))
-		spawn_enemy("zmii")
+func _spawn_room() -> void:
+	room_cleared = false
+	var en: Array = loc["enemies"]
+	for i in 4 + room * 2:
+		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 80, arena.position.y + arena.size.y * 0.55))
+		spawn_enemy(en[randi() % en.size()], loc["level"], false, pos)
+	if room == loc["rooms"]:
+		spawn_enemy(loc["boss"], loc["level"], true, Vector2(0, arena.position.y + 220))
+		show_banner("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
 	else:
-		show_banner("Хвиля %d" % wave)
+		show_banner("%s\nКімната %d/%d" % [loc["name"], room, loc["rooms"]])
 
 
-func _pick_kind() -> String:
-	var pool := ["mavka", "mavka", "mavka", "mavka", "mavka"]
-	if wave >= 2:
-		pool.append_array(["upyr", "upyr", "upyr"])
-	if wave >= 3:
-		pool.append_array(["bolotianyk", "bolotianyk"])
-	return pool[randi() % pool.size()]
+func _update_dungeon() -> void:
+	if not room_cleared and alive_enemy_count() == 0:
+		room_cleared = true
+		if room < loc["rooms"]:
+			_spawn_portal("Далі")
+			show_banner("Прохід відкрито!", Color(0.6, 1.0, 0.6))
+		else:
+			_dungeon_complete()
+	if portal != null and is_instance_valid(portal) and player.global_position.distance_to(portal.global_position) < 60.0:
+		_collect_all()
+		if room < loc["rooms"]:
+			room += 1
+			_setup_arena()
+			_spawn_room()
+		else:
+			enter_map()
 
 
-func spawn_enemy(kind: String) -> void:
-	var pos := Vector2.ZERO
-	for i in 10:
-		pos = player.global_position + Vector2.from_angle(randf() * TAU) * randf_range(700, 900)
-		pos = pos.clamp(ARENA.position + Vector2(60, 60), ARENA.end - Vector2(60, 60))
-		if pos.distance_to(player.global_position) > 450.0:
-			break
+func _spawn_portal(text: String) -> void:
+	portal = PortalScript.new()
+	portal.label = text
+	portal.position = Vector2(0, arena.position.y + 110)
+	entities.add_child(portal)
+
+
+func _dungeon_complete() -> void:
+	world.on_dungeon(loc_id)
+	var g: int = 40 * loc["level"]
+	player.add_gold(g)
+	show_banner("%s очищено!\n+%d дукатів" % [loc["name"], g], UI.GOLD)
+	_spawn_portal("Вихід")
+
+
+## Збирає всю здобич, що лишилась на землі (перед переходом у наступну кімнату).
+func _collect_all() -> void:
+	for c in entities.get_children():
+		if c.get_script() == PickupScript:
+			match c.kind:
+				"coin":
+					player.add_xp(c.value)
+					player.add_gold(c.value)
+				"item":
+					on_item_picked(c.item)
+
+
+func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> void:
+	if pos == null:
+		pos = Vector2.ZERO
+		for i in 10:
+			pos = player.global_position + Vector2.from_angle(randf() * TAU) * randf_range(650, 850)
+			pos = pos.clamp(arena.position + Vector2(60, 60), arena.end - Vector2(60, 60))
+			if pos.distance_to(player.global_position) > 420.0:
+				break
 	var e := EnemyScript.new()
 	e.main = self
 	e.position = pos
-	e.setup(kind, wave)
+	e.setup(kind, level, boss)
 	entities.add_child(e)
 
 
@@ -218,11 +444,12 @@ func spawn_bolt(points: PackedVector2Array) -> void:
 	effects.add_child(b)
 
 
-func spawn_pickup(pos: Vector2, kind: String, value: int) -> void:
+func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {}) -> void:
 	var p = PickupScript.new()
 	p.main = self
 	p.kind = kind
 	p.value = value
+	p.item = item
 	p.position = pos
 	p.spawn_vel = Vector2.from_angle(randf() * TAU) * randf_range(60, 200)
 	entities.add_child(p)
@@ -258,18 +485,35 @@ func alive_enemy_count() -> int:
 
 
 func on_enemy_killed(e) -> void:
-	kills += 1
+	for m in world.on_kill(e.kind):
+		float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
+	var pos: Vector2 = e.global_position
+	var ilvl: int = loc.get("level", 1)
 	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))
 	if e.is_boss:
 		shake(14.0)
-		show_banner("Змія переможено!", GOLD)
-		for i in 12:
-			spawn_pickup(e.global_position, "coin", 6)
-		spawn_pickup(e.global_position, "varenyk", heal_value * 2)
+		show_banner("%s переможений!" % Data.BOSS_NAMES.get(e.kind, "Бос"), UI.GOLD)
+		for i in 10:
+			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
+		for i in 2:
+			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, Data.roll_rarity(ilvl, 2)))
+		spawn_pickup(pos, "varenyk", heal_value * 2)
 	else:
-		spawn_pickup(e.global_position, "coin", e.xp_value)
+		spawn_pickup(pos, "coin", e.xp_value)
 		if randf() < 0.05 * (1 + player.varenyk_bonus):
-			spawn_pickup(e.global_position, "varenyk", heal_value)
+			spawn_pickup(pos, "varenyk", heal_value)
+		if randf() < 0.05:
+			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl)))
+
+
+func on_item_picked(item: Dictionary) -> void:
+	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	if player.add_item(item):
+		float_text(player.global_position + Vector2(0, -70), item["name"], col)
+	else:
+		var g := Data.sell_price(item)
+		player.gold += g
+		float_text(player.global_position + Vector2(0, -70), "Торба повна: +%d дук." % g, col)
 
 
 func get_move_input() -> Vector2:
@@ -297,114 +541,84 @@ func _input(event: InputEvent) -> void:
 		KEY_O, KEY_3:
 			if playing: player.use_skill("musket")
 		KEY_C, KEY_TAB:
+			if state == State.CHARACTER:
+				close_character()
+			elif playing or state == State.MAP or state == State.CITY:
+				open_character()
+		KEY_M:
 			if playing:
-				_show_character()
-			elif state == State.CHARACTER:
-				_resume()
+				_try_leave()
 		KEY_ESCAPE, KEY_P:
 			if playing:
 				_show_pause()
-			elif state == State.PAUSED or state == State.CHARACTER:
-				_resume()
+			elif state == State.PAUSED:
+				_resume_play()
+			elif state == State.CHARACTER:
+				close_character()
 
 
 func _notification(what: int) -> void:
-	# Автопауза, коли гравець згортає гру або тисне «Назад» на Android.
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		save_game()
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if state == State.PLAYING:
 			_show_pause()
 		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.CHARACTER:
-			_resume()
+			close_character()
 
 
-# ============ Події гри ============
+func _try_leave() -> void:
+	var e := nearest_enemy(player.global_position, 350.0)
+	if e:
+		show_banner("Нечисть поруч — не втечеш!", UI.BAD)
+		return
+	_collect_all()
+	enter_map()
+
+
+# ======================= Події =======================
 
 func _on_level_up(lvl: int) -> void:
-	show_banner("Рівень %d!\nВідкрий «Козак», щоб прокачатися" % lvl, GOLD)
+	show_banner("Рівень %d!\nВідкрий «Козак», щоб прокачатися" % lvl, UI.GOLD)
 
 
 func _on_player_died() -> void:
-	state = State.GAMEOVER
+	state = State.DEAD
 	controls.visible = false
-	pause_btn.visible = false
+	_hud_mode(true, false)
 	char_btn.visible = false
-	var new_record := wave > best_wave or (wave == best_wave and kills > best_kills)
-	if new_record:
-		best_wave = wave
-		best_kills = kills
-		_save_best()
 	show_banner("Козак поліг...", Color(1.0, 0.4, 0.35))
 	await get_tree().create_timer(1.4).timeout
-	_show_gameover(new_record)
+	var lost := int(player.gold * 0.25)
+	player.gold -= lost
+	_open_overlay()
+	_add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
+	_add_title("Побратими винесли тебе з бою. Втрачено %d дукатів." % lost, 24, UI.TEXT)
+	_add_button("Отямитися: %s" % Data.place_name(world.last_city), func(): enter_city(world.last_city))
 
 
-func _start_game() -> void:
-	_resume()
-	stats_box.visible = true
-	between_waves = 1.0
-	_update_hud(0.0)
-
-
-func _resume() -> void:
-	_close_overlay()
-	state = State.PLAYING
-	get_tree().paused = false
-	controls.visible = true
-	pause_btn.visible = true
-	char_btn.visible = true
-
-
-func _restart() -> void:
-	get_tree().paused = false
-	get_tree().reload_current_scene()
-
-
-# ============ Збереження ============
-
-func _load_best() -> void:
-	var cfg := ConfigFile.new()
-	if cfg.load(SAVE_PATH) == OK:
-		best_wave = int(cfg.get_value("best", "wave", 0))
-		best_kills = int(cfg.get_value("best", "kills", 0))
-
-
-func _save_best() -> void:
-	var cfg := ConfigFile.new()
-	cfg.set_value("best", "wave", best_wave)
-	cfg.set_value("best", "kills", best_kills)
-	cfg.save(SAVE_PATH)
-
-
-# ============ Інтерфейс ============
-
-func _style(bg: Color, border: Color) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(3)
-	sb.set_corner_radius_all(14)
-	sb.set_content_margin_all(12)
-	return sb
-
+# ======================= Інтерфейс =======================
 
 func _make_theme() -> Theme:
 	var th := Theme.new()
-	th.set_stylebox("normal", "Button", _style(Color(0.55, 0.12, 0.1), Color(0.95, 0.75, 0.2)))
-	th.set_stylebox("hover", "Button", _style(Color(0.68, 0.18, 0.12), Color(0.95, 0.75, 0.2)))
-	th.set_stylebox("pressed", "Button", _style(Color(0.4, 0.08, 0.06), Color(0.95, 0.75, 0.2)))
-	th.set_stylebox("disabled", "Button", _style(Color(0.2, 0.17, 0.15), Color(0.4, 0.35, 0.3)))
+	var gold_b := Color(0.95, 0.75, 0.2)
+	th.set_stylebox("normal", "Button", UI.style(Color(0.55, 0.12, 0.1), gold_b))
+	th.set_stylebox("hover", "Button", UI.style(Color(0.68, 0.18, 0.12), gold_b))
+	th.set_stylebox("pressed", "Button", UI.style(Color(0.4, 0.08, 0.06), gold_b))
+	th.set_stylebox("disabled", "Button", UI.style(Color(0.2, 0.17, 0.15), Color(0.4, 0.35, 0.3)))
 	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
-	th.set_font_size("font_size", "Button", 30)
+	th.set_font_size("font_size", "Button", 28)
 	th.set_color("font_color", "Button", Color(1, 0.95, 0.85))
 	th.set_color("font_disabled_color", "Button", Color(0.62, 0.6, 0.57))
-	th.set_font_size("font_size", "Label", 26)
+	th.set_font_size("font_size", "Label", 24)
 	th.set_color("font_outline_color", "Label", Color(0, 0, 0, 0.85))
 	th.set_constant("outline_size", "Label", 6)
-	th.set_font_size("font_size", "TabContainer", 26)
-	th.set_stylebox("panel", "TabContainer", _style(Color(0.1, 0.08, 0.07, 0.92), Color(0.6, 0.45, 0.15)))
-	th.set_stylebox("tab_selected", "TabContainer", _style(Color(0.55, 0.12, 0.1), Color(0.95, 0.75, 0.2)))
-	th.set_stylebox("tab_unselected", "TabContainer", _style(Color(0.2, 0.15, 0.12), Color(0.45, 0.35, 0.2)))
-	th.set_stylebox("tab_hovered", "TabContainer", _style(Color(0.35, 0.12, 0.1), Color(0.75, 0.55, 0.2)))
+	th.set_font_size("font_size", "TabContainer", 24)
+	th.set_stylebox("panel", "TabContainer", UI.style(Color(0.1, 0.08, 0.07, 0.94), Color(0.6, 0.45, 0.15)))
+	th.set_stylebox("panel", "PanelContainer", UI.style(Color(0.1, 0.08, 0.07, 0.92), Color(0.6, 0.45, 0.15)))
+	th.set_stylebox("tab_selected", "TabContainer", UI.style(Color(0.55, 0.12, 0.1), gold_b))
+	th.set_stylebox("tab_unselected", "TabContainer", UI.style(Color(0.2, 0.15, 0.12), Color(0.45, 0.35, 0.2)))
+	th.set_stylebox("tab_hovered", "TabContainer", UI.style(Color(0.35, 0.12, 0.1), Color(0.75, 0.55, 0.2)))
 	th.set_color("font_selected_color", "TabContainer", Color(1, 0.95, 0.8))
 	th.set_color("font_unselected_color", "TabContainer", Color(0.75, 0.7, 0.6))
 	th.set_color("font_hovered_color", "TabContainer", Color(1, 0.9, 0.75))
@@ -426,20 +640,28 @@ func _make_bar(fill: Color) -> ProgressBar:
 	return bar
 
 
+func _hud_label(pos: Vector2, size: int) -> Label:
+	var l := Label.new()
+	l.position = pos
+	l.add_theme_font_size_override("font_size", size)
+	stats_box.add_child(l)
+	return l
+
+
 func _build_hud() -> void:
-	hud = CanvasLayer.new()
+	var hud := CanvasLayer.new()
 	hud.layer = 10
 	add_child(hud)
 
-	# Сенсорне керування
 	controls = Node2D.new()
+	controls.visible = false
 	hud.add_child(controls)
 	joystick = JoystickScript.new()
 	controls.add_child(joystick)
-	btn_attack = _make_action_button("Шабля", 86.0, Color(0.75, 0.15, 0.12))
-	btn_attack.triggered.connect(_on_attack_button)
+	btn_attack = _make_action_button("Удар", 86.0, Color(0.75, 0.15, 0.12))
+	btn_attack.triggered.connect(func(): if state == State.PLAYING: player.attack())
 	btn_dodge = _make_action_button("Перекид", 56.0, Color(0.2, 0.45, 0.75))
-	btn_dodge.triggered.connect(_on_dodge_button)
+	btn_dodge.triggered.connect(func(): if state == State.PLAYING: player.dodge())
 	var skill_colors := {"whirl": Color(0.55, 0.3, 0.8), "lightning": Color(0.25, 0.55, 0.9), "musket": Color(0.45, 0.4, 0.3)}
 	for id in Data.ACTIVE_SKILLS:
 		var b = _make_action_button(Data.ACTIVE_LABELS[id], 54.0, skill_colors[id])
@@ -453,77 +675,89 @@ func _build_hud() -> void:
 	ui_root.theme = _make_theme()
 	hud.add_child(ui_root)
 
+	map_view = WorldMap.new()
+	map_view.main = self
+	map_view.set_anchors_preset(Control.PRESET_FULL_RECT)
+	map_view.visible = false
+	map_view.location_selected.connect(_on_map_select)
+	ui_root.add_child(map_view)
+
+	map_panel = PanelContainer.new()
+	map_panel.anchor_left = 1.0
+	map_panel.anchor_right = 1.0
+	map_panel.anchor_bottom = 1.0
+	map_panel.offset_left = -390
+	map_panel.offset_right = -12
+	map_panel.offset_top = 100
+	map_panel.offset_bottom = -12
+	map_panel.visible = false
+	ui_root.add_child(map_panel)
+
 	stats_box = Control.new()
 	stats_box.set_anchors_preset(Control.PRESET_FULL_RECT)
 	stats_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stats_box.visible = false
 	ui_root.add_child(stats_box)
-
 	hp_bar = _make_bar(Color(0.85, 0.15, 0.15))
 	hp_bar.position = Vector2(20, 18)
 	hp_bar.size = Vector2(340, 30)
 	stats_box.add_child(hp_bar)
-	hp_label = Label.new()
-	hp_label.add_theme_font_size_override("font_size", 20)
-	hp_label.position = Vector2(30, 18)
+	hp_label = _hud_label(Vector2(30, 18), 20)
 	hp_label.size = Vector2(320, 30)
 	hp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stats_box.add_child(hp_label)
-
 	xp_bar = _make_bar(Color(0.95, 0.75, 0.15))
 	xp_bar.position = Vector2(20, 54)
 	xp_bar.size = Vector2(340, 16)
 	stats_box.add_child(xp_bar)
+	level_label = _hud_label(Vector2(20, 72), 22)
+	quest_label = _hud_label(Vector2(20, 104), 16)
+	loc_label = Label.new()
+	loc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loc_label.anchor_right = 1.0
+	loc_label.offset_top = 14
+	stats_box.add_child(loc_label)
+	sub_label = Label.new()
+	sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub_label.anchor_right = 1.0
+	sub_label.offset_top = 46
+	sub_label.add_theme_font_size_override("font_size", 18)
+	stats_box.add_child(sub_label)
 
-	level_label = Label.new()
-	level_label.position = Vector2(20, 74)
-	stats_box.add_child(level_label)
-
-	wave_label = Label.new()
-	wave_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wave_label.anchor_right = 1.0
-	wave_label.offset_top = 14
-	stats_box.add_child(wave_label)
-
-	kills_label = Label.new()
-	kills_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	kills_label.anchor_right = 1.0
-	kills_label.offset_top = 48
-	kills_label.add_theme_font_size_override("font_size", 20)
-	stats_box.add_child(kills_label)
+	pause_btn = _make_corner_button("II", -96, -20, _on_pause_button)
+	char_btn = _make_corner_button("Козак", -290, -110, open_character)
+	char_btn.add_theme_font_size_override("font_size", 24)
+	map_btn = _make_corner_button("Мапа", -420, -305, func(): if state == State.PLAYING: _try_leave())
+	map_btn.add_theme_font_size_override("font_size", 24)
 
 	banner = Label.new()
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	banner.set_anchors_preset(Control.PRESET_FULL_RECT)
 	banner.offset_bottom = -200
-	banner.add_theme_font_size_override("font_size", 52)
+	banner.add_theme_font_size_override("font_size", 48)
 	banner.add_theme_constant_override("outline_size", 10)
 	banner.modulate.a = 0.0
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.z_index = 5
 	ui_root.add_child(banner)
 
-	pause_btn = _make_corner_button("II", -96, -20)
-	pause_btn.pressed.connect(_on_pause_button)
-	char_btn = _make_corner_button("Козак", -290, -110)
-	char_btn.add_theme_font_size_override("font_size", 26)
-	char_btn.pressed.connect(_on_char_button)
-
 	overlay = ColorRect.new()
-	overlay.color = Color(0, 0, 0, 0.7)
+	overlay.color = Color(0, 0, 0, 0.72)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.visible = false
+	overlay.z_index = 6
 	ui_root.add_child(overlay)
-	overlay_center = CenterContainer.new()
-	overlay_center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(overlay_center)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(center)
 	overlay_box = VBoxContainer.new()
 	overlay_box.add_theme_constant_override("separation", 18)
 	overlay_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	overlay_center.add_child(overlay_box)
+	center.add_child(overlay_box)
 
 
-func _make_corner_button(text: String, left: float, right: float) -> Button:
+func _make_corner_button(text: String, left: float, right: float, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.anchor_left = 1.0
@@ -533,18 +767,18 @@ func _make_corner_button(text: String, left: float, right: float) -> Button:
 	b.offset_top = 16
 	b.offset_bottom = 88
 	b.visible = false
+	b.pressed.connect(cb)
 	ui_root.add_child(b)
 	return b
 
 
-func _on_attack_button() -> void:
-	if state == State.PLAYING:
-		player.attack()
-
-
-func _on_dodge_button() -> void:
-	if state == State.PLAYING:
-		player.dodge()
+func _make_action_button(text: String, r: float, col: Color):
+	var b = ActionButtonScript.new()
+	b.label = text
+	b.radius = r
+	b.color = col
+	controls.add_child(b)
+	return b
 
 
 func _on_skill_button(id: String) -> void:
@@ -557,18 +791,12 @@ func _on_pause_button() -> void:
 		_show_pause()
 
 
-func _on_char_button() -> void:
-	if state == State.PLAYING:
-		_show_character()
-
-
-func _make_action_button(text: String, r: float, col: Color):
-	var b = ActionButtonScript.new()
-	b.label = text
-	b.radius = r
-	b.color = col
-	controls.add_child(b)
-	return b
+## Що показувати в HUD: смуги героя та кнопки бою.
+func _hud_mode(show_stats: bool, combat: bool) -> void:
+	stats_box.visible = show_stats
+	pause_btn.visible = combat
+	map_btn.visible = combat
+	char_btn.visible = show_stats
 
 
 func _layout() -> void:
@@ -580,20 +808,31 @@ func _layout() -> void:
 	skill_buttons["whirl"].position = Vector2(s.x - 120, s.y - 315)
 	skill_buttons["lightning"].position = Vector2(s.x - 275, s.y - 255)
 	skill_buttons["musket"].position = Vector2(s.x - 425, s.y - 105)
+	map_view.map_rect = Rect2(Vector2(8, 96), Vector2(s.x - 410, s.y - 104))
 
 
 func _update_hud(delta: float) -> void:
+	if player == null:
+		return
 	hp_bar.max_value = player.max_hp
 	hp_bar.value = player.hp
-	hp_label.text = "Здоров'я %d / %d" % [int(ceil(player.hp)), int(player.max_hp)]
+	hp_label.text = "Здоров'я %d / %d" % [roundi(player.hp), roundi(player.max_hp)]
 	xp_bar.max_value = player.xp_next
 	xp_bar.value = player.xp
-	level_label.text = "Рівень %d" % player.level
-	wave_label.text = "Хвиля %d" % wave if wave > 0 else ""
-	kills_label.text = "Знищено нечисті: %d" % kills
+	level_label.text = "Рівень %d    Дукати: %d" % [player.level, player.gold]
+	var ql := []
+	for q in world.quests:
+		ql.append("• %s %d/%d" % [q["text"], q["progress"], q["count"]] + ("  ✓" if world.is_done(q) else ""))
+	quest_label.text = "\n".join(ql)
+	if state == State.PLAYING:
+		loc_label.text = loc["name"]
+		sub_label.text = ("Кімната %d/%d" % [room, loc["rooms"]]) if loc["type"] == "dungeon" else ("Рівень місцевості %d" % loc["level"])
+	else:
+		loc_label.text = ""
+		sub_label.text = ""
 	var pts: int = player.unspent_points()
 	if pts > 0:
-		_pulse += delta * 5.0
+		_pulse += maxf(delta, 0.016) * 5.0
 		char_btn.text = "Козак +%d" % pts
 		char_btn.modulate = Color(1, 1, 1).lerp(Color(1.4, 1.25, 0.6), 0.5 + 0.5 * sin(_pulse))
 	else:
@@ -611,322 +850,307 @@ func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
 	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
 
 
-# --- Екрани-оверлеї ---
+# --- Мапа ---
+
+func _on_map_select(id: String) -> void:
+	map_sel = id
+	map_view.selected = id
+	_build_map_panel()
+
+
+func _build_map_panel() -> void:
+	for c in map_panel.get_children():
+		c.queue_free()
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	map_panel.add_child(v)
+	if map_sel == "":
+		v.add_child(UI.label("Мапа України", 28, UI.GOLD, false))
+		v.add_child(UI.label("Торкнись місця на мапі.", 19, UI.TEXT, false))
+		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Шаблі — дика місцевість", "Арка — печера з босом", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
+			v.add_child(UI.label(t, 16, UI.MUTED, false))
+		return
+	if Data.CITIES.has(map_sel):
+		var C: Dictionary = Data.CITIES[map_sel]
+		v.add_child(UI.label(C["name"], 28, UI.GOLD, false))
+		v.add_child(UI.label("Місто", 18, UI.MUTED, false))
+		var desc := UI.label(C["desc"], 18, UI.TEXT, false)
+		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(desc)
+		v.add_child(UI.label("Лояльність: %s (%d)" % [Data.LOYALTY_NAMES[world.loyalty_level(map_sel)], world.loyalty_points(map_sel)], 18, UI.TEXT, false))
+		var done := 0
+		for q in world.quests:
+			if q["city"] == map_sel and world.is_done(q):
+				done += 1
+		if done > 0:
+			v.add_child(UI.label("Можна здати завдань: %d" % done, 18, UI.GOOD, false))
+		v.add_child(UI.button("Увійти до міста", func(): enter_city(map_sel), Vector2(350, 70), 26))
+		return
+	var L: Dictionary = Data.LOCATIONS[map_sel]
+	v.add_child(UI.label(L["name"], 28, UI.GOLD, false))
+	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], Data.BOSS_NAMES[L["boss"]]]) if L["type"] == "dungeon" else "Дика місцевість"
+	v.add_child(UI.label(kind_text, 17, UI.MUTED, false))
+	var danger: bool = L["level"] > player.level + 2
+	v.add_child(UI.label("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
+	var desc2 := UI.label(L["desc"], 18, UI.TEXT, false)
+	desc2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(desc2)
+	var names := []
+	for e in L["enemies"]:
+		names.append(Data.ENEMY_NAMES[e])
+	v.add_child(UI.label("Нечисть: " + ", ".join(names), 17, UI.MUTED, false))
+	for q in world.quests:
+		if q["loc"] == map_sel and not world.is_done(q):
+			var ql := UI.label("! " + q["text"], 16, UI.GOLD, false)
+			ql.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(ql)
+	v.add_child(UI.button("Вирушити", func(): enter_location(map_sel), Vector2(350, 70), 26))
+
+
+# --- Повноекранні екрани (козак, місто) ---
+
+func _clear_screen() -> void:
+	if screen_root:
+		screen_root.queue_free()
+		screen_root = null
+
+
+func _set_screen(c: Control) -> void:
+	_clear_screen()
+	screen_root = c
+	ui_root.add_child(c)
+	ui_root.move_child(c, banner.get_index())
+
+
+func _build_city() -> void:
+	_set_screen(UiCity.build(self, city_id))
+
+
+func shop_stock(city: String) -> Array:
+	if not world.shops.has(city) or world.shop_dirty.get(city, true):
+		var C: Dictionary = Data.CITIES[city]
+		var loyal: int = world.loyalty_level(city)
+		var ilvl: int = maxi(C["level"], player.level - 1) + loyal
+		var stock := []
+		for i in 6:
+			stock.append(player.assign_uid(Data.gen_item(ilvl, Data.roll_rarity(C["level"] + loyal * 3))))
+		world.shops[city] = stock
+		world.shop_dirty[city] = false
+	return world.shops[city]
+
+
+func buy_price(city: String, item: Dictionary) -> int:
+	return int(Data.sell_price(item) * 4 * (1.0 - world.discount(city)))
+
+
+func hire_price(city: String, type: String) -> int:
+	return int(Data.COMPANIONS[type]["cost"] * (1.0 - world.discount(city)) * (1.0 + 0.1 * (player.level - 1)))
+
+
+func city_do(action: String, arg) -> void:
+	match action:
+		"take":
+			world.take(city_id, arg)
+		"abandon":
+			world.abandon(arg)
+		"turn_in":
+			var q: Dictionary = world.turn_in(arg)
+			if not q.is_empty():
+				player.gold += q["gold"]
+				player.add_xp(q["xp"])
+				var up: bool = world.add_loyalty(q["city"], q["loyalty"])
+				if up:
+					show_banner("Лояльність зросла!\n%s: %s" % [Data.place_name(q["city"]), Data.LOYALTY_NAMES[world.loyalty_level(q["city"])]], UI.GOOD)
+				else:
+					show_banner("Завдання виконано!\n+%d дукатів, +%d досвіду" % [q["gold"], q["xp"]], UI.GOLD)
+		"select":
+			city_sel_uid = arg
+			smith_msg = ""
+		"buy":
+			var stock := shop_stock(city_id)
+			for i in stock.size():
+				var it: Dictionary = stock[i]
+				if it["uid"] == arg:
+					var price := buy_price(city_id, it)
+					if player.gold >= price and player.add_item(it):
+						player.gold -= price
+						stock.remove_at(i)
+					break
+		"sell":
+			var it: Dictionary = player.remove_from_bag(arg)
+			if not it.is_empty():
+				player.gold += Data.sell_price(it)
+			city_sel_uid = -1
+		"sell_junk":
+			for it in player.inventory.duplicate():
+				if it["rarity"] == 0:
+					player.remove_from_bag(it["uid"])
+					player.gold += Data.sell_price(it)
+		"sharpen":
+			var before: int = player.find_item(arg).get("up", 0)
+			match player.sharpen(arg):
+				"ok":
+					smith_msg = "Успіх! Тепер +%d" % (before + 1)
+					smith_msg_color = UI.GOOD
+				"fail":
+					smith_msg = "Не вдалося... Заточка лишилась +%d" % before
+					smith_msg_color = UI.MUTED
+				"down":
+					smith_msg = "Лезо тріснуло! Заточка впала до +%d" % (before - 1)
+					smith_msg_color = UI.BAD
+				"nogold":
+					smith_msg = "Бракує дукатів."
+					smith_msg_color = UI.BAD
+		"hire":
+			var price := hire_price(city_id, arg)
+			if player.gold >= price and world.companions.size() < Data.MAX_COMPANIONS:
+				player.gold -= price
+				world.companions.append({"type": arg, "downed": false})
+		"dismiss":
+			if arg < world.companions.size():
+				world.companions.remove_at(arg)
+	save_game()
+	_build_city()
+
+
+func open_character() -> void:
+	if state == State.CHARACTER or player == null:
+		return
+	if not (state == State.PLAYING or state == State.MAP or state == State.CITY):
+		return
+	char_return = state
+	state = State.CHARACTER
+	get_tree().paused = true
+	controls.visible = false
+	joystick.release()
+	map_panel.visible = false
+	map_view.visible = false
+	_hud_mode(false, false)
+	char_sel_uid = -1
+	_build_character()
+
+
+func _build_character() -> void:
+	_set_screen(UiCharacter.build(self))
+
+
+func char_do(action: String, arg) -> void:
+	match action:
+		"stat":
+			player.add_stat(arg)
+		"skill":
+			player.learn_skill(arg)
+		"perk":
+			player.learn_perk(arg)
+		"select":
+			char_sel_uid = arg
+		"equip":
+			player.equip(arg)
+		"unequip":
+			player.unequip(arg)
+		"drop":
+			player.remove_from_bag(arg)
+			char_sel_uid = -1
+	_build_character()
+
+
+func close_character() -> void:
+	_clear_screen()
+	save_game()
+	match char_return:
+		State.PLAYING:
+			_resume_play()
+		State.CITY:
+			state = State.CITY
+			_build_city()
+		_:
+			enter_map()
+
+
+func _resume_play() -> void:
+	_close_overlay()
+	_clear_screen()
+	state = State.PLAYING
+	get_tree().paused = false
+	controls.visible = true
+	_hud_mode(true, true)
+
+
+# --- Оверлеї меню ---
 
 func _open_overlay() -> void:
 	for c in overlay_box.get_children():
 		c.queue_free()
-	if char_root:
-		char_root.queue_free()
-		char_root = null
 	overlay.visible = true
-	overlay_center.visible = true
 	controls.visible = false
-	pause_btn.visible = false
-	char_btn.visible = false
 	joystick.release()
-	banner.visible = false
 	get_tree().paused = true
 
 
 func _close_overlay() -> void:
 	overlay.visible = false
-	banner.visible = true
 	for c in overlay_box.get_children():
 		c.queue_free()
-	if char_root:
-		char_root.queue_free()
-		char_root = null
 
 
-func _label(text: String, size: int = 26, col: Color = TEXT, center := true) -> Label:
-	var l := Label.new()
-	l.text = text
-	if center:
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", col)
-	return l
-
-
-func _add_title(text: String, size: int = 56, col: Color = GOLD) -> Label:
-	var l := _label(text, size, col)
+func _add_title(text: String, size: int = 56, col: Color = UI.GOLD) -> Label:
+	var l := UI.label(text, size, col)
 	overlay_box.add_child(l)
 	return l
 
 
-func _add_button(text: String, cb: Callable, min_size := Vector2(460, 84)) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = min_size
-	b.pressed.connect(cb)
+func _add_button(text: String, cb: Callable, min_size := Vector2(480, 80)) -> Button:
+	var b := UI.button(text, cb, min_size)
 	overlay_box.add_child(b)
 	return b
 
 
 func _show_main_menu() -> void:
 	state = State.MENU
+	_hud_mode(false, false)
 	_open_overlay()
 	_add_title("Козацька Звитяга", 72)
-	_add_title("Нечисть лізе з Дикого Поля! Захисти рідний хутір.", 26, TEXT)
-	if best_wave > 0:
-		_add_title("Рекорд: хвиля %d, знищено %d" % [best_wave, best_kills], 22, Color(0.7, 0.9, 1.0))
-	_add_button("В бій!", _start_game)
-	_add_title("Ліва частина екрана — рух.  Праворуч — шабля, перекид і вміння.\nКнопка «Козак» — характеристики, вміння та перки.", 20, Color(0.8, 0.8, 0.8))
+	_add_title("Нечисть сунеться на українські землі. Козаче, рушай у похід!", 24, UI.TEXT)
+	if FileAccess.file_exists(SAVE_PATH):
+		_add_button("Продовжити", _continue_game)
+		_add_button("Нова гра", _confirm_new_game)
+	else:
+		_add_button("Нова гра", _new_game)
+	_add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
+
+
+func _continue_game() -> void:
+	if load_game():
+		map_here = world.last_city
+		enter_city(world.last_city)
+	else:
+		_new_game()
+
+
+func _confirm_new_game() -> void:
+	_open_overlay()
+	_add_title("Почати нову гру?", 48)
+	_add_title("Поточне збереження буде втрачено.", 24, UI.TEXT)
+	_add_button("Так, нова гра", _new_game)
+	_add_button("Ні", _show_main_menu)
 
 
 func _show_pause() -> void:
 	state = State.PAUSED
+	_hud_mode(false, false)
 	_open_overlay()
 	_add_title("Пауза")
-	_add_button("Продовжити", _resume)
-	_add_button("Козак", _show_character)
-	_add_button("Почати заново", _restart)
-
-
-func _show_gameover(new_record: bool) -> void:
-	_open_overlay()
-	_add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
-	var mins := int(play_time) / 60
-	var secs := int(play_time) % 60
-	_add_title("Хвиля %d  •  Рівень %d  •  Нечисті знищено: %d  •  Час %d:%02d" % [wave, player.level, kills, mins, secs], 26, TEXT)
-	if new_record:
-		_add_title("Новий рекорд!", 32, Color(0.6, 1.0, 0.6))
-	else:
-		_add_title("Рекорд: хвиля %d, знищено %d" % [best_wave, best_kills], 22, Color(0.7, 0.9, 1.0))
-	_add_button("Ще раз!", _restart)
-
-
-# ============ Екран козака: характеристики, вміння, перки ============
-
-func _show_character() -> void:
-	state = State.CHARACTER
-	_open_overlay()
-	overlay_center.visible = false
-	_build_character()
-
-
-func _refresh_character() -> void:
-	if char_root:
-		char_root.queue_free()
-	_build_character()
-
-
-func _build_character() -> void:
-	char_root = MarginContainer.new()
-	char_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	for side in ["left", "right", "top", "bottom"]:
-		char_root.add_theme_constant_override("margin_" + side, 16)
-	overlay.add_child(char_root)
-
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	char_root.add_child(v)
-
-	var header := HBoxContainer.new()
-	var title := _label("Козак — рівень %d" % player.level, 36, GOLD, false)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(title)
-	var close := Button.new()
-	close.text = "До бою"
-	close.custom_minimum_size = Vector2(220, 64)
-	close.pressed.connect(_resume)
-	header.add_child(close)
-	v.add_child(header)
-
-	var tabs := TabContainer.new()
-	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	v.add_child(tabs)
-	tabs.add_child(_scroll(_build_stats_tab()))
-	tabs.add_child(_scroll(_build_skills_tab()))
-	tabs.add_child(_scroll(_build_perks_tab()))
-	tabs.set_tab_title(0, "Характеристики" + _pts_suffix(player.stat_points))
-	tabs.set_tab_title(1, "Вміння" + _pts_suffix(player.skill_points))
-	tabs.set_tab_title(2, "Перки" + _pts_suffix(player.perk_points))
-	tabs.current_tab = char_tab
-	tabs.tab_changed.connect(func(i: int): char_tab = i)
-
-
-func _pts_suffix(n: int) -> String:
-	return "  (+%d)" % n if n > 0 else ""
-
-
-func _scroll(content: Control) -> ScrollContainer:
-	var sc := ScrollContainer.new()
-	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	var m := MarginContainer.new()
-	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for side in ["left", "right", "top", "bottom"]:
-		m.add_theme_constant_override("margin_" + side, 14)
-	m.add_child(content)
-	sc.add_child(m)
-	return sc
-
-
-func _build_stats_tab() -> Control:
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 40)
-
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 12)
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(left)
-	left.add_child(_label("Вільні очки: %d   (+%d за рівень)" % [player.stat_points, Data.STAT_POINTS_PER_LEVEL], 26, GOLD if player.stat_points > 0 else MUTED, false))
-	for st in Data.STATS:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 16)
-		var info := VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var val: int = player.stat(st["id"])
-		info.add_child(_label("%s: %d" % [st["name"], val], 30, TEXT, false))
-		info.add_child(_label(st["desc"], 18, MUTED, false))
-		row.add_child(info)
-		var b := Button.new()
-		b.text = "+"
-		b.custom_minimum_size = Vector2(90, 72)
-		b.disabled = player.stat_points <= 0
-		b.pressed.connect(_on_add_stat.bind(st["id"]))
-		row.add_child(b)
-		left.add_child(row)
-
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 4)
-	right.custom_minimum_size = Vector2(380, 0)
-	h.add_child(right)
-	right.add_child(_label("Бойові показники", 26, GOLD, false))
-	var p = player
-	var lines := [
-		["Здоров'я", "%d / %d" % [int(p.hp), int(p.max_hp)]],
-		["Шкода шаблею", "%.1f" % p.damage],
-		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
-		["Шанс криту", "%d%%  (x%.0f)" % [roundi(p.crit_chance * 100), p.crit_mult]],
-		["Дальність удару", "%d" % int(p.attack_range)],
-		["Захист", "%d%%" % roundi(p.armor * 100)],
-		["Швидкість бігу", "%d" % int(p.speed)],
-		["Сила вмінь", "%d%%" % roundi(p.skill_power * 100)],
-		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
-		["Відновлення", "%.1f / с" % p.regen],
-		["Вампіризм", "%d%%" % roundi(p.lifesteal * 100)],
-		["Бонус досвіду", "+%d%%" % roundi((p.xp_mult - 1.0) * 100)],
-	]
-	for l in lines:
-		var row := HBoxContainer.new()
-		var k := _label(l[0], 20, MUTED, false)
-		k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(k)
-		row.add_child(_label(l[1], 20, TEXT, false))
-		right.add_child(row)
-	return h
-
-
-func _connector() -> Control:
-	var c := ColorRect.new()
-	c.color = Color(0.85, 0.65, 0.2, 0.8)
-	c.custom_minimum_size = Vector2(6, 22)
-	c.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	return c
-
-
-func _tree_button(text: String, rank: int, max_rank: int, can: bool, locked: bool, font: int, min_size: Vector2) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = min_size
-	b.add_theme_font_size_override("font_size", font)
-	b.disabled = not can
-	if rank >= max_rank:
-		b.add_theme_stylebox_override("disabled", _style(Color(0.15, 0.32, 0.15), Color(0.5, 0.9, 0.4)))
-		b.add_theme_color_override("font_disabled_color", Color(0.85, 1.0, 0.8))
-	elif rank > 0:
-		b.add_theme_stylebox_override("disabled", _style(Color(0.35, 0.12, 0.1), Color(0.8, 0.6, 0.2)))
-		b.add_theme_color_override("font_disabled_color", Color(0.95, 0.88, 0.75))
-	elif locked:
-		b.modulate = Color(1, 1, 1, 0.6)
-	return b
-
-
-func _build_skills_tab() -> Control:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	v.add_child(_label("Очки вмінь: %d   (+%d за рівень).  Активні вміння з'являються кнопками в бою." % [player.skill_points, Data.SKILL_POINTS_PER_LEVEL], 22, GOLD if player.skill_points > 0 else MUTED))
-	var h := HBoxContainer.new()
-	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_theme_constant_override("separation", 24)
-	v.add_child(h)
-	for branch in Data.SKILL_BRANCHES:
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 0)
-		col.add_child(_label(branch["name"], 30, GOLD))
-		var spacer := Control.new()
-		spacer.custom_minimum_size = Vector2(0, 8)
-		col.add_child(spacer)
-		var nodes: Array = branch["nodes"]
-		for i in nodes.size():
-			var n: Dictionary = nodes[i]
-			if i > 0:
-				col.add_child(_connector())
-			var rank: int = player.sk(n["id"])
-			var req_met: bool = player.skill_req_met(n)
-			var text := "%s   %d/%d\n%s" % [n["name"], rank, n["max"], n["desc"]]
-			if not req_met:
-				var reqs := []
-				for r in n["req"]:
-					if player.sk(r) < n["req"][r]:
-						reqs.append("%s %d" % [Data.skill_name(r), n["req"][r]])
-				text += "\nПотрібно: " + ", ".join(reqs)
-			elif n.get("active", false):
-				text += "\nАктивне вміння"
-			var b := _tree_button(text, rank, n["max"], player.can_learn_skill(n), not req_met, 17, Vector2(320, 120))
-			b.pressed.connect(_on_learn_skill.bind(n["id"]))
-			col.add_child(b)
-		h.add_child(col)
-	return v
-
-
-func _build_perks_tab() -> Control:
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	v.add_child(_label("Очки перків: %d   (+%d за рівень).  Новий ярус відкривається за кожні %d очки, вкладені в гілку." % [player.perk_points, Data.PERK_POINTS_PER_LEVEL, Data.PERK_TIER_STEP], 22, GOLD if player.perk_points > 0 else MUTED))
-	var h := HBoxContainer.new()
-	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_theme_constant_override("separation", 16)
-	v.add_child(h)
-	for bi in Data.PERK_BRANCHES.size():
-		var branch: Dictionary = Data.PERK_BRANCHES[bi]
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 0)
-		col.add_child(_label("%s  (%d)" % [branch["name"], player.branch_perk_points(bi)], 28, GOLD))
-		var tiers: Array = branch["tiers"]
-		for ti in tiers.size():
-			var open: bool = player.perk_tier_open(bi, ti)
-			if ti > 0:
-				col.add_child(_connector())
-			if not open:
-				col.add_child(_label("Ярус %d: ще %d очк. у гілку" % [ti + 1, ti * Data.PERK_TIER_STEP - player.branch_perk_points(bi)], 16, MUTED))
-			var row := HBoxContainer.new()
-			row.alignment = BoxContainer.ALIGNMENT_CENTER
-			row.add_theme_constant_override("separation", 8)
-			for p in tiers[ti]:
-				var rank: int = player.pk(p["id"])
-				var text := "%s  %d/%d\n%s" % [p["name"], rank, p["max"], p["desc"]]
-				var w := 340.0 if tiers[ti].size() == 1 else 166.0
-				var b := _tree_button(text, rank, p["max"], player.can_learn_perk(p["id"]), not open, 14, Vector2(w, 88))
-				b.pressed.connect(_on_learn_perk.bind(p["id"]))
-				row.add_child(b)
-			col.add_child(row)
-		h.add_child(col)
-	return v
-
-
-func _on_add_stat(id: String) -> void:
-	if player.add_stat(id):
-		_refresh_character()
-
-
-func _on_learn_skill(id: String) -> void:
-	if player.learn_skill(id):
-		_refresh_character()
-
-
-func _on_learn_perk(id: String) -> void:
-	if player.learn_perk(id):
-		_refresh_character()
+	_add_button("Продовжити", _resume_play)
+	_add_button("Козак", func():
+		_close_overlay()
+		state = State.PLAYING
+		open_character())
+	var leave_text := "Покинути печеру (прогрес втратиться)" if loc.get("type", "") == "dungeon" else "Повернутися на мапу"
+	_add_button(leave_text, func():
+		_collect_all()
+		enter_map())
+	_add_button("Головне меню", func():
+		save_game()
+		_clear_combat()
+		_set_world_visible(false)
+		_show_main_menu())

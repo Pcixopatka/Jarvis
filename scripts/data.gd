@@ -100,3 +100,242 @@ static func find_perk(id: String) -> Array:
 				if p["id"] == id:
 					return [bi, ti, p]
 	return [-1, -1, {}]
+
+
+# ======================= Спорядження =======================
+
+const SLOTS := ["weapon", "head", "body", "belt", "boots", "amulet"]
+const SLOT_NAMES := {"weapon": "Зброя", "head": "Шапка", "body": "Жупан", "belt": "Пояс", "boots": "Чоботи", "amulet": "Оберіг"}
+const INVENTORY_SIZE := 24
+const MAX_UPGRADE := 10
+const UPGRADE_BONUS := 0.12  # +12% до всіх бонусів речі за кожен рівень заточки
+const SHARPEN_CHANCE := [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
+const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
+
+const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна"]
+const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15)]
+const LEGEND_EPITHETS := ["Громовиця", "Вовча", "Чорноморська", "Січова", "Перунова", "Хортицька", "Буревісна", "Сіркова"]
+
+# Типи зброї: множники шкоди, перезарядки удару, дальності, ширини дуги та відкидання.
+const WEAPON_TYPES := {
+	"sabre": {"name": "Шабля", "dmg": 1.0, "cd": 1.0, "range": 1.0, "arc": 1.0, "kb": 1.0,
+		"hint": "Збалансована"},
+	"mace": {"name": "Булава", "dmg": 1.45, "cd": 1.35, "range": 0.9, "arc": 1.1, "kb": 1.8,
+		"hint": "Повільна, б'є сильно і далеко відкидає"},
+	"pike": {"name": "Спис", "dmg": 1.1, "cd": 1.15, "range": 1.5, "arc": 0.55, "kb": 1.2,
+		"hint": "Довгий, але вузький удар"},
+}
+
+const ARMOR_TYPES := {
+	"head": ["Смушкова шапка", "Кучма", "Козацька шапка"],
+	"body": ["Жупан", "Кунтуш", "Кольчуга"],
+	"belt": ["Пояс", "Шовковий пояс", "Черес"],
+	"boots": ["Чоботи", "Сап'янці", "Похідні чоботи"],
+	"amulet": ["Оберіг", "Ладанка", "Мотанка"],
+}
+
+# Основний бонус кожного слота
+const SLOT_PRIMARY := {"weapon": "flat_dmg", "head": "hp", "body": "armor", "belt": "vit", "boots": "speed", "amulet": "skill_power"}
+
+# Шаблон тексту, кількість знаків після коми
+const STAT_FMT := {
+	"str": ["+%s до Сили", 0], "agi": ["+%s до Спритності", 0], "vit": ["+%s до Витривалості", 0],
+	"spi": ["+%s до Характерництва", 0], "flat_dmg": ["+%s шкоди", 0], "dmg_pct": ["+%s%% шкоди", 0],
+	"crit": ["+%s%% шансу криту", 1], "aspd": ["+%s%% швидкості удару", 0], "hp": ["+%s здоров'я", 0],
+	"armor": ["+%s%% захисту", 1], "regen": ["+%s здоров'я/с", 1], "lifesteal": ["+%s%% вампіризму", 1],
+	"speed": ["+%s%% швидкості бігу", 0], "xp": ["+%s%% досвіду", 0], "skill_power": ["+%s%% сили вмінь", 0],
+	"skill_cd": ["-%s%% перезарядки вмінь", 0], "pickup": ["+%s%% радіусу збору", 0], "gold": ["+%s%% дукатів", 0],
+}
+const INT_STATS := ["str", "agi", "vit", "spi"]
+const AFFIX_POOL := ["str", "agi", "vit", "spi", "dmg_pct", "crit", "aspd", "hp", "armor", "regen",
+	"lifesteal", "speed", "xp", "skill_power", "skill_cd", "pickup", "gold"]
+
+
+static func fmt_stat(id: String, value: float) -> String:
+	var f: Array = STAT_FMT[id]
+	var num := ("%.1f" % value) if f[1] == 1 else str(roundi(value))
+	return f[0] % num
+
+
+static func _roll_value(id: String, ilvl: int, rarity: int) -> float:
+	var q := 1.0 + 0.15 * rarity
+	match id:
+		"str", "agi", "vit", "spi":
+			return float(randi_range(1, 1 + ilvl / 3 + rarity / 2))
+		"dmg_pct": return (randf_range(3, 6) + 0.4 * ilvl) * q
+		"crit": return (randf_range(1.5, 3.5) + 0.15 * ilvl) * q
+		"aspd": return (randf_range(3, 6) + 0.3 * ilvl) * q
+		"hp": return (randf_range(8, 16) + 3.0 * ilvl) * q
+		"armor": return (randf_range(1.5, 3.0) + 0.2 * ilvl) * q
+		"regen": return (randf_range(0.3, 0.7) + 0.05 * ilvl) * q
+		"lifesteal": return (randf_range(0.8, 1.6) + 0.05 * ilvl) * q
+		"speed": return (randf_range(2, 4) + 0.2 * ilvl) * q
+		"xp": return (randf_range(4, 8) + 0.4 * ilvl) * q
+		"skill_power": return (randf_range(4, 7) + 0.4 * ilvl) * q
+		"skill_cd": return (randf_range(2, 4) + 0.2 * ilvl) * q
+		"pickup": return randf_range(10, 20) * q
+		"gold": return (randf_range(8, 15) + ilvl) * q
+	return 0.0
+
+
+static func _primary_value(slot: String, ilvl: int, rarity: int) -> float:
+	var q := 1.0 + 0.15 * rarity
+	match slot:
+		"weapon": return (3.0 + 1.2 * ilvl) * q
+		"head": return (10.0 + 4.0 * ilvl) * q
+		"body": return (3.0 + 0.4 * ilvl) * q
+		"belt": return float(1 + ilvl / 4 + rarity / 2)
+		"boots": return (3.0 + 0.3 * ilvl) * q
+		"amulet": return (5.0 + 0.6 * ilvl) * q
+	return 0.0
+
+
+static func roll_rarity(wave: int, min_rarity: int = 0) -> int:
+	var w := [60.0, 28.0, 10.0 + 0.8 * wave, 2.0 + 0.3 * wave]
+	var total := 0.0
+	for i in range(min_rarity, 4):
+		total += w[i]
+	var r := randf() * total
+	for i in range(min_rarity, 4):
+		r -= w[i]
+		if r <= 0.0:
+			return i
+	return 3
+
+
+## Створює випадкову річ. slot/type можна задати явно.
+static func gen_item(ilvl: int, rarity: int, slot: String = "", type: String = "") -> Dictionary:
+	if slot == "":
+		slot = ["weapon", "weapon", "head", "body", "belt", "boots", "amulet"][randi() % 7]
+	var name := ""
+	if slot == "weapon":
+		if type == "":
+			type = WEAPON_TYPES.keys()[randi() % WEAPON_TYPES.size()]
+		name = WEAPON_TYPES[type]["name"]
+	else:
+		var names: Array = ARMOR_TYPES[slot]
+		name = names[mini(names.size() - 1, randi() % names.size())]
+	if rarity == 3:
+		name += " «%s»" % LEGEND_EPITHETS[randi() % LEGEND_EPITHETS.size()]
+	var primary: String = SLOT_PRIMARY[slot]
+	var affixes := {}
+	var pool := AFFIX_POOL.duplicate()
+	pool.erase(primary)
+	pool.shuffle()
+	for i in rarity:
+		affixes[pool[i]] = _roll_value(pool[i], ilvl, rarity)
+	return {
+		"slot": slot, "type": type, "name": name, "rarity": rarity, "ilvl": ilvl, "up": 0, "spent": 0,
+		"base": {primary: _primary_value(slot, ilvl, rarity)}, "affixes": affixes,
+	}
+
+
+static func item_title(item: Dictionary) -> String:
+	return item["name"] + (" +%d" % item["up"] if item["up"] > 0 else "")
+
+
+## Усі бонуси речі з урахуванням заточки.
+static func item_stats(item: Dictionary) -> Dictionary:
+	var mult: float = 1.0 + UPGRADE_BONUS * item["up"]
+	var out := {}
+	for src in [item["base"], item["affixes"]]:
+		for id in src:
+			var v: float = src[id] * mult
+			if id in INT_STATS:
+				v = floorf(v)
+			out[id] = out.get(id, 0.0) + v
+	return out
+
+
+static func sharpen_cost(item: Dictionary) -> int:
+	return int(20 * (item["up"] + 1) * (1.0 + 0.5 * item["rarity"]) * (1.0 + 0.1 * item["ilvl"]))
+
+
+static func sharpen_chance(item: Dictionary) -> float:
+	return SHARPEN_CHANCE[mini(item["up"], SHARPEN_CHANCE.size() - 1)]
+
+
+static func sell_price(item: Dictionary) -> int:
+	return int(10 * (1 + item["rarity"]) * (1.0 + 0.1 * item["ilvl"]) + item["spent"] * 0.3)
+
+
+# ======================= Світ =======================
+# Позиції — реальні географічні координати (довгота, широта); мапа проєктує їх на екран.
+
+const CITIES := {
+	"sich": {"name": "Запорозька Січ", "pos": Vector2(35.1, 47.75), "level": 1,
+		"desc": "Козацька столиця за порогами. Тут усе починається."},
+	"chyhyryn": {"name": "Чигирин", "pos": Vector2(32.66, 49.08), "level": 2,
+		"desc": "Гетьманська столиця над Тясмином."},
+	"poltava": {"name": "Полтава", "pos": Vector2(34.55, 49.6), "level": 3,
+		"desc": "Полкове місто на Ворсклі."},
+	"kyiv": {"name": "Київ", "pos": Vector2(30.52, 50.45), "level": 4,
+		"desc": "Стародавня столиця на Дніпрових кручах."},
+	"chernihiv": {"name": "Чернігів", "pos": Vector2(31.3, 51.5), "level": 6,
+		"desc": "Княже місто серед поліських лісів."},
+	"kamianets": {"name": "Кам'янець", "pos": Vector2(26.58, 48.68), "level": 7,
+		"desc": "Неприступна фортеця над Смотричем."},
+	"lviv": {"name": "Львів", "pos": Vector2(24.03, 49.84), "level": 9,
+		"desc": "Багате торгове місто, ворота на захід."},
+}
+
+const LOCATIONS := {
+	"wild_field": {"name": "Дике Поле", "type": "field", "biome": "steppe", "pos": Vector2(37.6, 48.15), "level": 1,
+		"enemies": ["mavka", "upyr"], "desc": "Безкраї степи, де нечисть блукає ночами."},
+	"rapids": {"name": "Дніпрові пороги", "type": "field", "biome": "river", "pos": Vector2(34.5, 48.75), "level": 2,
+		"enemies": ["mavka", "bolotianyk"], "desc": "Бурхливі пороги, де мавки заманюють у воду."},
+	"zmii_cave": {"name": "Змієва печера", "type": "dungeon", "biome": "cave", "pos": Vector2(33.6, 47.2), "level": 3,
+		"rooms": 4, "enemies": ["mavka", "upyr", "bolotianyk"], "boss": "zmii",
+		"desc": "Глибоке лігво під кручами. Там спить Триголовий Змій."},
+	"black_forest": {"name": "Чорний ліс", "type": "field", "biome": "forest", "pos": Vector2(32.2, 48.45), "level": 4,
+		"enemies": ["mavka", "vovkulaka", "upyr"], "desc": "Темна пуща, де виють вовкулаки."},
+	"crypt": {"name": "Упирячий склеп", "type": "dungeon", "biome": "cave", "pos": Vector2(33.0, 50.85), "level": 6,
+		"rooms": 5, "enemies": ["upyr", "vovkulaka"], "boss": "upyr",
+		"desc": "Старі підземелля, де править Упир-володар."},
+	"polissia": {"name": "Поліські болота", "type": "field", "biome": "swamp", "pos": Vector2(27.6, 51.35), "level": 6,
+		"enemies": ["bolotianyk", "upyr", "mavka"], "desc": "Трясовина, туман і болотяники."},
+	"chornohora": {"name": "Чорногора", "type": "field", "biome": "mountain", "pos": Vector2(24.6, 48.05), "level": 9,
+		"enemies": ["vovkulaka", "upyr", "bolotianyk"], "desc": "Високі Карпати, сніг і вовчі зграї."},
+	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.2, 48.6), "level": 10,
+		"rooms": 6, "enemies": ["vovkulaka", "upyr", "bolotianyk"], "boss": "vovkulaka",
+		"desc": "Скарби опришків стереже Вовкулака-ватажок."},
+}
+
+const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zmii": "Змій"}
+const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zmii": "зміїв"}
+const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок"}
+const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура"}
+
+const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
+const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]
+const LOYALTY_DISCOUNT := [0.0, 0.05, 0.1, 0.2]
+const MAX_ACTIVE_QUESTS := 5
+const MAX_COMPANIONS := 2
+
+const COMPANIONS := {
+	"dzhura": {"name": "Джура", "desc": "Молодий козак із шаблею.\nБ'ється пліч-о-пліч.", "cost": 120, "loyalty": 0,
+		"hp": 90.0, "hp_lvl": 15.0, "dmg": 8.0, "dmg_lvl": 2.0, "range": 55.0, "cd": 0.7, "speed": 250.0,
+		"color": Color(0.2, 0.45, 0.75)},
+	"strilets": {"name": "Стрілець", "desc": "Влучно стріляє з рушниці\nз безпечної відстані.", "cost": 250, "loyalty": 1,
+		"hp": 60.0, "hp_lvl": 10.0, "dmg": 14.0, "dmg_lvl": 3.0, "range": 420.0, "cd": 1.6, "speed": 230.0,
+		"color": Color(0.3, 0.5, 0.25)},
+	"znakhar": {"name": "Знахарка", "desc": "Лікує козака й загін\nцілющими травами.", "cost": 400, "loyalty": 2,
+		"hp": 55.0, "hp_lvl": 9.0, "dmg": 5.0, "dmg_lvl": 1.0, "range": 300.0, "cd": 1.4, "speed": 240.0,
+		"heal": 10.0, "heal_lvl": 2.5, "color": Color(0.85, 0.85, 0.9)},
+}
+
+
+static func loyalty_level(points: int) -> int:
+	var lvl := 0
+	for i in LOYALTY_THRESHOLDS.size():
+		if points >= LOYALTY_THRESHOLDS[i]:
+			lvl = i
+	return lvl
+
+
+static func place_name(id: String) -> String:
+	if CITIES.has(id):
+		return CITIES[id]["name"]
+	if LOCATIONS.has(id):
+		return LOCATIONS[id]["name"]
+	return id

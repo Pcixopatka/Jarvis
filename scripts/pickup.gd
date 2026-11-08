@@ -1,8 +1,11 @@
 extends Node2D
-## Здобич: золотий дукат (досвід) або вареник (лікування).
+## Здобич: дукат (досвід і гроші), вареник (лікування) або річ спорядження.
+
+const Data := preload("res://scripts/data.gd")
 
 var main
-var kind := "coin"  # "coin" або "varenyk"
+var kind := "coin"  # "coin", "varenyk" або "item"
+var item := {}
 var value := 1
 var phase := randf() * TAU
 var pull_speed := 0.0
@@ -25,6 +28,9 @@ func _process(delta: float) -> void:
 	if dist < 22.0:
 		if kind == "coin":
 			p.add_xp(value)
+			p.add_gold(value)
+		elif kind == "item":
+			main.on_item_picked(item)
 		else:
 			p.heal(value)
 		queue_free()
@@ -37,6 +43,15 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 9.0, Color(0, 0, 0, 0.25))
 	draw_set_transform(Vector2(0, hover - 4), 0.0, Vector2.ONE)
+	if kind == "item":
+		var col: Color = Data.RARITY_COLORS[item["rarity"]]
+		draw_circle(Vector2.ZERO, 20.0 + sin(phase * 2.0) * 3.0, Color(col, 0.25))
+		# Вузлик зі здобиччю
+		draw_circle(Vector2(0, 2), 11.0, Color(0.55, 0.38, 0.2))
+		draw_colored_polygon(PackedVector2Array([Vector2(-6, -8), Vector2(6, -8), Vector2(0, -2)]), Color(0.45, 0.3, 0.15))
+		draw_line(Vector2(-7, -6), Vector2(7, -6), col, 3.0)
+		draw_circle(Vector2(6, -10), 2.5, Color(1, 1, 0.9))
+		return
 	if kind == "coin":
 		var r := 6.0 + minf(value, 20) * 0.35
 		draw_circle(Vector2.ZERO, r, Color(0.95, 0.75, 0.15))

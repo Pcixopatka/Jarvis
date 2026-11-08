@@ -1,9 +1,11 @@
 extends Node2D
-## Нечисть: мавка, упир, болотяник та бос — Змій.
+## Нечисть: мавка, упир, болотяник, вовкулака; боси — Змій або велетенські різновиди інших.
 
 var main
 var kind := "mavka"
+var level := 1
 var radius := 16.0
+var r_draw := 16.0  # радіус для малювання (без урахування масштабу боса)
 var max_hp := 30.0
 var hp := 30.0
 var speed := 150.0
@@ -19,54 +21,93 @@ var knockback := Vector2.ZERO
 var flash := 0.0
 var slow_timer := 0.0
 var contact_cd := 0.0
+var lunge_timer := 0.0
 var phase := randf() * TAU
 var facing := Vector2.LEFT
 var dead := false
 
 
-func setup(k: String, wave: int) -> void:
+func setup(k: String, lvl: int, boss: bool = false) -> void:
 	kind = k
-	var s := 1.0 + 0.12 * (wave - 1)
+	level = lvl
+	var s := 1.0 + 0.18 * (lvl - 1)
 	match k:
 		"mavka":
-			radius = 16.0; max_hp = 30.0 * s; speed = 150.0; damage = 8.0; xp_value = 3
+			radius = 16.0; max_hp = 30.0; speed = 150.0; damage = 8.0; xp_value = 3
 			color = Color(0.6, 0.92, 0.65)
 		"upyr":
-			radius = 22.0; max_hp = 85.0 * s; speed = 92.0; damage = 15.0; xp_value = 6
+			radius = 22.0; max_hp = 85.0; speed = 92.0; damage = 15.0; xp_value = 6
 			color = Color(0.5, 0.1, 0.14)
 		"bolotianyk":
-			radius = 20.0; max_hp = 45.0 * s; speed = 85.0; damage = 10.0; xp_value = 5
+			radius = 20.0; max_hp = 45.0; speed = 85.0; damage = 10.0; xp_value = 5
 			color = Color(0.33, 0.45, 0.2)
 			ranged = true; keep_distance = 320.0; shoot_cd = 2.2
+		"vovkulaka":
+			radius = 19.0; max_hp = 55.0; speed = 175.0; damage = 12.0; xp_value = 5
+			color = Color(0.45, 0.43, 0.42)
 		"zmii":
-			radius = 52.0; max_hp = 700.0 * s; speed = 70.0; damage = 25.0; xp_value = 60
+			radius = 52.0; max_hp = 70.0; speed = 70.0; damage = 25.0; xp_value = 6
 			color = Color(0.2, 0.55, 0.25)
-			ranged = true; is_boss = true; shoot_cd = 2.6
-	speed *= minf(1.35, 1.0 + 0.025 * (wave - 1))
+			ranged = true; shoot_cd = 2.6
+	r_draw = radius
+	max_hp *= s
+	damage *= 1.0 + 0.12 * (lvl - 1)
+	xp_value = int(xp_value * (1.0 + 0.25 * (lvl - 1)))
+	speed *= minf(1.3, 1.0 + 0.02 * (lvl - 1))
+	if boss or k == "zmii":
+		is_boss = true
+		max_hp *= 10.0
+		damage *= 1.5
+		xp_value *= 12
+		if k != "zmii":
+			scale = Vector2.ONE * 2.0
+			radius *= 2.0
+			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
 	hp = max_hp
 	add_to_group("enemies")
 
 
+## Найближчий союзник (козак або супутник).
+func _pick_target():
+	var best = null
+	var best_d := INF
+	for a in main.allies():
+		var d: float = global_position.distance_squared_to(a.global_position)
+		if d < best_d:
+			best_d = d
+			best = a
+	return best
+
+
 func _process(delta: float) -> void:
 	if dead:
 		return
-	var p = main.player
+	var p = _pick_target()
 	flash = maxf(0.0, flash - delta)
 	slow_timer = maxf(0.0, slow_timer - delta)
 	contact_cd = maxf(0.0, contact_cd - delta)
+	lunge_timer = maxf(0.0, lunge_timer - delta)
 	phase += delta * 6.0
 
-	var to: Vector2 = p.global_position - global_position
-	var dist := to.length()
-	var dir := to / maxf(dist, 0.001)
-	facing = dir
-	var desired := dir
-	if keep_distance > 0.0:
-		if dist < keep_distance * 0.8:
-			desired = -dir
-		elif dist < keep_distance * 1.15:
-			desired = dir.orthogonal() * sin(phase * 0.15)
+	var desired := Vector2.ZERO
+	var dist := INF
+	var dir := facing
+	if p != null:
+		var to: Vector2 = p.global_position - global_position
+		dist = to.length()
+		dir = to / maxf(dist, 0.001)
+		facing = dir
+		desired = dir
+		if keep_distance > 0.0:
+			if dist < keep_distance * 0.8:
+				desired = -dir
+			elif dist < keep_distance * 1.15:
+				desired = dir.orthogonal() * sin(phase * 0.15)
+		# Вовкулака робить стрибок, коли близько
+		if kind == "vovkulaka" and dist < 220.0 and lunge_timer <= 0.0:
+			lunge_timer = 2.5
+			knockback += dir * 520.0
 
 	# Розштовхування, щоб нечисть не злипалась в одну купу
 	var sep := Vector2.ZERO
@@ -79,26 +120,27 @@ func _process(delta: float) -> void:
 		if l < min_d and l > 0.01:
 			sep += d / l * (min_d - l) / min_d
 
-	if not p.alive:
-		desired = Vector2.ZERO
 	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0)
 	var vel := desired * spd + sep * speed * 1.5 + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	position += vel * delta
 	var pad := Vector2(radius, radius)
-	position = position.clamp(main.ARENA.position + pad, main.ARENA.end - pad)
+	position = position.clamp(main.arena.position + pad, main.arena.end - pad)
 
-	if p.alive and dist < radius + p.radius + 4.0 and contact_cd <= 0.0:
+	if p != null and dist < radius + p.radius + 4.0 and contact_cd <= 0.0:
 		p.take_damage(damage, self)
 		contact_cd = 0.9
 
-	if ranged and p.alive:
+	if ranged and p != null:
 		shoot_timer -= delta * (0.5 if slow_timer > 0.0 else 1.0)
 		if shoot_timer <= 0.0 and dist < 750.0:
 			shoot_timer = shoot_cd
-			if is_boss:
+			if kind == "zmii":
 				for a in [-0.35, 0.0, 0.35]:
-					main.spawn_projectile(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.7, Color(1.0, 0.5, 0.1), 13.0)
+					main.spawn_projectile(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.6, Color(1.0, 0.5, 0.1), 13.0)
+			elif is_boss:
+				for a in [-0.25, 0.0, 0.25]:
+					main.spawn_projectile(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
 			else:
 				main.spawn_projectile(global_position, dir, 260.0, damage, Color(0.55, 0.85, 0.2), 9.0)
 	queue_redraw()
@@ -126,8 +168,8 @@ func _c(c: Color) -> Color:
 
 
 func _draw() -> void:
-	draw_set_transform(Vector2(0, radius * 0.9), 0.0, Vector2(1.0, 0.38))
-	draw_circle(Vector2.ZERO, radius * 1.1, Color(0, 0, 0, 0.3))
+	draw_set_transform(Vector2(0, r_draw * 0.9), 0.0, Vector2(1.0, 0.38))
+	draw_circle(Vector2.ZERO, r_draw * 1.1, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
 	match kind:
@@ -137,13 +179,15 @@ func _draw() -> void:
 			_draw_upyr(side)
 		"bolotianyk":
 			_draw_bolotianyk(side)
+		"vovkulaka":
+			_draw_vovkulaka(side)
 		"zmii":
 			_draw_zmii()
 	if slow_timer > 0.0:
-		draw_arc(Vector2(0, -radius * 0.5), radius * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
-	if hp < max_hp and not is_boss:
-		var w := radius * 2.2
-		var y := -radius * 2.0 - 14.0
+		draw_arc(Vector2(0, -r_draw * 0.5), r_draw * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
+	if hp < max_hp and kind != "zmii":
+		var w := r_draw * 2.2
+		var y := -r_draw * 2.0 - 14.0
 		draw_rect(Rect2(-w / 2, y, w, 5), Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(-w / 2, y, w * hp / max_hp, 5), Color(0.9, 0.2, 0.2))
 
@@ -183,7 +227,7 @@ func _draw_upyr(side: float) -> void:
 func _draw_bolotianyk(side: float) -> void:
 	var squash := 1.0 + sin(phase * 0.8) * 0.06
 	draw_set_transform(Vector2(0, -6), 0.0, Vector2(squash, 2.0 - squash))
-	draw_circle(Vector2.ZERO, radius, _c(color))
+	draw_circle(Vector2.ZERO, r_draw, _c(color))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# Мох і багнюка
 	draw_circle(Vector2(-9, -16), 6.0, _c(Color(0.25, 0.38, 0.12)))
@@ -194,6 +238,29 @@ func _draw_bolotianyk(side: float) -> void:
 	draw_circle(Vector2(side * 6 + 5, -8), 4.0, Color(1, 0.95, 0.4))
 	draw_circle(Vector2(side * 7 - 4, -8), 1.8, Color.BLACK)
 	draw_circle(Vector2(side * 7 + 5, -8), 1.8, Color.BLACK)
+
+
+func _draw_vovkulaka(side: float) -> void:
+	var run := sin(phase * 1.5) * 3.0
+	# Задні лапи та хвіст
+	draw_line(Vector2(-6, 8), Vector2(-8, 16 + run), _c(color.darkened(0.3)), 5.0)
+	draw_line(Vector2(6, 8), Vector2(8, 16 - run), _c(color.darkened(0.3)), 5.0)
+	draw_line(Vector2(-side * 14, 2), Vector2(-side * 26, -6 + run), _c(color.darkened(0.15)), 6.0)
+	# Тулуб
+	draw_set_transform(Vector2(0, -2), 0.0, Vector2(1.15, 1.0))
+	draw_circle(Vector2.ZERO, 15.0, _c(color))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_circle(Vector2(0, 2), 9.0, _c(color.lightened(0.25)))
+	# Голова з вухами і пащею
+	var h := Vector2(side * 10, -20)
+	draw_colored_polygon(PackedVector2Array([h + Vector2(-8, -6), h + Vector2(-5, -18), h + Vector2(-1, -7)]), _c(color.darkened(0.2)))
+	draw_colored_polygon(PackedVector2Array([h + Vector2(1, -7), h + Vector2(5, -18), h + Vector2(8, -6)]), _c(color.darkened(0.2)))
+	draw_circle(h, 10.0, _c(color))
+	draw_colored_polygon(PackedVector2Array([h + Vector2(side * 4, -4), h + Vector2(side * 17, 2), h + Vector2(side * 4, 6)]), _c(color.lightened(0.1)))
+	draw_circle(h + Vector2(side * 17, 2), 2.2, Color.BLACK)
+	draw_circle(h + Vector2(side * 3, -3), 2.2, Color(1, 0.85, 0.1))
+	# Пазурі
+	draw_line(Vector2(side * 12, 0), Vector2(side * 20, 6), _c(Color(0.9, 0.9, 0.85)), 2.0)
 
 
 func _draw_zmii() -> void:
