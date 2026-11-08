@@ -11,7 +11,11 @@ func _draw() -> void:
 	var skin := Color(0.95, 0.78, 0.62)
 	draw_circle(c, r, Color(0.22, 0.17, 0.12))
 	draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.3, 0.24, 0.16))
-	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14)}.get(npc, Color.GRAY)
+	if npc == "putinoid":
+		skin = Color(0.78, 0.8, 0.76)  # мертвотно-бліда шкіра
+		draw_circle(c, r, Color(0.12, 0.06, 0.08))
+		draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.25, 0.05, 0.08))
+	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
 	if npc == "znakharka":
@@ -46,6 +50,22 @@ func _draw() -> void:
 			draw_circle(Vector2.ZERO, 18.0 * s, Color(0.6, 0.38, 0.18))
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 			draw_line(c + Vector2(-50, 40) * s, c + Vector2(-26, -10) * s, Color(0.45, 0.28, 0.12), 6.0 * s)
+		"putinoid":
+			# Дрібні червоні очі, тонкі губи, рідке волосся, шапка Мономаха
+			for x in [-10.0, 10.0]:
+				draw_circle(c + Vector2(x, eye_y) * s, 3.2 * s, Color(0.9, 0.05, 0.05))
+				draw_circle(c + Vector2(x, eye_y) * s, 6.0 * s, Color(1.0, 0.1, 0.1, 0.2))
+			draw_line(c + Vector2(-17, -12) * s, c + Vector2(-5, -9) * s, Color(0.6, 0.6, 0.55), 2.0 * s)
+			draw_line(c + Vector2(5, -9) * s, c + Vector2(17, -12) * s, Color(0.6, 0.6, 0.55), 2.0 * s)
+			draw_line(c + Vector2(-9, 14) * s, c + Vector2(9, 14) * s, Color(0.45, 0.3, 0.3), 2.0 * s)
+			draw_line(c + Vector2(-14, 20) * s, c + Vector2(-6, 24) * s, Color(0.6, 0.62, 0.58), 1.5 * s)  # зморшки
+			draw_line(c + Vector2(14, 20) * s, c + Vector2(6, 24) * s, Color(0.6, 0.62, 0.58), 1.5 * s)
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, -16), Vector2(30, -16), Vector2(24, -38), Vector2(0, -50), Vector2(-24, -38)]), Color(0.85, 0.65, 0.2))
+			draw_rect(Rect2(c + Vector2(-32, -20) * s, Vector2(64, 9) * s), Color(0.35, 0.25, 0.2))  # хутряна облямівка
+			draw_line(c + Vector2(0, -50) * s, c + Vector2(0, -64) * s, Color(0.85, 0.65, 0.2), 3.0 * s)
+			draw_line(c + Vector2(-6, -58) * s, c + Vector2(6, -58) * s, Color(0.85, 0.65, 0.2), 3.0 * s)
+			for i in 3:
+				draw_circle(c + Vector2(-16 + i * 16, -28) * s, 3.0 * s, Color(0.75, 0.05, 0.1))
 		"znakharka":
 			_eyes(c, s, eye_y, false)
 			draw_line(c + Vector2(-8, 14) * s, c + Vector2(8, 14) * s, Color(0.6, 0.3, 0.3), 2.0 * s)

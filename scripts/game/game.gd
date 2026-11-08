@@ -484,7 +484,7 @@ func _show_main_menu() -> void:
 	hud.set_mode(false, false)
 	_open_menu()
 	hud.add_title("Козацька Звитяга", 72)
-	hud.add_title("З московських земель повзе чорна зараза. Козаче, рушай у похід!", 24, UI.TEXT)
+	hud.add_title("З Кремля повзе чорна зараза Путіноїда. Козаче, рушай у похід!", 24, UI.TEXT)
 	if SaveSystem.exists(save_path):
 		hud.add_button("Продовжити", _continue_game)
 		hud.add_button("Нова гра", _confirm_new_game)
