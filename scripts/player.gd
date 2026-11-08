@@ -1,64 +1,226 @@
 extends Node2D
-## Козак — головний герой. Рух, удар шаблею, перекид, вихор, прокачка.
+## Козак — головний герой. Рух, бій, характеристики, вміння і перки.
 
 signal died
 signal leveled_up(level: int)
 
-var main
+const Data := preload("res://scripts/data.gd")
 
-# --- Характеристики ---
-var radius := 22.0
-var max_hp := 100.0
-var hp := 100.0
-var speed := 260.0
-var damage := 20.0
-var crit_chance := 0.1
-var attack_cooldown := 0.42
-var attack_range := 95.0
-var attack_arc := deg_to_rad(130.0)
-var skill_cooldown := 8.0
-var dodge_cooldown := 1.2
-var pickup_radius := 120.0
-var armor := 0.0
+var main
 
 # --- Прогрес ---
 var level := 1
 var xp := 0
 var xp_next := 10
+var stats := {"str": Data.STAT_BASE, "agi": Data.STAT_BASE, "vit": Data.STAT_BASE, "spi": Data.STAT_BASE}
+var skills := {"whirl": 1}  # id -> ранг
+var perks := {}  # id -> ранг
+var stat_points := 0
+var skill_points := 0
+var perk_points := 0
+
+# --- Обчислені показники (див. recalc) ---
+var radius := 22.0
+var max_hp := 100.0
+var hp := 100.0
+var speed := 260.0
+var damage := 20.0
+var crit_chance := 0.05
+var crit_mult := 2.0
+var attack_cooldown := 0.42
+var attack_range := 95.0
+var attack_arc := deg_to_rad(130.0)
+var dodge_cooldown := 1.2
+var pickup_radius := 120.0
+var armor := 0.0
+var regen := 0.0
+var lifesteal := 0.0
+var thorns := 0.0
+var xp_mult := 1.0
+var skill_cd_mult := 1.0
+var skill_power := 1.0
+var varenyk_bonus := 0
 
 # --- Стан ---
 var facing := Vector2.RIGHT
 var attack_held := false
 var attack_timer := 0.0
 var dodge_timer := 0.0
-var skill_timer := 0.0
+var skill_timers := {"whirl": 0.0, "lightning": 0.0, "musket": 0.0}
 var dodge_time_left := 0.0
 var dodge_dir := Vector2.RIGHT
+var dodge_hits := []
 var invuln := 0.0
 var swing_time := 0.0
 var swing_duration := 0.18
 var swing_full := false
+var storm_timer := -1.0
 var hurt_flash := 0.0
 var walk_phase := 0.0
 var moving := false
 var alive := true
+var unbreak_ready := true
 
+
+func _ready() -> void:
+	recalc()
+	hp = max_hp
+
+
+# ================= Прогресія =================
+
+func sk(id: String) -> int:
+	return skills.get(id, 0)
+
+
+func pk(id: String) -> int:
+	return perks.get(id, 0)
+
+
+## Значення характеристики з урахуванням перків.
+func stat(id: String) -> int:
+	return stats[id] + (2 if pk("sich") > 0 else 0)
+
+
+func _bonus(id: String) -> int:
+	return stat(id) - Data.STAT_BASE
+
+
+func recalc() -> void:
+	var old_max := max_hp
+	var s_str := _bonus("str")
+	var s_agi := _bonus("agi")
+	var s_vit := _bonus("vit")
+	var s_spi := _bonus("spi")
+
+	damage = 20.0 * (1.0 + 0.06 * s_str + 0.08 * pk("sharp"))
+	attack_range = 95.0 * (1.0 + 0.08 * pk("reach"))
+	attack_arc = deg_to_rad(130.0 + 20.0 * pk("cleave"))
+	attack_cooldown = 0.42 / (1.0 + 0.04 * s_agi + 0.06 * pk("fury"))
+	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck"))
+	crit_mult = 3.0 if pk("deadly") > 0 else 2.0
+	lifesteal = 0.02 * pk("thirst")
+
+	max_hp = 100.0 + 12.0 * s_vit + 15.0 * pk("tough")
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward"), 0.0, 0.6)
+	regen = 0.6 * pk("regen")
+	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll"))
+	thorns = 0.25 * pk("thorns")
+	varenyk_bonus = pk("varenyk")
+
+	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots"))
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse"))
+	xp_mult = 1.0 + 0.1 * pk("kobzar")
+	skill_cd_mult = (1.0 - 0.06 * pk("focus")) / (1.0 + 0.04 * s_spi)
+	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit")
+
+	if max_hp > old_max:
+		hp += max_hp - old_max
+	hp = minf(hp, max_hp)
+
+
+func unspent_points() -> int:
+	return stat_points + skill_points + perk_points
+
+
+func add_stat(id: String) -> bool:
+	if stat_points <= 0:
+		return false
+	stats[id] += 1
+	stat_points -= 1
+	recalc()
+	return true
+
+
+func skill_req_met(node: Dictionary) -> bool:
+	for r in node["req"]:
+		if sk(r) < node["req"][r]:
+			return false
+	return true
+
+
+func can_learn_skill(node: Dictionary) -> bool:
+	return skill_points > 0 and sk(node["id"]) < node["max"] and skill_req_met(node)
+
+
+func learn_skill(id: String) -> bool:
+	var node := Data.find_skill(id)
+	if node.is_empty() or not can_learn_skill(node):
+		return false
+	skills[id] = sk(id) + 1
+	skill_points -= 1
+	recalc()
+	return true
+
+
+func branch_perk_points(bi: int) -> int:
+	var total := 0
+	for tier in Data.PERK_BRANCHES[bi]["tiers"]:
+		for p in tier:
+			total += pk(p["id"])
+	return total
+
+
+func perk_tier_open(bi: int, ti: int) -> bool:
+	return branch_perk_points(bi) >= ti * Data.PERK_TIER_STEP
+
+
+func can_learn_perk(id: String) -> bool:
+	var f := Data.find_perk(id)
+	if f[0] < 0:
+		return false
+	return perk_points > 0 and pk(id) < f[2]["max"] and perk_tier_open(f[0], f[1])
+
+
+func learn_perk(id: String) -> bool:
+	if not can_learn_perk(id):
+		return false
+	perks[id] = pk(id) + 1
+	perk_points -= 1
+	recalc()
+	return true
+
+
+func add_xp(value: int) -> void:
+	xp += maxi(value, roundi(value * xp_mult))
+	while xp >= xp_next:
+		xp -= xp_next
+		level += 1
+		xp_next = int(10 + (level - 1) * 7 + pow(level - 1, 1.5))
+		stat_points += Data.STAT_POINTS_PER_LEVEL
+		skill_points += Data.SKILL_POINTS_PER_LEVEL
+		perk_points += Data.PERK_POINTS_PER_LEVEL
+		heal(max_hp * 0.25)
+		leveled_up.emit(level)
+
+
+# ================= Цикл =================
 
 func _process(delta: float) -> void:
 	if not alive:
 		return
 	attack_timer = maxf(0.0, attack_timer - delta)
 	dodge_timer = maxf(0.0, dodge_timer - delta)
-	skill_timer = maxf(0.0, skill_timer - delta)
+	for id in skill_timers:
+		skill_timers[id] = maxf(0.0, skill_timers[id] - delta)
 	invuln = maxf(0.0, invuln - delta)
 	swing_time = maxf(0.0, swing_time - delta)
 	hurt_flash = maxf(0.0, hurt_flash - delta)
+	if regen > 0.0:
+		hp = minf(max_hp, hp + regen * delta)
+
+	if storm_timer >= 0.0:
+		storm_timer -= delta
+		if storm_timer < 0.0:
+			_whirl_hit(0.7, 480.0)
 
 	var input_vec: Vector2 = main.get_move_input()
 	moving = false
 	if dodge_time_left > 0.0:
 		dodge_time_left -= delta
 		position += dodge_dir * speed * 3.2 * delta
+		if pk("dash_strike") > 0:
+			_dash_strike()
 	else:
 		position += input_vec * speed * delta
 		if input_vec.length() > 0.1:
@@ -75,12 +237,29 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-# --- Бойові дії ---
+# ================= Бій =================
 
-func _roll_damage(mult: float) -> Array:
+func _roll(mult: float) -> Array:
 	var crit := randf() < crit_chance
-	var dmg := damage * mult * (2.0 if crit else 1.0) * randf_range(0.9, 1.1)
+	var dmg := damage * mult * (crit_mult if crit else 1.0) * randf_range(0.9, 1.1)
 	return [dmg, crit]
+
+
+## Удар по ворогу з урахуванням вампіризму.
+func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
+	if e.dead:
+		return
+	e.take_damage(dmg, kb, crit)
+	if lifesteal > 0.0:
+		heal(dmg * lifesteal, false)
+
+
+func _alive_enemies() -> Array:
+	var out := []
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if not e.dead:
+			out.append(e)
+	return out
 
 
 func attack() -> void:
@@ -94,16 +273,14 @@ func attack() -> void:
 	swing_time = 0.18
 	swing_duration = 0.18
 	swing_full = false
-	for e in get_tree().get_nodes_in_group("enemies"):
-		if e.dead:
-			continue
+	for e in _alive_enemies():
 		var to: Vector2 = e.global_position - global_position
 		var dist := to.length()
 		if dist > attack_range + e.radius:
 			continue
 		if dist < 1.0 or absf(facing.angle_to(to)) <= attack_arc * 0.5:
-			var r := _roll_damage(1.0)
-			e.take_damage(r[0], to.normalized() * 280.0, r[1])
+			var r := _roll(1.0)
+			hit(e, r[0], to.normalized() * 280.0, r[1])
 	main.shake(2.0)
 
 
@@ -114,32 +291,132 @@ func dodge() -> void:
 	var input_vec: Vector2 = main.get_move_input()
 	dodge_dir = input_vec.normalized() if input_vec.length() > 0.1 else facing
 	dodge_time_left = 0.18
+	dodge_hits.clear()
 	invuln = maxf(invuln, 0.32)
 
 
-func skill() -> void:
-	if not alive or skill_timer > 0.0:
+func _dash_strike() -> void:
+	for e in _alive_enemies():
+		if e.get_instance_id() in dodge_hits:
+			continue
+		var to: Vector2 = e.global_position - global_position
+		if to.length() < radius + e.radius + 14.0:
+			dodge_hits.append(e.get_instance_id())
+			var r := _roll(0.8)
+			hit(e, r[0], to.normalized() * 200.0, r[1])
+
+
+# ================= Активні вміння =================
+
+func skill_cooldown(id: String) -> float:
+	match id:
+		"whirl":
+			return 8.0 * (1.0 - 0.1 * sk("whirl_cd")) * skill_cd_mult
+		"lightning":
+			return 6.0 * skill_cd_mult
+		"musket":
+			return 4.0 * (1.0 - 0.12 * sk("reload")) * skill_cd_mult
+	return 1.0
+
+
+func skill_ready_ratio(id: String) -> float:
+	return skill_timers.get(id, 0.0) / skill_cooldown(id)
+
+
+func use_skill(id: String) -> void:
+	if not alive or sk(id) <= 0 or skill_timers.get(id, 0.0) > 0.0:
 		return
-	skill_timer = skill_cooldown
+	var used := false
+	match id:
+		"whirl":
+			used = _whirl()
+		"lightning":
+			used = _lightning()
+		"musket":
+			used = _musket()
+	if used:
+		skill_timers[id] = skill_cooldown(id)
+
+
+func whirl_reach() -> float:
+	return attack_range * 1.8 * (1.0 + 0.08 * (sk("whirl") - 1))
+
+
+func _whirl() -> bool:
+	var storm := sk("storm") > 0
 	swing_time = 0.4
 	swing_duration = 0.4
 	swing_full = true
 	invuln = maxf(invuln, 0.4)
-	var reach := attack_range * 1.8
-	for e in get_tree().get_nodes_in_group("enemies"):
-		if e.dead:
-			continue
+	if storm:
+		# Притягуємо нечисть до козака, а за мить — другий удар.
+		for e in _alive_enemies():
+			var to: Vector2 = e.global_position - global_position
+			if to.length() <= whirl_reach() * 1.6 + e.radius:
+				e.knockback = -to.normalized() * minf(to.length() * 5.0, 900.0)
+		storm_timer = 0.3
+		_whirl_hit(1.0, 0.0)
+	else:
+		_whirl_hit(1.0, 480.0)
+	main.float_text(global_position + Vector2(0, -60), "Буревій!" if storm else "Вихор!", Color(0.6, 0.85, 1.0))
+	return true
+
+
+func _whirl_hit(mult: float, kb: float) -> void:
+	var m := 1.8 * (1.0 + 0.2 * (sk("whirl") - 1)) * skill_power * mult
+	for e in _alive_enemies():
 		var to: Vector2 = e.global_position - global_position
-		if to.length() <= reach + e.radius:
-			var r := _roll_damage(1.8)
-			e.take_damage(r[0], to.normalized() * 480.0, r[1])
+		if to.length() <= whirl_reach() + e.radius:
+			var r := _roll(m)
+			hit(e, r[0], to.normalized() * kb, r[1])
+	swing_time = 0.4
+	swing_duration = 0.4
+	swing_full = true
 	main.shake(9.0)
-	main.float_text(global_position + Vector2(0, -60), "Вихор!", Color(0.6, 0.85, 1.0))
 
 
-func take_damage(amount: float) -> void:
+func _lightning() -> bool:
+	var targets := _alive_enemies().filter(func(e): return global_position.distance_to(e.global_position) <= 480.0 + e.radius)
+	if targets.is_empty():
+		return false
+	targets.sort_custom(func(a, b): return global_position.distance_squared_to(a.global_position) < global_position.distance_squared_to(b.global_position))
+	var count := 2 + sk("lightning") + 2 * sk("chain")
+	var m := (1.2 + 0.25 * sk("lightning")) * skill_power
+	var pts := PackedVector2Array([global_position + Vector2(0, -30)])
+	for i in mini(count, targets.size()):
+		var e = targets[i]
+		pts.append(e.global_position)
+		var r := _roll(m)
+		hit(e, r[0], Vector2.ZERO, r[1])
+		if sk("wrath") > 0 and not e.dead:
+			e.slow_timer = 2.0
+	main.spawn_bolt(pts)
+	main.shake(5.0)
+	return true
+
+
+func _musket() -> bool:
+	var target: Node2D = main.nearest_enemy(global_position, 750.0)
+	var dir := facing
+	if target:
+		dir = (target.global_position - global_position).normalized()
+		facing = dir
+	var m := (2.2 + 0.4 * (sk("musket") - 1)) * skill_power
+	var angles := [-0.3, -0.15, 0.0, 0.15, 0.3] if sk("buckshot") > 0 else [0.0]
+	for a in angles:
+		var r := _roll(m * (0.6 if angles.size() > 1 else 1.0))
+		main.spawn_bullet(global_position + Vector2(0, -10) + dir * 30.0, dir.rotated(a), r[0], r[1])
+	main.shake(4.0)
+	return true
+
+
+# ================= Отримання шкоди =================
+
+func take_damage(amount: float, source = null) -> void:
 	if not alive or invuln > 0.0:
 		return
+	if source != null and thorns > 0.0 and not source.dead:
+		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
 	hp -= amount
 	hurt_flash = 0.2
@@ -147,55 +424,27 @@ func take_damage(amount: float) -> void:
 	main.shake(7.0)
 	main.float_text(global_position + Vector2(0, -50), str(int(amount)), Color(1.0, 0.35, 0.3))
 	if hp <= 0.0:
+		if pk("unbreak") > 0 and unbreak_ready:
+			unbreak_ready = false
+			hp = 1.0
+			invuln = 1.5
+			main.show_banner("Незламний!", Color(1.0, 0.85, 0.3))
+			return
 		hp = 0.0
 		alive = false
 		queue_redraw()
 		died.emit()
 
 
-func heal(amount: float) -> void:
+func heal(amount: float, show: bool = true) -> void:
 	var before := hp
 	hp = minf(max_hp, hp + amount)
 	var gained := int(hp - before)
-	if gained > 0:
+	if show and gained > 0:
 		main.float_text(global_position + Vector2(0, -50), "+%d" % gained, Color(0.4, 1.0, 0.45))
 
 
-func add_xp(value: int) -> void:
-	xp += value
-	while xp >= xp_next:
-		xp -= xp_next
-		level += 1
-		xp_next = int(10 + (level - 1) * 7 + pow(level - 1, 1.5))
-		leveled_up.emit(level)
-
-
-func apply_upgrade(id: String) -> void:
-	match id:
-		"damage":
-			damage *= 1.25
-		"hp":
-			max_hp += 25.0
-			hp += 25.0
-		"speed":
-			speed *= 1.12
-		"attack_speed":
-			attack_cooldown *= 0.85
-		"range":
-			attack_range *= 1.2
-		"skill":
-			skill_cooldown *= 0.8
-		"heal":
-			heal(max_hp * 0.5)
-		"magnet":
-			pickup_radius *= 1.4
-		"armor":
-			armor = minf(0.6, armor + 0.12)
-		"crit":
-			crit_chance = minf(0.75, crit_chance + 0.08)
-
-
-# --- Малювання козака (без зовнішніх спрайтів) ---
+# ================= Малювання козака (без зовнішніх спрайтів) =================
 
 func _draw() -> void:
 	var tint := Color.WHITE
@@ -212,7 +461,6 @@ func _draw() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	if not alive:
-		# Козак упав
 		draw_set_transform(Vector2(0, 8), PI / 2.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
 	var bob := sin(walk_phase) * 3.0 if moving else 0.0
@@ -265,12 +513,13 @@ func _draw() -> void:
 	if swing_time > 0.0:
 		var alpha := swing_time / swing_duration
 		if swing_full:
-			draw_arc(Vector2.ZERO, attack_range * 1.5, 0.0, TAU, 64, Color(0.7, 0.9, 1.0, 0.55 * alpha), 22.0)
-			draw_arc(Vector2.ZERO, attack_range * 1.1, 0.0, TAU, 64, Color(1, 1, 1, 0.4 * alpha), 8.0)
+			var rr := whirl_reach()
+			draw_arc(Vector2.ZERO, rr * 0.85, 0.0, TAU, 64, Color(0.7, 0.9, 1.0, 0.55 * alpha), 22.0)
+			draw_arc(Vector2.ZERO, rr * 0.6, 0.0, TAU, 64, Color(1, 1, 1, 0.4 * alpha), 8.0)
 		else:
 			var a0 := facing.angle() - attack_arc * 0.5
 			draw_arc(Vector2.ZERO, attack_range * 0.75, a0, a0 + attack_arc, 24, Color(1, 1, 1, 0.6 * alpha), 16.0)
 
-	# Індикатор готовності вихору
-	if skill_timer <= 0.0:
+	# Індикатор готовності Вихору
+	if skill_timers["whirl"] <= 0.0:
 		draw_arc(Vector2(0, 20), 26.0, 0.0, TAU, 32, Color(0.6, 0.85, 1.0, 0.5), 2.0)

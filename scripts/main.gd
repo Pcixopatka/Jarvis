@@ -1,32 +1,25 @@
 extends Node2D
-## Головний менеджер гри: світ, хвилі нечисті, інтерфейс, меню, збереження рекорду.
+## Головний менеджер гри: світ, хвилі нечисті, інтерфейс, екран козака, меню, рекорд.
 
 const ARENA := Rect2(-1400, -1400, 2800, 2800)
 const SAVE_PATH := "user://save.cfg"
 
+const Data := preload("res://scripts/data.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const EnemyScript := preload("res://scripts/enemy.gd")
 const ProjectileScript := preload("res://scripts/projectile.gd")
 const PickupScript := preload("res://scripts/pickup.gd")
 const FloatTextScript := preload("res://scripts/float_text.gd")
+const BoltScript := preload("res://scripts/bolt.gd")
 const GroundScript := preload("res://scripts/ground.gd")
 const JoystickScript := preload("res://scripts/joystick.gd")
 const ActionButtonScript := preload("res://scripts/action_button.gd")
 
-const UPGRADES := [
-	{"id": "damage", "name": "Гостра шабля", "desc": "+25% до шкоди"},
-	{"id": "hp", "name": "Козацьке здоров'я", "desc": "+25 до здоров'я"},
-	{"id": "speed", "name": "Легкі чоботи", "desc": "+12% до швидкості"},
-	{"id": "attack_speed", "name": "Швидка рука", "desc": "Шабля б'є на 15% частіше"},
-	{"id": "range", "name": "Довга шабля", "desc": "+20% до дальності удару"},
-	{"id": "skill", "name": "Характерник", "desc": "Вихор заряджається на 20% швидше"},
-	{"id": "heal", "name": "Бабусин узвар", "desc": "Відновлює 50% здоров'я"},
-	{"id": "magnet", "name": "Жадібний гаманець", "desc": "+40% радіус збору дукатів"},
-	{"id": "armor", "name": "Оберіг", "desc": "-12% отриманої шкоди"},
-	{"id": "crit", "name": "Козацька вдача", "desc": "+8% шансу критичного удару"},
-]
+const GOLD := Color(1.0, 0.85, 0.3)
+const TEXT := Color(0.95, 0.92, 0.85)
+const MUTED := Color(0.7, 0.7, 0.7)
 
-enum State { MENU, PLAYING, LEVELUP, PAUSED, GAMEOVER }
+enum State { MENU, PLAYING, CHARACTER, PAUSED, GAMEOVER }
 
 var state := State.MENU
 var player
@@ -41,10 +34,10 @@ var spawn_interval := 1.0
 var between_waves := -1.0
 var kills := 0
 var play_time := 0.0
-var pending_levelups := 0
 var shake_strength := 0.0
 var best_wave := 0
 var best_kills := 0
+var _pulse := 0.0
 
 # Інтерфейс
 var hud: CanvasLayer
@@ -54,7 +47,7 @@ var controls: Node2D
 var joystick
 var btn_attack
 var btn_dodge
-var btn_skill
+var skill_buttons := {}  # id -> кнопка
 var hp_bar: ProgressBar
 var xp_bar: ProgressBar
 var hp_label: Label
@@ -63,12 +56,18 @@ var wave_label: Label
 var kills_label: Label
 var banner: Label
 var pause_btn: Button
+var char_btn: Button
 var overlay: ColorRect
+var overlay_center: CenterContainer
 var overlay_box: VBoxContainer
+var char_root: Control
+var char_tab := 0
 
 
 func _ready() -> void:
 	randomize()
+	# Менеджер працює і на паузі (меню, клавіші), а світ — ні.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_load_best()
 	_build_world()
 	_build_hud()
@@ -80,27 +79,29 @@ func _ready() -> void:
 # ============ Світ ============
 
 func _build_world() -> void:
-	var ground = Node2D.new()
-	ground.set_script(GroundScript)
+	var ground = GroundScript.new()
 	ground.arena = ARENA
+	ground.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(ground)
 
 	entities = Node2D.new()
 	entities.y_sort_enabled = true
+	entities.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(entities)
 
 	effects = Node2D.new()
 	effects.z_index = 10
+	effects.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(effects)
 
 	player = PlayerScript.new()
 	player.main = self
-	player.position = Vector2.ZERO
 	entities.add_child(player)
 	player.died.connect(_on_player_died)
 	player.leveled_up.connect(_on_level_up)
 
 	camera = Camera2D.new()
+	camera.process_mode = Node.PROCESS_MODE_PAUSABLE
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
 	camera.limit_left = int(ARENA.position.x - 120)
@@ -112,6 +113,8 @@ func _build_world() -> void:
 
 
 func _process(delta: float) -> void:
+	if state != State.PLAYING:
+		return
 	camera.global_position = player.global_position
 	if shake_strength > 0.0:
 		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_strength
@@ -119,14 +122,15 @@ func _process(delta: float) -> void:
 	else:
 		camera.offset = Vector2.ZERO
 
-	if state != State.PLAYING:
-		return
 	play_time += delta
 	player.attack_held = btn_attack.held or Input.is_physical_key_pressed(KEY_J) or Input.is_physical_key_pressed(KEY_SPACE)
 	btn_dodge.set_cooldown(player.dodge_timer / player.dodge_cooldown)
-	btn_skill.set_cooldown(player.skill_timer / player.skill_cooldown)
+	for id in skill_buttons:
+		var b = skill_buttons[id]
+		b.visible = player.sk(id) > 0
+		b.set_cooldown(player.skill_ready_ratio(id))
 	_update_waves(delta)
-	_update_hud()
+	_update_hud(delta)
 
 
 func _update_waves(delta: float) -> void:
@@ -153,6 +157,7 @@ func start_wave() -> void:
 	to_spawn = 6 + wave * 4
 	spawn_interval = maxf(0.22, 1.1 - wave * 0.07)
 	spawn_timer = 0.5
+	player.unbreak_ready = true
 	if wave % 5 == 0:
 		show_banner("Хвиля %d\nЗмій наближається!" % wave, Color(1.0, 0.55, 0.2))
 		spawn_enemy("zmii")
@@ -183,21 +188,38 @@ func spawn_enemy(kind: String) -> void:
 	entities.add_child(e)
 
 
-func spawn_projectile(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: Color, r: float) -> void:
-	var p = Node2D.new()
-	p.set_script(ProjectileScript)
+func _new_projectile(pos: Vector2, vel: Vector2, dmg: float):
+	var p = ProjectileScript.new()
 	p.main = self
 	p.position = pos
-	p.velocity = dir * spd
+	p.velocity = vel
 	p.damage = dmg
+	effects.add_child(p)
+	return p
+
+
+func spawn_projectile(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: Color, r: float) -> void:
+	var p = _new_projectile(pos, dir * spd, dmg)
 	p.color = col
 	p.radius = r
-	effects.add_child(p)
+
+
+func spawn_bullet(pos: Vector2, dir: Vector2, dmg: float, crit: bool) -> void:
+	var p = _new_projectile(pos, dir * 950.0, dmg)
+	p.friendly = true
+	p.crit = crit
+	p.radius = 6.0
+	p.life = 0.9
+
+
+func spawn_bolt(points: PackedVector2Array) -> void:
+	var b = BoltScript.new()
+	b.points = points
+	effects.add_child(b)
 
 
 func spawn_pickup(pos: Vector2, kind: String, value: int) -> void:
-	var p = Node2D.new()
-	p.set_script(PickupScript)
+	var p = PickupScript.new()
 	p.main = self
 	p.kind = kind
 	p.value = value
@@ -207,8 +229,7 @@ func spawn_pickup(pos: Vector2, kind: String, value: int) -> void:
 
 
 func float_text(pos: Vector2, text: String, col: Color = Color.WHITE) -> void:
-	var t = Node2D.new()
-	t.set_script(FloatTextScript)
+	var t = FloatTextScript.new()
 	t.text = text
 	t.color = col
 	t.position = pos + Vector2(randf_range(-10, 10), 0)
@@ -238,16 +259,17 @@ func alive_enemy_count() -> int:
 
 func on_enemy_killed(e) -> void:
 	kills += 1
+	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))
 	if e.is_boss:
 		shake(14.0)
-		show_banner("Змія переможено!", Color(1.0, 0.85, 0.3))
+		show_banner("Змія переможено!", GOLD)
 		for i in 12:
 			spawn_pickup(e.global_position, "coin", 6)
-		spawn_pickup(e.global_position, "varenyk", 40)
+		spawn_pickup(e.global_position, "varenyk", heal_value * 2)
 	else:
 		spawn_pickup(e.global_position, "coin", e.xp_value)
-		if randf() < 0.05:
-			spawn_pickup(e.global_position, "varenyk", 20)
+		if randf() < 0.05 * (1 + player.varenyk_bonus):
+			spawn_pickup(e.global_position, "varenyk", heal_value)
 
 
 func get_move_input() -> Vector2:
@@ -262,40 +284,50 @@ func get_move_input() -> Vector2:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.physical_keycode:
-			KEY_K, KEY_SHIFT:
-				if state == State.PLAYING:
-					player.dodge()
-			KEY_L:
-				if state == State.PLAYING:
-					player.skill()
-			KEY_ESCAPE, KEY_P:
-				if state == State.PLAYING:
-					_show_pause()
-				elif state == State.PAUSED:
-					_resume()
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	var playing := state == State.PLAYING
+	match event.physical_keycode:
+		KEY_K, KEY_SHIFT:
+			if playing: player.dodge()
+		KEY_L, KEY_1:
+			if playing: player.use_skill("whirl")
+		KEY_I, KEY_2:
+			if playing: player.use_skill("lightning")
+		KEY_O, KEY_3:
+			if playing: player.use_skill("musket")
+		KEY_C, KEY_TAB:
+			if playing:
+				_show_character()
+			elif state == State.CHARACTER:
+				_resume()
+		KEY_ESCAPE, KEY_P:
+			if playing:
+				_show_pause()
+			elif state == State.PAUSED or state == State.CHARACTER:
+				_resume()
 
 
 func _notification(what: int) -> void:
-	# Автопауза, коли гравець згортає гру або повертається «назад» на Android.
+	# Автопауза, коли гравець згортає гру або тисне «Назад» на Android.
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_GO_BACK_REQUEST:
 		if state == State.PLAYING:
 			_show_pause()
+		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.CHARACTER:
+			_resume()
 
 
 # ============ Події гри ============
 
-func _on_level_up(_lvl: int) -> void:
-	pending_levelups += 1
-	if state == State.PLAYING:
-		_show_levelup()
+func _on_level_up(lvl: int) -> void:
+	show_banner("Рівень %d!\nВідкрий «Козак», щоб прокачатися" % lvl, GOLD)
 
 
 func _on_player_died() -> void:
 	state = State.GAMEOVER
 	controls.visible = false
 	pause_btn.visible = false
+	char_btn.visible = false
 	var new_record := wave > best_wave or (wave == best_wave and kills > best_kills)
 	if new_record:
 		best_wave = wave
@@ -307,14 +339,10 @@ func _on_player_died() -> void:
 
 
 func _start_game() -> void:
-	_close_overlay()
+	_resume()
 	stats_box.visible = true
-	_update_hud()
-	state = State.PLAYING
-	get_tree().paused = false
-	controls.visible = true
-	pause_btn.visible = true
 	between_waves = 1.0
+	_update_hud(0.0)
 
 
 func _resume() -> void:
@@ -323,8 +351,7 @@ func _resume() -> void:
 	get_tree().paused = false
 	controls.visible = true
 	pause_btn.visible = true
-	if pending_levelups > 0:
-		_show_levelup()
+	char_btn.visible = true
 
 
 func _restart() -> void:
@@ -350,27 +377,37 @@ func _save_best() -> void:
 
 # ============ Інтерфейс ============
 
+func _style(bg: Color, border: Color) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(14)
+	sb.set_content_margin_all(12)
+	return sb
+
+
 func _make_theme() -> Theme:
 	var th := Theme.new()
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.55, 0.12, 0.1)
-	normal.border_color = Color(0.95, 0.75, 0.2)
-	normal.set_border_width_all(3)
-	normal.set_corner_radius_all(14)
-	normal.set_content_margin_all(16)
-	var hover: StyleBoxFlat = normal.duplicate()
-	hover.bg_color = Color(0.68, 0.18, 0.12)
-	var pressed: StyleBoxFlat = normal.duplicate()
-	pressed.bg_color = Color(0.4, 0.08, 0.06)
-	th.set_stylebox("normal", "Button", normal)
-	th.set_stylebox("hover", "Button", hover)
-	th.set_stylebox("pressed", "Button", pressed)
+	th.set_stylebox("normal", "Button", _style(Color(0.55, 0.12, 0.1), Color(0.95, 0.75, 0.2)))
+	th.set_stylebox("hover", "Button", _style(Color(0.68, 0.18, 0.12), Color(0.95, 0.75, 0.2)))
+	th.set_stylebox("pressed", "Button", _style(Color(0.4, 0.08, 0.06), Color(0.95, 0.75, 0.2)))
+	th.set_stylebox("disabled", "Button", _style(Color(0.2, 0.17, 0.15), Color(0.4, 0.35, 0.3)))
 	th.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	th.set_font_size("font_size", "Button", 30)
 	th.set_color("font_color", "Button", Color(1, 0.95, 0.85))
+	th.set_color("font_disabled_color", "Button", Color(0.62, 0.6, 0.57))
 	th.set_font_size("font_size", "Label", 26)
 	th.set_color("font_outline_color", "Label", Color(0, 0, 0, 0.85))
 	th.set_constant("outline_size", "Label", 6)
+	th.set_font_size("font_size", "TabContainer", 26)
+	th.set_stylebox("panel", "TabContainer", _style(Color(0.1, 0.08, 0.07, 0.92), Color(0.6, 0.45, 0.15)))
+	th.set_stylebox("tab_selected", "TabContainer", _style(Color(0.55, 0.12, 0.1), Color(0.95, 0.75, 0.2)))
+	th.set_stylebox("tab_unselected", "TabContainer", _style(Color(0.2, 0.15, 0.12), Color(0.45, 0.35, 0.2)))
+	th.set_stylebox("tab_hovered", "TabContainer", _style(Color(0.35, 0.12, 0.1), Color(0.75, 0.55, 0.2)))
+	th.set_color("font_selected_color", "TabContainer", Color(1, 0.95, 0.8))
+	th.set_color("font_unselected_color", "TabContainer", Color(0.75, 0.7, 0.6))
+	th.set_color("font_hovered_color", "TabContainer", Color(1, 0.9, 0.75))
 	return th
 
 
@@ -392,20 +429,23 @@ func _make_bar(fill: Color) -> ProgressBar:
 func _build_hud() -> void:
 	hud = CanvasLayer.new()
 	hud.layer = 10
-	hud.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(hud)
 
-	# Сенсорне керування (малюється під меню)
+	# Сенсорне керування
 	controls = Node2D.new()
 	hud.add_child(controls)
 	joystick = JoystickScript.new()
 	controls.add_child(joystick)
 	btn_attack = _make_action_button("Шабля", 86.0, Color(0.75, 0.15, 0.12))
 	btn_attack.triggered.connect(_on_attack_button)
-	btn_dodge = _make_action_button("Перекид", 58.0, Color(0.2, 0.45, 0.75))
+	btn_dodge = _make_action_button("Перекид", 56.0, Color(0.2, 0.45, 0.75))
 	btn_dodge.triggered.connect(_on_dodge_button)
-	btn_skill = _make_action_button("Вихор", 58.0, Color(0.55, 0.3, 0.8))
-	btn_skill.triggered.connect(_on_skill_button)
+	var skill_colors := {"whirl": Color(0.55, 0.3, 0.8), "lightning": Color(0.25, 0.55, 0.9), "musket": Color(0.45, 0.4, 0.3)}
+	for id in Data.ACTIVE_SKILLS:
+		var b = _make_action_button(Data.ACTIVE_LABELS[id], 54.0, skill_colors[id])
+		b.triggered.connect(_on_skill_button.bind(id))
+		b.visible = false
+		skill_buttons[id] = b
 
 	ui_root = Control.new()
 	ui_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -457,35 +497,44 @@ func _build_hud() -> void:
 	banner.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	banner.set_anchors_preset(Control.PRESET_FULL_RECT)
 	banner.offset_bottom = -200
-	banner.add_theme_font_size_override("font_size", 56)
+	banner.add_theme_font_size_override("font_size", 52)
 	banner.add_theme_constant_override("outline_size", 10)
 	banner.modulate.a = 0.0
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_root.add_child(banner)
 
-	pause_btn = Button.new()
-	pause_btn.text = "II"
-	pause_btn.anchor_left = 1.0
-	pause_btn.anchor_right = 1.0
-	pause_btn.offset_left = -96
-	pause_btn.offset_right = -20
-	pause_btn.offset_top = 16
-	pause_btn.offset_bottom = 88
+	pause_btn = _make_corner_button("II", -96, -20)
 	pause_btn.pressed.connect(_on_pause_button)
-	ui_root.add_child(pause_btn)
+	char_btn = _make_corner_button("Козак", -290, -110)
+	char_btn.add_theme_font_size_override("font_size", 26)
+	char_btn.pressed.connect(_on_char_button)
 
 	overlay = ColorRect.new()
 	overlay.color = Color(0, 0, 0, 0.7)
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	ui_root.add_child(overlay)
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
+	overlay_center = CenterContainer.new()
+	overlay_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.add_child(overlay_center)
 	overlay_box = VBoxContainer.new()
 	overlay_box.add_theme_constant_override("separation", 18)
 	overlay_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.add_child(overlay_box)
+	overlay_center.add_child(overlay_box)
+
+
+func _make_corner_button(text: String, left: float, right: float) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.anchor_left = 1.0
+	b.anchor_right = 1.0
+	b.offset_left = left
+	b.offset_right = right
+	b.offset_top = 16
+	b.offset_bottom = 88
+	b.visible = false
+	ui_root.add_child(b)
+	return b
 
 
 func _on_attack_button() -> void:
@@ -498,9 +547,9 @@ func _on_dodge_button() -> void:
 		player.dodge()
 
 
-func _on_skill_button() -> void:
+func _on_skill_button(id: String) -> void:
 	if state == State.PLAYING:
-		player.skill()
+		player.use_skill(id)
 
 
 func _on_pause_button() -> void:
@@ -508,9 +557,13 @@ func _on_pause_button() -> void:
 		_show_pause()
 
 
+func _on_char_button() -> void:
+	if state == State.PLAYING:
+		_show_character()
+
+
 func _make_action_button(text: String, r: float, col: Color):
-	var b = Node2D.new()
-	b.set_script(ActionButtonScript)
+	var b = ActionButtonScript.new()
 	b.label = text
 	b.radius = r
 	b.color = col
@@ -523,11 +576,13 @@ func _layout() -> void:
 	joystick.rest_pos = Vector2(190, s.y - 180)
 	joystick.queue_redraw()
 	btn_attack.position = Vector2(s.x - 140, s.y - 140)
-	btn_dodge.position = Vector2(s.x - 300, s.y - 90)
-	btn_skill.position = Vector2(s.x - 110, s.y - 310)
+	btn_dodge.position = Vector2(s.x - 300, s.y - 80)
+	skill_buttons["whirl"].position = Vector2(s.x - 120, s.y - 315)
+	skill_buttons["lightning"].position = Vector2(s.x - 275, s.y - 255)
+	skill_buttons["musket"].position = Vector2(s.x - 425, s.y - 105)
 
 
-func _update_hud() -> void:
+func _update_hud(delta: float) -> void:
 	hp_bar.max_value = player.max_hp
 	hp_bar.value = player.hp
 	hp_label.text = "Здоров'я %d / %d" % [int(ceil(player.hp)), int(player.max_hp)]
@@ -536,6 +591,14 @@ func _update_hud() -> void:
 	level_label.text = "Рівень %d" % player.level
 	wave_label.text = "Хвиля %d" % wave if wave > 0 else ""
 	kills_label.text = "Знищено нечисті: %d" % kills
+	var pts: int = player.unspent_points()
+	if pts > 0:
+		_pulse += delta * 5.0
+		char_btn.text = "Козак +%d" % pts
+		char_btn.modulate = Color(1, 1, 1).lerp(Color(1.4, 1.25, 0.6), 0.5 + 0.5 * sin(_pulse))
+	else:
+		char_btn.text = "Козак"
+		char_btn.modulate = Color.WHITE
 
 
 func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
@@ -544,7 +607,7 @@ func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
 	var tw := banner.create_tween()
 	banner.modulate.a = 0.0
 	tw.tween_property(banner, "modulate:a", 1.0, 0.25)
-	tw.tween_interval(1.4)
+	tw.tween_interval(1.6)
 	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
 
 
@@ -553,24 +616,41 @@ func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
 func _open_overlay() -> void:
 	for c in overlay_box.get_children():
 		c.queue_free()
+	if char_root:
+		char_root.queue_free()
+		char_root = null
 	overlay.visible = true
+	overlay_center.visible = true
 	controls.visible = false
+	pause_btn.visible = false
+	char_btn.visible = false
 	joystick.release()
+	banner.visible = false
 	get_tree().paused = true
 
 
 func _close_overlay() -> void:
 	overlay.visible = false
+	banner.visible = true
 	for c in overlay_box.get_children():
 		c.queue_free()
+	if char_root:
+		char_root.queue_free()
+		char_root = null
 
 
-func _add_title(text: String, size: int = 56, col: Color = Color(1.0, 0.85, 0.3)) -> Label:
+func _label(text: String, size: int = 26, col: Color = TEXT, center := true) -> Label:
 	var l := Label.new()
 	l.text = text
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if center:
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
+	return l
+
+
+func _add_title(text: String, size: int = 56, col: Color = GOLD) -> Label:
+	var l := _label(text, size, col)
 	overlay_box.add_child(l)
 	return l
 
@@ -586,14 +666,13 @@ func _add_button(text: String, cb: Callable, min_size := Vector2(460, 84)) -> Bu
 
 func _show_main_menu() -> void:
 	state = State.MENU
-	pause_btn.visible = false
 	_open_overlay()
 	_add_title("Козацька Звитяга", 72)
-	_add_title("Нечисть лізе з Дикого Поля! Захисти рідний хутір.", 26, Color(0.95, 0.92, 0.85))
+	_add_title("Нечисть лізе з Дикого Поля! Захисти рідний хутір.", 26, TEXT)
 	if best_wave > 0:
 		_add_title("Рекорд: хвиля %d, знищено %d" % [best_wave, best_kills], 22, Color(0.7, 0.9, 1.0))
 	_add_button("В бій!", _start_game)
-	_add_title("Ліва частина екрана — рух.  Праворуч — Шабля, Перекид, Вихор.", 20, Color(0.8, 0.8, 0.8))
+	_add_title("Ліва частина екрана — рух.  Праворуч — шабля, перекид і вміння.\nКнопка «Козак» — характеристики, вміння та перки.", 20, Color(0.8, 0.8, 0.8))
 
 
 func _show_pause() -> void:
@@ -601,28 +680,8 @@ func _show_pause() -> void:
 	_open_overlay()
 	_add_title("Пауза")
 	_add_button("Продовжити", _resume)
+	_add_button("Козак", _show_character)
 	_add_button("Почати заново", _restart)
-
-
-func _show_levelup() -> void:
-	state = State.LEVELUP
-	_open_overlay()
-	_add_title("Новий рівень! (%d)" % player.level)
-	_add_title("Обери козацьку науку:", 26, Color(0.95, 0.92, 0.85))
-	var pool := UPGRADES.duplicate()
-	pool.shuffle()
-	for i in 3:
-		var up: Dictionary = pool[i]
-		_add_button("%s\n%s" % [up["name"], up["desc"]], _pick_upgrade.bind(up["id"]), Vector2(560, 100))
-
-
-func _pick_upgrade(id: String) -> void:
-	player.apply_upgrade(id)
-	pending_levelups -= 1
-	if pending_levelups > 0:
-		_show_levelup()
-	else:
-		_resume()
 
 
 func _show_gameover(new_record: bool) -> void:
@@ -630,9 +689,244 @@ func _show_gameover(new_record: bool) -> void:
 	_add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
 	var mins := int(play_time) / 60
 	var secs := int(play_time) % 60
-	_add_title("Хвиля %d  •  Нечисті знищено: %d  •  Час %d:%02d" % [wave, kills, mins, secs], 26, Color(0.95, 0.92, 0.85))
+	_add_title("Хвиля %d  •  Рівень %d  •  Нечисті знищено: %d  •  Час %d:%02d" % [wave, player.level, kills, mins, secs], 26, TEXT)
 	if new_record:
 		_add_title("Новий рекорд!", 32, Color(0.6, 1.0, 0.6))
 	else:
 		_add_title("Рекорд: хвиля %d, знищено %d" % [best_wave, best_kills], 22, Color(0.7, 0.9, 1.0))
 	_add_button("Ще раз!", _restart)
+
+
+# ============ Екран козака: характеристики, вміння, перки ============
+
+func _show_character() -> void:
+	state = State.CHARACTER
+	_open_overlay()
+	overlay_center.visible = false
+	_build_character()
+
+
+func _refresh_character() -> void:
+	if char_root:
+		char_root.queue_free()
+	_build_character()
+
+
+func _build_character() -> void:
+	char_root = MarginContainer.new()
+	char_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]:
+		char_root.add_theme_constant_override("margin_" + side, 16)
+	overlay.add_child(char_root)
+
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	char_root.add_child(v)
+
+	var header := HBoxContainer.new()
+	var title := _label("Козак — рівень %d" % player.level, 36, GOLD, false)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var close := Button.new()
+	close.text = "До бою"
+	close.custom_minimum_size = Vector2(220, 64)
+	close.pressed.connect(_resume)
+	header.add_child(close)
+	v.add_child(header)
+
+	var tabs := TabContainer.new()
+	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(tabs)
+	tabs.add_child(_scroll(_build_stats_tab()))
+	tabs.add_child(_scroll(_build_skills_tab()))
+	tabs.add_child(_scroll(_build_perks_tab()))
+	tabs.set_tab_title(0, "Характеристики" + _pts_suffix(player.stat_points))
+	tabs.set_tab_title(1, "Вміння" + _pts_suffix(player.skill_points))
+	tabs.set_tab_title(2, "Перки" + _pts_suffix(player.perk_points))
+	tabs.current_tab = char_tab
+	tabs.tab_changed.connect(func(i: int): char_tab = i)
+
+
+func _pts_suffix(n: int) -> String:
+	return "  (+%d)" % n if n > 0 else ""
+
+
+func _scroll(content: Control) -> ScrollContainer:
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	var m := MarginContainer.new()
+	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "right", "top", "bottom"]:
+		m.add_theme_constant_override("margin_" + side, 14)
+	m.add_child(content)
+	sc.add_child(m)
+	return sc
+
+
+func _build_stats_tab() -> Control:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 40)
+
+	var left := VBoxContainer.new()
+	left.add_theme_constant_override("separation", 12)
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(left)
+	left.add_child(_label("Вільні очки: %d   (+%d за рівень)" % [player.stat_points, Data.STAT_POINTS_PER_LEVEL], 26, GOLD if player.stat_points > 0 else MUTED, false))
+	for st in Data.STATS:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 16)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var val: int = player.stat(st["id"])
+		info.add_child(_label("%s: %d" % [st["name"], val], 30, TEXT, false))
+		info.add_child(_label(st["desc"], 18, MUTED, false))
+		row.add_child(info)
+		var b := Button.new()
+		b.text = "+"
+		b.custom_minimum_size = Vector2(90, 72)
+		b.disabled = player.stat_points <= 0
+		b.pressed.connect(_on_add_stat.bind(st["id"]))
+		row.add_child(b)
+		left.add_child(row)
+
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 4)
+	right.custom_minimum_size = Vector2(380, 0)
+	h.add_child(right)
+	right.add_child(_label("Бойові показники", 26, GOLD, false))
+	var p = player
+	var lines := [
+		["Здоров'я", "%d / %d" % [int(p.hp), int(p.max_hp)]],
+		["Шкода шаблею", "%.1f" % p.damage],
+		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
+		["Шанс криту", "%d%%  (x%.0f)" % [roundi(p.crit_chance * 100), p.crit_mult]],
+		["Дальність удару", "%d" % int(p.attack_range)],
+		["Захист", "%d%%" % roundi(p.armor * 100)],
+		["Швидкість бігу", "%d" % int(p.speed)],
+		["Сила вмінь", "%d%%" % roundi(p.skill_power * 100)],
+		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
+		["Відновлення", "%.1f / с" % p.regen],
+		["Вампіризм", "%d%%" % roundi(p.lifesteal * 100)],
+		["Бонус досвіду", "+%d%%" % roundi((p.xp_mult - 1.0) * 100)],
+	]
+	for l in lines:
+		var row := HBoxContainer.new()
+		var k := _label(l[0], 20, MUTED, false)
+		k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(k)
+		row.add_child(_label(l[1], 20, TEXT, false))
+		right.add_child(row)
+	return h
+
+
+func _connector() -> Control:
+	var c := ColorRect.new()
+	c.color = Color(0.85, 0.65, 0.2, 0.8)
+	c.custom_minimum_size = Vector2(6, 22)
+	c.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return c
+
+
+func _tree_button(text: String, rank: int, max_rank: int, can: bool, locked: bool, font: int, min_size: Vector2) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = min_size
+	b.add_theme_font_size_override("font_size", font)
+	b.disabled = not can
+	if rank >= max_rank:
+		b.add_theme_stylebox_override("disabled", _style(Color(0.15, 0.32, 0.15), Color(0.5, 0.9, 0.4)))
+		b.add_theme_color_override("font_disabled_color", Color(0.85, 1.0, 0.8))
+	elif rank > 0:
+		b.add_theme_stylebox_override("disabled", _style(Color(0.35, 0.12, 0.1), Color(0.8, 0.6, 0.2)))
+		b.add_theme_color_override("font_disabled_color", Color(0.95, 0.88, 0.75))
+	elif locked:
+		b.modulate = Color(1, 1, 1, 0.6)
+	return b
+
+
+func _build_skills_tab() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	v.add_child(_label("Очки вмінь: %d   (+%d за рівень).  Активні вміння з'являються кнопками в бою." % [player.skill_points, Data.SKILL_POINTS_PER_LEVEL], 22, GOLD if player.skill_points > 0 else MUTED))
+	var h := HBoxContainer.new()
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 24)
+	v.add_child(h)
+	for branch in Data.SKILL_BRANCHES:
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 0)
+		col.add_child(_label(branch["name"], 30, GOLD))
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(0, 8)
+		col.add_child(spacer)
+		var nodes: Array = branch["nodes"]
+		for i in nodes.size():
+			var n: Dictionary = nodes[i]
+			if i > 0:
+				col.add_child(_connector())
+			var rank: int = player.sk(n["id"])
+			var req_met: bool = player.skill_req_met(n)
+			var text := "%s   %d/%d\n%s" % [n["name"], rank, n["max"], n["desc"]]
+			if not req_met:
+				var reqs := []
+				for r in n["req"]:
+					if player.sk(r) < n["req"][r]:
+						reqs.append("%s %d" % [Data.skill_name(r), n["req"][r]])
+				text += "\nПотрібно: " + ", ".join(reqs)
+			elif n.get("active", false):
+				text += "\nАктивне вміння"
+			var b := _tree_button(text, rank, n["max"], player.can_learn_skill(n), not req_met, 17, Vector2(320, 120))
+			b.pressed.connect(_on_learn_skill.bind(n["id"]))
+			col.add_child(b)
+		h.add_child(col)
+	return v
+
+
+func _build_perks_tab() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	v.add_child(_label("Очки перків: %d   (+%d за рівень).  Новий ярус відкривається за кожні %d очки, вкладені в гілку." % [player.perk_points, Data.PERK_POINTS_PER_LEVEL, Data.PERK_TIER_STEP], 22, GOLD if player.perk_points > 0 else MUTED))
+	var h := HBoxContainer.new()
+	h.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_theme_constant_override("separation", 16)
+	v.add_child(h)
+	for bi in Data.PERK_BRANCHES.size():
+		var branch: Dictionary = Data.PERK_BRANCHES[bi]
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 0)
+		col.add_child(_label("%s  (%d)" % [branch["name"], player.branch_perk_points(bi)], 28, GOLD))
+		var tiers: Array = branch["tiers"]
+		for ti in tiers.size():
+			var open: bool = player.perk_tier_open(bi, ti)
+			if ti > 0:
+				col.add_child(_connector())
+			if not open:
+				col.add_child(_label("Ярус %d: ще %d очк. у гілку" % [ti + 1, ti * Data.PERK_TIER_STEP - player.branch_perk_points(bi)], 16, MUTED))
+			var row := HBoxContainer.new()
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
+			row.add_theme_constant_override("separation", 8)
+			for p in tiers[ti]:
+				var rank: int = player.pk(p["id"])
+				var text := "%s  %d/%d\n%s" % [p["name"], rank, p["max"], p["desc"]]
+				var w := 340.0 if tiers[ti].size() == 1 else 166.0
+				var b := _tree_button(text, rank, p["max"], player.can_learn_perk(p["id"]), not open, 14, Vector2(w, 88))
+				b.pressed.connect(_on_learn_perk.bind(p["id"]))
+				row.add_child(b)
+			col.add_child(row)
+		h.add_child(col)
+	return v
+
+
+func _on_add_stat(id: String) -> void:
+	if player.add_stat(id):
+		_refresh_character()
+
+
+func _on_learn_skill(id: String) -> void:
+	if player.learn_skill(id):
+		_refresh_character()
+
+
+func _on_learn_perk(id: String) -> void:
+	if player.learn_perk(id):
+		_refresh_character()

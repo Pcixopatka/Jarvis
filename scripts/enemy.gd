@@ -17,6 +17,7 @@ var shoot_cd := 2.0
 var shoot_timer := 1.5
 var knockback := Vector2.ZERO
 var flash := 0.0
+var slow_timer := 0.0
 var contact_cd := 0.0
 var phase := randf() * TAU
 var facing := Vector2.LEFT
@@ -52,6 +53,7 @@ func _process(delta: float) -> void:
 		return
 	var p = main.player
 	flash = maxf(0.0, flash - delta)
+	slow_timer = maxf(0.0, slow_timer - delta)
 	contact_cd = maxf(0.0, contact_cd - delta)
 	phase += delta * 6.0
 
@@ -79,18 +81,19 @@ func _process(delta: float) -> void:
 
 	if not p.alive:
 		desired = Vector2.ZERO
-	var vel := desired * speed + sep * speed * 1.5 + knockback
+	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0)
+	var vel := desired * spd + sep * speed * 1.5 + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	position += vel * delta
 	var pad := Vector2(radius, radius)
 	position = position.clamp(main.ARENA.position + pad, main.ARENA.end - pad)
 
 	if p.alive and dist < radius + p.radius + 4.0 and contact_cd <= 0.0:
-		p.take_damage(damage)
+		p.take_damage(damage, self)
 		contact_cd = 0.9
 
 	if ranged and p.alive:
-		shoot_timer -= delta
+		shoot_timer -= delta * (0.5 if slow_timer > 0.0 else 1.0)
 		if shoot_timer <= 0.0 and dist < 750.0:
 			shoot_timer = shoot_cd
 			if is_boss:
@@ -136,6 +139,8 @@ func _draw() -> void:
 			_draw_bolotianyk(side)
 		"zmii":
 			_draw_zmii()
+	if slow_timer > 0.0:
+		draw_arc(Vector2(0, -radius * 0.5), radius * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
 	if hp < max_hp and not is_boss:
 		var w := radius * 2.2
 		var y := -radius * 2.0 - 14.0
