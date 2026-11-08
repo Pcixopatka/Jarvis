@@ -9,6 +9,7 @@ var crystals := []  # [позиція, колір] — у печері біля 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
 	"swamp": Color(0.28, 0.35, 0.21), "mountain": Color(0.42, 0.46, 0.38), "cave": Color(0.2, 0.17, 0.15),
+	"plague": Color(0.15, 0.17, 0.11),
 }
 
 
@@ -17,12 +18,15 @@ func setup(rect: Rect2, b: String, s: int) -> void:
 	biome = b
 	seed_value = s
 	crystals.clear()
-	if biome == "cave":
+	if biome == "cave" or biome == "plague":
 		var rng := RandomNumberGenerator.new()
 		rng.seed = s + 99
 		for i in 7:
 			var p := Vector2(rng.randf_range(arena.position.x + 60, arena.end.x - 60), rng.randf_range(arena.position.y + 60, arena.end.y - 60))
-			crystals.append([p, Color(0.4, 0.8, 1.0) if rng.randf() < 0.5 else Color(0.75, 0.45, 1.0)])
+			var col := Color(0.4, 0.8, 1.0) if rng.randf() < 0.5 else Color(0.75, 0.45, 1.0)
+			if biome == "plague":
+				col = Color(0.45, 0.95, 0.2)
+			crystals.append([p, col])
 	queue_redraw()
 
 
@@ -30,7 +34,7 @@ func _draw() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var base: Color = BASE.get(biome, BASE["steppe"])
-	var outside := Color(0.1, 0.08, 0.07) if biome == "cave" else Color(0.12, 0.16, 0.1)
+	var outside := Color(0.1, 0.08, 0.07) if biome in ["cave", "plague"] else Color(0.12, 0.16, 0.1)
 	draw_rect(arena.grow(600), outside)
 	draw_rect(arena, base)
 	var area := arena.get_area() / 7840000.0  # відносно поля 2800×2800
@@ -68,7 +72,11 @@ func _draw() -> void:
 		"cave":
 			_cave_floor(rng, int(220 * area))
 			_crystals()
-	if biome == "cave" or biome == "mountain":
+		"plague":
+			_cave_floor(rng, int(200 * area))
+			_pools(rng, int(10 * area))
+			_crystals()
+	if biome in ["cave", "mountain", "plague"]:
 		_rock_wall()
 	else:
 		_fence()
@@ -237,7 +245,7 @@ func _stake(p: Vector2) -> void:
 func _rock_wall() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value + 7
-	var col := Color(0.3, 0.26, 0.23) if biome == "cave" else Color(0.38, 0.38, 0.36)
+	var col := Color(0.3, 0.26, 0.23) if biome in ["cave", "plague"] else Color(0.38, 0.38, 0.36)
 	var step := 40.0
 	var edges := []
 	var x := arena.position.x

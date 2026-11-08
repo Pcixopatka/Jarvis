@@ -15,13 +15,13 @@ func _draw() -> void:
 		skin = Color(0.78, 0.8, 0.76)  # мертвотно-бліда шкіра
 		draw_circle(c, r, Color(0.12, 0.06, 0.08))
 		draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.25, 0.05, 0.08))
-	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2)}.get(npc, Color.GRAY)
+	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
 	if npc == "znakharka":
 		for i in 7:
 			draw_circle(c + Vector2(-36 + i * 12, 52) * s, 3.0 * s, Color(0.8, 0.12, 0.12))  # вишивка
-	if npc == "otaman" or npc == "hero":
+	if npc == "otaman" or npc == "hero" or npc == "polkovnyk":
 		draw_line(c + Vector2(-46, 56) * s, c + Vector2(46, 56) * s, Color(0.95, 0.75, 0.2), 5.0 * s)  # пояс
 	# Шия й голова
 	draw_rect(Rect2(c + Vector2(-9, 26) * s, Vector2(18, 22) * s), skin.darkened(0.08))
@@ -34,6 +34,22 @@ func _draw() -> void:
 			_eyes(c, s, eye_y, false)
 			_mustache(c, s, Color(0.78, 0.78, 0.78), 34.0)
 			draw_line(c + Vector2(-22, -12) * s, c + Vector2(-14, 4) * s, Color(0.7, 0.4, 0.35), 2.0 * s)  # шрам
+		"polkovnyk":
+			_brows(c, s, Color(0.15, 0.1, 0.05), 3.5)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.15, 0.1, 0.05), 30.0)
+			# Хутряна шапка з пером
+			draw_rect(Rect2(c + Vector2(-30, -36) * s, Vector2(60, 18) * s), Color(0.3, 0.22, 0.15))
+			draw_colored_polygon(_pts(c, s, [Vector2(-22, -36), Vector2(22, -36), Vector2(10, -50), Vector2(-14, -48)]), Color(0.18, 0.3, 0.65))
+			draw_line(c + Vector2(18, -38) * s, c + Vector2(34, -62) * s, Color(0.95, 0.95, 0.9), 4.0 * s)
+		"litopysets":
+			# Чернечий клобук, довга темна борода, книга
+			draw_colored_polygon(_pts(c, s, [Vector2(-32, 6), Vector2(-30, -30), Vector2(0, -44), Vector2(30, -30), Vector2(32, 6), Vector2(24, -16), Vector2(0, -26), Vector2(-24, -16)]), Color(0.1, 0.08, 0.08))
+			_brows(c, s, Color(0.3, 0.25, 0.2), 2.5)
+			_eyes(c, s, eye_y, false)
+			draw_colored_polygon(_pts(c, s, [Vector2(-18, 10), Vector2(18, 10), Vector2(10, 52), Vector2(0, 58), Vector2(-10, 52)]), Color(0.3, 0.24, 0.18))
+			draw_rect(Rect2(c + Vector2(30, 30) * s, Vector2(26, 32) * s), Color(0.5, 0.15, 0.1))
+			draw_rect(Rect2(c + Vector2(33, 33) * s, Vector2(20, 26) * s), Color(0.9, 0.85, 0.7))
 		"hero":
 			_chub(c, s, Color(0.22, 0.14, 0.08))
 			_brows(c, s, Color(0.25, 0.15, 0.08), 2.5)

@@ -41,7 +41,12 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	var names := []
 	for e in L["enemies"]:
 		names.append(Data.ENEMY_NAMES[e])
-	v.add_child(UI.label("Нечисть: " + ", ".join(names), 17, UI.MUTED, false))
+	v.add_child(_wrapped("Нечисть: " + ", ".join(names), 17, UI.MUTED))
+	var times: int = world.cleared.get(sel, 0)
+	var rep := "Можна проходити повторно для прокачки"
+	if times > 0:
+		rep += " • пройдено: %d" % times
+	v.add_child(_wrapped(rep, 16, UI.GOOD))
 	for q in world.quests:
 		if q["loc"] == sel and not world.is_done(q):
 			v.add_child(_wrapped("! " + q["text"], 16, UI.GOLD))
@@ -52,4 +57,5 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 static func _wrapped(text: String, size: int, col: Color) -> Label:
 	var l := UI.label(text, size, col, false)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(340, 0)
 	return l

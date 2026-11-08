@@ -7,7 +7,7 @@ var biome := "steppe"
 var parts := []  # [позиція, швидкість, фаза, розмір]
 var _t := 0.0
 
-const COUNT := {"steppe": 40, "river": 35, "forest": 45, "swamp": 14, "mountain": 110, "cave": 40}
+const COUNT := {"steppe": 40, "river": 35, "forest": 45, "swamp": 14, "mountain": 110, "cave": 40, "plague": 50}
 
 
 func setup(b: String) -> void:
@@ -40,7 +40,7 @@ func _new_part(view: Rect2, anywhere: bool) -> Array:
 		"forest":
 			vel = Vector2(randf_range(-15, 15), randf_range(-15, 15))
 			size = randf_range(2, 3.5)
-		"cave":
+		"cave", "plague":
 			vel = Vector2(randf_range(-6, 6), randf_range(-10, -2))
 			size = randf_range(1.5, 2.5)
 		_:
@@ -77,6 +77,9 @@ func _draw() -> void:
 				draw_circle(pos, s, Color(1, 1, 1, 0.85))
 			"cave":
 				draw_circle(pos, s, Color(1.0, 0.8, 0.5, 0.35 * flick))
+			"plague":
+				draw_circle(pos, s * 2.5, Color(0.45, 0.95, 0.2, 0.1 * flick))
+				draw_circle(pos, s, Color(0.55, 1.0, 0.3, 0.5 * flick))
 			"river":
 				draw_circle(pos, s, Color(0.85, 0.95, 1.0, 0.35 * flick))
 			_:

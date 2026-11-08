@@ -57,6 +57,10 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 		"zarazhenyi":
 			radius = 20.0; max_hp = 70.0; speed = 100.0; damage = 13.0; xp_value = 6
 			color = Color(0.45, 0.16, 0.13)
+		"chaklun":
+			radius = 24.0; max_hp = 90.0; speed = 95.0; damage = 22.0; xp_value = 7
+			color = Color(0.12, 0.1, 0.14)
+			ranged = true; keep_distance = 300.0; shoot_cd = 2.2
 		"zmii":
 			radius = 52.0; max_hp = 60.0; speed = 70.0; damage = 17.0; xp_value = 6
 			color = Color(0.2, 0.55, 0.25)
@@ -76,7 +80,7 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			radius *= 2.0
 			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
-	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zarazhenyi": 0.5, "zmii": 0.5}.get(k, 0.35)
+	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zarazhenyi": 0.5, "chaklun": 0.5, "zmii": 0.5}.get(k, 0.35)
 	if is_boss:
 		windup_max = 0.55
 		ability_timer = 3.0
@@ -171,6 +175,9 @@ func _process(delta: float) -> void:
 			if kind == "zmii":
 				for a in [-0.35, 0.0, 0.35]:
 					combat.spawn_projectile(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.6, Color(1.0, 0.5, 0.1), 13.0)
+			elif kind == "chaklun":
+				for a in [-0.3, -0.1, 0.1, 0.3]:
+					combat.spawn_projectile(global_position, dir.rotated(a), 250.0, damage * 0.5, Color(0.45, 0.95, 0.2), 11.0)
 			elif is_boss:
 				for a in [-0.25, 0.0, 0.25]:
 					combat.spawn_projectile(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
@@ -261,10 +268,41 @@ func _boss_ability(target) -> void:
 			else:
 				Audio.play("roar", 0.05, -2.0)
 				_summon(["vovkulaka"], 2)
+		"chaklun":
+			ability_timer = 4.5
+			match ability_step % 3:
+				1:
+					# Дощ зарази: три зони навколо цілі, після удару лишаються хмари
+					Audio.play("lightning", 0.1, -6.0)
+					for i in 3:
+						var pos: Vector2 = target.global_position + (Vector2.ZERO if i == 0 else Vector2.from_angle(randf() * TAU) * 130.0)
+						var t = _telegraph("circle", pos, 1.1, damage * 0.9)
+						t.radius = 85.0
+						t.color = Color(0.45, 0.9, 0.15)
+						t.on_fire = func(): combat.spawn_plague(pos, damage * 0.5)
+				2:
+					_summon_infected()
+				0:
+					# Зникає в зеленому димі й з'являється подалі, розкидаючи кільце снарядів
+					combat.fx.burst(global_position, Color(0.35, 0.8, 0.15), 30, 260, 8, 0.6)
+					var best := global_position
+					for i in 8:
+						var cand := Vector2(randf_range(combat.arena.position.x + 120, combat.arena.end.x - 120), randf_range(combat.arena.position.y + 120, combat.arena.end.y - 120))
+						if cand.distance_to(target.global_position) > best.distance_to(target.global_position):
+							best = cand
+					global_position = best
+					combat.fx.burst(global_position, Color(0.35, 0.8, 0.15), 30, 260, 8, 0.6)
+					for i in 10:
+						combat.spawn_projectile(global_position, Vector2.from_angle(TAU * i / 10.0), 220.0, damage * 0.45, Color(0.45, 0.95, 0.2), 10.0)
 		_:
 			ability_timer = 6.0
 			var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
 			t.radius = 110.0
+
+
+func _summon_infected() -> void:
+	Audio.play("roar", 0.15, -4.0)
+	_summon(["zarazhenyi"], 3)
 
 
 # --- Малювання ---
@@ -296,6 +334,8 @@ func _draw() -> void:
 			_draw_vovkulaka(side)
 		"zarazhenyi":
 			_draw_zarazhenyi(side)
+		"chaklun":
+			_draw_chaklun(side)
 		"zmii":
 			_draw_zmii()
 	if slow_timer > 0.0:
@@ -353,6 +393,28 @@ func _draw_bolotianyk(side: float) -> void:
 	draw_circle(Vector2(side * 6 + 5, -8), 4.0, Color(1, 0.95, 0.4))
 	draw_circle(Vector2(side * 7 - 4, -8), 1.8, Color.BLACK)
 	draw_circle(Vector2(side * 7 + 5, -8), 1.8, Color.BLACK)
+
+
+func _draw_chaklun(side: float) -> void:
+	var hover := sin(phase * 0.6) * 3.0 - 4.0
+	draw_set_transform(Vector2(0, hover), 0.0, Vector2.ONE)
+	# Чорна ряса з червоною облямівкою
+	draw_colored_polygon(PackedVector2Array([Vector2(-10, -18), Vector2(10, -18), Vector2(18, 16), Vector2(-18, 16)]), _c(color))
+	draw_polyline(PackedVector2Array([Vector2(-18, 16), Vector2(18, 16)]), _c(Color(0.6, 0.05, 0.08)), 3.0)
+	draw_line(Vector2(0, -18), Vector2(0, 16), _c(Color(0.6, 0.05, 0.08)), 2.0)
+	# Каптур і обличчя
+	draw_circle(Vector2(0, -24), 11.0, _c(color.lightened(0.05)))
+	draw_circle(Vector2(side * 2, -22), 7.0, _c(Color(0.75, 0.78, 0.72)))
+	var glow := 0.6 + 0.4 * sin(phase * 2.5)
+	draw_circle(Vector2(side * 2 - 3, -23), 1.8, Color(0.5, 1.0, 0.2, glow))
+	draw_circle(Vector2(side * 2 + 3, -23), 1.8, Color(0.5, 1.0, 0.2, glow))
+	# Палиця з зеленою кулею
+	var hand := Vector2(side * 14, -6)
+	draw_line(hand + Vector2(0, 20), hand + Vector2(0, -26), _c(Color(0.3, 0.2, 0.15)), 3.0)
+	draw_circle(hand + Vector2(0, -30), 9.0, Color(0.45, 0.95, 0.2, 0.25 * glow))
+	draw_circle(hand + Vector2(0, -30), 5.0, Color(0.6, 1.0, 0.3))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_circle(Vector2(-side * 10, -36 + sin(phase) * 4.0), 3.0, Color(0.45, 0.95, 0.2, 0.4))
 
 
 func _draw_zarazhenyi(side: float) -> void:

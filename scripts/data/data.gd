@@ -317,21 +317,24 @@ const LOCATIONS := {
 		"rooms": 5, "enemies": ["upyr", "vovkulaka"], "boss": "upyr",
 		"desc": "Старі підземелля, де править Упир-володар."},
 	"polissia": {"name": "Поліські болота", "type": "field", "biome": "swamp", "pos": Vector2(27.6, 51.35), "level": 6,
-		"enemies": ["bolotianyk", "upyr", "mavka"], "desc": "Трясовина, туман і болотяники."},
+		"enemies": ["bolotianyk", "upyr", "zarazhenyi"], "desc": "Трясовина, туман і болотяники. Тут пройшли заражені загони."},
 	"chornohora": {"name": "Чорногора", "type": "field", "biome": "mountain", "pos": Vector2(24.6, 48.05), "level": 9,
 		"enemies": ["vovkulaka", "upyr", "bolotianyk"], "desc": "Високі Карпати, сніг і вовчі зграї."},
 	"bilovezha": {"name": "Біловезька пуща", "type": "field", "biome": "forest", "pos": Vector2(23.9, 52.7), "level": 8,
 		"enemies": ["vovkulaka", "mavka", "upyr"], "desc": "Прадавня пуща на межі з Польщею. Тут водяться найлютіші вовкулаки."},
 	"bryansk_forest": {"name": "Брянські ліси", "type": "field", "biome": "forest", "pos": Vector2(34.0, 53.1), "level": 11,
 		"enemies": ["zarazhenyi", "vovkulaka", "upyr"], "desc": "Прикордонні ліси на московських землях — звідси розповзається зараза."},
+	"chaklun_lair": {"name": "Лігво чаклуна", "type": "dungeon", "biome": "plague", "pos": Vector2(35.4, 53.7), "level": 12,
+		"rooms": 6, "enemies": ["zarazhenyi", "vovkulaka", "upyr"], "boss": "chaklun",
+		"desc": "Отруєні печери на московських землях. Звідси чаклун Путіноїда розсилає заразу."},
 	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.2, 48.6), "level": 10,
 		"rooms": 6, "enemies": ["vovkulaka", "upyr", "bolotianyk"], "boss": "vovkulaka",
 		"desc": "Скарби опришків стереже Вовкулака-ватажок."},
 }
 
-const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит", "zmii": "Змій"}
-const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених", "zmii": "зміїв"}
-const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок"}
+const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит", "zmii": "Змій", "chaklun": "Чаклун Путіноїда"}
+const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених", "zmii": "зміїв", "chaklun": "чаклунів"}
+const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда"}
 const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази"}
 
 const LOYALTY_THRESHOLDS := [0, 100, 250, 500]

@@ -317,11 +317,16 @@ func _suite_story() -> void:
 			StoryService.on_dialogue_done(w, p, "end", 0 if not d["choices"].is_empty() else -1)
 			steps_done += 1
 	check(StoryService.state(w)["stage"] == "done", "розділ пройдено до кінця")
-	check(steps_done == 6, "усі 6 кроків (пройдено %d)" % steps_done)
+	var total_steps = 0
+	for ch in load("res://scripts/data/story.gd").CHAPTERS:
+		total_steps += ch["steps"].size()
+	check(steps_done == total_steps, "усі %d кроків (пройдено %d)" % [total_steps, steps_done])
 	var names = []
 	for it in p.inventory:
 		names.append(it["name"])
-	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди в торбі")
+	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди розділу I")
+	check("Булава полковника" in names and "Каптур літописця" in names, "сюжетні нагороди розділу II")
+	check(w.story.get("choices", {}).get("crypt", -1) == 0 and w.loyalty_points("kyiv") >= 270, "вибір у розділі II враховано")
 	check(w.loyalty_points("chyhyryn") >= 90 and w.story.get("choices", {}).get("potion", -1) == 0, "вибір у розмові з Мотрею враховано")
 	check(p.gold > gold0 and p.level > 1, "гривні й досвід за сюжет")
 	check(StoryService.objective_line(w) == "" and StoryService.target(w) == "", "після завершення — без мети")

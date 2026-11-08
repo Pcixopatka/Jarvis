@@ -22,6 +22,7 @@ const DUNGEON_ARENA := Rect2(-750, -550, 1500, 1100)
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
+	"plague": Color(0.2, 0.26, 0.17),
 }
 
 ## Джерела керування (задає Game): вектор руху і чи затиснуто удар.
@@ -205,10 +206,10 @@ func _spawn_companions(companions: Array) -> void:
 
 func _setup_atmosphere(biome: String) -> void:
 	canvas_mod.color = BIOME_TINT.get(biome, Color.WHITE)
-	torch.enabled = biome == "cave"
+	torch.enabled = biome in ["cave", "plague"]
 	for c in lights.get_children():
 		c.queue_free()
-	if biome == "cave":
+	if biome in ["cave", "plague"]:
 		for c in ground.crystals:
 			var l := PointLight2D.new()
 			l.texture = light_tex
