@@ -11,6 +11,7 @@ const CompanionScript := preload("res://scripts/entities/companion.gd")
 const ProjectileScript := preload("res://scripts/entities/projectile.gd")
 const PickupScript := preload("res://scripts/entities/pickup.gd")
 const PortalScript := preload("res://scripts/entities/portal.gd")
+const FxSpriteScript := preload("res://scripts/world/fx_sprite.gd")
 const FloatTextScript := preload("res://scripts/world/float_text.gd")
 const BoltScript := preload("res://scripts/world/bolt.gd")
 const Elites := preload("res://scripts/data/elites.gd")
@@ -933,6 +934,18 @@ func spawn_plague(pos: Vector2, dps: float) -> void:
 	c.position = pos
 	c.dps = dps
 	effects.add_child(c)
+
+
+## Анімований ефект вміння (fx_<kind>.png) у шарі ефектів.
+func spawn_fx(kind: String, pos: Vector2, scale_k: float = 1.0, rot: float = 0.0, tint: Color = Color.WHITE, fps: float = 16.0) -> void:
+	var f = FxSpriteScript.new()
+	f.kind = kind
+	f.position = pos
+	f.scale = Vector2.ONE * scale_k
+	f.rotation = rot
+	f.tint = tint
+	f.fps = fps
+	effects.add_child(f)
 
 
 func spawn_bolt(points: PackedVector2Array) -> void:

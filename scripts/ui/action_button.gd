@@ -8,6 +8,7 @@ var label := ""
 var color := Color(0.8, 0.2, 0.2)
 var held := false
 var cooldown_ratio := 0.0  # 0 — готово, 1 — щойно використано
+var icon: Texture2D = null  # значок вміння (піксельний); підпис тоді дрібніший, під ним
 var _touch_index := -1
 
 
@@ -47,7 +48,15 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius * 0.5, start, start + TAU * cooldown_ratio, 32, Color(0, 0, 0, 0.45), radius)
 	draw_arc(Vector2.ZERO, radius, 0.0, TAU, 48, Color(1, 1, 1, 0.8 if ready else 0.35), 4.0)
 	var font := ThemeDB.fallback_font
-	var fs := int(radius * 0.36)
 	var w := radius * 2.0
+	if icon != null:
+		var isz := radius * 1.15
+		var tint := Color.WHITE if ready else Color(0.55, 0.55, 0.55)
+		draw_texture_rect(icon, Rect2(Vector2(-isz / 2.0, -isz / 2.0 - radius * 0.12), Vector2(isz, isz)), false, tint)
+		var fs2 := int(radius * 0.24)
+		draw_string_outline(font, Vector2(-radius, radius * 0.78), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs2, 3, Color(0, 0, 0, 0.7))
+		draw_string(font, Vector2(-radius, radius * 0.78), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs2, Color.WHITE)
+		return
+	var fs := int(radius * 0.36)
 	draw_string_outline(font, Vector2(-radius, fs * 0.35), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs, 4, Color(0, 0, 0, 0.7))
 	draw_string(font, Vector2(-radius, fs * 0.35), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color.WHITE)

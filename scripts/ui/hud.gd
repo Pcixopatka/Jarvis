@@ -19,6 +19,7 @@ const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const WorldMap := preload("res://scripts/ui/world_map.gd")
 const JoystickScript := preload("res://scripts/ui/joystick.gd")
 const ActionButtonScript := preload("res://scripts/ui/action_button.gd")
+const Gfx := preload("res://scripts/world/gfx.gd")
 
 var ui_root: Control
 var stats_box: Control
@@ -94,6 +95,7 @@ func _build() -> void:
 	for id in Data.ACTIVE_SKILLS:
 		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0 if SkillInfo.kind(id) == "attack" else 42.0, Data.Classes.ACTIVE_COLORS[id])
 		b.triggered.connect(func(): skill_pressed.emit(id))
+		b.icon = Gfx.skill_icon_tex(id)
 		b.visible = false
 		skill_buttons[id] = b
 

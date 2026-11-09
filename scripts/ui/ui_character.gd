@@ -1,4 +1,5 @@
 extends RefCounted
+const Gfx := preload("res://scripts/world/gfx.gd")
 ## Екран козака: характеристики, спорядження, дерево вмінь, дерево перків.
 ## Усі дії йдуть через game.char_do(дія, аргумент), після чого екран перебудовується.
 
@@ -271,6 +272,7 @@ static func _skills(game) -> Control:
 				tag = "  ⚔" if p.SkillInfo.kind(n["id"]) == "attack" else "  ✦"
 			var text := "%s%s   %d/%d" % [n["name"], tag, rank, n["max"]]
 			var b := _tree_button(text, rank, n["max"], true, not req_met, 15, Vector2(w, 54), _do(game, "skill_pick", n["id"]))
+			_with_icon(b, n["id"], 40)
 			if n["id"] == game.skill_sel:
 				b.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 10, 6))
 			col.add_child(b)
@@ -290,7 +292,9 @@ static func _skills(game) -> Control:
 		er.add_theme_constant_override("h_separation", 6)
 		er.add_child(UI.label("Набуте раніше:", 17, UI.MUTED, false))
 		for n in earlier:
-			er.add_child(UI.button("%s %d" % [n["name"], p.sk(n["id"])], _do(game, "skill_pick", n["id"]), Vector2(0, 40), 14))
+			var eb := UI.button("%s %d" % [n["name"], p.sk(n["id"])], _do(game, "skill_pick", n["id"]), Vector2(0, 40), 14)
+			_with_icon(eb, n["id"], 28)
+			er.add_child(eb)
 		v.add_child(er)
 	return v
 
@@ -314,10 +318,12 @@ static func _panel_row(game, v: VBoxContainer) -> void:
 			var text: String = Data.ACTIVE_LABELS.get(id, "—") if id != "" else "—"
 			var b: Button
 			if can_place and sel_kind == kind:
-				b = UI.button(text, _do(game, "panel_set", [kind, i, sel]), Vector2(74, 44), 13)
+				b = UI.button(text, _do(game, "panel_set", [kind, i, sel]), Vector2(74, 48), 11)
 				b.add_theme_stylebox_override("normal", UI.style(Color(0.2, 0.3, 0.15), Color(0.5, 0.9, 0.4), 8, 4))
 			else:
-				b = UI.button(text, _do(game, "panel_clear", [kind, i]), Vector2(74, 44), 13, id != "")
+				b = UI.button(text, _do(game, "panel_clear", [kind, i]), Vector2(74, 48), 11, id != "")
+			if id != "":
+				_with_icon(b, id, 36, true)
 			if id != "" and id == sel:
 				b.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 8, 4))
 			box.add_child(b)
@@ -341,7 +347,20 @@ static func _skill_card(game) -> Control:
 		return card
 	var rank: int = p.sk(id)
 	var active: bool = n.get("active", false)
-	card.add_child(UI.label(n["name"], 26, UI.GOLD, false))
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 10)
+	var ic := Gfx.skill_icon_tex(id)
+	if ic != null:
+		var tr := TextureRect.new()
+		tr.texture = ic
+		tr.custom_minimum_size = Vector2(72, 72)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		head.add_child(tr)
+	var title := UI.label(n["name"], 26, UI.GOLD, false)
+	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	head.add_child(title)
+	card.add_child(head)
 	var sub := "Ранг %d/%d" % [rank, n["max"]]
 	if active:
 		sub += "  •  %s" % ("атака ⚔" if SI.kind(id) == "attack" else "баф ✦")
@@ -453,3 +472,18 @@ static func _perks(game) -> Control:
 			col.add_child(row)
 		h.add_child(col)
 	return v
+
+
+## Додати до кнопки піксельний значок вміння (ліворуч від тексту або над ним).
+static func _with_icon(b: Button, id: String, size: int, above: bool = false) -> void:
+	var tex := Gfx.skill_icon_tex(id)
+	if tex == null:
+		return
+	b.icon = tex
+	b.expand_icon = true
+	b.add_theme_constant_override("icon_max_width", size)
+	if above:
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	else:
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT

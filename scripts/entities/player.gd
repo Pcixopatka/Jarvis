@@ -1050,6 +1050,7 @@ func _vyly() -> bool:
 	dodge_time_left = 0.1  # короткий випад уперед
 	Audio.play("swing", 0.1, 0.0)
 	combat.fx.burst(global_position + facing * length * 0.6, Color(0.9, 0.85, 0.7), 10, 220, 4, 0.3, 0, facing.angle(), 0.5)
+	combat.spawn_fx("slash", global_position + facing * length * 0.5, 1.6, facing.angle(), Color(1.0, 0.95, 0.8))
 	combat.shake(4.0)
 	return true
 
@@ -1059,6 +1060,7 @@ func _first_aid() -> bool:
 		return false
 	heal(max_hp * (0.15 + 0.05 * sk("first_aid")))
 	statuses.erase("bleed")
+	combat.spawn_fx("heal", global_position, 1.1)
 	return true
 
 
@@ -1070,6 +1072,7 @@ func _battle_cry() -> bool:
 	Audio.play("roar", 0.05, -2.0)
 	combat.float_text(global_position + Vector2(0, -70), "Гей, козаки!", Color(1.0, 0.7, 0.3))
 	combat.fx.ring(global_position, Color(1.0, 0.6, 0.25), 24, 260, 5, 0.4)
+	combat.spawn_fx("cry", global_position + Vector2(0, -20), 1.8)
 	return true
 
 
@@ -1093,6 +1096,7 @@ func _zemnyi() -> bool:
 	Audio.play("boom", 0.05, -2.0)
 	combat.fx.ring(global_position + Vector2(0, 16), Color(0.6, 0.45, 0.25), 30, reach * 2.0, 8, 0.4)
 	combat.fx.burst(global_position + Vector2(0, 16), Color(0.5, 0.4, 0.25), 24, 260, 7, 0.6)
+	combat.spawn_fx("earth", global_position + Vector2(0, 16), 2.6, 0.0, Color.WHITE, 12.0)
 	return true
 
 
@@ -1101,6 +1105,7 @@ func _stina() -> bool:
 	Audio.play("roar", 0.05, -3.0)
 	combat.float_text(global_position + Vector2(0, -70), "Козацька стіна!", Color(0.9, 0.8, 0.5))
 	combat.fx.ring(global_position, Color(0.85, 0.75, 0.5), 24, 420, 5, 0.4)
+	combat.spawn_fx("shockwave", global_position + Vector2(0, 10), 2.4, 0.0, Color(1.0, 0.9, 0.6))
 	return true
 
 
@@ -1122,6 +1127,7 @@ func _bulava() -> bool:
 	combat.hitstop(0.06)
 	Audio.play("crit", 0.05)
 	combat.fx.burst(global_position + facing * reach * 0.6, Color(1.0, 0.6, 0.3), 18, 300, 6, 0.4, 0, facing.angle(), 1.2)
+	combat.spawn_fx("slash", global_position + facing * reach * 0.5, 2.0, facing.angle(), Color(1.0, 0.75, 0.4))
 	return true
 
 
@@ -1138,6 +1144,7 @@ func _pastka() -> bool:
 
 func _tin() -> bool:
 	tin_timer = 4.0
+	combat.spawn_fx("smoke", global_position - Vector2(0, 10), 1.6)
 	combat.fx.burst(global_position, Color(0.2, 0.2, 0.25), 20, 160, 7, 0.5)
 	combat.float_text(global_position + Vector2(0, -70), "Тінь", Color(0.6, 0.6, 0.75))
 	return true
@@ -1193,6 +1200,7 @@ func _kartech() -> bool:
 	Audio.play("musket", 0.05, 0.0)
 	combat.shake(5.0)
 	combat.fx.burst(global_position + Vector2(0, -10) + dir * 44.0, Color(1.0, 0.8, 0.3), 14, 300, 5, 0.2, 0, dir.angle(), 0.9)
+	combat.spawn_fx("fire", global_position + Vector2(0, -10) + dir * 50.0, 0.8, 0.0, Color.WHITE, 24.0)
 	return true
 
 
@@ -1231,6 +1239,7 @@ func _vovk() -> bool:
 	Audio.play("roar", 0.0, 0.0)
 	combat.float_text(global_position + Vector2(0, -70), "Вовча подоба!", Color(0.8, 0.8, 0.85))
 	combat.fx.burst(global_position, Color(0.5, 0.5, 0.5), 26, 220, 8, 0.6)
+	combat.spawn_fx("wolf", global_position - Vector2(0, 10), 1.8, 0.0, Color.WHITE, 12.0)
 	return true
 
 
@@ -1238,6 +1247,7 @@ func _kulia() -> bool:
 	invuln = maxf(invuln, 2.0 + 0.5 * (sk("kulia") - 1))
 	combat.float_text(global_position + Vector2(0, -70), "Куля не бере!", Color(1.0, 0.85, 0.3))
 	combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 20, 100, 4, 0.4)
+	combat.spawn_fx("gold", global_position - Vector2(0, 10), 1.6)
 	return true
 
 
@@ -1245,6 +1255,7 @@ func _zamova() -> bool:
 	zamova_timer = 10.0
 	Audio.play("lightning", 0.05, -6.0)
 	combat.float_text(global_position + Vector2(0, -70), "Замовляння шаблі", Color(0.6, 0.8, 1.0))
+	combat.spawn_fx("lightning", global_position - Vector2(0, 28), 1.2, 0.0, Color(0.8, 0.9, 1.0))
 	return true
 
 
@@ -1276,6 +1287,7 @@ func _vidvid() -> bool:
 		return false
 	Audio.play("lightning", 0.1, -4.0)
 	combat.fx.ring(global_position, Color(0.6, 0.4, 0.8), 28, 600, 5, 0.5)
+	combat.spawn_fx("smoke", global_position - Vector2(0, 10), 2.4, 0.0, Color(0.8, 0.6, 1.0))
 	return true
 
 
@@ -1292,6 +1304,10 @@ func _zhyvytsia() -> bool:
 		if is_instance_valid(c) and c.alive:
 			c.heal(c.max_hp * pct)
 	combat.fx.ring(global_position, Color(0.5, 1.0, 0.55), 24, 260, 5, 0.5)
+	combat.spawn_fx("heal", global_position, 1.8)
+	for c in combat.companion_nodes:
+		if is_instance_valid(c) and c.alive:
+			combat.spawn_fx("heal", c.global_position, 1.2)
 	Audio.play("heal", 0.0)
 	return true
 
@@ -1300,6 +1316,7 @@ func _ochyshchennia() -> bool:
 	statuses.clear()
 	cleanse_timer = 2.0 + 1.0 * (sk("ochyshchennia") - 1)
 	combat.fx.ring(global_position, Color(0.8, 0.95, 1.0), 20, 160, 4, 0.4)
+	combat.spawn_fx("shield", global_position - Vector2(0, 10), 1.3, 0.0, Color(0.9, 1.0, 1.0))
 	combat.float_text(global_position + Vector2(0, -70), "Очищення", Color(0.8, 0.95, 1.0))
 	return true
 
@@ -1308,6 +1325,7 @@ func _oberih_zahonu() -> bool:
 	zahyst_timer = 8.0
 	zahyst_mult = 1.0 - (0.25 + 0.05 * (sk("oberih_zahonu") - 1))
 	combat.fx.ring(global_position, Color(0.5, 0.7, 1.0), 24, 320, 5, 0.5)
+	combat.spawn_fx("shield", global_position - Vector2(0, 10), 2.2)
 	combat.float_text(global_position + Vector2(0, -70), "Оберіг загону", Color(0.6, 0.8, 1.0))
 	Audio.play("heal", 0.0, -3.0)
 	return true
@@ -1318,6 +1336,7 @@ func _otruta() -> bool:
 	if e == null:
 		return false
 	combat.spawn_zone("otruta", e.global_position, 110.0, 5.0, damage * 0.5 * (1.0 + 0.2 * (sk("otruta") - 1)) * skill_power)
+	combat.spawn_fx("poison", e.global_position, 2.0, 0.0, Color.WHITE, 10.0)
 	Audio.play("swing", 0.1, -6.0)
 	return true
 
@@ -1338,6 +1357,7 @@ func _molot() -> bool:
 			if not t.dead and not t.is_boss:
 				t.stun = maxf(t.stun, 0.8)
 	combat.spawn_bolt(PackedVector2Array([pos + Vector2(10, -460), pos + Vector2(-20, -200), pos]))
+	combat.spawn_fx("lightning", pos - Vector2(0, 30), 2.4, 0.0, Color.WHITE, 20.0)
 	combat.fx.ring(pos, Color(0.75, 0.85, 1.0), 30, 320, 6, 0.35)
 	combat.shake(10.0)
 	Audio.play("lightning", 0.0, 2.0)
@@ -1359,6 +1379,7 @@ func _burya_strike() -> void:
 	var r := _roll(1.3 * (1.0 + 0.15 * (sk("burya") - 1)) * (1.0 + 0.1 * pk("grim")) * skill_power)
 	hit(e, r[0], Vector2.ZERO, r[1])
 	combat.spawn_bolt(PackedVector2Array([e.global_position + Vector2(randf_range(-40, 40), -420), e.global_position]))
+	combat.spawn_fx("lightning", e.global_position - Vector2(0, 30), 1.4, 0.0, Color.WHITE, 20.0)
 	Audio.play("lightning", 0.2, -8.0)
 
 
@@ -1370,12 +1391,15 @@ func _grad() -> bool:
 		return false
 	var k := 1.0 + 0.2 * pk("khmara")
 	combat.spawn_zone("grad", e.global_position, 140.0 * k, 3.0, damage * 0.45 * (1.0 + 0.2 * (sk("grad") - 1)) * k * skill_power)
+	for i in 3:
+		combat.spawn_fx("hail", e.global_position + Vector2(randf_range(-80, 80), randf_range(-60, 40)), 2.0 * k, 0.0, Color.WHITE, 10.0)
 	Audio.play("lightning", 0.2, -10.0)
 	return true
 
 
 func _tuman() -> bool:
 	combat.spawn_zone("tuman", global_position, 230.0, 6.0, 0.0)
+	combat.spawn_fx("smoke", global_position, 4.0, 0.0, Color(0.85, 0.88, 0.95), 8.0)
 	return true
 
 
@@ -1388,6 +1412,7 @@ func _proklin() -> bool:
 			Status.apply(t, "curse", 8.0)
 			Status.apply(t, "weak", 8.0)
 	combat.fx.ring(e.global_position, Color(0.5, 0.2, 0.5), 20, 300, 5, 0.5)
+	combat.spawn_fx("curse", e.global_position - Vector2(0, 20), 1.6, 0.0, Color.WHITE, 10.0)
 	Audio.play("roar", 0.3, -10.0)
 	return true
 
@@ -1395,6 +1420,7 @@ func _proklin() -> bool:
 func _dukh() -> bool:
 	combat.spawn_zone("spirit", global_position + Vector2(0, -60), 0.0, 15.0, damage * 0.8 * (1.0 + 0.2 * (sk("dukh") - 1)) * skill_power)
 	combat.float_text(global_position + Vector2(0, -70), "Духу гір, прийди!", Color(0.6, 0.9, 1.0))
+	combat.spawn_fx("spirit", global_position + Vector2(0, -60), 1.6, 0.0, Color.WHITE, 10.0)
 	return true
 
 
@@ -1443,6 +1469,7 @@ func _shield() -> bool:
 	Audio.play("heal", 0.0, -2.0)
 	combat.float_text(global_position + Vector2(0, -70), "Щит-оберіг!", Color(0.6, 0.85, 1.0))
 	combat.fx.ring(global_position, Color(0.5, 0.75, 1.0), 20, 90, 4, 0.4)
+	combat.spawn_fx("shield", global_position - Vector2(0, 10), 1.5)
 	return true
 
 
@@ -1455,6 +1482,7 @@ func _herb() -> bool:
 	statuses.erase("plague")
 	Audio.play("heal", 0.0)
 	combat.fx.burst(global_position, Color(0.5, 1.0, 0.5), 16, 120, 5, 0.8, -60)
+	combat.spawn_fx("heal", global_position, 1.4)
 	return true
 
 
@@ -1468,6 +1496,7 @@ func _charged_spell(power: float) -> void:
 	combo_step = 0
 	attack_timer = attack_cooldown
 	combat.shake(4.0 + 4.0 * power)
+	combat.spawn_fx("gold", global_position + Vector2(0, -24) + dir * 30.0, 0.8 + power, 0.0, Color(1.0, 0.8, 0.5), 24.0)
 	Audio.play("lightning", 0.05, -3.0)
 	Events.charged_hit.emit()
 	if power >= 0.99:
@@ -1498,6 +1527,8 @@ func _whirl() -> bool:
 	combat.float_text(global_position + Vector2(0, -60), "Буревій!" if storm else "Вихор!", Color(0.6, 0.85, 1.0))
 	Audio.play("whirl")
 	combat.fx.ring(global_position, Color(0.7, 0.9, 1.0, 0.8), 28, whirl_reach() * 2.2, 5, 0.35)
+	for i in 3:
+		combat.spawn_fx("slash", global_position + Vector2(0, -8), whirl_reach() / 30.0, TAU * i / 3.0, Color(0.8, 0.95, 1.0), 20.0)
 	return true
 
 
@@ -1528,6 +1559,7 @@ func _lightning() -> bool:
 		pts.append(e.global_position)
 		var r := _roll(m)
 		hit(e, r[0], Vector2.ZERO, r[1])
+		combat.spawn_fx("lightning", e.global_position - Vector2(0, 30), 1.2, 0.0, Color.WHITE, 20.0)
 		if sk("wrath") > 0 and not e.dead:
 			e.slow_timer = 2.0
 	combat.spawn_bolt(pts)

@@ -68,3 +68,33 @@ static func icon(ci: CanvasItem, id: String, pos: Vector2, scale: float = 2.0, t
 	if tex == null:
 		return
 	ci.draw_texture_rect_region(tex, Rect2(pos - size / 2.0, size), Rect2(i * 16, 0, 16, 16), tint)
+
+
+# ---------- Значки вмінь ----------
+const SkillIconIndex := preload("res://scripts/data/skill_icon_index.gd")
+static var _icon_tex := {}
+
+
+## Текстура значка вміння (для кнопок інтерфейсу); null, якщо значка нема.
+static func skill_icon_tex(id: String) -> Texture2D:
+	if not SkillIconIndex.INDEX.has(id):
+		return null
+	if not _icon_tex.has(id):
+		var base := sheet("skill_icons")
+		if base == null:
+			return null
+		var at := AtlasTexture.new()
+		at.atlas = base
+		var i: int = SkillIconIndex.INDEX[id]
+		var sz: int = SkillIconIndex.SIZE
+		at.region = Rect2((i % SkillIconIndex.COLS) * sz, (i / SkillIconIndex.COLS) * sz, sz, sz)
+		_icon_tex[id] = at
+	return _icon_tex[id]
+
+
+## Намалювати значок вміння з центром у pos, розміром size (пікселів).
+static func skill_icon(ci: CanvasItem, id: String, pos: Vector2, size: float, tint: Color = Color.WHITE) -> void:
+	var tex := skill_icon_tex(id)
+	if tex == null:
+		return
+	ci.draw_texture_rect(tex, Rect2(pos - Vector2(size, size) / 2.0, Vector2(size, size)), false, tint)

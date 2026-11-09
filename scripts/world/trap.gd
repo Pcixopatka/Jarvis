@@ -49,6 +49,7 @@ func _explode() -> void:
 	combat.fx.ring(global_position, Color(1.0, 0.55, 0.15), 36, blast * 2.0, 8, 0.4)
 	combat.fx.burst(global_position, Color(1.0, 0.5, 0.15), 30, 340, 8, 0.6, -80)
 	combat.fx.burst(global_position, Color(0.3, 0.3, 0.3, 0.8), 20, 200, 10, 1.0, -60)
+	combat.spawn_fx("fire", global_position, blast / 26.0, 0.0, Color.WHITE, 12.0)
 	combat.shake(10.0)
 	Audio.play("boom", 0.05, 0.0)
 	queue_free()
