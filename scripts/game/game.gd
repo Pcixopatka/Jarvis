@@ -14,6 +14,7 @@ const StoryService := preload("res://scripts/game/story_service.gd")
 const HeroService := preload("res://scripts/game/hero_service.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const TravelService := preload("res://scripts/game/travel_service.gd")
+const DefenseService := preload("res://scripts/game/defense_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -83,7 +84,9 @@ func _ready() -> void:
 	Events.companion_down.connect(_on_companion_down)
 	Events.field_cleared.connect(_on_location_cleared)
 	Events.dungeon_cleared.connect(_on_dungeon_cleared)
-	Events.exit_requested.connect(enter_map)
+	Events.exit_requested.connect(_on_exit)
+	Events.defense_won.connect(_on_defense_won)
+	Events.defense_lost.connect(_on_defense_lost)
 	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка «Козак» → вкладка «Спорядження»."))
 	Events.boss_spawned.connect(func(_e): hint("boss", "Бос! Червоні зони на землі — місця його удару. Виходь із них, поки вони не заповнились!"))
 	Events.hint.connect(hint)
@@ -113,7 +116,12 @@ func _combat_info() -> Dictionary:
 		return {}
 	var L: Dictionary = combat.loc
 	var sub := ""
-	if combat.is_dungeon():
+	if combat.is_defense():
+		var gp: int = roundi(100.0 * combat.gate.hp / combat.gate.max_hp) if combat.gate != null and is_instance_valid(combat.gate) else 0
+		sub = "Хвиля %d/%d  •  Брама %d%%" % [combat.wave, L["waves"], gp]
+		if combat.defense_over and combat.field_cleared:
+			sub = "Оборону виграно! Портал веде до брами"
+	elif combat.is_dungeon():
 		sub = "Кімната %d/%d" % [combat.room, L["rooms"]]
 	elif combat.field_cleared:
 		sub = "Очищено! Портал веде на мапу"
@@ -233,9 +241,14 @@ func enter_map() -> void:
 	mv.story_target = StoryService.target(world)
 	mv.plague = PlagueService.state(world)["levels"]
 	if from_trip:
+		var news := []
 		var spread := PlagueService.tick(world)
 		if not spread.is_empty():
-			hud.show_banner("Зараза повзе далі!\n" + ", ".join(spread), Color(0.6, 1.0, 0.35))
+			news.append("Зараза повзе далі: " + ", ".join(spread))
+		news.append_array(DefenseService.tick(world, player))
+		if not news.is_empty():
+			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
+	mv.sieges = DefenseService.state(world)["sieges"]
 	_build_map_panel()
 	save_game()
 	hint("map", "Торкнись місця на мапі. «!» позначає твоє завдання. Почни з Дикого Поля поруч із Січчю.")
@@ -425,6 +438,9 @@ func _on_level_up(lvl: int) -> void:
 
 
 func _on_player_died() -> void:
+	if combat.is_defense() and not combat.defense_over:
+		combat.defense_over = true
+		hud.show_banner(DefenseService.lose(world, player, combat.loc["target"]), UI.BAD)
 	state = State.DEAD
 	hud.set_mode(true, false)
 	hud.char_btn.visible = false
@@ -466,10 +482,53 @@ func _build_map_panel() -> void:
 func _go_to(id: String) -> void:
 	if id == Camp.CAMP_ID:
 		enter_camp()
+	elif DefenseService.is_besieged(world, id):
+		start_defense(id)
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
 		_travel_to(id)
+
+
+# ======================= Оборона =======================
+
+var defense_target := ""  # куди повернутися після виграної оборони
+
+
+## Бій біля брами обложеного міста чи хутора.
+func start_defense(target: String) -> void:
+	combat.defense_loc = DefenseService.battle_loc(world, target, player)
+	enter_location("defense")
+	map_here = target
+	hint("defense", "Облога! Нечисть іде хвилями й ламає браму внизу. Стань між ними та брамою — коли брама впаде, оборону програно.")
+
+
+func _on_defense_won(target: String) -> void:
+	defense_target = target
+	hud.show_banner(DefenseService.win(world, player, target), UI.GOLD)
+	save_game()
+
+
+func _on_defense_lost(target: String) -> void:
+	if not DefenseService.is_besieged(world, target):
+		return
+	hud.show_banner(DefenseService.lose(world, player, target), UI.BAD)
+	save_game()
+	await get_tree().create_timer(2.5).timeout
+	if state == State.PLAYING and combat.is_defense():
+		enter_map()
+
+
+## Портал виходу: після оборони — одразу в урятоване місто чи на хутір.
+func _on_exit() -> void:
+	var t := defense_target
+	defense_target = ""
+	if t == Camp.CAMP_ID:
+		enter_camp()
+	elif t != "":
+		enter_city(t)
+	else:
+		enter_map()
 
 
 ## Дорога до місцевості: іноді трапляється пригода, а вже потім — похід.

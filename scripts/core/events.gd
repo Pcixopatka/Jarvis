@@ -16,6 +16,8 @@ signal item_found(item: Dictionary)
 # Локації
 signal field_cleared(loc_id: String)
 signal dungeon_cleared(loc_id: String)
+signal defense_won(target: String)
+signal defense_lost(target: String)
 signal exit_requested  # гравець зайшов у портал виходу
 
 # Повідомлення для інтерфейсу

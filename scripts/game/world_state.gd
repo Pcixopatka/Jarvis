@@ -3,6 +3,7 @@ extends RefCounted
 
 const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
+const DefenseService := preload("res://scripts/game/defense_service.gd")
 
 var loyalty := {}  # місто -> очки
 var boards := {}  # місто -> доступні завдання
@@ -18,6 +19,7 @@ var story := {}  # стан сюжету (див. StoryService)
 var camp := {}  # хутір: будівлі, пасіка (див. CampService)
 var boosts := {}  # нагороди за рекламу: xp2 (секунди), safe_sharpen (жетони)
 var ads := {}  # денні ліміти реклами
+var defense := {}  # облоги міст і хутора (див. DefenseService)
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
 var heroes := {}  # побратими: зустріч, дружба, особисті завдання (див. HeroService)
@@ -42,7 +44,8 @@ func add_loyalty(city: String, v: int) -> bool:
 func discount(city: String) -> float:
 	# Лояльність міста + наслідки сюжетних виборів (напр. вдячний Чигирин)
 	var d: float = Data.LOYALTY_DISCOUNT[loyalty_level(city)]
-	return minf(0.6, d + StoryService.effect(self, "discount_" + city))
+	# Пограбоване після облоги місто — навпаки, дорожче
+	return clampf(d + StoryService.effect(self, "discount_" + city) - DefenseService.markup(self, city), -0.5, 0.6)
 
 
 # ---------- Завдання ----------
@@ -193,7 +196,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -212,3 +215,4 @@ func from_dict(d: Dictionary) -> void:
 	heroes = d.get("heroes", {})
 	plague = d.get("plague", {})
 	travel = d.get("travel", {})
+	defense = d.get("defense", {})

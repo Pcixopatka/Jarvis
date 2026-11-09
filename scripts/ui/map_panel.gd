@@ -7,6 +7,17 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 
 
+## Попередження про облогу (true — місто/хутір в облозі).
+static func _siege_note(v: Control, world, sel: String) -> bool:
+	var DS = load("res://scripts/game/defense_service.gd")
+	if DS.markup(world, sel) > 0.0:
+		v.add_child(_wrapped("Місто пограбоване після облоги — ціни вищі.", 16, UI.BAD))
+	if not DS.is_besieged(world, sel):
+		return false
+	v.add_child(_wrapped("ОБЛОГА! Заражені під брамою. Протримаються ще %d походи — далі впадуть." % DS.trips_left(world, sel), 18, UI.BAD))
+	return true
+
+
 ## on_go(id) викликається кнопкою «Вирушити» / «Увійти до міста».
 static func build(sel: String, world, player: Player, on_go: Callable, story_target: String = "", story_line: String = "") -> Control:
 	var v := VBoxContainer.new()
@@ -30,6 +41,9 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		var honey := CampService.pasika_ready(world, player.level)
 		if honey > 0:
 			v.add_child(UI.label("Пасіка: готово %d грн" % honey, 17, UI.GOOD, false))
+		if _siege_note(v, world, sel):
+			v.add_child(UI.button("На оборону хутора!", on_go.bind(sel), Vector2(350, 70), 24))
+			return v
 		v.add_child(UI.button("Увійти на хутір", on_go.bind(sel), Vector2(350, 70), 26))
 		return v
 	if Data.CITIES.has(sel):
@@ -44,6 +58,9 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 				done += 1
 		if done > 0:
 			v.add_child(UI.label("Можна здати завдань: %d" % done, 18, UI.GOOD, false))
+		if _siege_note(v, world, sel):
+			v.add_child(UI.button("На оборону міста!", on_go.bind(sel), Vector2(350, 70), 24))
+			return v
 		v.add_child(UI.button("Увійти до міста", on_go.bind(sel), Vector2(350, 70), 26))
 		return v
 	var L: Dictionary = Data.LOCATIONS[sel]

@@ -48,6 +48,7 @@ var affixes := []  # властивості еліти (див. Elites.AFFIXES)
 var title := ""  # ім'я еліти над головою
 var dmg_taken_mult := 1.0
 var base_scale := 1.0
+var rams_gate := false  # в обороні: іде просто на браму, поки козак не стане поперек дороги
 var blink_timer := 2.5  # чорт: телепорт до цілі
 var phase2 := false  # боси Кощій і Путіноїд лютішають на половині здоров'я
 
@@ -123,6 +124,10 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 
 ## Найближчий союзник (козак або супутник).
 func _pick_target():
+	if rams_gate and combat.gate != null and is_instance_valid(combat.gate) and combat.gate.alive:
+		var pl = combat.player
+		if not (pl.alive and global_position.distance_to(pl.global_position) < 110.0):
+			return combat.gate
 	var best = null
 	var best_d := INF
 	for a in combat.allies():
@@ -502,6 +507,8 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, r_draw * 1.1, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
+	if rams_gate:
+		draw_line(Vector2(-r_draw, -r_draw * 2.2), Vector2(r_draw, -r_draw * 2.2), Color(1.0, 0.4, 0.2, 0.8), 3.0)  # мітка тараньщика
 	if infected > 0:
 		var pulse := 0.5 + 0.5 * sin(phase * 1.3)
 		draw_circle(Vector2(0, -r_draw * 0.4), r_draw * (1.15 + 0.1 * pulse), Color(0.45, 0.85, 0.15, 0.07 + 0.05 * infected))

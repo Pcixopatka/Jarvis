@@ -17,6 +17,8 @@ const Elites := preload("res://scripts/data/elites.gd")
 const TelegraphScript := preload("res://scripts/world/telegraph.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
+const GateScript := preload("res://scripts/entities/gate.gd")
+const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
 const FxScript := preload("res://scripts/world/fx.gd")
 const AmbientScript := preload("res://scripts/world/ambient.gd")
@@ -50,7 +52,12 @@ var companion_nodes: Array = []
 
 var active := false
 var plague := 0  # рівень зарази поточної місцевості
-var boss_revives := 0  # скільки разів Кощій ще встане (поки голка ціла)
+var boss_revives := 0
+var defense_loc := {}  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
+var gate = null
+var wave := 0
+var wave_timer := 0.0
+var defense_over := false  # скільки разів Кощій ще встане (поки голка ціла)
 var plague_mods := {}
 var cloud_timer := 0.0
 var loc_id := ""
@@ -139,6 +146,9 @@ func set_visible_world(v: bool) -> void:
 ## companions — список {"type", "downed"} зі стану світу.
 func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	loc_id = id
+	if not Data.LOCATIONS.has(id):
+		enter_defense(defense_loc, companions)
+		return
 	plague = plague_level
 	plague_mods = PlagueService.mods(plague)
 	cloud_timer = 4.0
@@ -177,10 +187,97 @@ func is_dungeon() -> bool:
 	return loc.get("type", "") == "dungeon"
 
 
+func is_defense() -> bool:
+	return loc.get("type", "") == "defense"
+
+
+# ======================= Оборона =======================
+
+## Бій біля брами: хвилі нечисті йдуть згори, брама — внизу.
+func enter_defense(dl: Dictionary, companions: Array) -> void:
+	loc = dl
+	plague = 0
+	plague_mods = PlagueService.mods(0)
+	room = 0
+	wave = 0
+	wave_timer = 2.5
+	defense_over = false
+	field_cleared = false
+	player.unbreak_ready = true
+	_setup_arena(companions)
+	set_visible_world(true)
+	active = true
+	gate = GateScript.new()
+	gate.combat = self
+	gate.camp = dl.get("camp", false)
+	gate.max_hp = float(dl["gate_hp"])
+	gate.hp = gate.max_hp
+	gate.position = Vector2(0, arena.end.y - 170)
+	entities.add_child(gate)
+	Events.banner.emit(dl["name"] + "\nНе дай зламати браму!", Color(1.0, 0.6, 0.4))
+
+
+func _update_defense(delta: float) -> void:
+	if defense_over:
+		_check_exit_portal()
+		return
+	if alive_enemy_count() > 0:
+		return
+	if wave >= int(loc["waves"]):
+		_defense_complete()
+		return
+	wave_timer -= delta
+	if wave_timer > 0.0:
+		return
+	wave += 1
+	wave_timer = 3.0
+	_spawn_wave()
+
+
+func _spawn_wave() -> void:
+	var en: Array = loc["enemies"]
+	var lvl := int(loc["level"])
+	var last := wave == int(loc["waves"])
+	Events.banner.emit("Хвиля %d/%d%s" % [wave, loc["waves"], "\nВатажок!" if last else ""], Color(1.0, 0.7, 0.4))
+	Audio.play("roar", 0.1, -6.0)
+	for i in 4 + 2 * wave:
+		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 60, arena.position.y + 260))
+		spawn_enemy(en[randi() % en.size()], lvl, false, pos)
+		var e = _last_enemy()
+		e.rams_gate = i % 2 == 1  # половина нечисті одразу йде на браму
+		if wave >= 3 and i == 0:
+			e.make_elite(Elites.roll_affixes(lvl))
+	if last:
+		spawn_enemy(en[0], lvl, true, Vector2(0, arena.position.y + 140))
+
+
+func _defense_complete() -> void:
+	defense_over = true
+	field_cleared = true
+	Audio.play("quest", 0.0)
+	var pos: Vector2 = player.global_position + Vector2(0, -120)
+	for i in 6:
+		spawn_pickup(pos, "coin", int(loc["level"]) * 3)
+	spawn_pickup(pos, "item", 0, Data.gen_item(int(loc["level"]), Data.roll_rarity(int(loc["level"]), 1)))
+	_spawn_portal("До брами", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
+	Events.defense_won.emit(loc["target"])
+
+
+## Браму зламано — оборону програно.
+func on_gate_destroyed() -> void:
+	if defense_over:
+		return
+	defense_over = true
+	shake(16.0)
+	Audio.play("boom", 0.0)
+	fx.burst(gate.global_position, Color(0.5, 0.35, 0.2), 40, 320, 9, 0.8)
+	Events.defense_lost.emit(loc["target"])
+
+
 func _setup_arena(companions: Array) -> void:
 	_clear()
-	arena = DUNGEON_ARENA if is_dungeon() else FIELD_ARENA
-	player.position = Vector2(0, arena.end.y - 160) if is_dungeon() else Vector2.ZERO
+	arena = DUNGEON_ARENA if is_dungeon() else (DEFENSE_ARENA if is_defense() else FIELD_ARENA)
+	player.position = Vector2(0, arena.end.y - 160) if is_dungeon() else (Vector2(0, arena.end.y - 330) if is_defense() else Vector2.ZERO)
 	ground.setup(arena, loc["biome"], hash(loc_id) + room * 31)
 	_setup_atmosphere(loc["biome"])
 	camera.limit_left = int(arena.position.x - 120)
@@ -203,6 +300,7 @@ func _clear() -> void:
 	for c in effects.get_children():
 		c.queue_free()
 	portal = null
+	gate = null
 	fx.clear()
 
 
@@ -260,6 +358,8 @@ func _process(delta: float) -> void:
 	player.block_held = block_input.call()
 	if is_dungeon():
 		_update_dungeon()
+	elif is_defense():
+		_update_defense(delta)
 	else:
 		_update_field(delta)
 
@@ -414,7 +514,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 		hitstop(0.15)
 	else:
 		hitstop(0.03)
-	if not is_dungeon() and not field_cleared:
+	if not is_dungeon() and not is_defense() and not field_cleared:
 		field_kills += 1
 		if field_kills >= field_goal:
 			_field_complete()
@@ -507,6 +607,8 @@ func allies() -> Array:
 	for c in companion_nodes:
 		if is_instance_valid(c) and c.alive:
 			out.append(c)
+	if gate != null and is_instance_valid(gate) and gate.alive:
+		out.append(gate)
 	return out
 
 

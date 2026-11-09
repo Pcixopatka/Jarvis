@@ -18,6 +18,15 @@ static func level(world, id: String) -> int:
 	return int(state(world)["buildings"].get(id, 0))
 
 
+## Скільки будівель уже стоїть на хуторі.
+static func built_count(world) -> int:
+	var n := 0
+	for id in state(world)["buildings"]:
+		if int(state(world)["buildings"][id]) > 0:
+			n += 1
+	return n
+
+
 static func max_level(id: String) -> int:
 	return Camp.BUILDINGS[id]["levels"].size()
 

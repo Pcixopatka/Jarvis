@@ -44,8 +44,10 @@ func _run() -> void:
 	_suite_heroes()
 	_suite_plague()
 	_suite_travel()
+	_suite_defense_logic()
 	await _suite_gameplay()
 	await _suite_moves()
+	await _suite_defense_battle()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -596,6 +598,114 @@ func _suite_travel() -> void:
 	w2.from_dict(w.to_dict())
 	check(w2.travel.has("seen") and not w2.travel["seen"].is_empty(), "пригоди зберігаються")
 	p.free()
+
+
+func _suite_defense_logic() -> void:
+	suite("Оборона: облоги")
+	var DS = load("res://scripts/game/defense_service.gd")
+	var p = _new_player()
+	p.level = 6
+	var w = WorldState.new()
+	w.story = {"chapter": 0, "step": 0, "stage": "active", "progress": 0}
+	w.defense = {"sieges": {}, "ruined": {}, "won": 0, "lost": 0, "calm": 0}
+	var any := false
+	for i in 30:
+		if not DS.tick(w, p).is_empty():
+			any = true
+	check(not any and w.defense["sieges"].is_empty(), "у пролозі облог немає")
+	w.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	check(not DS.threatened(w, p).is_empty(), "міста поруч із заразою під загрозою: %s" % ", ".join(DS.threatened(w, p)))
+	seed(11)
+	var started := ""
+	for i in 60:
+		for m in DS.tick(w, p):
+			if "облягають" in m:
+				started = m
+		if not w.defense["sieges"].is_empty():
+			break
+	check(started != "" and w.defense["sieges"].size() == 1, "облога починається")
+	var target: String = w.defense["sieges"].keys()[0]
+	check(DS.is_besieged(w, target) and DS.trips_left(w, target) == DS.DEADLINE, "у міста є кілька походів на допомогу")
+	if target != "hutir":
+		var loy0: int = w.loyalty_points(target)
+		var g0: int = p.gold
+		DS.win(w, p, target)
+		check(not DS.is_besieged(w, target) and w.loyalty_points(target) == loy0 + 80 and p.gold > g0, "перемога: лояльність і гривні")
+	# Запізнення
+	w.defense["sieges"] = {"kyiv": 1}
+	w.loyalty["kyiv"] = 100
+	var price0: int = int(Data.potion_price(p.level) * (1.0 - w.discount("kyiv")))
+	var msgs = DS.tick(w, p)
+	check(not DS.is_besieged(w, "kyiv") and msgs.any(func(m): return "Не встиг" in m), "не встиг — місто падає")
+	check(w.loyalty_points("kyiv") == 40 and DS.markup(w, "kyiv") > 0.0, "пограбоване місто: лояльність −60")
+	check(int(Data.potion_price(p.level) * (1.0 - w.discount("kyiv"))) > price0, "після пограбування дорожче")
+	for i in DS.RUIN_TRIPS:
+		DS.tick(w, p)
+	check(DS.markup(w, "kyiv") == 0.0, "місто відбудовується")
+	p.resources = {"wood": 10, "iron": 10, "herbs": 10}
+	DS.lose(w, p, "hutir")
+	check(p.resources["wood"] == 7, "пограбований хутір утрачає запаси")
+	var bl = DS.battle_loc(w, "chyhyryn", p)
+	check(bl["type"] == "defense" and bl["level"] >= p.level - 1 and bl["waves"] == DS.WAVES, "бій-оборона під рівень козака")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.defense["lost"] == w.defense["lost"], "облоги зберігаються")
+	p.free()
+
+
+func _suite_defense_battle() -> void:
+	suite("Оборона: бій біля брами")
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	p.rank = "cossack"
+	p.stats["str"] = 60
+	p.stats["vit"] = 60
+	p.skills = {"whirl": 3, "lightning": 3}
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true}
+	game.world.defense = {"sieges": {"chyhyryn": 3}, "ruined": {}, "won": 0, "lost": 0, "calm": 3}
+	game.world.story = {"chapter": 1, "step": 3, "stage": "active", "progress": 0}
+	game._go_to("chyhyryn")
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null, "обложене місто — одразу бій біля брами")
+	var loy0: int = game.world.loyalty_points("chyhyryn")
+	var frames := 0
+	while not game.combat.defense_over and frames < 6000:
+		_bot_fight(game)
+		if game.combat.gate != null and is_instance_valid(game.combat.gate):
+			game.combat.gate.hp = game.combat.gate.max_hp  # тест про хвилі, а не про міцність
+		p.hp = p.max_hp
+		await process_frame
+		frames += 1
+	check(game.combat.defense_over and game.combat.wave == game.DefenseService.WAVES, "усі хвилі відбито (кадрів: %d)" % frames)
+	check(not game.DefenseService.is_besieged(game.world, "chyhyryn") and game.world.loyalty_points("chyhyryn") == loy0 + 80, "Чигирин відстояно")
+	frames = 0
+	while game.state == game.State.PLAYING and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and game.city_id == "chyhyryn", "з порталу — просто в урятоване місто")
+	game.hud.close_dialogue()
+	# Поразка: браму зламано
+	game.world.defense["sieges"]["kyiv"] = 2
+	game._go_to("kyiv")
+	await _frames(2)
+	game.combat.gate.take_damage(game.combat.gate.max_hp * 2.0)
+	await _frames(2)
+	check(not game.DefenseService.is_besieged(game.world, "kyiv") and game.DefenseService.markup(game.world, "kyiv") > 0.0, "браму зламано — Київ пограбовано")
+	await create_timer(2.8).timeout
+	check(game.state == game.State.MAP, "після поразки — на мапу")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
 
 
 func _suite_camp() -> void:

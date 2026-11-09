@@ -110,6 +110,7 @@ var current := ""  # де зараз козак
 var targets := {}  # місцевості з активними завданнями
 var story_target := ""  # куди веде сюжет (зірка)
 var plague := {}  # id місцевості -> рівень зарази (0..3)
+var sieges := {}  # місто/хутір -> походів до падіння (облога)
 var hero_level := 1
 var map_rect := Rect2()  # область для мапи на екрані
 var zoom := 1.6
@@ -374,6 +375,13 @@ func _draw() -> void:
 			var c: Vector2 = _markers[id] + Vector2(16, -22) * k
 			draw_circle(c, 10 * k, Color(1.0, 0.8, 0.1))
 			_text(font, c + Vector2(0, 6 * k), "!", int(18 * k), Color(0.2, 0.1, 0.0), false)
+	# Облоги: червоне пульсуюче кільце й напис
+	for id in sieges:
+		if _markers.has(id):
+			var sc: Vector2 = _markers[id]
+			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 200.0)
+			draw_arc(sc, (24.0 + 6.0 * pulse) * k, 0.0, TAU, 32, Color(1.0, 0.25, 0.15, 0.6 + 0.4 * pulse), 4.0 * k)
+			_text(font, sc + Vector2(0, -30 * k), "Облога! (%d)" % int(sieges[id]), int(clampf(16.0 * k, 12, 26)), Color(1.0, 0.45, 0.35))
 	# Сюжет — пульсуюча зірка
 	if _markers.has(story_target):
 		var sc: Vector2 = _markers[story_target] + Vector2(-18, -26) * k
