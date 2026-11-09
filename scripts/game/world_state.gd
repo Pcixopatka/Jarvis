@@ -2,6 +2,7 @@ extends RefCounted
 ## Стан світу: лояльність міст, дошки завдань, активні завдання, загін, крамниці.
 
 const Data := preload("res://scripts/data/data.gd")
+const StoryService := preload("res://scripts/game/story_service.gd")
 
 var loyalty := {}  # місто -> очки
 var boards := {}  # місто -> доступні завдання
@@ -36,7 +37,9 @@ func add_loyalty(city: String, v: int) -> bool:
 
 
 func discount(city: String) -> float:
-	return Data.LOYALTY_DISCOUNT[loyalty_level(city)]
+	# Лояльність міста + наслідки сюжетних виборів (напр. вдячний Чигирин)
+	var d: float = Data.LOYALTY_DISCOUNT[loyalty_level(city)]
+	return minf(0.6, d + StoryService.effect(self, "discount_" + city))
 
 
 # ---------- Завдання ----------

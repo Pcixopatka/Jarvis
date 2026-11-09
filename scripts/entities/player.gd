@@ -31,6 +31,7 @@ var bag_bonus := 0  # від складу на хуторі (не зберіга
 var potion_bonus := 0  # від зілляварні
 var xp_boost := 1.0  # ×2 за рекламу (виставляє Game, поки діє)
 var plague_immune := false
+var plague_resist := 0.0  # частка шкоди від зарази, яку козак не отримує (наслідок вибору; не зберігається)
 var inventory := []  # речі в торбі
 var equipment := {}  # слот -> річ
 var next_uid := 1

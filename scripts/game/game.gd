@@ -310,6 +310,7 @@ func _story_dialogue(city: String) -> void:
 	dlg.finished.connect(func(choice: int):
 		hud.close_dialogue()
 		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice)
+		CampService.apply_effects(world, player)  # вибір міг дати постійний наслідок
 		var texts := []
 		for m in msgs:
 			texts.append(m["text"])

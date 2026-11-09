@@ -5,6 +5,7 @@ extends RefCounted
 
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Data := preload("res://scripts/data/data.gd")
+const StoryService := preload("res://scripts/game/story_service.gd")
 
 
 static func state(world) -> Dictionary:
@@ -79,10 +80,11 @@ static func forge_chance_bonus(world) -> float:
 	return 0.1 if level(world, "kuznia") >= 3 else 0.0
 
 
-## Застосовує пасивні бонуси будівель до героя (торба, зілля).
+## Застосовує пасивні бонуси будівель і наслідки сюжетних виборів до героя.
 static func apply_effects(world, player) -> void:
 	player.bag_bonus = bag_bonus(world)
-	player.potion_bonus = potion_bonus(world)
+	player.potion_bonus = potion_bonus(world) + int(StoryService.effect(world, "potion_max"))
+	player.plague_resist = clampf(StoryService.effect(world, "plague_resist"), 0.0, 0.9)
 
 
 # ---------- Пасіка ----------

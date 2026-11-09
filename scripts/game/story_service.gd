@@ -44,7 +44,66 @@ static func _count(st: Dictionary) -> int:
 
 ## Вступна розповідь поточного кроку (пролог): показується на початку нової гри.
 static func intro(world) -> Array:
-	return current(world).get("intro", [])
+	return lines(world, current(world).get("intro", []))
+
+
+## Чи гравець колись обрав такий варіант. cond: "id_кроку=номер_вибору".
+static func chose(world, cond: String) -> bool:
+	var parts := cond.split("=")
+	if parts.size() != 2:
+		return false
+	return int(world.story.get("choices", {}).get(parts[0], -1)) == int(parts[1])
+
+
+## Репліки, які має почути саме цей гравець (з урахуванням його минулих виборів).
+static func lines(world, src: Array) -> Array:
+	var out := []
+	for l in src:
+		if l.size() < 3 or chose(world, l[2]):
+			out.append([l[0], l[1]])
+	return out
+
+
+static func _find_step(id: String) -> Dictionary:
+	for ch in Story.CHAPTERS:
+		for st in ch["steps"]:
+			if st["id"] == id:
+				return st
+	return {}
+
+
+## Постійні наслідки всіх зроблених виборів: {"discount_kyiv": 0.2, "potion_max": 1, ...}.
+static func effects(world) -> Dictionary:
+	var out := {}
+	var made: Dictionary = world.story.get("choices", {})
+	for id in made:
+		var choices: Array = _find_step(id).get("choices", [])
+		var ci := int(made[id])
+		if ci < 0 or ci >= choices.size():
+			continue
+		var eff: Dictionary = choices[ci].get("effects", {})
+		for k in eff:
+			out[k] = out.get(k, 0.0) + float(eff[k])
+	return out
+
+
+static func effect(world, key: String) -> float:
+	return float(effects(world).get(key, 0.0))
+
+
+## «Літопис»: записи про зроблені вибори в порядку сюжету.
+static func chronicle(world) -> Array:
+	var out := []
+	var made: Dictionary = world.story.get("choices", {})
+	for ch in Story.CHAPTERS:
+		for st in ch["steps"]:
+			if not made.has(st["id"]):
+				continue
+			var choices: Array = st.get("choices", [])
+			var ci := int(made[st["id"]])
+			if ci >= 0 and ci < choices.size():
+				out.append({"chapter": ch["title"], "text": choices[ci].get("memo", choices[ci]["text"])})
+	return out
 
 
 ## Що сказати в цьому місті: {"kind": "start"/"end", "lines", "choices"} або {}.
@@ -54,9 +113,9 @@ static func city_dialogue(world, city: String) -> Dictionary:
 	if st.is_empty():
 		return {}
 	if s["stage"] == "offer" and st["city"] == city:
-		return {"kind": "start", "lines": st["start"], "choices": []}
+		return {"kind": "start", "lines": lines(world, st["start"]), "choices": []}
 	if s["stage"] == "turnin" and st["turn_in"] == city:
-		return {"kind": "end", "lines": st["end"], "choices": st.get("choices", [])}
+		return {"kind": "end", "lines": lines(world, st["end"]), "choices": st.get("choices", [])}
 	return {}
 
 
@@ -117,6 +176,9 @@ static func _complete(world, player, choice: int) -> Array:
 		_apply_reward(world, player, choices[choice].get("reward", {}), msgs)
 		world.story["choices"] = world.story.get("choices", {})
 		world.story["choices"][st["id"]] = choice
+	for b in st.get("bonus", []):
+		if chose(world, b["if"]):
+			_apply_reward(world, player, b["reward"], msgs)
 	_advance(world, msgs)
 	return msgs
 
@@ -144,6 +206,10 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 	if r.has("skills"):
 		for id in r["skills"]:
 			player.skills[id] = maxi(player.sk(id), int(r["skills"][id]))
+	if r.has("stats"):
+		for id in r["stats"]:
+			player.stats[id] = int(player.stats.get(id, 0)) + int(r["stats"][id])
+		player.recalc()
 	if r.has("gold"):
 		player.gold += int(r["gold"])
 	if r.has("xp"):

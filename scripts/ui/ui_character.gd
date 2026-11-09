@@ -17,6 +17,7 @@ static func build(game) -> Control:
 		["Спорядження", _gear(game)],
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Перки" + _pts(p.perk_points), _perks(game)],
+		["Літопис", _chronicle(game)],
 	]
 	return UI.screen("Козак — рівень %d   •   Гривні: %d" % [p.level, p.gold], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i)
@@ -78,6 +79,32 @@ static func _stats(game) -> Control:
 		row.add_child(UI.label(l[1], 19, UI.TEXT, false))
 		right.add_child(row)
 	return h
+
+
+# ---------------- Літопис ----------------
+
+static func _chronicle(game) -> Control:
+	var SS = game.StoryService
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var title: String = SS.chapter_title(game.world)
+	v.add_child(UI.label(title if title != "" else "Сюжет пройдено", 26, UI.GOLD, false))
+	var obj: String = SS.objective_line(game.world)
+	if obj != "":
+		v.add_child(UI.label(obj, 20, UI.TEXT, false))
+	v.add_child(UI.label("Твої вибори та їхні наслідки", 24, UI.GOLD, false))
+	var rec: Array = SS.chronicle(game.world)
+	if rec.is_empty():
+		v.add_child(UI.label("Поки що доля ще не ставила тебе перед вибором.", 19, UI.MUTED, false))
+	var last := ""
+	for r in rec:
+		if r["chapter"] != last:
+			last = r["chapter"]
+			v.add_child(UI.label(last, 18, UI.MUTED, false))
+		var l := UI.label("•  " + r["text"], 20, UI.TEXT, false)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+	return v
 
 
 # ---------------- Спорядження ----------------

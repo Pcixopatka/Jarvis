@@ -21,7 +21,8 @@ func _process(delta: float) -> void:
 			if a.get("plague_immune") == true:
 				continue
 			if a.global_position.distance_to(global_position) < radius + a.radius:
-				a.take_damage(dps * 0.5, null)
+				var resist = a.get("plague_resist")
+				a.take_damage(dps * 0.5 * (1.0 - (resist if resist != null else 0.0)), null)
 	queue_redraw()
 
 
