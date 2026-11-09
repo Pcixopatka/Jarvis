@@ -4,6 +4,7 @@ extends RefCounted
 
 const Data := preload("res://scripts/data/data.gd")
 const Party := preload("res://scripts/game/party.gd")
+const CampService := preload("res://scripts/game/camp_service.gd")
 
 const SHOP_SIZE := 6
 const BUY_MARKUP := 4.0
@@ -34,8 +35,12 @@ static func can_hire(world, player: Player, city: String, type: String) -> bool:
 	var info: Dictionary = Data.COMPANIONS[type]
 	return world.loyalty_level(city) >= info["loyalty"] \
 		and player.gold >= hire_price(world, player, city, type) \
-		and world.companions.size() < Data.MAX_COMPANIONS \
+		and world.companions.size() < party_size(world) \
 		and not world.has_companion(type)
+
+
+static func party_size(world) -> int:
+	return CampService.party_size(world)
 
 
 static func buy(world, player: Player, city: String, uid: int) -> bool:
@@ -83,7 +88,7 @@ static func potion_price(world, player: Player, city: String) -> int:
 
 static func buy_potion(world, player: Player, city: String) -> bool:
 	var price := potion_price(world, player, city)
-	if player.gold < price or player.potions >= Data.POTION_MAX:
+	if player.gold < price or player.potions >= player.potion_max():
 		return false
 	player.gold -= price
 	player.potions += 1

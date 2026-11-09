@@ -24,6 +24,12 @@ var perk_points := 0
 var gold := 0
 var potions := Data.POTION_START
 var potion_timer := 0.0
+var resources := {"wood": 0, "iron": 0, "herbs": 0}  # для будівництва хутора
+var trip_buffs := {}  # зілля, випите перед походом: "strength", "antiplague"
+var bag_bonus := 0  # від складу на хуторі (не зберігається — рахується з будівель)
+var potion_bonus := 0  # від зілляварні
+var xp_boost := 1.0  # ×2 за рекламу (виставляє Game, поки діє)
+var plague_immune := false
 var inventory := []  # речі в торбі
 var equipment := {}  # слот -> річ
 var next_uid := 1
@@ -114,8 +120,16 @@ func is_equipped(uid: int) -> bool:
 	return false
 
 
+func bag_size() -> int:
+	return Data.INVENTORY_SIZE + bag_bonus
+
+
 func bag_full() -> bool:
-	return inventory.size() >= Data.INVENTORY_SIZE
+	return inventory.size() >= bag_size()
+
+
+func potion_max() -> int:
+	return Data.POTION_MAX + potion_bonus
 
 
 ## Додає річ у торбу. Повертає false, якщо місця немає.
@@ -168,22 +182,23 @@ func add_gold(v: int) -> void:
 
 
 ## Заточка: повертає "ok", "fail", "down", "nogold" або "max".
-func sharpen(uid: int) -> String:
+## cost_mult/chance_bonus — бонуси кузні хутора; safe — безпечна заточка (рівень не падає).
+func sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0, safe: bool = false) -> String:
 	var it := find_item(uid)
 	if it.is_empty():
 		return "fail"
 	if it["up"] >= Data.MAX_UPGRADE:
 		return "max"
-	var cost := Data.sharpen_cost(it)
+	var cost := int(Data.sharpen_cost(it) * cost_mult)
 	if gold < cost:
 		return "nogold"
 	gold -= cost
 	it["spent"] += cost
 	var res := "fail"
-	if randf() < Data.sharpen_chance(it):
+	if randf() < minf(1.0, Data.sharpen_chance(it) + chance_bonus):
 		it["up"] += 1
 		res = "ok"
-	elif it["up"] >= Data.SHARPEN_RISK_FROM:
+	elif it["up"] >= Data.SHARPEN_RISK_FROM and not safe:
 		it["up"] -= 1
 		res = "down"
 	recalc()
@@ -209,7 +224,8 @@ func eq(id: String) -> float:
 func to_dict() -> Dictionary:
 	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
-		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions}
+		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions,
+		"resources": resources, "trip_buffs": trip_buffs}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -261,6 +277,9 @@ func recalc() -> void:
 	var s_spi := _bonus("spi")
 
 	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_str + 0.08 * pk("sharp") + eq("dmg_pct") / 100.0)
+	if trip_buffs.has("strength"):
+		damage *= 1.3
+	plague_immune = trip_buffs.has("antiplague")
 	attack_range = 95.0 * weapon["range"] * (1.0 + 0.08 * pk("reach"))
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + eq("aspd") / 100.0)
@@ -350,7 +369,7 @@ func learn_perk(id: String) -> bool:
 
 
 func add_xp(value: int) -> void:
-	xp += maxi(value, roundi(value * xp_mult))
+	xp += maxi(value, roundi(value * xp_mult * xp_boost))
 	while xp >= xp_next:
 		xp -= xp_next
 		level += 1
@@ -477,7 +496,7 @@ func use_potion() -> bool:
 
 
 func add_potion() -> bool:
-	if potions >= Data.POTION_MAX:
+	if potions >= potion_max():
 		return false
 	potions += 1
 	return true
@@ -627,6 +646,8 @@ func take_damage(amount: float, source = null) -> void:
 	if source != null and thorns > 0.0 and not source.dead:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
+	if trip_buffs.has("antiplague"):
+		amount *= 0.8
 	hp -= amount
 	hurt_flash = 0.2
 	invuln = 0.35

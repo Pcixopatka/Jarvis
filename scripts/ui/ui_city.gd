@@ -110,13 +110,13 @@ static func _shop(game, city: String) -> Control:
 	h.add_child(left)
 
 	var pprice: int = game.CityService.potion_price(game.world, p, city)
-	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, Data.POTION_MAX], 20, UI.TEXT, false))
+	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, p.potion_max()], 20, UI.TEXT, false))
 	left.add_child(UI.label("Лікує %d%% здоров'я в бою" % roundi(Data.POTION_HEAL * 100), 15, UI.MUTED, false))
-	left.add_child(UI.button("Купити зілля • %d грн" % pprice, _do(game, "buy_potion"), Vector2(306, 56), 18, p.gold >= pprice and p.potions < Data.POTION_MAX))
+	left.add_child(UI.button("Купити зілля • %d грн" % pprice, _do(game, "buy_potion"), Vector2(306, 56), 18, p.gold >= pprice and p.potions < p.potion_max()))
 
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
-	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), Data.INVENTORY_SIZE], 22, UI.GOLD, false))
+	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
 		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d грн" % Data.sell_price(it)))
@@ -175,6 +175,9 @@ static func _smith(game) -> Control:
 	det.add_theme_constant_override("separation", 8)
 	h.add_child(det)
 	det.add_child(UI.label("Заточка робить усі бонуси речі сильнішими\n(+%d%% за рівень, максимум +%d).\nЗ +%d невдача знижує заточку на 1." % [roundi(Data.UPGRADE_BONUS * 100), Data.MAX_UPGRADE, Data.SHARPEN_RISK_FROM], 16, UI.MUTED, false))
+	var safe_n: int = game.AdRewards.safe_tokens(game.world)
+	det.add_child(UI.label("Безпечних заточок: %d" % safe_n, 16, UI.TEXT, false))
+	det.add_child(UI.button("Реклама: +1 безпечна заточка (сьогодні ще %d)" % game.AdRewards.safe_left_today(game.world), _do(game, "ad_safe"), Vector2(360, 52), 15, game.AdRewards.safe_left_today(game.world) > 0))
 	var it: Dictionary = p.find_item(sel) if sel > 0 else {}
 	if it.is_empty():
 		det.add_child(UI.label("Обери річ для заточки.", 20, UI.MUTED, false))
@@ -185,7 +188,9 @@ static func _smith(game) -> Control:
 	else:
 		var cost := Data.sharpen_cost(it)
 		var chance := Data.sharpen_chance(it)
-		var risk := "  ризик -1" if it["up"] >= Data.SHARPEN_RISK_FROM else ""
+		var risk := ""
+		if it["up"] >= Data.SHARPEN_RISK_FROM:
+			risk = "  без ризику" if safe_n > 0 else "  ризик -1"
 		det.add_child(UI.button("Заточити до +%d\n%d грн • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(340, 80), 20, p.gold >= cost))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 22, game.smith_msg_color, false))
@@ -199,7 +204,7 @@ static func _tavern(game, city: String) -> Control:
 	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	v.add_child(UI.label("Твій загін (%d/%d). Поранені супутники одужують у будь-якому місті." % [w.companions.size(), Data.MAX_COMPANIONS], 22, UI.GOLD, false))
+	v.add_child(UI.label("Твій загін (%d/%d). Поранені супутники одужують у будь-якому місті." % [w.companions.size(), game.CityService.party_size(w)], 22, UI.GOLD, false))
 	v.add_child(UI.label("Супутники отримують досвід за кожного ворога, вбитого в поході, і ростуть до рівня козака.", 16, UI.MUTED, false))
 	if w.companions.is_empty():
 		v.add_child(UI.label("Поки що ти сам.", 18, UI.MUTED, false))
@@ -231,7 +236,7 @@ static func _tavern(game, city: String) -> Control:
 			col.add_child(UI.label("Потрібна лояльність міста: %s" % Data.LOYALTY_NAMES[need], 16, UI.BAD, false))
 		row.add_child(col)
 		var price: int = game.hire_price(city, type)
-		var ok: bool = lvl >= need and p.gold >= price and w.companions.size() < Data.MAX_COMPANIONS and not w.has_companion(type)
+		var ok: bool = lvl >= need and p.gold >= price and w.companions.size() < game.CityService.party_size(w) and not w.has_companion(type)
 		row.add_child(UI.button("Найняти\n%d грн" % price, _do(game, "hire", type), Vector2(190, 70), 18, ok))
 		v.add_child(row)
 	return v

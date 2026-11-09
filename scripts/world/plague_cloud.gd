@@ -18,6 +18,8 @@ func _process(delta: float) -> void:
 	if _tick <= 0.0:
 		_tick = 0.5
 		for a in combat.allies():
+			if a.get("plague_immune") == true:
+				continue
 			if a.global_position.distance_to(global_position) < radius + a.radius:
 				a.take_damage(dps * 0.5, null)
 	queue_redraw()

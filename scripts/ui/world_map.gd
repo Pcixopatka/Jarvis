@@ -5,6 +5,7 @@ extends Control
 signal location_selected(id: String)
 
 const Data := preload("res://scripts/data/data.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
 
 # Спрощений контур України (довгота, широта), за годинниковою стрілкою.
 const BORDER := [
@@ -342,6 +343,17 @@ func _draw() -> void:
 		draw_rect(Rect2(c + Vector2(-13, -8) * k, Vector2(26, 16) * k), Color(0.95, 0.8, 0.3), false, 2.0)
 		draw_rect(Rect2(c + Vector2(-3, 0) * k, Vector2(6, 8) * k), Color(0.2, 0.1, 0.05))
 		_text(font, c + Vector2(0, 12 * k + city_fs), C["name"], city_fs, Color(1.0, 0.9, 0.55))
+
+	# Хутір козака
+	var hc := _proj(Camp.CAMP["pos"])
+	_markers[Camp.CAMP_ID] = hc
+	draw_colored_polygon(PackedVector2Array([hc + Vector2(-14, 0) * k, hc + Vector2(0, -14) * k, hc + Vector2(14, 0) * k]), Color(0.7, 0.55, 0.25))
+	draw_rect(Rect2(hc + Vector2(-11, 0) * k, Vector2(22, 12) * k), Color(0.95, 0.92, 0.82))
+	draw_rect(Rect2(hc + Vector2(-3, 4) * k, Vector2(6, 8) * k), Color(0.35, 0.22, 0.1))
+	draw_line(hc + Vector2(10, -6) * k, hc + Vector2(10, -24) * k, Color(0.3, 0.2, 0.1), 2.0)
+	draw_colored_polygon(PackedVector2Array([hc + Vector2(10, -24) * k, hc + Vector2(22, -21) * k, hc + Vector2(10, -18) * k]), Color(0.15, 0.35, 0.8))
+	draw_colored_polygon(PackedVector2Array([hc + Vector2(10, -21) * k, hc + Vector2(22, -21) * k, hc + Vector2(10, -18) * k]), Color(1.0, 0.85, 0.1))
+	_text(font, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.75, 1.0, 0.7))
 
 	# Завдання
 	for id in targets:

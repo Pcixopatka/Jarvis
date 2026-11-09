@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 5
+const SAVE_VERSION := 6
 const Data := preload("res://scripts/data/data.gd")
 const SAVE_PATH := "user://hero.save"
 const SETTINGS_PATH := "user://settings.cfg"
@@ -87,6 +87,16 @@ static func migrate(d: Dictionary) -> Dictionary:
 		if not d["world"].has("story"):
 			d["world"]["story"] = {}
 		v = 5
+	if v == 5:
+		# v6: хутір, ресурси, нагороди за рекламу
+		var w6: Dictionary = d["world"]
+		for k in ["camp", "boosts", "ads"]:
+			if not w6.has(k):
+				w6[k] = {}
+		var p6: Dictionary = d["player"]
+		if not p6.has("resources"):
+			p6["resources"] = {"wood": 0, "iron": 0, "herbs": 0}
+		v = 6
 	d["version"] = v
 	return d
 

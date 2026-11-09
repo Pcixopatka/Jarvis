@@ -4,6 +4,7 @@ extends Node2D
 
 const Data := preload("res://scripts/data/data.gd")
 const Party := preload("res://scripts/game/party.gd")
+const OFFSETS := [Vector2(-70, 40), Vector2(70, 40), Vector2(-60, -55), Vector2(60, -55)]  # строй загону
 
 var combat: Combat
 var type := "dzhura"
@@ -52,7 +53,7 @@ func _process(delta: float) -> void:
 	swing = maxf(0.0, swing - delta)
 	var p = combat.player
 	var target: Node2D = combat.nearest_enemy(global_position, 450.0)
-	var dest: Vector2 = p.global_position + Vector2(-70 if index == 0 else 70, 40)
+	var dest: Vector2 = p.global_position + OFFSETS[index % OFFSETS.size()]
 	var reach: float = info["range"]
 
 	if target and p.global_position.distance_to(target.global_position) < 500.0:

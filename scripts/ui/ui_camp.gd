@@ -1,0 +1,174 @@
+extends RefCounted
+## Екран хутора: будівлі, кузня, зілляварня, пасіка. Дії йдуть через game.camp_do(дія, аргумент).
+
+const Data := preload("res://scripts/data/data.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
+const UI := preload("res://scripts/ui/ui_kit.gd")
+const CampService := preload("res://scripts/game/camp_service.gd")
+const AdRewards := preload("res://scripts/game/ad_rewards.gd")
+
+
+static func _do(game, action: String, arg = null) -> Callable:
+	return game.camp_do.bind(action, arg)
+
+
+static func resources_text(p) -> String:
+	return "Гривні: %d  •  Дерево: %d  •  Залізо: %d  •  Трави: %d" % [p.gold, p.resources.get("wood", 0), p.resources.get("iron", 0), p.resources.get("herbs", 0)]
+
+
+static func build(game) -> Control:
+	var w = game.world
+	var pages := [["Будівлі", _buildings(game)]]
+	if CampService.level(w, "kuznia") >= 1:
+		pages.append(["Кузня", _forge(game)])
+	if CampService.level(w, "zillia") >= 1:
+		pages.append(["Зілляварня", _brewery(game)])
+	if CampService.level(w, "pasika") >= 1:
+		pages.append(["Пасіка", _pasika(game)])
+	var pts: int = game.player.unspent_points()
+	return UI.screen("Козацький хутір  •  " + resources_text(game.player), "На мапу", game.leave_camp,
+		pages, game.camp_tab, func(i: int): game.camp_tab = i,
+		[["Козак" + ((" +%d" % pts) if pts > 0 else ""), game.open_character]])
+
+
+static func _cost_text(cost: Dictionary) -> String:
+	var parts := ["%d грн" % cost["gold"]]
+	for r in Camp.RESOURCES:
+		if int(cost.get(r, 0)) > 0:
+			parts.append("%s %d" % [Camp.RESOURCES[r], cost[r]])
+	return ", ".join(parts)
+
+
+static func _buildings(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(UI.label("Козак і загін відпочили. Ресурси (дерево, залізо, трави) падають з ворогів у місцевостях.", 17, UI.MUTED, false))
+	_ad_row(game, v)
+	for id in Camp.BUILD_ORDER:
+		var b: Dictionary = Camp.BUILDINGS[id]
+		var lvl := CampService.level(w, id)
+		var mx := CampService.max_level(id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(UI.label("%s — рівень %d/%d" % [b["name"], lvl, mx], 22, UI.GOLD if lvl > 0 else UI.TEXT, false))
+		info.add_child(UI.label(b["desc"], 15, UI.MUTED, false))
+		for i in mx:
+			var done := i < lvl
+			info.add_child(UI.label(("✓ " if done else "• ") + b["levels"][i]["text"], 16, UI.GOOD if done else UI.MUTED, false))
+		row.add_child(info)
+		var cost := CampService.next_cost(w, id)
+		if cost.is_empty():
+			row.add_child(UI.button("Збудовано", func(): pass, Vector2(260, 64), 18, false))
+		else:
+			var txt := ("Збудувати" if lvl == 0 else "Покращити") + "\n" + _cost_text(cost)
+			row.add_child(UI.button(txt, _do(game, "build", id), Vector2(260, 80), 15, CampService.can_afford(p, cost)))
+		v.add_child(row)
+	return v
+
+
+static func _ad_row(game, v: VBoxContainer) -> void:
+	var w = game.world
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var left := AdRewards.xp2_left(w)
+	var l := UI.label(("×2 досвіду діє ще: %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 18, UI.GOLD, false)
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	row.add_child(UI.button("Переглянути рекламу", _do(game, "ad_xp2"), Vector2(260, 56), 17, AdRewards.can_xp2(w)))
+	v.add_child(row)
+
+
+# ---------- Кузня ----------
+
+static func _forge(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 18)
+	var sel: int = game.camp_sel_uid
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 6)
+	list.add_child(UI.label("Вдягнуте", 22, UI.GOLD, false))
+	var eg := UI.grid(3)
+	for slot in Data.SLOTS:
+		if p.equipment.has(slot):
+			var it: Dictionary = p.equipment[slot]
+			eg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
+	list.add_child(eg)
+	list.add_child(UI.label("Торба", 22, UI.GOLD, false))
+	var bg := UI.grid(3)
+	for it in p.inventory:
+		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
+	list.add_child(bg)
+	h.add_child(list)
+
+	var det := VBoxContainer.new()
+	det.custom_minimum_size = Vector2(380, 0)
+	det.add_theme_constant_override("separation", 8)
+	h.add_child(det)
+	var bonus := "Своя кузня: заточка на %d%% дешевше" % roundi((1.0 - CampService.forge_cost_mult(w)) * 100)
+	if CampService.forge_chance_bonus(w) > 0.0:
+		bonus += ", шанс +%d%%" % roundi(CampService.forge_chance_bonus(w) * 100)
+	det.add_child(UI.label(bonus, 16, UI.GOOD, false))
+	det.add_child(UI.label("Безпечних заточок: %d (рівень не падає при невдачі)" % AdRewards.safe_tokens(w), 16, UI.TEXT, false))
+	det.add_child(UI.button("Реклама: +1 безпечна заточка (сьогодні ще %d)" % AdRewards.safe_left_today(w), _do(game, "ad_safe"), Vector2(370, 52), 15, AdRewards.safe_left_today(w) > 0))
+	var it: Dictionary = p.find_item(sel) if sel > 0 else {}
+	if it.is_empty():
+		det.add_child(UI.label("Обери річ.", 20, UI.MUTED, false))
+		return h
+	det.add_child(UI.item_card(it))
+	if it["up"] < Data.MAX_UPGRADE:
+		var cost := int(Data.sharpen_cost(it) * CampService.forge_cost_mult(w))
+		var chance := minf(1.0, Data.sharpen_chance(it) + CampService.forge_chance_bonus(w))
+		var risk := ""
+		if it["up"] >= Data.SHARPEN_RISK_FROM:
+			risk = "  без ризику" if AdRewards.safe_tokens(w) > 0 else "  ризик -1"
+		det.add_child(UI.button("Заточити до +%d\n%d грн • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(370, 80), 19, p.gold >= cost))
+	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
+		det.add_child(UI.button("Переплавити на залізо (+%d)" % CampService.salvage_value(it), _do(game, "salvage", sel), Vector2(370, 56), 18))
+	if game.smith_msg != "":
+		det.add_child(UI.label(game.smith_msg, 20, game.smith_msg_color, false))
+	return h
+
+
+# ---------- Зілляварня ----------
+
+static func _brewery(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	v.add_child(UI.label("Трави: %d  •  Залізо: %d  •  Зілля здоров'я: %d/%d" % [p.resources.get("herbs", 0), p.resources.get("iron", 0), p.potions, p.potion_max()], 20, UI.TEXT, false))
+	v.add_child(UI.label("Зілля «на похід» випивається одразу й діє до кінця наступного походу.", 16, UI.MUTED, false))
+	for id in Camp.BREW:
+		var r: Dictionary = Camp.BREW[id]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var locked: bool = CampService.level(w, "zillia") < int(r["level"])
+		info.add_child(UI.label(r["name"] + ("  (діє на наступний похід)" if p.trip_buffs.has(id) else ""), 21, UI.GOOD if p.trip_buffs.has(id) else UI.TEXT, false))
+		info.add_child(UI.label(r["desc"] + ("  •  потрібна зілляварня %d рівня" % r["level"] if locked else ""), 15, UI.BAD if locked else UI.MUTED, false))
+		row.add_child(info)
+		var cost := "трави %d" % r["herbs"] + ((", залізо %d" % r["iron"]) if int(r["iron"]) > 0 else "")
+		row.add_child(UI.button("Зварити\n" + cost, _do(game, "brew", id), Vector2(220, 70), 17, CampService.can_brew(w, p, id)))
+		v.add_child(row)
+	return v
+
+
+# ---------- Пасіка ----------
+
+static func _pasika(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	var ready := CampService.pasika_ready(w, p.level)
+	v.add_child(UI.label("Пасіка %d рівня: %d грн на годину (накопичується до %d годин, навіть коли гра закрита)" % [CampService.level(w, "pasika"), roundi(CampService.pasika_rate(w, p.level)), roundi(Camp.PASIKA_CAP_HOURS)], 19, UI.TEXT, false))
+	v.add_child(UI.label("Готово до збору: %d грн" % ready, 26, UI.GOLD, false))
+	v.add_child(UI.button("Зібрати мед і продати", _do(game, "collect"), Vector2(360, 70), 22, ready > 0))
+	return v

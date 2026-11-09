@@ -13,6 +13,7 @@ config/icon="res://icon.svg"
 
 Events="*res://scripts/core/events.gd"
 Audio="*res://scripts/core/audio.gd"
+Ads="*res://scripts/core/ads.gd"
 
 [display]
 

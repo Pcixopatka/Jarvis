@@ -40,6 +40,7 @@ func _run() -> void:
 	_suite_city()
 	_suite_story()
 	_suite_party()
+	_suite_camp()
 	await _suite_gameplay()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -386,7 +387,92 @@ func _suite_party() -> void:
 	q.free()
 
 
-# ======================= 7. Ігровий сценарій =======================
+# ======================= 7. Хутір і реклама =======================
+
+func _suite_camp() -> void:
+	suite("Хутір і реклама")
+	var CampService = load("res://scripts/game/camp_service.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var AdRewards = load("res://scripts/game/ad_rewards.gd")
+	var p = _new_player()
+	var w = WorldState.new()
+	check(CampService.party_size(w) == Data.MAX_COMPANIONS and p.bag_size() == Data.INVENTORY_SIZE, "без будівель — базові межі")
+	check(not CampService.build(w, p, "kurin"), "без ресурсів не збудувати")
+	p.gold = 100000
+	p.resources = {"wood": 1000, "iron": 1000, "herbs": 1000}
+	for id in Camp.BUILD_ORDER:
+		for i in 5:
+			CampService.build(w, p, id)
+		check(CampService.level(w, id) == CampService.max_level(id), "%s до максимуму" % id)
+	check(not CampService.build(w, p, "kurin"), "понад максимум не будується")
+	check(CampService.party_size(w) == Data.MAX_COMPANIONS + 2, "курінь: загін до 4")
+	check(p.bag_size() == Data.INVENTORY_SIZE + 16 and p.potion_max() == Data.POTION_MAX + 2, "склад і зілляварня дають бонуси")
+	check(CampService.companion_xp_mult(w) == 1.5 and CampService.forge_cost_mult(w) < 1.0, "тренування й знижка кузні")
+	# Зілляварня
+	p.potions = 0
+	check(CampService.brew(w, p, "heal") and p.potions == 1, "варіння зілля здоров'я")
+	var dmg = p.damage
+	check(CampService.brew(w, p, "strength") and p.damage > dmg * 1.25, "зілля сили на похід")
+	check(not CampService.brew(w, p, "strength"), "двічі на один похід не вариться")
+	CampService.brew(w, p, "antiplague")
+	check(p.plague_immune, "зілля проти зарази")
+	# Переплавка
+	var junk = Data.gen_item(6, 2, "boots")
+	p.add_item(junk)
+	var iron = p.resources["iron"]
+	check(CampService.salvage(w, p, junk["uid"]) > 0 and p.resources["iron"] > iron and p.find_item(junk["uid"]).is_empty(), "переплавка на залізо")
+	# Пасіка
+	var now = Time.get_unix_time_from_system()
+	w.camp["pasika_ts"] = now - 2 * 3600
+	var honey = CampService.pasika_ready(w, p.level, now)
+	check(honey > 0, "пасіка накопичує")
+	w.camp["pasika_ts"] = now - 100 * 3600
+	check(CampService.pasika_ready(w, p.level, now) == int(Camp.PASIKA_CAP_HOURS * CampService.pasika_rate(w, p.level)), "пасіка має стелю")
+	var g = p.gold
+	check(CampService.collect_pasika(w, p, now) > 0 and p.gold > g and CampService.pasika_ready(w, p.level, now) == 0, "збір меду")
+	# Реклама: ×2 досвіду
+	check(AdRewards.xp_mult(w) == 1.0, "без реклами множник 1")
+	AdRewards.grant_xp2(w)
+	check(AdRewards.xp_mult(w) == 2.0 and AdRewards.xp2_left(w) == AdRewards.XP2_SECONDS, "реклама дає годину ×2")
+	AdRewards.grant_xp2(w)
+	AdRewards.grant_xp2(w)
+	check(not AdRewards.can_xp2(w), "не більше 3 годин наперед")
+	AdRewards.tick(w, 10000.0)
+	AdRewards.tick(w, 10000.0)
+	check(AdRewards.xp_mult(w) == 1.0, "час минає")
+	var q = _new_player()
+	q.xp_boost = 2.0
+	var xp_before = q.xp
+	q.add_xp(10)
+	check(q.xp - xp_before == 20, "×2 досвіду працює")
+	# Безпечна заточка
+	for i in 5:
+		AdRewards.grant_safe(w)
+	check(AdRewards.safe_tokens(w) == AdRewards.SAFE_PER_DAY and AdRewards.safe_left_today(w) == 0, "денний ліміт безпечних заточок")
+	var wpn = p.equipment["weapon"]
+	var downs = 0
+	for i in 60:
+		wpn["up"] = Data.SHARPEN_RISK_FROM + 2
+		p.gold = 100000
+		if p.sharpen(wpn["uid"], 1.0, 0.0, true) == "down":
+			downs += 1
+	check(downs == 0, "безпечна заточка не знижує рівень")
+	# Збереження
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.camp["buildings"]["kurin"] == 3 and w2.boosts.has("safe_sharpen"), "хутір і нагороди зберігаються")
+	var r = _new_player()
+	r.from_dict(p.to_dict())
+	check(r.resources["iron"] == p.resources["iron"], "ресурси зберігаються")
+	var old = {"version": 5, "player": {"level": 3}, "world": {}}
+	var m = SaveSystem.migrate(old)
+	check(m["world"].has("camp") and m["player"].has("resources"), "міграція v5 → v6")
+	p.free()
+	q.free()
+	r.free()
+
+
+# ======================= 8. Ігровий сценарій =======================
 
 func _bot_fight(game) -> void:
 	var p = game.player
@@ -411,6 +497,7 @@ func _suite_gameplay() -> void:
 	game.new_game()
 	await _frames(2)
 	check(game.state == game.State.CITY and game.city_id == "sich", "нова гра починається на Січі")
+	root.get_node("Ads").instant = true
 	check(game.hud.dialogue_root != null, "на Січі одразу розмова з кошовим")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
@@ -485,6 +572,22 @@ func _suite_gameplay() -> void:
 	check(game.smith_msg != "", "коваль відповідає")
 	game.city_do("hire", "dzhura")
 	check(game.world.has_companion("dzhura"), "джура в загоні")
+
+	# Хутір
+	game.enter_city("sich")
+	game.enter_camp()
+	check(game.state == game.State.CAMP and game.player.hp == game.player.max_hp, "хутір: відпочинок")
+	p.resources = {"wood": 100, "iron": 100, "herbs": 100}
+	p.gold = 5000
+	game.camp_do("build", "kurin")
+	check(game.CampService.level(game.world, "kurin") == 1, "будівництво на хуторі")
+	game.camp_do("ad_xp2", null)
+	await _frames(3)
+	check(game.AdRewards.xp_mult(game.world) == 2.0, "реклама в сцені дає ×2 досвіду")
+	game.open_character()
+	game.close_character()
+	check(game.state == game.State.CAMP, "з екрана козака назад на хутір")
+	game.enter_city("sich")
 
 	# Екран козака
 	game.open_character()

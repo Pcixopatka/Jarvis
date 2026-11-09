@@ -103,7 +103,7 @@ static func _gear(game) -> Control:
 
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
-	bag.add_child(UI.label("Торба %d/%d" % [p.inventory.size(), Data.INVENTORY_SIZE], 22, UI.GOLD, false))
+	bag.add_child(UI.label("Торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
 		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))

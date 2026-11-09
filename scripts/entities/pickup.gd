@@ -2,6 +2,7 @@ extends Node2D
 ## Здобич: гривня (досвід і гроші), вареник (лікування) або річ спорядження.
 
 const Data := preload("res://scripts/data/data.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
 
 var combat: Combat
 var kind := "coin"  # "coin", "varenyk" або "item"
@@ -33,6 +34,9 @@ func _process(delta: float) -> void:
 			combat.fx.burst(global_position, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
 		elif kind == "item":
 			combat.pick_item(item)
+		elif kind == "res":
+			combat.add_resource(item["res"], value)
+			combat.float_text(global_position + Vector2(0, -30), "+%d %s" % [value, Camp.RESOURCES[item["res"]]], Camp.RESOURCE_COLORS[item["res"]].lightened(0.3))
 		elif kind == "potion":
 			if p.add_potion():
 				combat.float_text(global_position + Vector2(0, -30), "+1 зілля", Color(1.0, 0.45, 0.45))
@@ -59,6 +63,20 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([Vector2(-6, -8), Vector2(6, -8), Vector2(0, -2)]), Color(0.45, 0.3, 0.15))
 		draw_line(Vector2(-7, -6), Vector2(7, -6), col, 3.0)
 		draw_circle(Vector2(6, -10), 2.5, Color(1, 1, 0.9))
+		return
+	if kind == "res":
+		var col: Color = Camp.RESOURCE_COLORS[item["res"]]
+		match item["res"]:
+			"wood":
+				draw_rect(Rect2(-10, -4, 20, 8), col)
+				draw_circle(Vector2(10, 0), 4.0, col.lightened(0.3))
+			"iron":
+				draw_colored_polygon(PackedVector2Array([Vector2(-9, 4), Vector2(-5, -5), Vector2(9, -5), Vector2(5, 4)]), col)
+				draw_line(Vector2(-5, -5), Vector2(9, -5), col.lightened(0.4), 2.0)
+			_:
+				for i in 3:
+					draw_line(Vector2(-4 + i * 4, 6), Vector2(-6 + i * 6, -8), col, 3.0)
+				draw_circle(Vector2(0, -8), 3.0, Color(0.95, 0.85, 0.3))
 		return
 	if kind == "potion":
 		# Пляшечка з червоним зіллям

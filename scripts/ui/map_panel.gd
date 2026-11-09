@@ -3,6 +3,8 @@ extends RefCounted
 
 const Data := preload("res://scripts/data/data.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
+const CampService := preload("res://scripts/game/camp_service.gd")
 
 
 ## on_go(id) викликається кнопкою «Вирушити» / «Увійти до міста».
@@ -14,8 +16,21 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	if sel == "":
 		v.add_child(UI.label("Мапа земель", 28, UI.GOLD, false))
 		v.add_child(UI.label("Торкнись місця на мапі.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
-		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
+		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Хата з прапором — твій хутір", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
+		return v
+	if sel == Camp.CAMP_ID:
+		v.add_child(UI.label(Camp.CAMP["name"], 28, UI.GOLD, false))
+		v.add_child(_wrapped(Camp.CAMP["desc"], 18, UI.TEXT))
+		var built := []
+		for id in Camp.BUILD_ORDER:
+			if CampService.level(world, id) > 0:
+				built.append("%s %d" % [Camp.BUILDINGS[id]["name"], CampService.level(world, id)])
+		v.add_child(_wrapped("Будівлі: " + (", ".join(built) if not built.is_empty() else "ще нічого не збудовано"), 16, UI.MUTED))
+		var honey := CampService.pasika_ready(world, player.level)
+		if honey > 0:
+			v.add_child(UI.label("Пасіка: готово %d грн" % honey, 17, UI.GOOD, false))
+		v.add_child(UI.button("Увійти на хутір", on_go.bind(sel), Vector2(350, 70), 26))
 		return v
 	if Data.CITIES.has(sel):
 		var C: Dictionary = Data.CITIES[sel]

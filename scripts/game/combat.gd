@@ -5,6 +5,7 @@ extends Node2D
 ## Про важливі події повідомляє через шину Events; сам нічого не знає про меню й інтерфейс.
 
 const Data := preload("res://scripts/data/data.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
 const EnemyScript := preload("res://scripts/entities/enemy.gd")
 const CompanionScript := preload("res://scripts/entities/companion.gd")
 const ProjectileScript := preload("res://scripts/entities/projectile.gd")
@@ -151,6 +152,9 @@ func enter(id: String, companions: Array) -> void:
 
 
 func leave() -> void:
+	if active and not player.trip_buffs.is_empty():
+		player.trip_buffs.clear()  # зілля «на похід» діє лише один похід
+		player.recalc()
 	active = false
 	Engine.time_scale = 1.0
 	_clear()
@@ -199,7 +203,7 @@ func _spawn_companions(companions: Array) -> void:
 		var c: Companion = CompanionScript.new()
 		c.combat = self
 		c.setup(data["type"], int(data.get("level", player.level)), data.get("index", i))
-		c.position = player.position + Vector2(-60 + 120 * (i % 2), 50)
+		c.position = player.position + CompanionScript.OFFSETS[c.index % CompanionScript.OFFSETS.size()]
 		entities.add_child(c)
 		companion_nodes.append(c)
 
@@ -333,6 +337,7 @@ func _field_complete() -> void:
 		spawn_pickup(pos, "item", 0, Data.gen_item(loc["level"], Data.roll_rarity(loc["level"], 1)))
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 2)
+	_resource_bundle(pos, 5)
 	_spawn_portal("На мапу", _clamp_in(player.global_position + Vector2(0, -260), 100.0))
 	Events.field_cleared.emit(loc_id)
 	Events.hint.emit("cleared", "Місцевість очищено! Збери скарб і зайди в портал, щоб повернутися на мапу.")
@@ -343,6 +348,7 @@ func _dungeon_complete() -> void:
 	player.add_gold(g)
 	Events.banner.emit("%s очищено!\n+%d грн" % [loc["name"], g], Color(1.0, 0.85, 0.3))
 	Audio.play("quest", 0.0)
+	_resource_bundle(player.global_position + Vector2(0, -100), 7)
 	_spawn_portal("Вихід", Vector2(0, arena.position.y + 110))
 	Events.dungeon_cleared.emit(loc_id)
 
@@ -357,6 +363,8 @@ func collect_all() -> void:
 					player.add_gold(Data.coin_gold(c.value))
 				"item":
 					pick_item(c.item)
+				"res":
+					add_resource(c.item["res"], c.value)
 			c.queue_free()
 
 
@@ -396,10 +404,28 @@ func _drop_loot(e: Node2D) -> void:
 		spawn_pickup(pos, "coin", e.xp_value)
 		if randf() < 0.05 * (1 + player.varenyk_bonus):
 			spawn_pickup(pos, "varenyk", heal_value)
+		if randf() < Camp.RESOURCE_DROP_CHANCE:
+			spawn_pickup(pos, "res", 1, {"res": _roll_resource()})
 		if randf() < Data.POTION_DROP_CHANCE:
 			spawn_pickup(pos, "potion", 1)
 		if randf() < Data.ITEM_DROP_CHANCE:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl)))
+
+
+## Ресурс для хутора: здебільшого той, яким багатий ландшафт.
+func _roll_resource() -> String:
+	if randf() < 0.7:
+		return Camp.BIOME_RESOURCE.get(loc.get("biome", "steppe"), "wood")
+	return Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
+
+
+func _resource_bundle(pos: Vector2, n: int) -> void:
+	for i in n:
+		spawn_pickup(pos, "res", 1 + int(loc.get("level", 1)) / 4, {"res": _roll_resource()})
+
+
+func add_resource(r: String, amount: int) -> void:
+	player.resources[r] = int(player.resources.get(r, 0)) + amount
 
 
 func pick_item(item: Dictionary) -> void:

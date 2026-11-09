@@ -12,13 +12,17 @@ const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const Party := preload("res://scripts/game/party.gd")
+const CampService := preload("res://scripts/game/camp_service.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
+const AdRewards := preload("res://scripts/game/ad_rewards.gd")
+const UiCamp := preload("res://scripts/ui/ui_camp.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const PlayerScript := preload("res://scripts/entities/player.gd")
 const CombatScript := preload("res://scripts/game/combat.gd")
 const HudScript := preload("res://scripts/ui/hud.gd")
 
-enum State { MENU, MAP, CITY, PLAYING, CHARACTER, PAUSED, DEAD }
+enum State { MENU, MAP, CITY, CAMP, PLAYING, CHARACTER, PAUSED, DEAD }
 
 var state := State.MENU
 var player: Player = null
@@ -40,6 +44,8 @@ var city_tab := 0
 var city_sel_uid := -1
 var smith_msg := ""
 var smith_msg_color := Color.WHITE
+var camp_tab := 0
+var camp_sel_uid := -1
 
 
 func _ready() -> void:
@@ -84,7 +90,12 @@ func _process(delta: float) -> void:
 		return
 	if state == State.PLAYING:
 		meta["playtime"] = float(meta.get("playtime", 0.0)) + delta
-	hud.update(player, world, _combat_info(), delta, StoryService.objective_line(world))
+		AdRewards.tick(world, delta)
+	player.xp_boost = AdRewards.xp_mult(world)
+	var top := StoryService.objective_line(world)
+	if AdRewards.xp2_left(world) > 0.0:
+		top = "×2 досвіду: %s\n%s" % [AdRewards.format_time(AdRewards.xp2_left(world)), top]
+	hud.update(player, world, _combat_info(), delta, top.strip_edges())
 
 
 func _combat_info() -> Dictionary:
@@ -127,6 +138,7 @@ func new_game() -> void:
 	world = WorldState.new()
 	meta = {"playtime": 0.0, "created": Time.get_unix_time_from_system()}
 	_new_hero({})
+	CampService.apply_effects(world, player)
 	player.gold = 60
 	map_here = "sich"
 	enter_city("sich")  # кошовий одразу зустріне розмовою
@@ -147,6 +159,7 @@ func load_game() -> bool:
 	meta = d.get("meta", meta)
 	_new_hero(d["player"])
 	Party.normalize(world, player.level)
+	CampService.apply_effects(world, player)
 	return true
 
 
@@ -251,7 +264,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 	for m in world.on_kill(e.kind):
 		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
 	_story_event("kill", e.kind)
-	for up in Party.gain_xp(world, player.level, e.xp_value):
+	for up in Party.gain_xp(world, player.level, roundi(e.xp_value * CampService.companion_xp_mult(world) * AdRewards.xp_mult(world))):
 		combat.companion_level_up(up[0], up[1])
 
 
@@ -339,11 +352,18 @@ func _on_map_select(id: String) -> void:
 
 
 func _build_map_panel() -> void:
-	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world)))
+	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world))
+	if map_sel == "":
+		var left := AdRewards.xp2_left(world)
+		panel.add_child(UI.label(("×2 досвіду ще %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 17, UI.GOLD, false))
+		panel.add_child(UI.button("Переглянути рекламу", func(): _watch_xp2(_build_map_panel), Vector2(350, 56), 18, AdRewards.can_xp2(world)))
+	hud.set_map_panel(panel)
 
 
 func _go_to(id: String) -> void:
-	if Data.CITIES.has(id):
+	if id == Camp.CAMP_ID:
+		enter_camp()
+	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
 		enter_location(id)
@@ -400,15 +420,25 @@ func city_do(action: String, arg) -> void:
 		"buy_potion":
 			if CityService.buy_potion(world, player, city_id):
 				Audio.play("coin", 0.0)
+		"ad_safe":
+			Ads.show_rewarded("safe_sharpen", func(ok: bool):
+				if ok and AdRewards.grant_safe(world):
+					hud.show_banner("Дякуємо! +1 безпечна заточка", UI.GOOD)
+				save_game()
+				if state == State.CITY:
+					_build_city())
+			return
 		"dismiss":
 			CityService.dismiss(world, arg)
 	save_game()
 	_build_city()
 
 
-func _sharpen(uid: int) -> void:
+func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> void:
 	var before: int = player.find_item(uid).get("up", 0)
-	match player.sharpen(uid):
+	# Жетон безпечної заточки витрачається лише на ризиковану спробу
+	var safe := before >= Data.SHARPEN_RISK_FROM and AdRewards.use_safe(world)
+	match player.sharpen(uid, cost_mult, chance_bonus, safe):
 		"ok":
 			Audio.play("sharpen_ok", 0.03)
 			smith_msg = "Успіх! Тепер +%d" % (before + 1)
@@ -416,6 +446,8 @@ func _sharpen(uid: int) -> void:
 		"fail":
 			Audio.play("sharpen_fail")
 			smith_msg = "Не вдалося... Заточка лишилась +%d" % before
+			if safe:
+				smith_msg += " (безпечна заточка вберегла)"
 			smith_msg_color = UI.MUTED
 		"down":
 			Audio.play("sharpen_fail")
@@ -431,7 +463,7 @@ func _sharpen(uid: int) -> void:
 func open_character() -> void:
 	if state == State.CHARACTER or player == null:
 		return
-	if not (state == State.PLAYING or state == State.MAP or state == State.CITY):
+	if not (state == State.PLAYING or state == State.MAP or state == State.CITY or state == State.CAMP):
 		return
 	char_return = state
 	state = State.CHARACTER
@@ -475,6 +507,9 @@ func close_character() -> void:
 		State.CITY:
 			state = State.CITY
 			_build_city()
+		State.CAMP:
+			state = State.CAMP
+			_build_camp()
 		_:
 			enter_map()
 
@@ -520,6 +555,7 @@ func _show_pause() -> void:
 		hud.close_overlay()
 		state = State.PLAYING
 		open_character())
+	hud.add_button(("×2 досвіду ще %s" % AdRewards.format_time(AdRewards.xp2_left(world))) if not AdRewards.can_xp2(world) else "Реклама: ×2 досвіду на годину", func(): _watch_xp2(_show_pause))
 	var leave_text := "Покинути печеру (прогрес втратиться)" if combat.is_dungeon() else "Повернутися на мапу"
 	hud.add_button(leave_text, enter_map)
 	_add_sound_toggles(_show_pause)
@@ -571,7 +607,7 @@ func _input(event: InputEvent) -> void:
 		KEY_C, KEY_TAB:
 			if state == State.CHARACTER:
 				close_character()
-			elif playing or state == State.MAP or state == State.CITY:
+			elif playing or state == State.MAP or state == State.CITY or state == State.CAMP:
 				open_character()
 		KEY_M:
 			if playing:
@@ -593,3 +629,85 @@ func _notification(what: int) -> void:
 			_show_pause()
 		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.CHARACTER:
 			close_character()
+
+
+# ======================= Хутір =======================
+
+func enter_camp() -> void:
+	_leave_combat()
+	hud.close_overlay()
+	state = State.CAMP
+	Audio.play_music("calm")
+	get_tree().paused = true
+	map_here = Camp.CAMP_ID
+	player.revive()
+	world.revive_companions()
+	CampService.apply_effects(world, player)
+	hud.show_map(false)
+	hud.set_mode(false, false)
+	camp_sel_uid = -1
+	smith_msg = ""
+	_build_camp()
+	save_game()
+	hint("camp", "Твій хутір! Тут козак і загін відпочивають. Будуй курінь, кузню, зілляварню, склад і пасіку за гривні та ресурси з походів.")
+
+
+func leave_camp() -> void:
+	enter_map()
+
+
+func _build_camp() -> void:
+	hud.set_screen(UiCamp.build(self))
+
+
+func camp_do(action: String, arg) -> void:
+	match action:
+		"build":
+			if CampService.build(world, player, arg):
+				Audio.play("quest", 0.0)
+				hud.show_banner("%s: рівень %d!" % [Camp.BUILDINGS[arg]["name"], CampService.level(world, arg)], UI.GOLD)
+		"select":
+			camp_sel_uid = arg
+			smith_msg = ""
+		"sharpen":
+			_sharpen(arg, CampService.forge_cost_mult(world), CampService.forge_chance_bonus(world))
+		"salvage":
+			var v := CampService.salvage(world, player, arg)
+			if v > 0:
+				Audio.play("sharpen_ok", 0.1, -6.0)
+				smith_msg = "Переплавлено: +%d заліза" % v
+				smith_msg_color = UI.GOOD
+				camp_sel_uid = -1
+		"brew":
+			if CampService.brew(world, player, arg):
+				Audio.play("heal", 0.0)
+		"collect":
+			var g := CampService.collect_pasika(world, player)
+			if g > 0:
+				Audio.play("coin", 0.0)
+				hud.show_banner("Мед продано: +%d грн" % g, UI.GOLD)
+		"ad_xp2":
+			_watch_xp2(_build_camp)
+			return
+		"ad_safe":
+			Ads.show_rewarded("safe_sharpen", func(ok: bool):
+				if ok and AdRewards.grant_safe(world):
+					hud.show_banner("Дякуємо! +1 безпечна заточка", UI.GOOD)
+				save_game()
+				if state == State.CAMP:
+					_build_camp())
+			return
+	save_game()
+	_build_camp()
+
+
+## Реклама за ×2 досвіду; refresh перебудовує поточний екран після перегляду.
+func _watch_xp2(refresh: Callable) -> void:
+	if not AdRewards.can_xp2(world):
+		return
+	Ads.show_rewarded("xp2", func(ok: bool):
+		if ok:
+			AdRewards.grant_xp2(world)
+			hud.show_banner("Дякуємо! ×2 досвіду: %s" % AdRewards.format_time(AdRewards.xp2_left(world)), UI.GOOD)
+			save_game()
+		refresh.call())
