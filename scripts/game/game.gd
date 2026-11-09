@@ -17,6 +17,7 @@ const TravelService := preload("res://scripts/game/travel_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const CraftService := preload("res://scripts/game/craft_service.gd")
+const SpecService := preload("res://scripts/game/spec_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -94,6 +95,8 @@ func _ready() -> void:
 		_story_event("job", str(jl))
 		if player.can_change_class() and player.is_peasant():
 			hud.show_banner("Майстерність %d!\nЧас обирати дорогу: Січ чи Карпати" % jl, UI.GOLD)
+		elif player.can_change_class() and jl == player.Classes.JOB_CHANGE_AT[1]:
+			hud.show_banner("Майстерність %d!\nНаставники на Січі чекають на тебе" % jl, UI.GOLD)
 		elif state != State.PLAYING:
 			hud.show_banner("Майстерність %d!" % jl, UI.GOLD))
 	Events.charged_hit.connect(func(): _record("charged"))
@@ -117,6 +120,9 @@ func _process(delta: float) -> void:
 	var top := StoryService.objective_line(world)
 	for l in HeroService.objective_lines(world):
 		top += "\n" + l
+	var sl := SpecService.objective_line(world)
+	if sl != "":
+		top += "\n" + sl
 	if AdRewards.xp2_left(world) > 0.0:
 		top = "×2 досвіду: %s\n%s" % [AdRewards.format_time(AdRewards.xp2_left(world)), top]
 	hud.update(player, world, _combat_info(), delta, top.strip_edges())
@@ -282,6 +288,9 @@ func enter_map() -> void:
 	mv.targets = world.quest_targets()
 	for loc in HeroService.targets(world):
 		mv.targets[loc] = true
+	var stg := SpecService.target(world)
+	if stg != "":
+		mv.targets[stg] = true
 	mv.story_target = StoryService.target(world)
 	mv.plague = PlagueService.state(world)["levels"]
 	if from_trip:
@@ -365,6 +374,9 @@ func _on_enemy_killed(e: Node2D) -> void:
 	_hero_event("kill", e.kind)
 	_record("kill")
 	_record("kill:" + e.kind)
+	_spec_event("kill", e.kind)
+	if e.elite:
+		_spec_event("elite", "")
 	if e.elite:
 		_record("elite")
 	if e.is_boss:
@@ -394,6 +406,49 @@ func _cleanse(loc_id: String) -> void:
 	combat.float_text(player.global_position + Vector2(0, -150), text, Color(0.6, 1.0, 0.4))
 
 
+## Посвята в спеціалізацію після випробування.
+func _spec_dialogue(city: String) -> void:
+	var d := SpecService.city_dialogue(world, city)
+	if d.is_empty():
+		return
+	var dlg = DialogueScript.new()
+	dlg.setup(d["lines"], [])
+	dlg.finished.connect(func(_c):
+		hud.close_dialogue()
+		var text := SpecService.complete(world, player)
+		_after_class_change()
+		CampService.apply_effects(world, player)
+		if text != "":
+			hud.show_banner(text, UI.GOLD)
+			Audio.play("levelup", 0.0)
+			_record("spec")
+		save_game()
+		if state == State.CITY and city_id == city:
+			_build_city())
+	hud.show_dialogue(dlg)
+
+
+## Почати випробування: наставник пояснює, що робити.
+func _start_trial(spec: String) -> void:
+	if not SpecService.start(world, player, spec):
+		return
+	var dlg = DialogueScript.new()
+	dlg.setup(SpecService.TRIALS[spec]["start"], [])
+	dlg.finished.connect(func(_c):
+		hud.close_dialogue()
+		hud.show_banner("◆ " + SpecService.objective(world)["text"], UI.GOLD)
+		save_game()
+		if state == State.CITY:
+			_build_city())
+	hud.show_dialogue(dlg)
+
+
+func _spec_event(type: String, arg: String) -> void:
+	for m in SpecService.on_event(world, type, arg):
+		hud.show_banner(m["text"], UI.GOLD)
+		Audio.play("quest", 0.0)
+
+
 ## Загін для бою: записи світу + сила, ім'я й колір побратимів.
 func _party_data() -> Array:
 	var out := []
@@ -421,6 +476,7 @@ func _hero_event(type: String, arg: String) -> void:
 func _hero_dialogue(city: String) -> void:
 	var d := HeroService.city_dialogue(world, city)
 	if d.is_empty():
+		_spec_dialogue(city)  # побратими мовчать — може, наставник чекає на посвяту
 		return
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], d["choices"])
@@ -479,6 +535,7 @@ func _on_location_cleared(loc_id: String) -> void:
 	world.cleared[loc_id] = world.cleared.get(loc_id, 0) + 1
 	_cleanse(loc_id)
 	_record("field")
+	_spec_event("clear", loc_id)
 	_story_event("clear", loc_id)
 	_hero_event("clear", loc_id)
 
@@ -487,6 +544,7 @@ func _on_dungeon_cleared(loc_id: String) -> void:
 	world.on_dungeon(loc_id)
 	_cleanse(loc_id)
 	_record("dungeon")
+	_spec_event("dungeon", loc_id)
 	_story_event("dungeon", loc_id)
 	_hero_event("dungeon", loc_id)
 
@@ -681,6 +739,9 @@ func city_do(action: String, arg) -> void:
 			return
 		"dismiss":
 			CityService.dismiss(world, arg)
+		"spec_start":
+			_start_trial(arg)
+			return
 		"hero_join":
 			for m in HeroService.join(world, player, arg):
 				hud.show_banner(m["text"], UI.GOLD)

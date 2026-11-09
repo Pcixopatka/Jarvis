@@ -86,6 +86,18 @@ const SKILL_ORDER := {
 		"regen", "mana_flow", "spirit", "fireball", "pyre", "tough", "iskra", "iskra", "spirit", "focus", "shield", "herb", "tough",
 		"deep_well", "mana_flow", "spirit", "focus", "pyre", "regen", "tough", "ward", "focus", "ward", "shield", "herb", "deep_well", "mana_flow", "regen"],
 }
+## Спеціалізації: порядок вмінь і зброя
+const SPEC_ORDER := {
+	"zaporozhets": ["zemnyi", "stina", "bulava", "zemnyi", "iron_skin", "bulava", "mace_master", "zemnyi", "iron_skin", "nevhamovnyi",
+		"bulava", "zaporizka_vytryvalist", "zemnyi", "mace_master", "iron_skin", "nevhamovnyi", "bulava", "stina", "zaporizka_vytryvalist", "mace_master"],
+	"plastun": ["kydok", "oko", "pastka", "kydok", "tin", "oko", "kydok", "deadly", "oko", "trapper", "kydok", "tin", "pastka", "stryvok",
+		"oko", "kydok", "tin", "trapper", "pastka", "stryvok"],
+	"samopalnyk": ["kartech", "porokh", "prytsil", "kartech", "porokh", "bochka", "shvydke", "prytsil", "vluchnist", "kartech",
+		"porokh", "shvydke", "prytsil", "vluchnist", "deadly", "bochka", "kartech", "porokh", "prytsil", "shvydke"],
+	"kharakternyk": ["vovk", "zamova", "kulia", "vovk", "zamova", "vidvid", "wolf_blood", "spirit", "vovk", "zamova", "wolf_blood",
+		"vidvid", "spirit", "kulia", "vovk", "zamova", "wolf_blood", "spirit", "vidvid", "kulia"],
+}
+const SPEC_WEAPON := {"zaporozhets": "mace", "plastun": "pike", "samopalnyk": "pishchal", "kharakternyk": "sabre"}
 const PERK_ORDER := ["boots", "luck", "kobzar", "luck", "boots", "steel_will", "varenyk", "luck", "kobzar", "steel_will",
 	"boots", "purse", "sich", "kobzar", "varenyk", "steel_will", "purse"]
 
@@ -101,12 +113,17 @@ func _build_hero(lvl: int) -> void:
 	p.skill_points = 9
 	for id in PEASANT_ORDER:
 		p.learn_skill(id)
+	var spec := ""
+	if SPEC_ORDER.has(cls):
+		# Спеціалізація: спершу Козак до 30-ї майстерності (усі його очки), потім посвята
+		spec = cls
+		cls = "cossack"
 	p.change_class(cls)
 	game._sync_class()
 	while p.level < lvl:
 		p.add_xp(p.xp_next - p.xp)
 	# Майстерність класу приблизно встигає за рівнем героя
-	p.job_level = clampi(lvl, 1, p.job_max())
+	p.job_level = clampi(lvl, 1, p.job_max()) if spec == "" else 30
 	p.skill_points = p.job_level  # (job_level - 1) + 1 вміння в нагороду за посвяту
 	# Характеристики: воїн — сила й витривалість, волхв — Характерництво й витривалість
 	var cycle = ["str", "vit", "str", "agi", "vit", "str", "vit", "agi", "str", "str"]
@@ -120,13 +137,23 @@ func _build_hero(lvl: int) -> void:
 		if p.skill_points <= 0:
 			break
 		p.learn_skill(id)
+	if spec != "":
+		p.change_class(spec)
+		game._sync_class()
+		p.job_level = clampi(lvl - 18, 1, 50)
+		p.skill_points = p.job_level
+		for id in SPEC_ORDER[spec]:
+			if p.skill_points <= 0:
+				break
+			p.learn_skill(id)
 	for id in PERK_ORDER:
 		if p.perk_points <= 0:
 			break
 		p.learn_perk(id)
 	# Спорядження свого рівня: добротне, з типовою для цього етапу заточкою
 	for slot in Data.SLOTS:
-		var it = Data.gen_item(lvl, 1, slot, ("staff" if cls == "volkhv" else "sabre") if slot == "weapon" else "")
+		var wt: String = SPEC_WEAPON.get(spec, "staff" if cls == "volkhv" else "sabre")
+		var it = Data.gen_item(lvl, 1, slot, wt if slot == "weapon" else "")
 		it["up"] = mini(lvl / 3, 4)
 		p.add_item(it)
 		p.equip(it["uid"])

@@ -50,7 +50,8 @@ const STATS := [
 
 # Вміння тепер у деревах класів (див. classes.gd).
 const Classes := preload("res://scripts/data/classes.gd")
-const ACTIVE_SKILLS: Array = ["vyly", "first_aid", "whirl", "battle_cry", "musket", "fireball", "shield", "herb"]
+const ACTIVE_SKILLS: Array = ["vyly", "first_aid", "whirl", "battle_cry", "musket", "fireball", "shield", "herb",
+	"zemnyi", "stina", "bulava", "pastka", "tin", "kydok", "kartech", "prytsil", "bochka", "vovk", "kulia", "zamova", "vidvid"]
 const ACTIVE_LABELS: Dictionary = Classes.ACTIVE_LABELS
 
 
@@ -112,6 +113,8 @@ const WEAPON_TYPES := {
 		"hint": "Довгий, але вузький удар"},
 	"staff": {"name": "Посох", "dmg": 1.0, "cd": 1.1, "range": 1.0, "arc": 1.0, "kb": 0.5,
 		"hint": "Волхвів: б'є іскрами здалеку, сила — від Характерництва"},
+	"pishchal": {"name": "Пищаль", "dmg": 1.1, "cd": 1.5, "range": 1.0, "arc": 1.0, "kb": 1.2,
+		"hint": "Самопальника: куля пробиває ворогів, сила — від Спритності"},
 }
 ## Яку зброю генерувати в здобичі й крамницях (виставляє гра під клас героя; порожньо — будь-яку).
 static var weapon_pool: Array = []

@@ -113,6 +113,11 @@ var ward_hp := 0.0  # Щит-оберіг: скільки шкоди ще пог
 var ward_timer := 0.0
 var herb_timer := 0.0  # Цілюща трава: лікування в часі
 var herb_rate := 0.0
+var stina_timer := 0.0  # Козацька стіна (Запорожець): вороги б'ють лише тебе, шкода менша
+var tin_timer := 0.0  # Тінь (Пластун): вороги не бачать, наступний удар — крит
+var wolf_timer := 0.0  # Вовча подоба (Характерник)
+var zamova_timer := 0.0  # Замовляння шаблі (Характерник)
+var _chaining := false
 
 
 func _ready() -> void:
@@ -366,8 +371,10 @@ func recalc() -> void:
 	var s_spi := _bonus("spi")
 
 	# Волхв із посохом черпає силу з Характерництва, усі інші — із Сили
-	var s_main := s_spi if weapon_type == "staff" else s_str
-	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + eq("dmg_pct") / 100.0)
+	var s_main := s_spi if weapon_type == "staff" else (s_agi if weapon_type == "pishchal" else s_str)
+	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + 0.08 * pk("porokh") + eq("dmg_pct") / 100.0)
+	if weapon_type == "mace":
+		damage *= 1.0 + 0.1 * pk("mace_master")
 	if trip_buffs.has("strength"):
 		damage *= 1.3
 	if trip_buffs.has("inspired"):
@@ -376,17 +383,21 @@ func recalc() -> void:
 	attack_range = 95.0 * weapon["range"] * (1.0 + 0.08 * pk("reach"))
 	if weapon_type == "staff":
 		attack_range = 430.0  # іскри летять далеко
+	elif weapon_type == "pishchal":
+		attack_range = 480.0
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + eq("aspd") / 100.0)
-	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + eq("crit") / 100.0)
+	if weapon_type == "pishchal":
+		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
+	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0)
 	crit_mult = 3.0 if pk("deadly") > 0 else 2.0
-	lifesteal = 0.02 * pk("thirst") + eq("lifesteal") / 100.0
+	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0
 
-	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy")) * float(class_info().get("hp_mult", 1.0))
+	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist")) * float(class_info().get("hp_mult", 1.0))
 	damage *= float(class_info().get("dmg_mult", 1.0))
-	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + eq("armor") / 100.0, 0.0, 0.75)
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + eq("armor") / 100.0, 0.0, 0.75)
 	regen = 0.6 * pk("regen") + eq("regen")
-	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll"))
+	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok"))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
@@ -562,7 +573,7 @@ func _process(delta: float) -> void:
 		if pk("dash_strike") > 0:
 			_dash_strike()
 	else:
-		position += input_vec * speed * (0.45 if blocking else 1.0) * Status.speed_mult(self) * (1.2 if cry_timer > 0.0 else 1.0) * delta
+		position += input_vec * speed * (0.45 if blocking else 1.0) * Status.speed_mult(self) * (1.2 if cry_timer > 0.0 else 1.0) * (1.4 if wolf_timer > 0.0 else 1.0) * delta
 		if input_vec.length() > 0.1:
 			moving = true
 			if swing_time <= 0.0:
@@ -604,6 +615,12 @@ func charged_strike(power: float) -> void:
 		return
 	if weapon_type == "staff":
 		_charged_spell(power)
+		return
+	if weapon_type == "pishchal":
+		_prytsil_shot((2.0 + 2.5 * power) * skill_power, power >= 0.99)
+		Events.charged_hit.emit()
+		combo_step = 0
+		attack_timer = attack_cooldown
 		return
 	var mult := 1.6 + 1.6 * power
 	var reach := attack_range * (1.2 + 0.6 * power)
@@ -662,6 +679,10 @@ func _parry(source) -> void:
 
 func _tick_effects(delta: float) -> void:
 	cry_timer = maxf(0.0, cry_timer - delta)
+	stina_timer = maxf(0.0, stina_timer - delta)
+	tin_timer = maxf(0.0, tin_timer - delta)
+	wolf_timer = maxf(0.0, wolf_timer - delta)
+	zamova_timer = maxf(0.0, zamova_timer - delta)
 	if ward_timer > 0.0:
 		ward_timer -= delta
 		if ward_timer <= 0.0:
@@ -673,7 +694,16 @@ func _tick_effects(delta: float) -> void:
 
 func _roll(mult: float) -> Array:
 	var crit := randf() < crit_chance
+	if tin_timer > 0.0:
+		# Удар із Тіні: гарантований крит і бонус, а Тінь спадає
+		crit = true
+		mult *= 1.2 + 0.2 * sk("tin")
+		tin_timer = 0.0
 	var dmg := damage * mult * (crit_mult if crit else 1.0) * randf_range(0.9, 1.1) * (1.0 + (cry_bonus if cry_timer > 0.0 else 0.0))
+	if wolf_timer > 0.0:
+		dmg *= 1.25
+	if pk("nevhamovnyi") > 0:
+		dmg *= 1.0 + 0.15 * pk("nevhamovnyi") * clampf(1.0 - hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	return [dmg, crit]
 
 
@@ -682,6 +712,10 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 	if e.dead:
 		return
 	e.take_damage(dmg, kb, crit)
+	if zamova_timer > 0.0 and not _chaining:
+		_zamova_chain(e, dmg)
+	if wolf_timer > 0.0:
+		heal(dmg * 0.08, false)
 	if crit and not e.dead:
 		Status.apply(e, "bleed", 3.0, dmg * 0.1)  # критичний удар лишає кровотечу
 	if lifesteal > 0.0:
@@ -709,6 +743,9 @@ func attack() -> void:
 		attack_timer = attack_cooldown * 1.3  # після завершального — коротка пауза, як у справжньому ритмі
 	if weapon_type == "staff":
 		_cast_sparks(step, finisher)
+		return
+	if weapon_type == "pishchal":
+		_fire_pishchal(step, finisher)
 		return
 	# Автонаведення — на телефоні цілитися пальцем незручно.
 	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.8)
@@ -839,6 +876,32 @@ func use_skill(id: String) -> void:
 			used = _shield()
 		"herb":
 			used = _herb()
+		"zemnyi":
+			used = _zemnyi()
+		"stina":
+			used = _stina()
+		"bulava":
+			used = _bulava()
+		"pastka":
+			used = _pastka()
+		"tin":
+			used = _tin()
+		"kydok":
+			used = _kydok()
+		"kartech":
+			used = _kartech()
+		"prytsil":
+			used = _prytsil_shot((3.8 + 0.9 * (sk("prytsil") - 1)) * skill_power, false)
+		"bochka":
+			used = _bochka()
+		"vovk":
+			used = _vovk()
+		"kulia":
+			used = _kulia()
+		"zamova":
+			used = _zamova()
+		"vidvid":
+			used = _vidvid()
 	if used:
 		mana -= skill_cost(id)
 		skill_timers[id] = skill_cooldown(id)
@@ -898,6 +961,212 @@ func _battle_cry() -> bool:
 	Audio.play("roar", 0.05, -2.0)
 	combat.float_text(global_position + Vector2(0, -70), "Гей, козаки!", Color(1.0, 0.7, 0.3))
 	combat.fx.ring(global_position, Color(1.0, 0.6, 0.25), 24, 260, 5, 0.4)
+	return true
+
+
+# ---------- Запорожець ----------
+
+func _zemnyi() -> bool:
+	var reach := 230.0
+	var m := 1.6 * (1.0 + 0.15 * (sk("zemnyi") - 1)) * skill_power
+	for e in _alive_enemies():
+		var to: Vector2 = e.global_position - global_position
+		if to.length() <= reach + e.radius:
+			var r := _roll(m)
+			hit(e, r[0], to.normalized() * 300.0, r[1])
+			if not e.dead and not e.is_boss:
+				e.stun = maxf(e.stun, 1.0 + 0.2 * sk("zemnyi"))
+	swing_time = 0.35
+	swing_duration = 0.35
+	swing_full = true
+	swing_reach = reach
+	combat.shake(10.0)
+	Audio.play("boom", 0.05, -2.0)
+	combat.fx.ring(global_position + Vector2(0, 16), Color(0.6, 0.45, 0.25), 30, reach * 2.0, 8, 0.4)
+	combat.fx.burst(global_position + Vector2(0, 16), Color(0.5, 0.4, 0.25), 24, 260, 7, 0.6)
+	return true
+
+
+func _stina() -> bool:
+	stina_timer = 6.0
+	Audio.play("roar", 0.05, -3.0)
+	combat.float_text(global_position + Vector2(0, -70), "Козацька стіна!", Color(0.9, 0.8, 0.5))
+	combat.fx.ring(global_position, Color(0.85, 0.75, 0.5), 24, 420, 5, 0.4)
+	return true
+
+
+func _bulava() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 300.0)
+	if target:
+		facing = (target.global_position - global_position).normalized()
+	var reach := maxf(attack_range * 1.5, 190.0)
+	var m := 3.0 * (1.0 + 0.2 * (sk("bulava") - 1)) * skill_power
+	for e in _alive_enemies():
+		var to: Vector2 = e.global_position - global_position
+		if to.length() <= reach + e.radius and (to.length() < 1.0 or absf(facing.angle_to(to)) <= 1.05):
+			var r := _roll(m)
+			hit(e, r[0], to.normalized() * 900.0, r[1])
+	swing_time = 0.3
+	swing_duration = 0.3
+	swing_full = false
+	combat.shake(9.0)
+	combat.hitstop(0.06)
+	Audio.play("crit", 0.05)
+	combat.fx.burst(global_position + facing * reach * 0.6, Color(1.0, 0.6, 0.3), 18, 300, 6, 0.4, 0, facing.angle(), 1.2)
+	return true
+
+
+# ---------- Пластун ----------
+
+func _pastka() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 260.0)
+	var pos: Vector2 = target.global_position if target else global_position + facing * 80.0
+	var r := _roll(2.2 * (1.0 + 0.2 * (sk("pastka") - 1)) * (1.0 + 0.2 * pk("trapper")) * skill_power)
+	combat.spawn_trap(pos, r[0], r[1], 2 + pk("trapper"))
+	Audio.play("sharpen_ok", 0.1, -8.0)
+	return true
+
+
+func _tin() -> bool:
+	tin_timer = 4.0
+	combat.fx.burst(global_position, Color(0.2, 0.2, 0.25), 20, 160, 7, 0.5)
+	combat.float_text(global_position + Vector2(0, -70), "Тінь", Color(0.6, 0.6, 0.75))
+	return true
+
+
+func _kydok() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 650.0)
+	var dir := facing
+	if target:
+		dir = (target.global_position - global_position).normalized()
+		facing = dir
+	var r := _roll(3.0 * (1.0 + 0.2 * (sk("kydok") - 1)) * skill_power)
+	combat.spawn_bullet(global_position + Vector2(0, -12) + dir * 30.0, dir, r[0], r[1])
+	combat.last_projectile().color = Color(0.85, 0.8, 0.7)
+	combat.last_projectile().spear = true
+	Audio.play("swing", 0.05, 0.0)
+	return true
+
+
+# ---------- Самопальник ----------
+
+## Звичайна атака пищаллю: куля навиліт, завершальний постріл — три кулі.
+func _fire_pishchal(step: int, finisher: bool) -> void:
+	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.3)
+	if target == null:
+		combo_step = 0
+		return
+	var dir: Vector2 = (target.global_position - global_position).normalized()
+	facing = dir
+	var angles := [-0.12, 0.0, 0.12] if finisher else [0.0]
+	for a in angles:
+		var r := _roll(COMBO_MULT[step] * (0.7 if angles.size() > 1 else 1.0))
+		combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 34.0, dir.rotated(a), r[0], r[1])
+		combat.last_projectile().pierce = 2  # звичайна куля пищалі пробиває двох
+	Audio.play("musket", 0.15, -8.0)
+	combat.fx.burst(global_position + Vector2(0, -10) + dir * 44.0, Color(0.85, 0.85, 0.8, 0.6), 8, 120, 7, 0.6, -40, dir.angle(), 0.8)
+	combat.shake(1.5)
+	combo_step = (step + 1) % COMBO_MULT.size()
+	combo_timer = COMBO_WINDOW
+
+
+func _kartech() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 600.0)
+	var dir := facing
+	if target:
+		dir = (target.global_position - global_position).normalized()
+		facing = dir
+	var m := 0.65 * (1.0 + 0.15 * (sk("kartech") - 1)) * skill_power
+	for i in 7:
+		var r := _roll(m)
+		combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 34.0, dir.rotated(-0.42 + i * 0.14), r[0], r[1])
+		combat.last_projectile().pierce = 1  # картеч не пробиває
+	Audio.play("musket", 0.05, 0.0)
+	combat.shake(5.0)
+	combat.fx.burst(global_position + Vector2(0, -10) + dir * 44.0, Color(1.0, 0.8, 0.3), 14, 300, 5, 0.2, 0, dir.angle(), 0.9)
+	return true
+
+
+func _prytsil_shot(mult: float, stun: bool) -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 900.0)
+	var dir := facing
+	if target:
+		dir = (target.global_position - global_position).normalized()
+		facing = dir
+	var r := _roll(mult)
+	combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 34.0, dir, r[0], true)
+	var b = combat.last_projectile()
+	b.velocity = dir * 1500.0
+	b.radius = 9.0
+	b.life = 1.2
+	b.stun_all = stun
+	Audio.play("musket", 0.0, 2.0)
+	combat.shake(6.0)
+	combat.hitstop(0.04)
+	return true
+
+
+func _bochka() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 450.0)
+	var pos: Vector2 = target.global_position if target else global_position + facing * 220.0
+	var r := _roll(2.8 * (1.0 + 0.2 * (sk("bochka") - 1)) * skill_power)
+	combat.spawn_barrel(pos, r[0], r[1], 150.0, r[0] * 0.1)
+	Audio.play("swing", 0.05, -2.0)
+	return true
+
+
+# ---------- Характерник ----------
+
+func _vovk() -> bool:
+	wolf_timer = 10.0 + 2.0 * (sk("vovk") - 1)
+	Audio.play("roar", 0.0, 0.0)
+	combat.float_text(global_position + Vector2(0, -70), "Вовча подоба!", Color(0.8, 0.8, 0.85))
+	combat.fx.burst(global_position, Color(0.5, 0.5, 0.5), 26, 220, 8, 0.6)
+	return true
+
+
+func _kulia() -> bool:
+	invuln = maxf(invuln, 2.0 + 0.5 * (sk("kulia") - 1))
+	combat.float_text(global_position + Vector2(0, -70), "Куля не бере!", Color(1.0, 0.85, 0.3))
+	combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 20, 100, 4, 0.4)
+	return true
+
+
+func _zamova() -> bool:
+	zamova_timer = 10.0
+	Audio.play("lightning", 0.05, -6.0)
+	combat.float_text(global_position + Vector2(0, -70), "Замовляння шаблі", Color(0.6, 0.8, 1.0))
+	return true
+
+
+## Замовлена шабля: удар перескакує блискавкою на двох сусідів.
+func _zamova_chain(from, dmg: float) -> void:
+	_chaining = true
+	var near := _alive_enemies().filter(func(e): return e != from and e.global_position.distance_to(from.global_position) < 260.0)
+	near.sort_custom(func(a, b): return from.global_position.distance_squared_to(a.global_position) < from.global_position.distance_squared_to(b.global_position))
+	var pts := PackedVector2Array([from.global_position])
+	for i in mini(2, near.size()):
+		var e = near[i]
+		pts.append(e.global_position)
+		hit(e, dmg * (0.35 + 0.05 * sk("zamova")), Vector2.ZERO, false)
+	if pts.size() > 1:
+		combat.spawn_bolt(pts)
+	_chaining = false
+
+
+func _vidvid() -> bool:
+	var dur := 2.0 + 0.3 * (sk("vidvid") - 1)
+	var n := 0
+	for e in _alive_enemies():
+		if global_position.distance_to(e.global_position) <= 300.0 + e.radius:
+			Status.apply(e, "weak", dur + 2.0)
+			if not e.is_boss:
+				e.stun = maxf(e.stun, dur)
+			n += 1
+	if n == 0:
+		return false
+	Audio.play("lightning", 0.1, -4.0)
+	combat.fx.ring(global_position, Color(0.6, 0.4, 0.8), 28, 600, 5, 0.5)
 	return true
 
 
@@ -1079,6 +1348,8 @@ func take_damage(amount: float, source = null) -> bool:
 		if amount <= 0.0:
 			combat.float_text(global_position + Vector2(0, -70), "Оберіг", Color(0.6, 0.85, 1.0))
 			return false
+	if stina_timer > 0.0:
+		amount *= 1.0 - (0.4 + 0.05 * (sk("stina") - 1))
 	if source != null and thorns > 0.0 and not source.dead:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
@@ -1155,6 +1426,10 @@ func _draw() -> void:
 		tint = Color(1.0, 0.45, 0.45)
 	elif dodge_time_left > 0.0:
 		tint = Color(1, 1, 1, 0.55)
+	if alive and tin_timer > 0.0:
+		tint = Color(0.6, 0.6, 0.75, 0.4)  # Тінь: пластун ледь видно
+	elif alive and wolf_timer > 0.0:
+		tint = tint * Color(0.75, 0.75, 0.8)
 
 	# Тінь
 	draw_set_transform(Vector2(0, 20), 0.0, Vector2(1.0, 0.38))
@@ -1191,9 +1466,18 @@ func _draw() -> void:
 		draw_line(Vector2(6, -14), Vector2(6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
 		draw_rect(Rect2(-14, 4, 28, 3), Color(0.55, 0.4, 0.25) * tint)
 	else:
-		# Тулуб: червоний жупан і жовтий пояс
-		draw_circle(Vector2(0, -2), 16.0, Color(0.78, 0.14, 0.14) * tint)
+		# Тулуб: жупан кольору спеціалізації і пояс
+		var coat: Color = {"zaporozhets": Color(0.55, 0.08, 0.1), "plastun": Color(0.35, 0.4, 0.22),
+			"samopalnyk": Color(0.2, 0.25, 0.45), "kharakternyk": Color(0.15, 0.12, 0.14)}.get(job, Color(0.78, 0.14, 0.14))
+		draw_circle(Vector2(0, -2), 16.0, coat * tint)
 		draw_rect(Rect2(-15, 3, 30, 5), Color(0.95, 0.75, 0.15) * tint)
+		if job == "zaporozhets":
+			draw_arc(Vector2(0, -2), 16.0, PI * 1.1, PI * 1.9, 12, Color(0.95, 0.75, 0.2) * tint, 3.0)  # золоте шиття
+		elif job == "kharakternyk":
+			draw_arc(Vector2(0, -6), 15.0, PI * 1.05, PI * 1.95, 12, Color(0.55, 0.55, 0.55) * tint, 6.0)  # вовча шкура на плечах
+		elif job == "samopalnyk":
+			draw_line(Vector2(-10, -12), Vector2(8, 4), Color(0.6, 0.45, 0.25) * tint, 3.0)  # ремінь порохівниці
+			draw_circle(Vector2(9, 5), 4.0, Color(0.75, 0.6, 0.3) * tint)
 
 	var head := Vector2(0, -26)
 	draw_circle(head, 11.0, Color(0.96, 0.8, 0.65) * tint)
@@ -1225,6 +1509,11 @@ func _draw() -> void:
 			head + Vector2(side * 6, -10), head + Vector2(-side * 4, -24), head + Vector2(-side * 14, -18), head + Vector2(-side * 8, -9)
 		]), hc.darkened(0.25) * tint)
 		draw_rect(Rect2(head + Vector2(-12, -14), Vector2(24, 8)), Color(0.25, 0.18, 0.12) * tint)
+	if wolf_timer > 0.0:
+		# Вовча подоба: вуха й сяйво очей
+		draw_colored_polygon(PackedVector2Array([head + Vector2(-9, -8), head + Vector2(-12, -22), head + Vector2(-3, -11)]), Color(0.5, 0.5, 0.52) * tint)
+		draw_colored_polygon(PackedVector2Array([head + Vector2(9, -8), head + Vector2(12, -22), head + Vector2(3, -11)]), Color(0.5, 0.5, 0.52) * tint)
+		draw_circle(head + Vector2(side * 4, -2), 2.6, Color(1.0, 0.85, 0.2))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	if not alive:
@@ -1243,6 +1532,11 @@ func _draw() -> void:
 	var rarity: int = equipment["weapon"]["rarity"] if equipment.has("weapon") else 0
 	var metal: Color = [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45)][rarity]
 	match weapon_type:
+		"pishchal":
+			# Пищаль: довгий ствол на ложі
+			draw_line(hand - dir * 14.0, hand + dir * 18.0, Color(0.45, 0.28, 0.12), 6.0)
+			draw_line(hand + dir * 4.0, hand + dir * 52.0, metal.darkened(0.35), 3.5)
+			draw_circle(hand + dir * 52.0, 2.5, Color(0.2, 0.2, 0.22))
 		"staff":
 			# Посох: довга палиця з живим вогником на верхівці
 			var top := hand + Vector2(0, -38)
@@ -1288,6 +1582,11 @@ func _draw() -> void:
 		draw_arc(Vector2(0, -8), 36.0, 0.0, TAU, 40, Color(0.6, 0.85, 1.0, 0.6), 2.5)
 	if cry_timer > 0.0:
 		draw_arc(Vector2(0, 16), 28.0, 0.0, TAU, 32, Color(1.0, 0.6, 0.25, 0.5), 3.0)
+	if stina_timer > 0.0:
+		draw_arc(Vector2(0, -6), 44.0, 0.0, TAU, 40, Color(0.95, 0.8, 0.45, 0.7), 4.0)
+	if zamova_timer > 0.0:
+		var za := walk_phase * 0.5 + zamova_timer * 6.0
+		draw_line(Vector2(side * 12, -4), Vector2(side * 12, -4) + Vector2.from_angle(za) * 26.0, Color(0.6, 0.85, 1.0, 0.8), 2.0)
 	if herb_timer > 0.0:
 		for i in 3:
 			var a := walk_phase * 0.3 + herb_timer * 2.0 + i * TAU / 3.0

@@ -25,6 +25,8 @@ static func build(game, city: String) -> Control:
 		["Коваль", _smith(game)],
 		["Корчма", _tavern(game, city)],
 	]
+	if city == "sich" and "cossack" in game.player.Classes.lineage(game.player.job):
+		pages.append(["Наставники", _mentors(game)])
 	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int): game.city_tab = i,
 		[[game.player.class_name_ua() + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
 
@@ -195,6 +197,49 @@ static func _smith(game) -> Control:
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 22, game.smith_msg_color, false))
 	return h
+
+
+# ---------------- Наставники (спеціалізації Козака) ----------------
+
+static func _mentors(game) -> Control:
+	var p = game.player
+	var Classes = p.Classes
+	var SS = game.SpecService
+	var w = game.world
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var need: int = Classes.JOB_CHANGE_AT[1]
+	if p.job == "cossack":
+		var t := "Спеціалізацію можна обрати з %d-го рівня майстерності Козака (зараз %d)." % [need, p.job_level]
+		v.add_child(UI.label(t, 19, UI.GOOD if p.job_level >= need else UI.MUTED, false))
+	else:
+		v.add_child(UI.label("Ти вже %s. Іншу дорогу відкриє лише Алатир-камінь." % p.class_name_ua().to_lower(), 19, UI.MUTED, false))
+	var trial: Dictionary = w.spec_trial
+	for spec in Classes.CLASSES["cossack"]["next"]:
+		var info: Dictionary = Classes.CLASSES[spec]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var mentor: Dictionary = game.StoryService.Story.NPCS[info["mentor"]]
+		col.add_child(UI.label("%s  •  наставник: %s" % [info["name"], mentor["name"]], 22, UI.GOLD if p.job == spec else UI.TEXT, false))
+		var d := UI.label(info["desc"], 16, UI.MUTED, false)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(d)
+		row.add_child(col)
+		var label := "Випробування"
+		var ok: bool = spec in SS.available(p)
+		if p.job == spec:
+			label = "Твоя дорога"
+			ok = false
+		elif not trial.is_empty() and trial["spec"] == spec:
+			label = "Триває" if trial["stage"] == "active" else "Посвята"
+			ok = false
+		v.add_child(row)
+		row.add_child(UI.button(label, _do(game, "spec_start", spec), Vector2(200, 64), 18, ok))
+	if not trial.is_empty():
+		v.add_child(UI.label(SS.objective_line(w), 19, UI.GOLD, false))
+	return v
 
 
 # ---------------- Корчма ----------------

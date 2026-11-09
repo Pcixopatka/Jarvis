@@ -18,6 +18,7 @@ const TelegraphScript := preload("res://scripts/world/telegraph.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
 const GateScript := preload("res://scripts/entities/gate.gd")
+const TrapScript := preload("res://scripts/world/trap.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
 const FxScript := preload("res://scripts/world/fx.gd")
@@ -665,6 +666,7 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 
 func _new_projectile(pos: Vector2, vel: Vector2, dmg: float) -> Projectile:
 	var p: Projectile = ProjectileScript.new()
+	_last_proj = p
 	p.combat = self
 	p.position = pos
 	p.velocity = vel
@@ -678,6 +680,40 @@ func spawn_projectile(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: C
 	p.color = col
 	p.radius = r
 	p.source = source
+
+
+## Остання випущена куля/снаряд (щоб вміння могли її налаштувати).
+var _last_proj = null
+
+
+func last_projectile():
+	return _last_proj
+
+
+## Пастка пластуна. max_count — скільки пасток може стояти одночасно (старі зникають).
+func spawn_trap(pos: Vector2, dmg: float, crit: bool, max_count: int) -> void:
+	var traps := effects.get_children().filter(func(n): return n.get_script() == TrapScript and n.kind == "trap" and not n.is_queued_for_deletion())
+	while traps.size() >= max_count:
+		traps.pop_front().queue_free()
+	var t = TrapScript.new()
+	t.combat = self
+	t.position = pos
+	t.damage = dmg
+	t.crit = crit
+	effects.add_child(t)
+
+
+## Бочка пороху: вибухає за мить.
+func spawn_barrel(pos: Vector2, dmg: float, crit: bool, blast: float, burn: float) -> void:
+	var t = TrapScript.new()
+	t.combat = self
+	t.kind = "barrel"
+	t.position = pos
+	t.damage = dmg
+	t.crit = crit
+	t.blast = blast
+	t.burn = burn
+	effects.add_child(t)
 
 
 ## Іскра волхва: самонавідна ціль уже обрана, летить швидко, б'є одного.

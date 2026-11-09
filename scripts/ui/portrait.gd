@@ -38,6 +38,7 @@ func _draw() -> void:
 		"petro": Color(0.55, 0.25, 0.2), "yaryna": Color(0.95, 0.92, 0.8), "oksana": Color(0.3, 0.38, 0.2),
 		"hanna": Color(0.35, 0.12, 0.3), "opryshok": Color(0.85, 0.82, 0.7), "koshchii": Color(0.08, 0.06, 0.08),
 		"velemyr": Color(0.95, 0.94, 0.88), "hero_volkhv": Color(0.95, 0.94, 0.9),
+		"myron": Color(0.55, 0.08, 0.1), "sava": Color(0.35, 0.4, 0.22), "okhrim": Color(0.2, 0.25, 0.45), "yarema": Color(0.15, 0.12, 0.14),
 		"chumak": Color(0.92, 0.9, 0.82), "gonets": Color(0.2, 0.35, 0.6), "koval": Color(0.4, 0.26, 0.15), "bizhenka": Color(0.55, 0.4, 0.3)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
@@ -167,6 +168,35 @@ func _draw() -> void:
 			draw_colored_polygon(_pts(c, s, [Vector2(-34, 4), Vector2(-30, -26), Vector2(0, -38), Vector2(30, -26), Vector2(34, 4), Vector2(26, -14), Vector2(0, -24), Vector2(-26, -14)]), Color(0.3, 0.25, 0.3))
 			draw_colored_polygon(_pts(c, s, [Vector2(-34, 4), Vector2(-26, -14), Vector2(-14, 30), Vector2(-28, 34)]), Color(0.3, 0.25, 0.3))
 			draw_colored_polygon(_pts(c, s, [Vector2(34, 4), Vector2(26, -14), Vector2(14, 30), Vector2(28, 34)]), Color(0.3, 0.25, 0.3))
+		"myron":
+			# Осавул: сивіючий оселедець, довгі вуса, шрам через брову
+			_chub(c, s, Color(0.55, 0.5, 0.45))
+			_brows(c, s, Color(0.45, 0.4, 0.35), 4.0)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.5, 0.45, 0.4), 36.0)
+			draw_line(c + Vector2(8, -22) * s, c + Vector2(18, 2) * s, Color(0.7, 0.4, 0.35), 2.5 * s)
+		"sava":
+			# Пластун: зелений каптур, гострі очі, коротка борідка
+			draw_colored_polygon(_pts(c, s, [Vector2(-36, 20), Vector2(-32, -26), Vector2(0, -42), Vector2(32, -26), Vector2(36, 20), Vector2(24, -12), Vector2(0, -22), Vector2(-24, -12)]), Color(0.3, 0.35, 0.2))
+			_brows(c, s, Color(0.25, 0.18, 0.1), 3.0)
+			_eyes(c, s, eye_y, false)
+			draw_colored_polygon(_pts(c, s, [Vector2(-10, 16), Vector2(10, 16), Vector2(0, 30)]), Color(0.3, 0.2, 0.12))
+		"okhrim":
+			# Гармаш: закопчене обличчя, хутряна шапка, рудий вус
+			_brows(c, s, Color(0.2, 0.15, 0.1), 4.0)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.75, 0.4, 0.15), 26.0)
+			draw_circle(c + Vector2(-14, 8) * s, 5.0 * s, Color(0.3, 0.3, 0.3, 0.4))
+			draw_rect(Rect2(c + Vector2(-30, -38) * s, Vector2(60, 16) * s), Color(0.3, 0.22, 0.15))
+		"yarema":
+			# Характерник: сивий оселедець, сиві вуса, вовчі очі
+			_chub(c, s, Color(0.85, 0.85, 0.85))
+			_brows(c, s, Color(0.8, 0.8, 0.8), 3.5)
+			for x in [-11.0, 11.0]:
+				draw_circle(c + Vector2(x, eye_y) * s, 3.5 * s, Color(0.95, 0.75, 0.2))
+				draw_circle(c + Vector2(x, eye_y) * s, 1.5 * s, Color(0.1, 0.1, 0.1))
+			_mustache(c, s, Color(0.85, 0.85, 0.85), 40.0)
+			draw_arc(c + Vector2(0, 44) * s, 40.0 * s, PI * 1.1, PI * 1.9, 12, Color(0.5, 0.5, 0.5), 8.0 * s)
 		"velemyr":
 			# Верховний волхв: сива борода до пояса, вінок із дубового листя, посох
 			draw_circle(c + Vector2(0, -14) * s, 26.0 * s, Color(0.9, 0.9, 0.88))

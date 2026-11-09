@@ -14,7 +14,9 @@ var source = null  # ворог, що вистрілив (щоб удар міг
 var spell := false  # іскра чи вогняна куля волхва (не пробиває, своє світіння)
 var explode_radius := 0.0  # > 0 — вибухає при першому влучанні або в кінці польоту
 var burn_dps := 0.0
-var stun_all := false  # повний заряд волхва приголомшує
+var stun_all := false  # повний заряд волхва / прицільний постріл приголомшує
+var spear := false  # кинутий спис пластуна
+var pierce := 999  # скільки ворогів пробиває куля козака
 var _hit_ids := []
 
 
@@ -31,6 +33,11 @@ func _process(delta: float) -> void:
 					_explode()
 					return
 				combat.player.hit(e, damage, velocity.normalized() * 160.0, crit)
+				if stun_all and not e.dead and not e.is_boss:
+					e.stun = maxf(e.stun, 1.0)
+				if _hit_ids.size() >= pierce:
+					queue_free()
+					return
 				if spell:
 					combat.fx.burst(global_position, color, 6, 140, 3, 0.25)
 					queue_free()
@@ -77,6 +84,10 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, radius * 1.6, Color(color, 0.25))
 		draw_circle(Vector2.ZERO, radius, color)
 		draw_circle(Vector2.ZERO, radius * 0.45, Color(1, 1, 0.9))
+		return
+	if spear:
+		draw_line(back * 34.0, -back * 10.0, Color(0.5, 0.33, 0.15), 4.0)
+		draw_colored_polygon(PackedVector2Array([-back * 22.0, -back * 8.0 + back.orthogonal() * 5.0, -back * 8.0 - back.orthogonal() * 5.0]), Color(0.85, 0.88, 0.92))
 		return
 	if friendly:
 		draw_line(Vector2.ZERO, back * 40.0, Color(1.0, 0.9, 0.6, 0.5), radius)

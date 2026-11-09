@@ -48,10 +48,12 @@ func _run() -> void:
 	_suite_challenges()
 	_suite_craft()
 	_suite_classes()
+	_suite_specs()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
 	await _suite_mage_battle()
+	await _suite_spec_battle()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -1046,6 +1048,189 @@ func _suite_mage_battle() -> void:
 	SaveSystem.delete(TEST_SAVE)
 
 
+func _suite_specs() -> void:
+	suite("Спеціалізації Козака: наставники й випробування")
+	var SS = load("res://scripts/game/spec_service.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var p = _new_player()
+	var w = WorldState.new()
+	check(Classes.CLASSES["cossack"]["next"].size() == 4, "у Козака 4 дороги")
+	for spec in Classes.CLASSES["cossack"]["next"]:
+		var info: Dictionary = Classes.CLASSES[spec]
+		check(info["tier"] == 2 and info["job_max"] == 50 and SS.TRIALS.has(spec), "%s: ступінь 2, є випробування" % spec)
+		check(load("res://scripts/data/story.gd").NPCS.has(info["mentor"]), "%s: наставник %s" % [spec, info["mentor"]])
+		var t: Dictionary = SS.TRIALS[spec]
+		check(not t["start"].is_empty() and not t["end"].is_empty() and t["item"]["type"] in info["weapons"], "%s: розмови й зброя класу" % spec)
+		var obj: Dictionary = t["objective"]
+		check(not obj.has("loc") or Data.LOCATIONS.has(obj["loc"]), "%s: місце випробування існує" % spec)
+	p.job_level = 29
+	check(SS.available(p).is_empty() and not SS.start(w, p, "plastun"), "до 30-ї майстерності випробувань немає")
+	p.job_level = 30
+	check(SS.available(p).size() == 4 and SS.start(w, p, "plastun"), "з 30-ї — можна до наставника")
+	check(SS.objective_line(w).begins_with("◆") and SS.target(w) == "", "мета пластуна — будь-де")
+	for i in 7:
+		SS.on_event(w, "elite", "")
+	SS.on_event(w, "kill", "upyr")
+	check(w.spec_trial["stage"] == "active" and w.spec_trial["progress"] == 7, "звичайні вороги не рахуються")
+	var m = SS.on_event(w, "elite", "")
+	check(w.spec_trial["stage"] == "turnin" and not m.is_empty() and SS.target(w) == "sich", "8 еліт — повертайся на Січ")
+	check(SS.city_dialogue(w, "kyiv").is_empty() and SS.city_dialogue(w, "sich")["spec"] == "plastun", "посвята — лише на Січі")
+	var skills_before: Dictionary = p.skills.duplicate()
+	var t2 = SS.complete(w, p)
+	check(t2 != "" and p.job == "plastun" and p.job_level == 1 and w.spec_trial.is_empty(), "посвячено в пластуни")
+	check(p.equipment["weapon"]["name"] == "Спис пластуна" and p.equipment["weapon"]["rarity"] == 2, "наставник дає зброю")
+	check(p.skills.has("whirl") and "cossack" in Classes.lineage("plastun"), "козацькі вміння лишаються")
+	p.skill_points = 1
+	check(p.learn_skill("kydok") and not p.learn_skill("whirl"), "пластун вчить свої вміння, а козацькі — вже ні")
+	check(SS.available(p).is_empty(), "з пластуна далі не обирають (поки)")
+	# Пищаль: лише для самопальника
+	var gun = Data.gen_item(10, 1, "weapon", "pishchal")
+	var c = _new_player()
+	c.add_item(gun)
+	check(not c.can_use(gun), "звичайний козак пищаль не бере")
+	c.change_class("samopalnyk")
+	check(c.equip(gun["uid"]) and c.attack_range > 400.0, "самопальник — пищаль здалеку")
+	var d0: float = c.damage
+	c.stats["agi"] += 10
+	c.recalc()
+	check(c.damage > d0 * 1.3, "сила пищалі — від Спритності")
+	# Міграція не потрібна: новий стан порожній за замовчуванням
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.spec_trial.is_empty(), "стан випробування зберігається")
+	p.free()
+	c.free()
+
+
+func _suite_spec_battle() -> void:
+	suite("Бій спеціалізацій")
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "block": true, "elite": true, "boss": true, "item": true, "map": true}
+	var p = game.player
+	p.change_class("zaporozhets")
+	var mace = Data.gen_item(10, 1, "weapon", "mace")
+	p.add_item(mace)
+	p.equip(mace["uid"])
+	p.skills = {"zemnyi": 2, "stina": 2, "bulava": 2, "nevhamovnyi": 3, "tin": 1, "pastka": 1, "kydok": 1,
+		"kartech": 1, "prytsil": 1, "bochka": 1, "vovk": 1, "kulia": 1, "zamova": 1, "vidvid": 1}
+	p.recalc()
+	game.enter_location("wild_field")
+	await _frames(2)
+	p.invuln = 99.0
+	# Запорожець
+	var e = _moves_dummy(game, "upyr")
+	p.mana = p.max_mana
+	var h0: float = e.hp
+	p.use_skill("zemnyi")
+	check(e.hp < h0 and e.stun > 0.5, "Земний удар: шкода й приголомшення")
+	p.mana = p.max_mana
+	p.use_skill("stina")
+	var far = _moves_dummy(game, "mavka")
+	far.global_position = p.global_position + Vector2(300, 0)
+	check(far._pick_target() == p, "Козацька стіна: вороги б'ють запорожця")
+	p.invuln = 0.0
+	var hp0: float = p.hp
+	p.take_damage(100.0, null)
+	check(hp0 - p.hp < 100.0 * (1.0 - p.armor) * 0.7, "Стіна зменшує шкоду")
+	p.invuln = 99.0
+	p.stina_timer = 0.0
+	var b = _moves_dummy(game, "upyr")
+	var bh: float = b.hp
+	p.mana = p.max_mana
+	p.use_skill("bulava")
+	check(b.hp < bh, "Булава гніву")
+	p.hp = p.max_hp * 0.2
+	var low: float = p._roll(1.0)[0]
+	p.hp = p.max_hp
+	var full: float = p._roll(1.0)[0]
+	check(low > full * 1.15, "Невгамовний: поранений б'є сильніше")
+	# Пластун
+	p.change_class("plastun")
+	p.mana = p.max_mana
+	p.use_skill("tin")
+	var seer = _moves_dummy(game, "upyr")
+	check(p.tin_timer > 0.0 and seer._pick_target() != p, "Тінь: вороги не бачать")
+	var r: Array = p._roll(1.0)
+	check(r[1] and p.tin_timer == 0.0, "удар із Тіні — гарантований крит")
+	var t = _moves_dummy(game, "upyr")
+	t.global_position = p.global_position + Vector2(120, 0)
+	p.mana = p.max_mana
+	p.use_skill("pastka")
+	var th: float = t.hp
+	for i in 5:
+		await process_frame
+	check(t.hp < th and t.stun > 0.5, "пастка ловить ворога")
+	var k = _moves_dummy(game, "upyr")
+	k.global_position = p.global_position + Vector2(200, 0)
+	var kh: float = k.hp
+	p.mana = p.max_mana
+	p.use_skill("kydok")
+	for i in 20:
+		await process_frame
+	check(k.hp < kh, "кидок списа")
+	# Самопальник
+	p.change_class("samopalnyk")
+	var gun = Data.gen_item(10, 1, "weapon", "pishchal")
+	p.add_item(gun)
+	p.equip(gun["uid"])
+	var g = _moves_dummy(game, "upyr")
+	g.global_position = p.global_position + Vector2(300, 0)
+	var gh: float = g.hp
+	p.attack_timer = 0.0
+	p.attack()
+	for i in 20:
+		await process_frame
+	check(g.hp < gh, "пищаль б'є здалеку")
+	gh = g.hp
+	p.mana = p.max_mana
+	p.use_skill("kartech")
+	for i in 20:
+		await process_frame
+	check(g.hp < gh, "картеч")
+	gh = g.hp
+	p.mana = p.max_mana
+	p.use_skill("bochka")
+	for i in 80:
+		await process_frame
+	check(g.hp < gh and g.statuses.has("burn"), "бочка пороху вибухає й підпалює")
+	# Характерник
+	p.change_class("kharakternyk")
+	var sb = Data.gen_item(10, 1, "weapon", "sabre")
+	p.add_item(sb)
+	p.equip(sb["uid"])
+	p.mana = p.max_mana
+	p.use_skill("vovk")
+	check(p.wolf_timer > 0.0, "Вовча подоба")
+	p.wolf_timer = 0.0
+	p.invuln = 0.0
+	p.mana = p.max_mana
+	p.use_skill("kulia")
+	check(p.invuln >= 2.0, "Куля не бере — невразливість")
+	p.mana = p.max_mana
+	p.use_skill("zamova")
+	var z1 = _moves_dummy(game, "upyr")
+	game.combat.spawn_enemy("mavka", 5, false, z1.global_position + Vector2(40, 40))
+	var z2 = game.combat.get_tree().get_nodes_in_group("enemies")[-1]
+	z2.max_hp = 100000.0
+	z2.hp = z2.max_hp
+	var z2h: float = z2.hp
+	p.hit(z1, 50.0, Vector2.ZERO, false)
+	check(z2.hp < z2h, "замовлена шабля перескакує блискавкою")
+	p.zamova_timer = 0.0
+	p.mana = p.max_mana
+	p.use_skill("vidvid")
+	check(z1.stun > 1.0 and z1.statuses.has("weak"), "Відвід очей: заціпеніння й слабкість")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+
+
 func _suite_camp() -> void:
 	suite("Хутір і реклама")
 	var CampService = load("res://scripts/game/camp_service.gd")
@@ -1386,7 +1571,7 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root != null, "посвята: урочиста розмова")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(p.job == "cossack" and p.job_level == 1 and p.sk("whirl") == 1 and p.sk("vyly") == 1 and game.world.story["chapter"] == 1, "посвячено в козаки — розділ I, селянське вміння лишилось")
+	check(p.job == "cossack" and p.job_level < 5 and p.sk("whirl") == 1 and p.sk("vyly") == 1 and game.world.story["chapter"] == 1, "посвячено в козаки — розділ I, селянське вміння лишилось")
 	check(p.equipment["weapon"]["type"] == "sabre", "козацька шабля одразу в руці")
 	check(game.hud.dialogue_root != null, "розділ I: кошовий одразу кличе")
 	game.hud.dialogue_root._finish()
