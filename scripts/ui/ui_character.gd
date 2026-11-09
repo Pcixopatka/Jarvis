@@ -19,7 +19,7 @@ static func build(game) -> Control:
 		["Перки" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
 	]
-	return UI.screen("Козак — рівень %d   •   Гривні: %d" % [p.level, p.gold], "Назад", game.close_character,
+	return UI.screen("%s — рівень %d   •   Гривні: %d" % [{"peasant": "Селянин", "hetman": "Гетьман"}.get(p.rank, "Козак"), p.level, p.gold], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i)
 
 

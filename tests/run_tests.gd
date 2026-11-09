@@ -298,7 +298,7 @@ func _suite_story() -> void:
 	check(p.is_peasant() and not p.can_learn_skill(Data.SKILL_BRANCHES[0]["nodes"][0]), "селянин не вчить козацьких умінь")
 	var steps_done = 0
 	var guard = 0
-	while StoryService.state(w)["stage"] != "done" and guard < 60:
+	while StoryService.state(w)["stage"] != "done" and guard < 300:
 		guard += 1
 		var st = StoryService.current(w)
 		var stage = StoryService.state(w)["stage"]
@@ -329,6 +329,9 @@ func _suite_story() -> void:
 			steps_done += 1
 	check(StoryService.state(w)["stage"] == "done", "розділ пройдено до кінця")
 	check(not p.is_peasant() and p.sk("whirl") >= 1, "після посвяти — козак із вихором")
+	check(p.rank == "hetman" and "Гетьманська булава" in p.inventory.map(func(it): return it["name"]), "фінал: гетьман із булавою")
+	check(StoryService.effect(w, "koshchii_mortal") == 1.0, "зламана голка — Кощій смертний")
+	check(w.plague["pressure"] == 0.0 and load("res://scripts/game/plague_service.gd").infected_count(w) == 0, "після Кремля зарази немає")
 	var total_steps = 0
 	for ch in load("res://scripts/data/story.gd").CHAPTERS:
 		total_steps += ch["steps"].size()
@@ -345,12 +348,12 @@ func _suite_story() -> void:
 	# Наслідки виборів (тест завжди обирає перший варіант)
 	check(p.stats["str"] == Data.STAT_BASE + 3, "присяга помсти: +3 сили")
 	check("Печатка Києва" in names, "стіни Києва: печатка в нагороду")
-	check(is_equal_approx(StoryService.effect(w, "plague_resist"), 0.3) and StoryService.effect(w, "potion_max") == 1.0, "вибори дають опір заразі й зілля")
+	check(is_equal_approx(StoryService.effect(w, "plague_resist"), 0.3) and StoryService.effect(w, "potion_max") == 2.0, "вибори дають опір заразі й зілля")
 	check(w.discount("chyhyryn") >= 0.25 and w.discount("chyhyryn") > w.discount("lviv"), "вдячний Чигирин продає дешевше")
-	check(StoryService.chronicle(w).size() == 5, "у літописі 5 виборів (%d)" % StoryService.chronicle(w).size())
+	check(StoryService.chronicle(w).size() == 7, "у літописі 7 виборів (%d)" % StoryService.chronicle(w).size())
 	var CampService = load("res://scripts/game/camp_service.gd")
 	CampService.apply_effects(w, p)
-	check(p.plague_resist > 0.0 and p.potion_max() == Data.POTION_MAX + 1, "наслідки застосовано до козака")
+	check(p.plague_resist > 0.0 and p.potion_max() == Data.POTION_MAX + 2, "наслідки застосовано до козака")
 	var lair: Dictionary = StoryService._find_step("lair")
 	w.story["choices"]["camp"] = 0
 	var heard0 = StoryService.lines(w, lair["end"]).size()

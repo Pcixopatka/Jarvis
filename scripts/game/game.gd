@@ -269,6 +269,7 @@ func enter_location(id: String) -> void:
 	hud.close_dialogue()
 	hud.close_overlay()
 	hud.show_map(false)
+	combat.boss_revives = 0 if StoryService.effect(world, "koshchii_mortal") > 0.0 else 1
 	combat.enter(id, _party_data(), PlagueService.level(world, id))
 	hud.set_mode(true, true)
 	state = State.PLAYING

@@ -47,6 +47,7 @@ var companion_nodes: Array = []
 
 var active := false
 var plague := 0  # рівень зарази поточної місцевості
+var boss_revives := 0  # скільки разів Кощій ще встане (поки голка ціла)
 var plague_mods := {}
 var cloud_timer := 0.0
 var loc_id := ""

@@ -341,12 +341,31 @@ const LOCATIONS := {
 	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.2, 48.6), "level": 10,
 		"rooms": 6, "enemies": ["vovkulaka", "upyr", "bolotianyk"], "boss": "vovkulaka",
 		"desc": "Скарби опришків стереже Вовкулака-ватажок."},
+	# ---- Розділ III: Карпатська варта ----
+	"kamianets_walls": {"name": "Кам'янецькі мури", "type": "field", "biome": "mountain", "pos": Vector2(27.1, 48.25), "level": 13,
+		"enemies": ["zarazhenyi", "pishchalnyk", "chort"], "desc": "Під мурами фортеці стала облогою Кощієва рать: пищальники й чорти."},
+	"koshchii_tower": {"name": "Кощієва вежа", "type": "dungeon", "biome": "plague", "pos": Vector2(30.4, 54.4), "level": 16,
+		"rooms": 6, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "koshchii",
+		"desc": "Кістяна вежа на білоруських болотах. Тут сидить Кощій — воєвода Путіноїда, якого не бере смерть."},
+	# ---- Розділ IV: Похід на Північ ----
+	"smolensk_road": {"name": "Смоленський шлях", "type": "field", "biome": "forest", "pos": Vector2(33.6, 54.6), "level": 18,
+		"enemies": ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"], "desc": "Старий шлях на Москву. Кожна верста тут полита кров'ю."},
+	"mozhaisk": {"name": "Можайські болота", "type": "field", "biome": "swamp", "pos": Vector2(35.9, 55.5), "level": 20,
+		"enemies": ["pishchalnyk", "bolotianyk", "chort", "zarazhenyi"], "desc": "Останні болота перед Москвою. Зараза тут така густа, що її видно оком."},
+	# ---- Розділ V: Кремль ----
+	"kremlin": {"name": "Кремль", "type": "dungeon", "biome": "plague", "pos": Vector2(37.62, 55.75), "level": 22,
+		"rooms": 7, "enemies": ["zarazhenyi", "pishchalnyk", "chort", "upyr"], "boss": "putinoid",
+		"desc": "Червоні мури, за якими сто років сидить Путіноїд. Серце зарази."},
 }
 
-const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит", "zmii": "Змій", "chaklun": "Чаклун Путіноїда"}
-const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених", "zmii": "зміїв", "chaklun": "чаклунів"}
-const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда"}
-const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази"}
+const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит",
+	"zmii": "Змій", "chaklun": "Чаклун Путіноїда", "chort": "Чорт", "pishchalnyk": "Заражений пищальник", "koshchii": "Кощій", "putinoid": "Путіноїд"}
+const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених",
+	"zmii": "зміїв", "chaklun": "чаклунів", "chort": "чортів", "pishchalnyk": "пищальників", "koshchii": "кощіїв", "putinoid": "путіноїдів"}
+const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда",
+	"koshchii": "Кощій Безсмертний", "putinoid": "Путіноїд, кремлівський упир-цар"}
+const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази",
+	"chort": "Чортів ріг", "pishchalnyk": "Наказ воєводи"}
 
 const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
 const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]

@@ -192,7 +192,7 @@ static func _advance(world, msgs: Array) -> void:
 	s["stage"] = "offer"
 	if s["step"] >= steps.size():
 		msgs.append({"text": "%s — завершено!" % Story.CHAPTERS[s["chapter"]]["title"], "big": true})
-		if PlagueService.CHAPTER_CLEANSE.has(int(s["chapter"])):
+		if PlagueService.CHAPTER_CLEANSE.has(int(s["chapter"])) or int(s["chapter"]) >= PlagueService.FINAL_CHAPTER:
 			PlagueService.on_chapter_done(world, int(s["chapter"]))
 			msgs.append({"text": "Зараза відступає з цілого краю!", "big": true})
 		s["chapter"] += 1
@@ -206,7 +206,7 @@ static func _advance(world, msgs: Array) -> void:
 static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 	if r.has("rank"):
 		player.rank = r["rank"]
-		msgs.append({"text": "Ти — козак Запорозького війська!", "big": true})
+		msgs.append({"text": {"cossack": "Ти — козак Запорозького війська!", "hetman": "Тебе обрано гетьманом України!"}.get(r["rank"], ""), "big": true})
 	if r.has("skills"):
 		for id in r["skills"]:
 			player.skills[id] = maxi(player.sk(id), int(r["skills"][id]))

@@ -11,12 +11,17 @@ func _draw() -> void:
 	var skin := Color(0.95, 0.78, 0.62)
 	draw_circle(c, r, Color(0.22, 0.17, 0.12))
 	draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.3, 0.24, 0.16))
+	if npc == "koshchii":
+		skin = Color(0.92, 0.9, 0.82)  # голий череп
+		draw_circle(c, r, Color(0.06, 0.08, 0.05))
+		draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.1, 0.18, 0.08))
 	if npc == "putinoid":
 		skin = Color(0.78, 0.8, 0.76)  # мертвотно-бліда шкіра
 		draw_circle(c, r, Color(0.12, 0.06, 0.08))
 		draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.25, 0.05, 0.08))
 	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1), "selianyn": Color(0.95, 0.94, 0.9),
-		"petro": Color(0.55, 0.25, 0.2), "yaryna": Color(0.95, 0.92, 0.8), "oksana": Color(0.3, 0.38, 0.2)}.get(npc, Color.GRAY)
+		"petro": Color(0.55, 0.25, 0.2), "yaryna": Color(0.95, 0.92, 0.8), "oksana": Color(0.3, 0.38, 0.2),
+		"hanna": Color(0.35, 0.12, 0.3), "opryshok": Color(0.85, 0.82, 0.7), "koshchii": Color(0.08, 0.06, 0.08)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
 	if npc == "znakharka":
@@ -84,6 +89,38 @@ func _draw() -> void:
 			_brows(c, s, Color(0.3, 0.2, 0.1), 2.5)
 			_eyes(c, s, eye_y, false)
 			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.65, 0.35, 0.3), 2.0 * s)
+		"hanna":
+			# Шляхтянка-воїтелька: темне волосся під шапкою з пером, сталевий нагрудник
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, 10), Vector2(-28, -22), Vector2(0, -32), Vector2(28, -22), Vector2(30, 10), Vector2(20, -14), Vector2(-20, -14)]), Color(0.15, 0.1, 0.08))
+			draw_rect(Rect2(c + Vector2(-30, -38) * s, Vector2(60, 14) * s), Color(0.35, 0.12, 0.3))
+			draw_line(c + Vector2(22, -38) * s, c + Vector2(40, -60) * s, Color(0.95, 0.95, 0.9), 4.0 * s)
+			_brows(c, s, Color(0.15, 0.1, 0.08), 2.5)
+			_eyes(c, s, eye_y, false)
+			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.7, 0.3, 0.3), 2.0 * s)
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, 48), Vector2(30, 48), Vector2(24, 64), Vector2(-24, 64)]), Color(0.7, 0.72, 0.75))
+		"opryshok":
+			# Гуцульський капелюх, довге чорне волосся, топірець
+			draw_colored_polygon(_pts(c, s, [Vector2(-32, 6), Vector2(-30, -16), Vector2(30, -16), Vector2(32, 6), Vector2(22, -6), Vector2(-22, -6)]), Color(0.1, 0.08, 0.08))
+			draw_rect(Rect2(c + Vector2(-44, -24) * s, Vector2(88, 8) * s), Color(0.12, 0.1, 0.1))
+			draw_rect(Rect2(c + Vector2(-24, -44) * s, Vector2(48, 22) * s), Color(0.12, 0.1, 0.1))
+			draw_line(c + Vector2(-24, -28) * s, c + Vector2(24, -28) * s, Color(0.85, 0.2, 0.15), 3.0 * s)
+			_brows(c, s, Color(0.1, 0.08, 0.08), 3.0)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.1, 0.08, 0.08), 18.0)
+			draw_line(c + Vector2(44, 64) * s, c + Vector2(52, 12) * s, Color(0.45, 0.28, 0.12), 4.0 * s)
+			draw_colored_polygon(_pts(c, s, [Vector2(48, 12), Vector2(64, 6), Vector2(62, 22), Vector2(50, 20)]), Color(0.7, 0.72, 0.75))
+		"koshchii":
+			# Череп із зеленим вогнем в очницях і зубчаста корона
+			draw_rect(Rect2(c + Vector2(-14, 18) * s, Vector2(28, 12) * s), skin)
+			for x in [-11.0, 11.0]:
+				draw_circle(c + Vector2(x, eye_y) * s, 7.0 * s, Color(0.05, 0.05, 0.05))
+				draw_circle(c + Vector2(x, eye_y) * s, 3.5 * s, Color(0.5, 1.0, 0.3))
+			draw_colored_polygon(_pts(c, s, [Vector2(0, 6), Vector2(-4, 14), Vector2(4, 14)]), Color(0.1, 0.1, 0.1))
+			for i in 6:
+				draw_line(c + Vector2(-12 + i * 5, 20) * s, c + Vector2(-12 + i * 5, 28) * s, Color(0.3, 0.3, 0.28), 1.5 * s)
+			for i in 5:
+				var x := -24.0 + i * 12.0
+				draw_colored_polygon(_pts(c, s, [Vector2(x - 6, -26), Vector2(x + 6, -26), Vector2(x, -46)]), Color(0.85, 0.7, 0.2))
 		"hero":
 			_chub(c, s, Color(0.22, 0.14, 0.08))
 			_brows(c, s, Color(0.25, 0.15, 0.08), 2.5)
