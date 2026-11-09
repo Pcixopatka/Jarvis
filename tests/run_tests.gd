@@ -223,6 +223,10 @@ func _suite_save() -> void:
 	var m = SaveSystem.migrate(v2)
 	check(m.get("version", 0) == SaveSystem.SAVE_VERSION and m.has("meta") and m["world"].has("hints"), "міграція v2 → поточна")
 	check(m["player"]["xp_next"] == Data.xp_for_level(m["player"]["level"]), "міграція перераховує поріг досвіду")
+	var v6 = SaveSystem.migrate({"version": 6, "player": p.to_dict(), "world": {"story": {"chapter": 1, "step": 3, "stage": "active", "progress": 0}}})
+	check(v6["world"]["story"]["chapter"] == 2 and v6["world"]["story"]["step"] == 3, "міграція v7: розділ зсувається через пролог")
+	var v6d = SaveSystem.migrate({"version": 6, "player": {}, "world": {"story": {"chapter": 2, "step": 0, "stage": "done"}}})
+	check(v6d["world"]["story"]["chapter"] == 2, "завершений сюжет не зсувається")
 	check(SaveSystem.migrate({"version": 1, "player": {}, "world": {}}).is_empty(), "v1 не підтримується")
 	check(SaveSystem.migrate({"version": 99, "player": {}, "world": {}}).is_empty(), "майбутня версія відхиляється")
 	var w2 = WorldState.new()
@@ -283,10 +287,13 @@ func _suite_story() -> void:
 	var p = _new_player()
 	var w = WorldState.new()
 	var gold0 = p.gold
-	check(StoryService.state(w)["stage"] == "offer", "сюжет чекає першої розмови")
+	p.rank = "peasant"
+	p.skills = {}
+	check(StoryService.state(w)["stage"] == "active" and StoryService.current(w)["id"] == "village", "пролог: одразу бій за рідне село")
+	check(not StoryService.intro(w).is_empty(), "пролог: кобзар розповідає вступ")
 	check(StoryService.city_dialogue(w, "kyiv").is_empty(), "у чужому місті розмови немає")
-	check(StoryService.city_dialogue(w, "sich").get("kind", "") == "start", "розмова з кошовим на Січі")
-	check(StoryService.target(w) == "sich" and StoryService.objective_line(w) != "", "зірка й рядок мети")
+	check(StoryService.target(w) == "ridne_selo" and StoryService.objective_line(w) != "", "зірка й рядок мети")
+	check(p.is_peasant() and not p.can_learn_skill(Data.SKILL_BRANCHES[0]["nodes"][0]), "селянин не вчить козацьких умінь")
 	var steps_done = 0
 	var guard = 0
 	while StoryService.state(w)["stage"] != "done" and guard < 60:
@@ -319,6 +326,7 @@ func _suite_story() -> void:
 			StoryService.on_dialogue_done(w, p, "end", 0 if not d["choices"].is_empty() else -1)
 			steps_done += 1
 	check(StoryService.state(w)["stage"] == "done", "розділ пройдено до кінця")
+	check(not p.is_peasant() and p.sk("whirl") >= 1, "після посвяти — козак із вихором")
 	var total_steps = 0
 	for ch in load("res://scripts/data/story.gd").CHAPTERS:
 		total_steps += ch["steps"].size()
@@ -326,6 +334,7 @@ func _suite_story() -> void:
 	var names = []
 	for it in p.inventory:
 		names.append(it["name"])
+	check("Козацька шабля" in names, "шабля за посвяту")
 	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди розділу I")
 	check("Булава полковника" in names and "Каптур літописця" in names, "сюжетні нагороди розділу II")
 	check(w.story.get("choices", {}).get("crypt", -1) == 0 and w.loyalty_points("kyiv") >= 270, "вибір у розділі II враховано")
@@ -496,13 +505,43 @@ func _suite_gameplay() -> void:
 	check(game.state == game.State.MENU, "старт у головному меню")
 	game.new_game()
 	await _frames(2)
-	check(game.state == game.State.CITY and game.city_id == "sich", "нова гра починається на Січі")
 	root.get_node("Ads").instant = true
-	check(game.hud.dialogue_root != null, "на Січі одразу розмова з кошовим")
+	var p = game.player
+	check(game.hud.dialogue_root != null, "нова гра: кобзар розповідає вступ")
+	check(p.is_peasant() and p.skills.is_empty() and p.equipment["weapon"]["name"] == "Вила", "старт простим селянином із вилами")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.loc_id == "ridne_selo", "пролог: бій у рідному селі")
+	p.stats["str"] = 40
+	p.stats["vit"] = 40
+	p.recalc()
+	p.hp = p.max_hp
+	var pf = 0
+	while not game.combat.field_cleared and pf < 3600:
+		_bot_fight(game)
+		await process_frame
+		pf += 1
+	check(game.combat.field_cleared and game.world.story["step"] == 1, "рідне село відбито — веди вцілілих на Січ")
+	game.enter_city("sich")
+	await _frames(2)
+	check(game.hud.dialogue_root != null, "кошовий зустрічає втікача")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.world.story["step"] == 2 and game.hud.dialogue_root != null, "кошовий пропонує посвяту")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	for i in 8:
+		game._story_event("kill", "zarazhenyi")
+	game.enter_city("sich")
+	await _frames(2)
+	check(game.hud.dialogue_root != null, "посвята: урочиста розмова")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(not p.is_peasant() and p.sk("whirl") == 1 and game.world.story["chapter"] == 1, "посвячено в козаки — розділ I")
+	check(game.hud.dialogue_root != null, "розділ I: кошовий одразу кличе")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
 	check(game.world.story["stage"] == "active" and game.hud.map_view != null, "після розмови сюжет активний")
-	var p = game.player
 	# Сильний козак, щоб тест ішов швидко й стабільно
 	p.stats["str"] = 40
 	p.stats["vit"] = 40

@@ -23,7 +23,7 @@ const DUNGEON_ARENA := Rect2(-750, -550, 1500, 1100)
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
-	"plague": Color(0.2, 0.26, 0.17),
+	"plague": Color(0.2, 0.26, 0.17), "village": Color(1.0, 0.82, 0.68),
 }
 
 ## Джерела керування (задає Game): вектор руху і чи затиснуто удар.
@@ -134,7 +134,7 @@ func enter(id: String, companions: Array) -> void:
 	loc = Data.LOCATIONS[id]
 	room = 1 if loc["type"] == "dungeon" else 0
 	field_kills = 0
-	field_goal = Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL
+	field_goal = int(loc.get("goal", Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL))
 	field_cleared = false
 	spawn_timer = 1.0
 	player.unbreak_ready = true

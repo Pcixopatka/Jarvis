@@ -15,7 +15,7 @@ func _draw() -> void:
 		skin = Color(0.78, 0.8, 0.76)  # мертвотно-бліда шкіра
 		draw_circle(c, r, Color(0.12, 0.06, 0.08))
 		draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.25, 0.05, 0.08))
-	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1)}.get(npc, Color.GRAY)
+	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1), "selianyn": Color(0.95, 0.94, 0.9)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
 	if npc == "znakharka":
@@ -50,6 +50,14 @@ func _draw() -> void:
 			draw_colored_polygon(_pts(c, s, [Vector2(-18, 10), Vector2(18, 10), Vector2(10, 52), Vector2(0, 58), Vector2(-10, 52)]), Color(0.3, 0.24, 0.18))
 			draw_rect(Rect2(c + Vector2(30, 30) * s, Vector2(26, 32) * s), Color(0.5, 0.15, 0.1))
 			draw_rect(Rect2(c + Vector2(33, 33) * s, Vector2(20, 26) * s), Color(0.9, 0.85, 0.7))
+		"selianyn":
+			# Молодий хлопець: чуприна, без вусів, вишита сорочка
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, -2), Vector2(-26, -26), Vector2(0, -36), Vector2(26, -26), Vector2(30, -2), Vector2(14, -18), Vector2(-8, -20)]), Color(0.45, 0.3, 0.15))
+			_brows(c, s, Color(0.4, 0.25, 0.12), 2.5)
+			_eyes(c, s, eye_y, false)
+			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.6, 0.35, 0.3), 2.0 * s)
+			for i in 6:
+				draw_circle(c + Vector2(-30 + i * 12, 52) * s, 3.0 * s, Color(0.8, 0.12, 0.12))
 		"hero":
 			_chub(c, s, Color(0.22, 0.14, 0.08))
 			_brows(c, s, Color(0.25, 0.15, 0.08), 2.5)

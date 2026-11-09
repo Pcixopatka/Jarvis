@@ -152,6 +152,8 @@ static func _skills(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	v.add_child(UI.label("Очки вмінь: %d   (+%d за рівень).  Активні вміння з'являються кнопками в бою." % [p.skill_points, Data.SKILL_POINTS_PER_LEVEL], 21, UI.GOLD if p.skill_points > 0 else UI.MUTED))
+	if p.is_peasant():
+		v.add_child(UI.label("Бойові вміння відкриються після посвяти в козаки на Січі. Очки вмінь збережуться.", 20, UI.BAD))
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 24)

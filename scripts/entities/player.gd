@@ -22,6 +22,7 @@ var perk_points := 0
 
 # --- Спорядження ---
 var gold := 0
+var rank := "cossack"  # "peasant" — до посвяти (нова гра), "cossack" — після
 var potions := Data.POTION_START
 var potion_timer := 0.0
 var resources := {"wood": 0, "iron": 0, "herbs": 0}  # для будівництва хутора
@@ -225,7 +226,7 @@ func to_dict() -> Dictionary:
 	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions,
-		"resources": resources, "trip_buffs": trip_buffs}
+		"resources": resources, "trip_buffs": trip_buffs, "rank": rank}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -326,7 +327,13 @@ func skill_req_met(node: Dictionary) -> bool:
 	return true
 
 
+func is_peasant() -> bool:
+	return rank == "peasant"
+
+
 func can_learn_skill(node: Dictionary) -> bool:
+	if is_peasant():
+		return false  # бойові вміння — після посвяти в козаки
 	return skill_points > 0 and sk(node["id"]) < node["max"] and skill_req_met(node)
 
 
@@ -544,6 +551,8 @@ func skill_ready_ratio(id: String) -> float:
 
 
 func use_skill(id: String) -> void:
+	if is_peasant():
+		return
 	if not alive or sk(id) <= 0 or skill_timers.get(id, 0.0) > 0.0:
 		return
 	var used := false
@@ -700,29 +709,44 @@ func _draw() -> void:
 	var side := 1.0 if facing.x >= 0.0 else -1.0
 	var bob := sin(walk_phase) * 3.0 if moving else 0.0
 
-	# Ноги: широкі сині шаровари та червоні чоботи
+	var peasant := is_peasant()
+	# Ноги: козак — широкі сині шаровари й червоні чоботи; селянин — полотняні штани й постоли
 	var leg_l := Vector2(-7, 10 + bob)
 	var leg_r := Vector2(7, 10 - bob)
-	draw_rect(Rect2(leg_l - Vector2(6, 2), Vector2(11, 10)), Color(0.18, 0.3, 0.7) * tint)
-	draw_rect(Rect2(leg_r - Vector2(5, 2), Vector2(11, 10)), Color(0.18, 0.3, 0.7) * tint)
-	draw_rect(Rect2(leg_l + Vector2(-5, 7), Vector2(10, 6)), Color(0.6, 0.1, 0.1) * tint)
-	draw_rect(Rect2(leg_r + Vector2(-4, 7), Vector2(10, 6)), Color(0.6, 0.1, 0.1) * tint)
+	var pants := Color(0.72, 0.68, 0.58) if peasant else Color(0.18, 0.3, 0.7)
+	var boots := Color(0.45, 0.32, 0.2) if peasant else Color(0.6, 0.1, 0.1)
+	draw_rect(Rect2(leg_l - Vector2(6, 2), Vector2(11, 10)), pants * tint)
+	draw_rect(Rect2(leg_r - Vector2(5, 2), Vector2(11, 10)), pants * tint)
+	draw_rect(Rect2(leg_l + Vector2(-5, 7), Vector2(10, 6)), boots * tint)
+	draw_rect(Rect2(leg_r + Vector2(-4, 7), Vector2(10, 6)), boots * tint)
 
-	# Тулуб: червоний жупан і жовтий пояс
-	draw_circle(Vector2(0, -2), 16.0, Color(0.78, 0.14, 0.14) * tint)
-	draw_rect(Rect2(-15, 3, 30, 5), Color(0.95, 0.75, 0.15) * tint)
+	if peasant:
+		# Тулуб: біла сорочка з вишивкою і мотузяний пояс
+		draw_circle(Vector2(0, -2), 15.0, Color(0.95, 0.94, 0.9) * tint)
+		draw_line(Vector2(-6, -14), Vector2(-6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
+		draw_line(Vector2(6, -14), Vector2(6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
+		draw_rect(Rect2(-14, 4, 28, 3), Color(0.55, 0.4, 0.25) * tint)
+	else:
+		# Тулуб: червоний жупан і жовтий пояс
+		draw_circle(Vector2(0, -2), 16.0, Color(0.78, 0.14, 0.14) * tint)
+		draw_rect(Rect2(-15, 3, 30, 5), Color(0.95, 0.75, 0.15) * tint)
 
-	# Голова, оселедець, вуса
 	var head := Vector2(0, -26)
 	draw_circle(head, 11.0, Color(0.96, 0.8, 0.65) * tint)
-	var chub := PackedVector2Array([
-		head + Vector2(0, -11), head + Vector2(-side * 6, -17),
-		head + Vector2(-side * 13, -14), head + Vector2(-side * 15, -6),
-	])
-	draw_polyline(chub, Color(0.25, 0.15, 0.08) * tint, 4.0, true)
-	draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
-	draw_line(head + Vector2(side * 2, 4), head + Vector2(side * 10, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
-	draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
+	if peasant:
+		# Звичайна чуприна, без вусів — ще зовсім молодий
+		draw_colored_polygon(PackedVector2Array([head + Vector2(-11, -2), head + Vector2(-9, -11), head + Vector2(0, -14), head + Vector2(9, -11), head + Vector2(11, -2), head + Vector2(side * 3, -8)]), Color(0.45, 0.3, 0.15) * tint)
+		draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
+	else:
+		# Оселедець і вуса
+		var chub := PackedVector2Array([
+			head + Vector2(0, -11), head + Vector2(-side * 6, -17),
+			head + Vector2(-side * 13, -14), head + Vector2(-side * 15, -6),
+		])
+		draw_polyline(chub, Color(0.25, 0.15, 0.08) * tint, 4.0, true)
+		draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
+		draw_line(head + Vector2(side * 2, 4), head + Vector2(side * 10, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
+		draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
 	# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю
 	if equipment.has("head"):
 		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]

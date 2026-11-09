@@ -9,7 +9,7 @@ var crystals := []  # [позиція, колір] — у печері біля 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
 	"swamp": Color(0.28, 0.35, 0.21), "mountain": Color(0.42, 0.46, 0.38), "cave": Color(0.2, 0.17, 0.15),
-	"plague": Color(0.15, 0.17, 0.11),
+	"plague": Color(0.15, 0.17, 0.11), "village": Color(0.4, 0.5, 0.25),
 }
 
 
@@ -52,6 +52,11 @@ func _draw() -> void:
 			_flowers(rng, int(260 * area))
 			_rocks(rng, int(40 * area))
 			_sunflowers(rng, int(45 * area))
+		"village":
+			_path(rng, Color(0.5, 0.42, 0.28, 0.7))
+			_grass(rng, int(700 * area), base)
+			_huts(rng, int(28 * area) + 6)
+			_sunflowers(rng, int(20 * area))
 		"river":
 			_grass(rng, int(700 * area), base)
 			_flowers(rng, int(150 * area))
@@ -80,6 +85,26 @@ func _draw() -> void:
 		_rock_wall()
 	else:
 		_fence()
+
+
+## Хати: білені стіни, солом'яна стріха; частина — спалені.
+func _huts(rng: RandomNumberGenerator, n: int) -> void:
+	for i in n:
+		var p := _pt(rng)
+		if p.length() < 260.0:
+			continue  # центр лишаємо вільним для бою
+		var burnt := rng.randf() < 0.6
+		var wall := Color(0.22, 0.2, 0.18) if burnt else Color(0.95, 0.93, 0.86)
+		var roof := Color(0.12, 0.1, 0.08) if burnt else Color(0.75, 0.6, 0.3)
+		draw_circle(p + Vector2(0, 26), 46.0, Color(0, 0, 0, 0.25))
+		draw_rect(Rect2(p + Vector2(-38, -10), Vector2(76, 40)), wall)
+		draw_colored_polygon(PackedVector2Array([p + Vector2(-48, -8), p + Vector2(0, -48), p + Vector2(48, -8)]), roof)
+		draw_rect(Rect2(p + Vector2(-8, 6), Vector2(16, 24)), Color(0.3, 0.2, 0.12))
+		draw_rect(Rect2(p + Vector2(16, 0), Vector2(14, 12)), Color(0.4, 0.55, 0.7) if not burnt else Color(0.1, 0.08, 0.06))
+		if burnt:
+			for k in 3:
+				draw_circle(p + Vector2(rng.randf_range(-30, 30), -40 - k * 18), 14.0 - k * 3, Color(0.25, 0.25, 0.25, 0.35))
+			draw_circle(p + Vector2(rng.randf_range(-20, 20), -12), 9.0, Color(1.0, 0.45, 0.1, 0.55))
 
 
 func _pt(rng: RandomNumberGenerator) -> Vector2:

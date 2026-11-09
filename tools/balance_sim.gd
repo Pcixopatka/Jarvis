@@ -83,7 +83,9 @@ const PERK_ORDER := ["sharp", "tough", "sharp", "ward", "luck", "regen", "sharp"
 
 func _build_hero(lvl: int) -> void:
 	game.new_game()
+	game.hud.close_dialogue()
 	var p = game.player
+	p.rank = "cossack"
 	while p.level < lvl:
 		p.add_xp(p.xp_next - p.xp)
 	# Характеристики: сила 45%, витривалість 35%, спритність 20%

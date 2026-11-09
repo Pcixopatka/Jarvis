@@ -138,10 +138,32 @@ func new_game() -> void:
 	world = WorldState.new()
 	meta = {"playtime": 0.0, "created": Time.get_unix_time_from_system()}
 	_new_hero({})
+	_make_peasant()
 	CampService.apply_effects(world, player)
-	player.gold = 60
-	map_here = "sich"
-	enter_city("sich")  # кошовий одразу зустріне розмовою
+	player.gold = 20
+	map_here = "ridne_selo"
+	# Кобзар розповідає, як усе почалося, — і бій за рідне село
+	var dlg = DialogueScript.new()
+	dlg.setup(StoryService.intro(world), [])
+	dlg.finished.connect(func(_c):
+		hud.close_dialogue()
+		enter_location("ridne_selo"))
+	hud.close_overlay()
+	hud.set_mode(false, false)
+	hud.show_dialogue(dlg)
+
+
+## Простий хлопець із хутора: вила, сорочка, жодних козацьких умінь до посвяти.
+func _make_peasant() -> void:
+	player.rank = "peasant"
+	player.skills = {}
+	player.inventory.clear()
+	player.equipment.clear()
+	var vyla := Data.gen_item(1, 0, "weapon", "pike")
+	vyla["name"] = "Вила"
+	player.equip_new(vyla)
+	player.recalc()
+	player.hp = player.max_hp
 
 
 func save_game() -> void:

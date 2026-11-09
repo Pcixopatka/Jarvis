@@ -42,6 +42,11 @@ static func _count(st: Dictionary) -> int:
 
 # ---------- Діалоги ----------
 
+## Вступна розповідь поточного кроку (пролог): показується на початку нової гри.
+static func intro(world) -> Array:
+	return current(world).get("intro", [])
+
+
 ## Що сказати в цьому місті: {"kind": "start"/"end", "lines", "choices"} або {}.
 static func city_dialogue(world, city: String) -> Dictionary:
 	var s := state(world)
@@ -133,6 +138,12 @@ static func _advance(world, msgs: Array) -> void:
 
 
 static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
+	if r.has("rank"):
+		player.rank = r["rank"]
+		msgs.append({"text": "Ти — козак Запорозького війська!", "big": true})
+	if r.has("skills"):
+		for id in r["skills"]:
+			player.skills[id] = maxi(player.sk(id), int(r["skills"][id]))
 	if r.has("gold"):
 		player.gold += int(r["gold"])
 	if r.has("xp"):
