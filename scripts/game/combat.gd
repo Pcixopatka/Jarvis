@@ -30,6 +30,7 @@ const BIOME_TINT := {
 ## Джерела керування (задає Game): вектор руху і чи затиснуто удар.
 var move_input: Callable = func() -> Vector2: return Vector2.ZERO
 var attack_input: Callable = func() -> bool: return false
+var block_input: Callable = func() -> bool: return false
 
 var arena := FIELD_ARENA
 var player: Player
@@ -253,6 +254,7 @@ func _process(delta: float) -> void:
 	else:
 		camera.offset = Vector2.ZERO
 	player.attack_held = attack_input.call()
+	player.block_held = block_input.call()
 	if is_dungeon():
 		_update_dungeon()
 	else:

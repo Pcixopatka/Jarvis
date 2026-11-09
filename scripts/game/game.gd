@@ -60,6 +60,8 @@ func _ready() -> void:
 	combat = CombatScript.new()
 	add_child(combat)
 	combat.move_input = _move_input
+	combat.block_input = func() -> bool:
+		return hud.btn_block.held or Input.is_physical_key_pressed(KEY_E) or Input.is_physical_key_pressed(KEY_B)
 	combat.attack_input = func() -> bool:
 		return hud.btn_attack.held or Input.is_physical_key_pressed(KEY_J) or Input.is_physical_key_pressed(KEY_SPACE)
 
@@ -84,6 +86,9 @@ func _ready() -> void:
 	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка «Козак» → вкладка «Спорядження»."))
 	Events.boss_spawned.connect(func(_e): hint("boss", "Бос! Червоні зони на землі — місця його удару. Виходь із них, поки вони не заповнились!"))
 	Events.hint.connect(hint)
+	Events.player_hurt.connect(func():
+		if world != null and world.hints.has("combat"):
+			hint("block", "Натисни «Блок» саме тоді, коли ворог червоніє, — парируєш удар і приголомшиш його. Тримай «Блок» довше — зарядиш потужний удар, відпусти — вдар!"))
 	_show_main_menu()
 
 

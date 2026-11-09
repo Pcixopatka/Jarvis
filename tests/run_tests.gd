@@ -44,6 +44,7 @@ func _run() -> void:
 	_suite_heroes()
 	_suite_plague()
 	await _suite_gameplay()
+	await _suite_moves()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -616,6 +617,129 @@ func _bot_fight(game) -> void:
 		p.use_skill(id)
 	if c.portal != null and is_instance_valid(c.portal):
 		p.global_position = c.portal.global_position
+
+
+func _moves_dummy(game, kind: String = "upyr"):
+	for e in game.combat.get_tree().get_nodes_in_group("enemies"):
+		e.remove_from_group("enemies")
+		e.queue_free()
+	var p = game.player
+	game.combat.spawn_enemy(kind, 5, false, p.global_position + Vector2(60, 0))
+	var e = game.combat.get_tree().get_nodes_in_group("enemies")[-1]
+	e.max_hp = 1000000.0
+	e.hp = e.max_hp
+	p.facing = Vector2.RIGHT
+	return e
+
+
+func _suite_moves() -> void:
+	suite("Бойові прийоми")
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.enter_location("wild_field")
+	await _frames(2)
+	var p = game.player
+	p.rank = "cossack"
+	p.crit_chance = 0.0
+	p.lifesteal = 0.0
+	p.armor = 0.0
+	# Комбо: третій удар серії сильніший
+	var e = _moves_dummy(game)
+	var dmg := []
+	for i in 3:
+		p.attack_timer = 0.0
+		var before: float = e.hp
+		p.attack()
+		dmg.append(before - e.hp)
+	check(dmg[0] > 0.0 and dmg[2] > dmg[0] * 1.4, "третій удар серії — завершальний (%.0f → %.0f)" % [dmg[0], dmg[2]])
+	check(p.combo_step == 0 and p.attack_timer > p.attack_cooldown, "після завершального — нова серія й пауза")
+	p.attack_timer = 0.0
+	p.combo_timer = 0.0
+	var b0: float = e.hp
+	p.attack()
+	check(b0 - e.hp < dmg[2] * 0.8, "перерва між ударами скидає серію")
+	# Блок
+	p.invuln = 0.0
+	p.block_held = true
+	p._update_block(0.0)
+	p._update_block(0.5)
+	var hp0: float = p.hp
+	p.take_damage(40.0, e)
+	check(p.blocking and is_equal_approx(hp0 - p.hp, 40.0 * p.BLOCK_MULT), "блок зменшує шкоду (%.1f)" % (hp0 - p.hp))
+	# Парирування: щойно натиснутий блок
+	p.block_held = false
+	p._update_block(0.0)
+	p.block_cd = 0.0
+	p.invuln = 0.0
+	p.block_held = true
+	p._update_block(0.0)
+	e.windup = 0.2
+	var hp1: float = p.hp
+	var ehp: float = e.hp
+	p.take_damage(40.0, e)
+	check(p.hp == hp1 and e.stun > 1.0 and e.hp < ehp and e.windup == 0.0, "парирування: без шкоди, ворог приголомшений, удар у відповідь")
+	check(p.combo_step == 2, "після парирування наступний удар — завершальний")
+	p.invuln = 0.0
+	p.block_held = false
+	p._update_block(0.0)
+	# Пізно натиснутий блок — уже не парирування
+	p.block_cd = 0.0
+	p.block_held = true
+	p._update_block(0.0)
+	p._update_block(p.PARRY_WINDOW + 0.05)
+	var hp2: float = p.hp
+	p.take_damage(40.0, e)
+	check(p.hp < hp2, "запізнився — лише блок, не парирування")
+	p.invuln = 0.0
+	# Заряджений удар
+	e.stun = 0.0
+	var c1: float = e.hp
+	p._update_block(p.CHARGE_FULL)
+	check(p.charge_ratio() >= 1.0, "заряд наповнюється")
+	p.block_held = false
+	p._update_block(0.0)
+	var charged: float = c1 - e.hp
+	check(not p.blocking and charged > dmg[0] * 2.5 and e.stun > 0.0, "повний заряд — потужний удар і приголомшення (%.0f)" % charged)
+	p.block_cd = 0.0
+	p.block_held = true
+	p._update_block(0.0)
+	p._update_block(0.2)
+	p.block_held = false
+	var c2: float = e.hp
+	p._update_block(0.0)
+	check(e.hp == c2, "короткий блок не б'є")
+	# Приголомшений ворог не рухається й не б'є
+	e.stun = 1.0
+	var pos0: Vector2 = e.global_position
+	e.knockback = Vector2.ZERO
+	e._process(0.1)
+	check(e.global_position == pos0 and e.windup == 0.0, "приголомшений стоїть")
+	# Чорт телепортується до цілі
+	var ch = _moves_dummy(game, "chort")
+	ch.global_position = p.global_position + Vector2(600, 0)
+	ch.blink_timer = 0.0
+	ch._process(0.016)
+	check(ch.global_position.distance_to(p.global_position) < 150.0, "чорт вигулькує поруч")
+	# Кощій встає, поки голка ціла
+	game.combat.boss_revives = 1
+	game.combat.spawn_enemy("koshchii", 16, true, p.global_position + Vector2(300, 0))
+	var k = game.combat.get_tree().get_nodes_in_group("enemies")[-1]
+	k.take_damage(k.max_hp * 2.0, Vector2.ZERO)
+	check(not k.dead and k.hp > 0.0 and game.combat.boss_revives == 0, "Кощій встає знову")
+	k.take_damage(k.max_hp * 2.0, Vector2.ZERO)
+	check(k.dead, "удруге — падає")
+	game.combat.spawn_enemy("putinoid", 22, true, p.global_position + Vector2(300, 0))
+	var pu = game.combat.get_tree().get_nodes_in_group("enemies")[-1]
+	pu.take_damage(pu.max_hp * 0.6, Vector2.ZERO)
+	check(pu.phase2, "Путіноїд скидає личину на половині здоров'я")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
 
 
 func _suite_gameplay() -> void:

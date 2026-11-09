@@ -75,6 +75,20 @@ var invuln := 0.0
 var swing_time := 0.0
 var swing_duration := 0.18
 var swing_full := false
+# --- Комбо, блок, парирування, заряд ---
+const COMBO_WINDOW := 1.0  # скільки чекає серія між ударами
+const COMBO_MULT := [1.0, 1.15, 1.8]  # третій удар серії — сильний і широкий
+const PARRY_WINDOW := 0.25  # натиснув «Блок» за мить до удару — парирування
+const BLOCK_MULT := 0.35  # частка шкоди, що проходить крізь блок
+const CHARGE_MIN := 0.6  # з якого часу утримання блоку удар уже заряджений
+const CHARGE_FULL := 1.4
+var combo_step := 0
+var combo_timer := 0.0
+var block_held := false
+var blocking := false
+var block_time := 0.0
+var block_cd := 0.0
+var swing_reach := 0.0  # радіус кругового сліду для зарядженого удару (0 — як у Вихору)
 var storm_timer := -1.0
 var hurt_flash := 0.0
 var walk_phase := 0.0
@@ -399,6 +413,9 @@ func _process(delta: float) -> void:
 	if not alive:
 		return
 	attack_timer = maxf(0.0, attack_timer - delta)
+	combo_timer = maxf(0.0, combo_timer - delta)
+	block_cd = maxf(0.0, block_cd - delta)
+	_update_block(delta)
 	dodge_timer = maxf(0.0, dodge_timer - delta)
 	potion_timer = maxf(0.0, potion_timer - delta)
 	for id in skill_timers:
@@ -422,7 +439,7 @@ func _process(delta: float) -> void:
 		if pk("dash_strike") > 0:
 			_dash_strike()
 	else:
-		position += input_vec * speed * delta
+		position += input_vec * speed * (0.45 if blocking else 1.0) * delta
 		if input_vec.length() > 0.1:
 			moving = true
 			if swing_time <= 0.0:
@@ -432,9 +449,86 @@ func _process(delta: float) -> void:
 	var pad := Vector2(radius, radius)
 	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
 
-	if attack_held and attack_timer <= 0.0:
+	if attack_held and attack_timer <= 0.0 and not blocking:
 		attack()
 	queue_redraw()
+
+
+## Блок: натиснув — щит догори (перша мить — парирування); тримаєш — заряджається удар;
+## відпустив після CHARGE_MIN — заряджений удар.
+func _update_block(delta: float) -> void:
+	if block_held and not blocking and block_cd <= 0.0 and dodge_time_left <= 0.0:
+		blocking = true
+		block_time = 0.0
+	elif blocking and block_held:
+		block_time += delta
+	elif blocking and not block_held:
+		blocking = false
+		block_cd = 0.25
+		if block_time >= CHARGE_MIN:
+			charged_strike(clampf((block_time - CHARGE_MIN) / (CHARGE_FULL - CHARGE_MIN), 0.0, 1.0))
+
+
+func charge_ratio() -> float:
+	if not blocking or block_time < CHARGE_MIN * 0.3:
+		return 0.0
+	return clampf(block_time / CHARGE_FULL, 0.0, 1.0)
+
+
+## Заряджений удар: сила 0..1. Повний заряд б'є довкола і приголомшує нечисть.
+func charged_strike(power: float) -> void:
+	if not alive:
+		return
+	var mult := 1.6 + 1.6 * power
+	var reach := attack_range * (1.2 + 0.6 * power)
+	var full := power >= 0.99
+	var arc := TAU if full else minf(TAU, attack_arc * 1.6)
+	var target: Node2D = combat.nearest_enemy(global_position, reach * 1.5)
+	if target:
+		facing = (target.global_position - global_position).normalized()
+	swing_time = 0.3
+	swing_duration = 0.3
+	swing_full = full
+	swing_reach = reach
+	var hits := 0
+	for e in _alive_enemies():
+		var to: Vector2 = e.global_position - global_position
+		if to.length() > reach + e.radius:
+			continue
+		if full or to.length() < 1.0 or absf(facing.angle_to(to)) <= arc * 0.5:
+			var r := _roll(mult)
+			hit(e, r[0], to.normalized() * 600.0 * (1.0 + power) * weapon["kb"], r[1])
+			if not e.dead and not e.is_boss:
+				e.stun = maxf(e.stun, 0.4 + 0.8 * power)
+			hits += 1
+	combo_step = 0
+	attack_timer = attack_cooldown
+	Audio.play("crit", 0.05)
+	combat.shake(6.0 + 6.0 * power)
+	combat.fx.ring(global_position, Color(1.0, 0.85, 0.35), 30, reach, 6, 0.35)
+	if hits > 0:
+		combat.hitstop(0.06 + 0.05 * power)
+	if full:
+		combat.float_text(global_position + Vector2(0, -70), "Козацький удар!", Color(1.0, 0.85, 0.3))
+
+
+## Ідеальне парирування: ворожий удар зірвано, ворог приголомшений, у відповідь — критичний удар.
+func _parry(source) -> void:
+	invuln = 0.45
+	blocking = false
+	block_cd = 0.15
+	combo_step = 2  # наступний удар — завершальний
+	combo_timer = COMBO_WINDOW
+	Audio.play("crit", 0.0)
+	combat.hitstop(0.12)
+	combat.fx.ring(global_position, Color(1.0, 0.95, 0.6), 20, 120, 5, 0.3)
+	combat.float_text(global_position + Vector2(0, -70), "Парирування!" if source != null else "Відбито!", Color(1.0, 0.95, 0.5))
+	Events.parried.emit()
+	if source != null and is_instance_valid(source) and not source.dead:
+		source.windup = 0.0
+		source.stun = maxf(source.stun, 0.6 if source.is_boss else 1.5)
+		var to: Vector2 = source.global_position - global_position
+		hit(source, damage * 1.5 * crit_mult, to.normalized() * 400.0, true)
 
 
 # ================= Бій =================
@@ -466,6 +560,13 @@ func attack() -> void:
 	if not alive or attack_timer > 0.0 or dodge_time_left > 0.0:
 		return
 	attack_timer = attack_cooldown
+	if combo_timer <= 0.0:
+		combo_step = 0
+	var step := combo_step
+	var finisher := step == COMBO_MULT.size() - 1
+	var arc := attack_arc * (1.5 if finisher else 1.0)
+	if finisher:
+		attack_timer = attack_cooldown * 1.3  # після завершального — коротка пауза, як у справжньому ритмі
 	# Автонаведення — на телефоні цілитися пальцем незручно.
 	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.8)
 	if target:
@@ -473,19 +574,28 @@ func attack() -> void:
 	swing_time = 0.18
 	swing_duration = 0.18
 	swing_full = false
-	Audio.play("swing", 0.15, -4.0)
+	Audio.play("swing", 0.15, -4.0 if not finisher else 0.0)
 	var hits := 0
 	var crit_any := false
+	var reach := attack_range * (1.15 if finisher else 1.0)
 	for e in _alive_enemies():
 		var to: Vector2 = e.global_position - global_position
 		var dist := to.length()
-		if dist > attack_range + e.radius:
+		if dist > reach + e.radius:
 			continue
-		if dist < 1.0 or absf(facing.angle_to(to)) <= attack_arc * 0.5:
-			var r := _roll(1.0)
-			hit(e, r[0], to.normalized() * 280.0 * weapon["kb"], r[1])
+		if dist < 1.0 or absf(facing.angle_to(to)) <= arc * 0.5:
+			var r := _roll(COMBO_MULT[step])
+			hit(e, r[0], to.normalized() * 280.0 * weapon["kb"] * (2.2 if finisher else 1.0), r[1])
 			hits += 1
 			crit_any = crit_any or r[1]
+	if hits > 0:
+		combo_step = (step + 1) % COMBO_MULT.size()
+		combo_timer = COMBO_WINDOW
+		if finisher:
+			combat.fx.ring(global_position + facing * 40.0, Color(1.0, 0.8, 0.4), 16, reach, 4, 0.25)
+			combat.shake(4.0)
+	else:
+		combo_step = 0
 	if hits > 0:
 		Audio.play("crit" if crit_any else "hit", 0.12)
 		combat.shake(2.5 * weapon["kb"])
@@ -513,6 +623,8 @@ func add_potion() -> bool:
 func dodge() -> void:
 	if not alive or dodge_timer > 0.0:
 		return
+	blocking = false
+	combo_step = 0
 	dodge_timer = dodge_cooldown
 	var input_vec: Vector2 = combat.get_move_input()
 	dodge_dir = input_vec.normalized() if input_vec.length() > 0.1 else facing
@@ -577,6 +689,7 @@ func _whirl() -> bool:
 	swing_time = 0.4
 	swing_duration = 0.4
 	swing_full = true
+	swing_reach = 0.0
 	invuln = maxf(invuln, 0.4)
 	if storm:
 		# Притягуємо нечисть до козака, а за мить — другий удар.
@@ -604,6 +717,7 @@ func _whirl_hit(mult: float, kb: float) -> void:
 	swing_time = 0.4
 	swing_duration = 0.4
 	swing_full = true
+	swing_reach = 0.0
 	combat.shake(9.0)
 
 
@@ -653,6 +767,12 @@ func _musket() -> bool:
 func take_damage(amount: float, source = null) -> void:
 	if not alive or invuln > 0.0:
 		return
+	if blocking:
+		if block_time <= PARRY_WINDOW:
+			_parry(source)
+			return
+		amount *= BLOCK_MULT
+		combat.float_text(global_position + Vector2(0, -70), "Блок", Color(0.75, 0.85, 1.0))
 	if source != null and thorns > 0.0 and not source.dead:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
@@ -797,12 +917,25 @@ func _draw() -> void:
 	if swing_time > 0.0:
 		var alpha := swing_time / swing_duration
 		if swing_full:
-			var rr := whirl_reach()
+			var rr := swing_reach if swing_reach > 0.0 else whirl_reach()
 			draw_arc(Vector2.ZERO, rr * 0.85, 0.0, TAU, 64, Color(0.7, 0.9, 1.0, 0.55 * alpha), 22.0)
 			draw_arc(Vector2.ZERO, rr * 0.6, 0.0, TAU, 64, Color(1, 1, 1, 0.4 * alpha), 8.0)
 		else:
 			var a0 := facing.angle() - attack_arc * 0.5
 			draw_arc(Vector2.ZERO, attack_range * 0.75, a0, a0 + attack_arc, 24, Color(1, 1, 1, 0.6 * alpha), 16.0)
+
+	# Блок: схрещена шабля перед козаком; заряд — золоте кільце, що наповнюється
+	if blocking:
+		var fa := facing.angle()
+		var parry := block_time <= PARRY_WINDOW
+		draw_arc(Vector2(0, -8), 34.0, fa - 0.9, fa + 0.9, 16, Color(1.0, 1.0, 0.8, 0.9) if parry else Color(0.7, 0.85, 1.0, 0.7), 6.0)
+		var cr := charge_ratio()
+		if cr > 0.0:
+			var ready := block_time >= CHARGE_MIN
+			var col := Color(1.0, 0.85, 0.3, 0.9) if ready else Color(1.0, 1.0, 1.0, 0.45)
+			draw_arc(Vector2(0, 8), 40.0, -PI / 2, -PI / 2 + TAU * cr, 40, col, 4.0)
+			if cr >= 1.0:
+				draw_circle(Vector2(0, 8), 44.0, Color(1.0, 0.8, 0.3, 0.15 + 0.1 * sin(walk_phase * 3.0 + block_time * 20.0)))
 
 	# Індикатор готовності Вихору
 	if skill_timers["whirl"] <= 0.0:

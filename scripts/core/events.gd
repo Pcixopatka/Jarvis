@@ -7,6 +7,7 @@ extends Node
 signal enemy_killed(enemy: Node2D)
 signal boss_spawned(enemy: Node2D)
 signal player_hurt
+signal parried  # козак відбив удар
 signal player_died
 signal level_up(level: int)
 signal companion_down(index: int, name: String)

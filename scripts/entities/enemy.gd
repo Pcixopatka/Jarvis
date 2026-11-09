@@ -35,6 +35,7 @@ var windup := 0.0  # замах перед ударом: червоніє — ч
 var windup_max := 0.35
 var ability_timer := 4.0
 var ability_step := 0
+var stun := 0.0  # приголомшений: не рухається й не б'є
 var blink_timer := 2.5  # чорт: телепорт до цілі
 var phase2 := false  # боси Кощій і Путіноїд лютішають на половині здоров'я
 
@@ -134,6 +135,13 @@ func _process(delta: float) -> void:
 	contact_cd = maxf(0.0, contact_cd - delta)
 	lunge_timer = maxf(0.0, lunge_timer - delta)
 	phase += delta * 6.0
+	if stun > 0.0:
+		stun -= delta
+		windup = 0.0
+		position += knockback * delta
+		knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
+		queue_redraw()
+		return
 
 	var desired := Vector2.ZERO
 	var dist := INF
@@ -459,6 +467,11 @@ func _draw() -> void:
 			_draw_zmii()
 	if slow_timer > 0.0:
 		draw_arc(Vector2(0, -r_draw * 0.5), r_draw * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
+	if stun > 0.0:
+		# Зірочки довкола голови
+		for i in 3:
+			var a := phase * 0.6 + i * TAU / 3.0
+			draw_circle(Vector2(cos(a) * r_draw * 0.9, -r_draw * 2.0 + sin(a) * 4.0), 3.0, Color(1.0, 0.9, 0.3))
 	if hp < max_hp and kind != "zmii":
 		var w := r_draw * 2.2
 		var y := -r_draw * 2.0 - 14.0
