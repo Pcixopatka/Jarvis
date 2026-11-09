@@ -59,6 +59,7 @@ func _run() -> void:
 	await _suite_spec_battle()
 	await _suite_volkhv_specs()
 	await _suite_depth_battle()
+	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -717,9 +718,8 @@ func _suite_defense_battle() -> void:
 	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true}
 	game.world.defense = {"sieges": {"chyhyryn": 3}, "ruined": {}, "won": 0, "lost": 0, "calm": 3}
 	game.world.story = {"chapter": 1, "step": 3, "stage": "active", "progress": 0}
-	game._go_to("chyhyryn")
-	await _frames(2)
-	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null, "обложене місто — одразу бій біля брами")
+	await _ride(game, "chyhyryn")
+	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null, "обложене місто — після поїздки бій біля брами")
 	var loy0: int = game.world.loyalty_points("chyhyryn")
 	var frames := 0
 	while not game.combat.defense_over and frames < 6000:
@@ -741,8 +741,7 @@ func _suite_defense_battle() -> void:
 	# Облога хутора: кнопка з мапи має вести в бій, а не на хутір
 	game.world.camp = {"buildings": {"kurin": 1}, "pasika_ts": 0}
 	game.world.defense["sieges"]["hutir"] = 3
-	game._go_to("hutir")
-	await _frames(2)
+	await _ride(game, "hutir")
 	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null and game.combat.gate.camp, "обложений хутір — бій біля тину, а не екран хутора")
 	frames = 0
 	while not game.combat.defense_over and frames < 6000:
@@ -761,8 +760,7 @@ func _suite_defense_battle() -> void:
 	check(game.state == game.State.CAMP, "з порталу — просто на хутір")
 	# Поразка: браму зламано
 	game.world.defense["sieges"]["kyiv"] = 2
-	game._go_to("kyiv")
-	await _frames(2)
+	await _ride(game, "kyiv")
 	game.combat.gate.take_damage(game.combat.gate.max_hp * 2.0)
 	await _frames(2)
 	check(not game.DefenseService.is_besieged(game.world, "kyiv") and game.DefenseService.markup(game.world, "kyiv") > 0.0, "браму зламано — Київ пограбовано")
@@ -1609,6 +1607,94 @@ func _suite_bulk_sell() -> void:
 	p.free()
 
 
+func _suite_travel_ride() -> void:
+	suite("Подорож мапою")
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "map": true, "city": true, "block": true, "elite": true, "boss": true, "item": true}
+	var p = game.player
+	p.change_class("cossack")
+	game._sync_class()
+	p.level = 6
+	game.world.travel = {"cooldown": 99, "seen": {}}  # поки без пригод
+	game.map_here = "sich"
+	game.enter_map()
+	await _frames(2)
+	game._go_to("kyiv")
+	await _frames(3)
+	check(game.travel_to == "kyiv" and game.state == game.State.MAP and not game.hud.map_view.travel.is_empty(), "«Вирушити» — починається поїздка, ми ще на мапі")
+	var t0: float = game.travel_t
+	var dur: float = game.travel_dur
+	check(dur >= 1.5 and dur <= 4.0, "час поїздки Січ→Київ у межах (%.1f с)" % dur)
+	game._go_to("chyhyryn")
+	check(game.travel_to == "kyiv", "другу поїздку під час першої не почати")
+	await _frames(10)
+	check(game.travel_t > t0 and game.hud.map_view.travel["t"] == game.travel_t, "фігурка їде, мапа знає прогрес")
+	# Прискорення дотиком
+	var before: float = game.travel_t
+	await _frames(6)
+	var slow: float = game.travel_t - before
+	game._travel_speed_up()
+	before = game.travel_t
+	await _frames(6)
+	var fast: float = game.travel_t - before
+	check(fast > slow * 2.0, "дотик по мапі прискорює (×3)")
+	var frames := 0
+	while game.travel_to != "" and frames < 600:
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and game.city_id == "kyiv" and game.map_here == "kyiv", "приїхали в Київ")
+	check(game.hud.map_view.travel.is_empty(), "після прибуття фігурка зникає")
+	# Пригода посеред шляху
+	game.hud.close_dialogue()
+	game.world.travel = {"cooldown": 0, "seen": {}}
+	game.enter_map()
+	await _frames(2)
+	seed(3)
+	var got_event := false
+	var tries := 0
+	while not got_event and tries < 12:
+		tries += 1
+		game._go_to("black_forest")
+		if game.travel_event_at > 0.0:
+			got_event = true
+			break
+		# без пригоди — доїхати й повернутись на мапу
+		while game.travel_to != "":
+			await process_frame
+		await _frames(2)
+		game.enter_map()
+		game.world.travel["cooldown"] = 0
+		await _frames(2)
+	check(got_event, "пригода може трапитись у дорозі (спроб: %d)" % tries)
+	if got_event:
+		check(game.travel_event_at >= 0.4 and game.travel_event_at <= 0.65, "пригода чекає посеред шляху (t=%.2f)" % game.travel_event_at)
+		frames = 0
+		while game.hud.dialogue_root == null and frames < 600:
+			await process_frame
+			frames += 1
+		check(game.hud.dialogue_root != null and game.travel_paused and game.state == game.State.MAP, "поїздка зупинилась на пригоду")
+		var tp: float = game.travel_t
+		await _frames(10)
+		check(is_equal_approx(game.travel_t, tp), "поки триває розмова — фігурка стоїть")
+		game.hud.dialogue_root._finish()
+		await _frames(3)
+		check(not game.travel_paused and game.travel_to == "black_forest", "після пригоди дорога продовжується")
+		frames = 0
+		while game.travel_to != "" and frames < 600:
+			await process_frame
+			frames += 1
+		check(game.state == game.State.PLAYING and game.combat.loc_id == "black_forest", "доїхали до Чорного лісу — бій")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+
+
 func _suite_camp() -> void:
 	suite("Хутір і реклама")
 	var CampService = load("res://scripts/game/camp_service.gd")
@@ -1704,6 +1790,22 @@ func _bot_fight(game) -> void:
 		p.use_skill(id)
 	if c.portal != null and is_instance_valid(c.portal):
 		p.global_position = c.portal.global_position
+
+
+## Натиснути «Вирушити» й дочекатись прибуття (подорож мапою триває кілька секунд).
+## Поїздка рухається лише на мапі — тож спершу виходимо на неї, як і справжній гравець.
+func _ride(game, id: String) -> void:
+	if game.state != game.State.MAP:
+		game.enter_map()
+		await _frames(2)
+	game._go_to(id)
+	var frames := 0
+	while game.travel_to != "" and frames < 1200:
+		if game.hud.dialogue_root != null:
+			game.hud.dialogue_root._finish()  # пригода в дорозі — беремо перший варіант
+		await process_frame
+		frames += 1
+	await _frames(2)
 
 
 func _moves_dummy(game, kind: String = "upyr"):

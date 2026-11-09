@@ -61,7 +61,14 @@ var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
 var confirm_action := ""
 var skill_sel := ""
-var path_card := "cossack"  # яка картка розгорнута на екрані «Дорога»  # вміння, відкрите в картці на вкладці «Вміння»
+var path_card := "cossack"
+# Подорож мапою
+var travel_to := ""  # куди їдемо ("" — стоїмо)
+var travel_t := 0.0
+var travel_dur := 2.0
+var travel_boost := 1.0  # дотик по мапі прискорює
+var travel_event_at := -1.0  # на якому t чекає пригода (-1 — без пригоди)
+var travel_paused := false  # зупинились на пригоду  # яка картка розгорнута на екрані «Дорога»  # вміння, відкрите в картці на вкладці «Вміння»
 var depth_sel := 1  # обрана глибина на мапі
 var camp_sel_uid := -1
 
@@ -92,6 +99,7 @@ func _ready() -> void:
 	hud.character_pressed.connect(open_character)
 	hud.map_pressed.connect(func(): if state == State.PLAYING: _try_leave())
 	hud.map_location_selected.connect(_on_map_select)
+	hud.map_view.travel_tapped.connect(_travel_speed_up)
 
 	Events.enemy_killed.connect(_on_enemy_killed)
 	Events.level_up.connect(_on_level_up)
@@ -130,6 +138,8 @@ func _process(delta: float) -> void:
 	if state == State.PLAYING:
 		meta["playtime"] = float(meta.get("playtime", 0.0)) + delta
 		AdRewards.tick(world, delta)
+	elif state == State.MAP:
+		_travel_tick(delta)
 	player.xp_boost = AdRewards.xp_mult(world)
 	var top := StoryService.objective_line(world)
 	for l in HeroService.objective_lines(world):
@@ -656,6 +666,15 @@ func _on_map_select(id: String) -> void:
 
 
 func _build_map_panel() -> void:
+	if travel_to != "":
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 8)
+		v.add_child(UI.label("У дорозі", 28, UI.GOLD, false))
+		var l := UI.label("Їдемо: %s. Торкнись мапи, щоб поквапитись." % Data.place_name(travel_to), 18, UI.TEXT, false)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+		hud.set_map_panel(v)
+		return
 	if map_sel == DepthService.LOC_ID:
 		hud.set_map_panel(MapPanel.build_depths(world, player, depth_sel, func(d: int):
 			depth_sel = d
@@ -669,7 +688,40 @@ func _build_map_panel() -> void:
 	hud.set_map_panel(panel)
 
 
+## Кнопка «Вирушити» на мапі: спершу поїздка фігуркою, прибуття — у _arrive.
 func _go_to(id: String) -> void:
+	if travel_to != "":
+		return  # уже їдемо
+	if id == map_here:
+		_arrive(id)
+		return
+	var a: Vector2 = hud.map_view._place_ll(map_here)
+	var b: Vector2 = hud.map_view._place_ll(id)
+	var dist: float = a.distance_to(b)  # градуси; Січ–Київ ≈ 5.3
+	travel_to = id
+	travel_t = 0.0
+	travel_dur = clampf(1.2 + dist * 0.45, 1.5, 4.0)
+	travel_boost = 1.0
+	travel_paused = false
+	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)
+	travel_event_at = -1.0
+	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and not DefenseService.is_besieged(world, id):
+		pending_event = TravelService.roll(world, player)
+		if not pending_event.is_empty():
+			travel_event_at = randf_range(0.4, 0.65)
+	hud.map_view.travel = {"from": map_here, "to": id, "t": 0.0}
+	hud.map_view.selected = ""
+	_build_map_panel()
+	Audio.play("portal", 0.1, -8.0)
+
+
+var pending_event := {}
+
+
+## Прибуття: те, що раніше робив _go_to одразу.
+func _arrive(id: String) -> void:
+	travel_to = ""
+	hud.map_view.travel = {}
 	if DefenseService.is_besieged(world, id):
 		start_defense(id)  # обложене місто чи хутір — спершу бій біля брами
 	elif id == Camp.CAMP_ID:
@@ -679,7 +731,46 @@ func _go_to(id: String) -> void:
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
-		_travel_to(id)
+		enter_location(id)
+
+
+## Крок подорожі (викликається з _process, коли ми на мапі й їдемо).
+func _travel_tick(delta: float) -> void:
+	if travel_to == "" or travel_paused:
+		return
+	travel_t += delta / travel_dur * travel_boost
+	hud.map_view.travel["t"] = travel_t
+	if travel_event_at > 0.0 and travel_t >= travel_event_at:
+		travel_event_at = -1.0
+		travel_paused = true
+		_show_travel_event(pending_event, func():
+			travel_paused = false)
+		return
+	if travel_t >= 1.0:
+		map_here = travel_to
+		_arrive(travel_to)
+
+
+## Дотик по мапі під час поїздки — їхати втричі швидше.
+func _travel_speed_up() -> void:
+	if travel_to != "":
+		travel_boost = 3.0
+
+
+## Пригода посеред шляху: діалог із вибором, потім дорога продовжується.
+func _show_travel_event(ev: Dictionary, on_done: Callable) -> void:
+	var dlg = DialogueScript.new()
+	dlg.setup(ev["lines"], ev["choices"])
+	dlg.finished.connect(func(choice: int):
+		hud.close_dialogue()
+		if choice >= 0 and choice < ev["choices"].size():
+			var summary := TravelService.apply(world, player, ev["choices"][choice]["outcome"])
+			_record("travel")
+			if summary != "":
+				hud.show_banner(summary, UI.GOLD)
+		save_game()
+		on_done.call())
+	hud.show_dialogue(dlg)
 
 
 # ======================= Глибини зарази =======================
@@ -737,22 +828,10 @@ func _on_exit() -> void:
 
 
 ## Дорога до місцевості: іноді трапляється пригода, а вже потім — похід.
+## Миттєвий похід без поїздки (для старих викликів і тестів).
 func _travel_to(id: String) -> void:
-	var ev := TravelService.roll(world, player)
-	if ev.is_empty():
-		enter_location(id)
-		return
-	var dlg = DialogueScript.new()
-	dlg.setup(ev["lines"], ev["choices"])
-	dlg.finished.connect(func(choice: int):
-		hud.close_dialogue()
-		if choice >= 0 and choice < ev["choices"].size():
-			var summary := TravelService.apply(world, player, ev["choices"][choice]["outcome"])
-			_record("travel")
-			if summary != "":
-				hud.show_banner(summary, UI.GOLD)
-		enter_location(id))
-	hud.show_dialogue(dlg)
+	map_here = id
+	_arrive(id)
 
 
 # ======================= Місто =======================

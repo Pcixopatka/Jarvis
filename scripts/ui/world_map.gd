@@ -3,6 +3,7 @@ extends Control
 ## Координати — довгота/широта, спроєктовані на екран.
 
 signal location_selected(id: String)
+signal travel_tapped  # дотик під час подорожі — прискорити
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -112,6 +113,8 @@ var story_target := ""  # куди веде сюжет (зірка)
 var plague := {}  # id місцевості -> рівень зарази (0..3)
 var sieges := {}  # місто/хутір -> походів до падіння (облога)
 var hero_level := 1
+## Подорож: {"from": id, "to": id, "t": 0..1} або порожньо. Фігурка їде дугою, камера слідує.
+var travel := {}
 var map_rect := Rect2()  # область для мапи на екрані
 var zoom := 1.6
 var center := Vector2(MAP_W * 0.55, MAP_H * 0.55)  # центр огляду в одиницях мапи
@@ -150,7 +153,26 @@ func _process(delta: float) -> void:
 	_pulse += delta * 4.0
 	if _zoom_box:
 		_zoom_box.position = Vector2(map_rect.position.x + 8, map_rect.end.y - 144)
+	if not travel.is_empty():
+		# Камера м'яко слідує за фігуркою
+		var want := _unit(_travel_ll(travel["t"]))
+		center = center.lerp(want, minf(1.0, delta * 4.0))
 	queue_redraw()
+
+
+## Координати (довгота, широта) точки шляху для прогресу t — пряма між місцями.
+func _place_ll(id: String) -> Vector2:
+	if Data.CITIES.has(id):
+		return Data.CITIES[id]["pos"]
+	if Data.LOCATIONS.has(id):
+		return Data.LOCATIONS[id]["pos"]
+	if id == Camp.CAMP_ID:
+		return Camp.CAMP["pos"]
+	return Vector2(31, 49)
+
+
+func _travel_ll(t: float) -> Vector2:
+	return _place_ll(travel["from"]).lerp(_place_ll(travel["to"]), clampf(t, 0.0, 1.0))
 
 
 # ---------- Проєкція і масштаб ----------
@@ -236,7 +258,10 @@ func _gui_input(event: InputEvent) -> void:
 				_press_pos = event.position
 				_dragging = false
 			elif not _dragging:
-				_tap(event.position)
+				if not travel.is_empty():
+					travel_tapped.emit()  # під час поїздки дотик — лише прискорити
+				else:
+					_tap(event.position)
 			accept_event()
 	elif event is InputEventMouseMotion and event.button_mask & MOUSE_BUTTON_MASK_LEFT:
 		if _touches.size() >= 2:
@@ -393,8 +418,10 @@ func _draw() -> void:
 			star.append(sc + Vector2.from_angle(-PI / 2 + i * PI / 5) * (rr if i % 2 == 0 else rr * 0.45))
 		draw_colored_polygon(star, Color(1.0, 0.85, 0.2))
 		draw_polyline(star + PackedVector2Array([star[0]]), Color(0.4, 0.2, 0.0), 2.0, true)
-	# Де козак
-	if _markers.has(current):
+	# Де козак: прапорець на місці або фігурка в дорозі
+	if not travel.is_empty():
+		_draw_traveler(k)
+	elif _markers.has(current):
 		var c: Vector2 = _markers[current] + Vector2(-20, -18) * k
 		draw_line(c, c + Vector2(0, -26) * k, Color(0.3, 0.2, 0.1), 3.0)
 		draw_colored_polygon(PackedVector2Array([c + Vector2(0, -26) * k, c + Vector2(16, -21) * k, c + Vector2(0, -15) * k]), Color(0.9, 0.15, 0.15))
@@ -404,6 +431,42 @@ func _draw() -> void:
 
 
 ## Підпис по центру; ширина рахується за реальним розміром тексту.
+## Фігурка героя в дорозі: пунктирний шлях, вершник із хоругвою, підскок у такт.
+func _draw_traveler(k: float) -> void:
+	var t: float = travel["t"]
+	var a := _proj(_place_ll(travel["from"]))
+	var b := _proj(_place_ll(travel["to"]))
+	# Пунктир шляху: пройдене — яскраве, попереду — бліде
+	var seg := 14.0 * k
+	var n := maxi(2, int(a.distance_to(b) / seg))
+	for i in n:
+		if i % 2 == 1:
+			continue
+		var f0 := float(i) / n
+		var f1 := float(i + 1) / n
+		var col := Color(1.0, 0.85, 0.3, 0.9) if f1 <= t else Color(1.0, 1.0, 1.0, 0.35)
+		draw_line(a.lerp(b, f0), a.lerp(b, f1), col, 3.0 * k)
+	var p := a.lerp(b, t)
+	var bob := absf(sin(_pulse * 2.5)) * 4.0 * k
+	var side := 1.0 if b.x >= a.x else -1.0
+	draw_set_transform(p + Vector2(0, 6 * k), 0.0, Vector2(1.0, 0.4))
+	draw_circle(Vector2.ZERO, 12.0 * k, Color(0, 0, 0, 0.3))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var y := -bob
+	# Кінь
+	draw_circle(p + Vector2(0, y - 4 * k), 9.0 * k, Color(0.4, 0.26, 0.14))
+	draw_circle(p + Vector2(side * 10 * k, y - 8 * k), 5.0 * k, Color(0.4, 0.26, 0.14))
+	for dx in [-6.0, 5.0]:
+		draw_line(p + Vector2(dx * k, y + 2 * k), p + Vector2((dx + sin(_pulse * 5.0 + dx) * 2.0) * k, y + 10 * k), Color(0.3, 0.2, 0.1), 2.5 * k)
+	# Вершник
+	draw_circle(p + Vector2(0, y - 14 * k), 6.0 * k, Color(0.78, 0.14, 0.14))
+	draw_circle(p + Vector2(0, y - 22 * k), 4.0 * k, Color(0.96, 0.8, 0.65))
+	# Хоругва
+	draw_line(p + Vector2(-side * 6 * k, y - 10 * k), p + Vector2(-side * 6 * k, y - 36 * k), Color(0.3, 0.2, 0.1), 2.0 * k)
+	draw_colored_polygon(PackedVector2Array([p + Vector2(-side * 6 * k, y - 36 * k), p + Vector2(-side * 18 * k, y - 32 * k), p + Vector2(-side * 6 * k, y - 27 * k)]), Color(0.15, 0.35, 0.8))
+	draw_colored_polygon(PackedVector2Array([p + Vector2(-side * 6 * k, y - 32 * k), p + Vector2(-side * 18 * k, y - 32 * k), p + Vector2(-side * 6 * k, y - 27 * k)]), Color(1.0, 0.85, 0.1))
+
+
 ## Назви місць без накладання: важливіші (вибране, мета, міста) малюються першими,
 ## а ті, що налазять на вже намальовані, ховаються до наближення мапи.
 func _draw_labels(font: Font, labels: Array) -> void:

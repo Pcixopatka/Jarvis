@@ -379,4 +379,6 @@ static func place_name(id: String) -> String:
 		return CITIES[id]["name"]
 	if LOCATIONS.has(id):
 		return LOCATIONS[id]["name"]
+	if id == "hutir":
+		return "Козацький хутір"
 	return id
