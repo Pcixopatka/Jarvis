@@ -22,6 +22,9 @@ const StoneService := preload("res://scripts/game/stone_service.gd")
 const DepthService := preload("res://scripts/game/depth_service.gd")
 const TowerService := preload("res://scripts/game/tower_service.gd")
 const EventService := preload("res://scripts/game/event_service.gd")
+const DuelService := preload("res://scripts/game/duel_service.gd")
+const GloryService := preload("res://scripts/game/glory_service.gd")
+const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
 const Paths := preload("res://scripts/data/paths.gd")
 const AccountScript := preload("res://scripts/game/account.gd")
@@ -125,6 +128,7 @@ func _ready() -> void:
 	Events.dungeon_cleared.connect(_on_dungeon_cleared)
 	Events.exit_requested.connect(_on_exit)
 	Events.defense_won.connect(_on_defense_won)
+	Events.duel_won.connect(_on_duel_won)
 	Events.parried.connect(func(): _record("parry"))
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
@@ -170,7 +174,12 @@ func _combat_info() -> Dictionary:
 		return {}
 	var L: Dictionary = combat.loc
 	var sub := ""
-	if combat.is_defense():
+	if combat.is_duel():
+		var rv = combat.nearest_enemy(player.global_position, 5000.0)
+		sub = "Коло %d із %d  •  Суперник: %d%%" % [int(L["round"]) + 1, DuelService.ROUNDS, roundi(100.0 * rv.hp / rv.max_hp) if rv != null else 0]
+		if combat.duel_over:
+			sub = "Перемога! Портал веде на Січ"
+	elif combat.is_defense():
 		var gp: int = roundi(100.0 * combat.gate.hp / combat.gate.max_hp) if combat.gate != null and is_instance_valid(combat.gate) else 0
 		sub = "Хвиля %d/%d  •  Брама %d%%" % [combat.wave, L["waves"], gp]
 		if combat.defense_over and combat.field_cleared:
@@ -358,7 +367,7 @@ func _leave_combat() -> void:
 
 
 func enter_map() -> void:
-	var from_trip: bool = combat.active
+	var from_trip: bool = combat.active and combat.counts_as_trip()
 	_leave_combat()
 	hud.clear_screen()
 	hud.close_overlay()
@@ -447,6 +456,9 @@ func enter_location(id: String) -> void:
 
 
 func _try_leave() -> void:
+	if combat.is_duel() and not combat.duel_over:
+		hud.show_banner("З майдану не тікають. Здатися можна в паузі.", UI.BAD)
+		return
 	if not combat.can_leave():
 		hud.show_banner("Нечисть поруч — не втечеш!", UI.BAD)
 		return
@@ -702,6 +714,9 @@ func _on_level_up(lvl: int) -> void:
 
 
 func _on_player_died() -> void:
+	if combat.is_duel():
+		_duel_lost()
+		return
 	if combat.is_defense() and not combat.defense_over:
 		combat.defense_over = true
 		var ev := EventService.battle_at(world, combat.loc["target"])
@@ -927,6 +942,40 @@ func start_defense(target: String) -> void:
 	hint("defense", "Облога! Нечисть іде хвилями й ламає браму внизу. Стань між ними та брамою — коли брама впаде, оборону програно.")
 
 
+# ======================= Герць на майдані =======================
+
+func start_duel() -> void:
+	if not DuelService.can_fight(world, player):
+		hud.show_banner("На майдан зараз не вийти", UI.BAD)
+		return
+	combat.defense_loc = DuelService.battle_loc(world, player)
+	enter_location("duel")
+	map_here = "sich"
+	hint("duel", "Герць — сам на сам. Червоні зони на землі показують, куди вдарить суперник: виходь із них або відбивай «Блоком». Смерті на майдані нема.")
+
+
+func _on_duel_won() -> void:
+	defense_target = "sich"  # з порталу — назад на Січ
+	var msgs := DuelService.win(world, player)
+	hud.show_banner("\n".join(msgs), UI.GOLD)
+	_record("duel")
+	if DuelService.is_champion(world):
+		_record("duel_champion")
+	save_game()
+
+
+## Поразка чи здача в герці: без втрат, лише мінус спроба; повертаємось на Січ.
+func _duel_lost() -> void:
+	hud.close_overlay()
+	hud.show_banner(DuelService.lose(world), UI.BAD)
+	state = State.DEAD
+	hud.set_mode(true, false)
+	get_tree().paused = false
+	await get_tree().create_timer(1.6).timeout
+	if state == State.DEAD:
+		enter_city("sich")
+
+
 ## Бій події (набіг, валка, облога Січі, полон, поранений) — як оборона, але з іншою «брамою».
 func start_event(ev: Dictionary) -> void:
 	combat.defense_loc = EventService.battle_loc(world, ev, player)
@@ -1094,6 +1143,9 @@ func city_do(action: String, arg) -> void:
 		"hero_join":
 			for m in HeroService.join(world, player, arg):
 				hud.show_banner(m["text"], UI.GOLD)
+		"duel_start":
+			start_duel()
+			return
 	save_game()
 	_build_city()
 
@@ -1126,6 +1178,9 @@ func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> vo
 # ======================= Екран козака =======================
 
 func open_character() -> void:
+	if state == State.PLAYING and combat.is_duel() and not combat.duel_over:
+		hud.show_banner("Під час герцю не до торби", UI.BAD)
+		return
 	if state == State.CHARACTER or player == null:
 		return
 	if not (state == State.PLAYING or state == State.MAP or state == State.CITY or state == State.CAMP):
@@ -1312,7 +1367,10 @@ func _show_pause() -> void:
 		open_character())
 	hud.add_button(("×2 досвіду ще %s" % AdRewards.format_time(AdRewards.xp2_left(world))) if not AdRewards.can_xp2(world) else "Реклама: ×2 досвіду на годину", func(): _watch_xp2(_show_pause))
 	var leave_text := "Покинути печеру (прогрес втратиться)" if combat.is_dungeon() else "Повернутися на мапу"
-	hud.add_button(leave_text, enter_map)
+	if combat.is_duel() and not combat.duel_over:
+		hud.add_button("Здатися (мінус спроба)", _duel_lost)
+	else:
+		hud.add_button(leave_text, enter_map)
 	_add_sound_toggles(_show_pause)
 	hud.add_button("Головне меню", func():
 		save_game()

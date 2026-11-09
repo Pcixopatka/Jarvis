@@ -25,6 +25,8 @@ static func build(game, city: String) -> Control:
 		["Коваль", _smith(game)],
 		["Корчма", _tavern(game, city)],
 	]
+	if city == "sich":
+		pages.append(["Майдан", _maidan(game)])
 	if city == "sich" and game.PathService.choosing(game.world):
 		pages.insert(0, ["★ Дорога", _path_tab(game)])
 	if not _city_specs(game, city).is_empty():
@@ -437,4 +439,59 @@ static func _tavern(game, city: String) -> Control:
 		var ok: bool = lvl >= need and p.gold >= price and w.companions.size() < game.CityService.party_size(w) and not w.has_companion(type)
 		row.add_child(UI.button("Найняти\n%d грн" % price, _do(game, "hire", type), Vector2(190, 70), 18, ok))
 		v.add_child(row)
+	return v
+
+
+# ---------------- Майдан (Січ): герць ----------------
+
+static func _wrap(text: String, size: int, col: Color) -> Label:
+	var l := UI.label(text, size, col, false)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return l
+
+
+static func _maidan(game) -> Control:
+	var DS = game.DuelService
+	var GS = game.GloryService
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(UI.label("Герць на майдані", 26, UI.GOLD, false))
+	v.add_child(_wrap("Щотижня на Січі сходяться найкращі шаблі. Три кола сам на сам, без побратимів. Програв — мінус спроба; смерті на майдані нема.", 17, UI.MUTED))
+	v.add_child(UI.label("Слава: %d — %s%s" % [GS.glory(w), GS.rank_name(w), ("   (до наступного рангу: %d)" % GS.to_next(w)) if GS.to_next(w) > 0 else ""], 18, UI.TEXT, false))
+	if not DS.unlocked(p):
+		v.add_child(_wrap("Кошовий пускає на майдан із %d-го рівня й лише тих, хто вже обрав свою дорогу." % DS.MIN_LEVEL, 19, UI.BAD))
+		return v
+	var s: Dictionary = DS.state(w)
+	var done: int = int(s["round"])
+	v.add_child(UI.label("Виграно кіл: %d/%d   •   Спроб: %d   •   Новий турнір за %d дн.   •   Титулів чемпіона: %d" % [done, DS.ROUNDS, int(s["tries"]), DS.days_to_reset(), int(s["titles"])], 18, UI.TEXT, false))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var ids: Array = DS.lineup()
+	for i in ids.size():
+		var info: Dictionary = game.Acts.RIVALS[ids[i]]
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var border := UI.GOOD if i < done else (UI.GOLD if i == done else UI.MUTED)
+		card.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), border, 10, 10))
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 4)
+		var status := "✓ Переможений" if i < done else ("▶ Наступний" if i == done else "Попереду")
+		col.add_child(UI.label("Коло %d%s  •  %s" % [i + 1, " (фінал)" if i == DS.ROUNDS - 1 else "", status], 15, border, false))
+		col.add_child(UI.label(info["name"], 22, UI.GOLD if i <= done else UI.TEXT, false))
+		col.add_child(_wrap(info["bio"], 15, UI.MUTED))
+		col.add_child(UI.label("+%d грн, +%d слави" % [DS.gold_for(i, p.level), game.Acts.DUEL_GLORY[i]], 15, UI.TEXT, false))
+		card.add_child(col)
+		row.add_child(card)
+	v.add_child(row)
+	if DS.is_champion(w):
+		v.add_child(UI.label("Ти — чемпіон майдану цього тижня! Повертайся на новий турнір.", 22, UI.GOOD, false))
+	elif int(s["tries"]) <= 0:
+		v.add_child(UI.label("Спроб цього тижня більше нема. Новий турнір — за %d дн." % DS.days_to_reset(), 20, UI.BAD, false))
+	else:
+		var rival: Dictionary = DS.next_rival(w)
+		v.add_child(UI.button("Вийти на герць: %s" % rival["name"], _do(game, "duel_start"), Vector2(520, 70), 24, DS.can_fight(w, p)))
+		if not s["belt"]:
+			v.add_child(UI.label("Перший чемпіонський титул — легендарний «%s»." % DS.BELT_NAME, 16, UI.GOLD, false))
 	return v

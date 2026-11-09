@@ -21,6 +21,8 @@ const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
 const GateScript := preload("res://scripts/entities/gate.gd")
 const TrapScript := preload("res://scripts/world/trap.gd")
 const ZoneScript := preload("res://scripts/world/zone.gd")
+const SpectatorScript := preload("res://scripts/world/spectator.gd")
+const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
 const FxScript := preload("res://scripts/world/fx.gd")
@@ -28,6 +30,7 @@ const AmbientScript := preload("res://scripts/world/ambient.gd")
 
 const FIELD_ARENA := Rect2(-1400, -1400, 2800, 2800)
 const DUNGEON_ARENA := Rect2(-750, -550, 1500, 1100)
+const DUEL_ARENA := Rect2(-480, -360, 960, 720)  # майдан для герцю
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
@@ -59,6 +62,9 @@ var boss_revives := 0
 var defense_loc := {}
 var custom_loc := {}
 var tower_boss_spawned := false  # Башта: міні-бос/супербос поверху вже на арені
+var duel_over := false  # герць: суперник упав
+var spectators: Array = []  # глядачі на майдані
+var _duel_hp := 0.0  # здоров'я суперника минулого кадру (щоб глядачі раділи влучанням)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
 var wave := 0
@@ -155,7 +161,11 @@ func set_visible_world(v: bool) -> void:
 func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictionary = {}) -> void:
 	loc_id = id
 	if not Data.LOCATIONS.has(id):
-		enter_defense(defense_loc, companions)
+		# Особливі бої, описані службами (оборона, події, герць...)
+		if defense_loc.get("type", "") == "duel":
+			enter_duel(defense_loc)
+		else:
+			enter_defense(defense_loc, companions)
 		return
 	plague = plague_level
 	plague_mods = PlagueService.mods(plague)
@@ -220,6 +230,91 @@ func is_defense() -> bool:
 
 func is_tower() -> bool:
 	return loc.get("type", "") == "tower"
+
+
+func is_duel() -> bool:
+	return loc.get("type", "") == "duel"
+
+
+func is_field() -> bool:
+	return loc.get("type", "") == "field"
+
+
+## Чи рахується цей бій походом (після нього світ робить крок: зараза, облоги, події).
+func counts_as_trip() -> bool:
+	return not is_duel()
+
+
+# ======================= Герць на майдані =======================
+
+## Сам на сам із суперником на майдані Січі: без побратимів, довкола глядачі.
+func enter_duel(dl: Dictionary) -> void:
+	loc = dl
+	plague = 0
+	plague_mods = PlagueService.mods(0)
+	room = int(dl.get("round", 0))
+	duel_over = false
+	field_cleared = false
+	player.unbreak_ready = true
+	player.berehynia_ready = true
+	_setup_arena([])
+	set_visible_world(true)
+	active = true
+	spawn_enemy("rival", int(dl["level"]), false, Vector2(0, arena.position.y + 190))
+	var e = _last_enemy()
+	e.make_rival(Acts.RIVALS[dl["rival"]], float(dl["rival_hp"]), float(dl["rival_dmg"]), float(dl.get("rival_cap", 0.0)))
+	_duel_hp = e.hp
+	_spawn_spectators()
+	Events.banner.emit("%s\nКоло %d із 3" % [dl["name"], int(dl["round"]) + 1], Color(1.0, 0.85, 0.4))
+
+
+func _spawn_spectators() -> void:
+	spectators.clear()
+	var sheets: Array = Acts.SPECTATORS
+	var spots := []
+	var x := arena.position.x + 30.0
+	while x < arena.end.x - 20.0:
+		spots.append([Vector2(x, arena.position.y - 34.0), Vector2.DOWN])
+		spots.append([Vector2(x + 26.0, arena.end.y + 58.0), Vector2.UP])
+		x += 62.0
+	var y := arena.position.y + 40.0
+	while y < arena.end.y - 20.0:
+		spots.append([Vector2(arena.position.x - 44.0, y), Vector2.RIGHT])
+		spots.append([Vector2(arena.end.x + 44.0, y), Vector2.LEFT])
+		y += 70.0
+	for sp in spots:
+		if randf() < 0.2:
+			continue  # подекуди порожнє місце
+		var s = SpectatorScript.new()
+		s.sheet = sheets[randi() % sheets.size()]
+		s.look = sp[1]
+		s.position = sp[0] + Vector2(randf_range(-8, 8), randf_range(-6, 6))
+		entities.add_child(s)
+		spectators.append(s)
+
+
+func cheer(dur: float = 0.7) -> void:
+	for s in spectators:
+		if is_instance_valid(s) and randf() < 0.6:
+			s.cheer = dur * randf_range(0.6, 1.2)
+
+
+func _update_duel(_delta: float) -> void:
+	if duel_over:
+		_check_exit_portal()
+		return
+	var rival = nearest_enemy(player.global_position, 5000.0)
+	if rival != null:
+		if rival.hp < _duel_hp - 1.0:
+			cheer()
+		_duel_hp = rival.hp
+		return
+	duel_over = true
+	field_cleared = true
+	cheer(2.5)
+	Audio.play("quest", 0.0)
+	_spawn_portal("До Січі", Vector2(0, 0))
+	Events.duel_won.emit()
 
 
 # ======================= Башта Кощія =======================
@@ -406,8 +501,8 @@ func on_gate_destroyed() -> void:
 
 func _setup_arena(companions: Array) -> void:
 	_clear()
-	arena = DUNGEON_ARENA if (is_dungeon() or is_tower()) else (DEFENSE_ARENA if is_defense() else FIELD_ARENA)
-	player.position = Vector2(0, arena.end.y - 160) if (is_dungeon() or is_tower()) else (Vector2(0, arena.end.y - 330) if is_defense() else Vector2.ZERO)
+	arena = _arena_rect()
+	player.position = _start_pos()
 	ground.setup(arena, loc["biome"], hash(loc_id) + room * 31)
 	_setup_atmosphere(loc["biome"])
 	camera.limit_left = int(arena.position.x - 120)
@@ -419,7 +514,24 @@ func _setup_arena(companions: Array) -> void:
 	_spawn_companions(companions)
 
 
+func _arena_rect() -> Rect2:
+	if is_duel():
+		return DUEL_ARENA
+	if is_dungeon() or is_tower():
+		return DUNGEON_ARENA
+	return DEFENSE_ARENA if is_defense() else FIELD_ARENA
+
+
+func _start_pos() -> Vector2:
+	if is_duel():
+		return Vector2(0, arena.end.y - 150)
+	if is_dungeon() or is_tower():
+		return Vector2(0, arena.end.y - 160)
+	return Vector2(0, arena.end.y - 330) if is_defense() else Vector2.ZERO
+
+
 func _clear() -> void:
+	spectators.clear()
 	for c in entities.get_children():
 		if c == player:
 			continue
@@ -489,7 +601,9 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2.ZERO
 	player.attack_held = attack_input.call()
 	player.block_held = block_input.call()
-	if is_tower():
+	if is_duel():
+		_update_duel(delta)
+	elif is_tower():
 		_update_tower(delta)
 	elif is_dungeon():
 		_update_dungeon()
@@ -649,7 +763,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 		hitstop(0.15)
 	else:
 		hitstop(0.03)
-	if not is_dungeon() and not is_defense() and not is_tower() and not field_cleared:
+	if is_field() and not field_cleared:
 		field_kills += 1
 		if field_kills >= field_goal:
 			_field_complete()
@@ -657,6 +771,8 @@ func _on_enemy_killed(e: Node2D) -> void:
 
 
 func _drop_loot(e: Node2D) -> void:
+	if is_duel():
+		return  # на майдані здобичі нема — нагороду дає кошовий
 	var pos: Vector2 = e.global_position
 	var ilvl: int = loc.get("level", 1)
 	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))

@@ -11,7 +11,7 @@ var crystals := []  # [позиція, колір] — у печері біля 
 var props_parent: Node2D = null  # шар сутностей: сюди ставляться дерева й камені (сортування за y)
 var props := []
 ## Біоми, що малюються тайлами (решта — поки що процедурно)
-const TILED := ["forest", "steppe", "village", "cave", "plague", "river", "swamp", "mountain"]
+const TILED := ["forest", "steppe", "village", "cave", "plague", "river", "swamp", "mountain", "maidan"]
 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
@@ -93,6 +93,26 @@ func _spawn_props() -> void:
 			_scatter(rng, "pine", int(60 * area), 230.0, 60.0)
 			_scatter(rng, "pine2", int(30 * area), 230.0, 60.0)
 			_scatter(rng, "pebbles", int(30 * area), 120.0, 40.0)
+		"maidan":
+			# Майдан Січі: огорожа зі стовпців довкола, за нею хати
+			var px := arena.position.x
+			while px <= arena.end.x:
+				_prop("post", Vector2(px, arena.position.y + 4.0))
+				_prop("post", Vector2(px, arena.end.y + 22.0))
+				px += 48.0
+			var py := arena.position.y + 48.0
+			while py < arena.end.y:
+				_prop("post", Vector2(arena.position.x - 6.0, py))
+				_prop("post", Vector2(arena.end.x + 6.0, py))
+				py += 48.0
+			for hx in [-380.0, -40.0, 320.0]:
+				_prop("house", Vector2(hx, arena.position.y - 70.0))
+			for hy in [-200.0, 120.0]:
+				_prop("hut", Vector2(arena.position.x - 130.0, hy))
+				_prop("hut", Vector2(arena.end.x + 130.0, hy))
+			for tx in [-560.0, 560.0]:
+				for ty in [-330.0, -40.0, 300.0]:
+					_prop("tree", Vector2(tx + rng.randf_range(-20, 20), ty + rng.randf_range(-20, 20)))
 		"cave", "plague":
 			_scatter(rng, "boulder_big", int(18 * area) + 2, 230.0, 70.0)
 			_scatter(rng, "boulder", int(40 * area), 160.0, 40.0)
@@ -443,6 +463,13 @@ func _draw_tiles() -> void:
 				Tiles.rg_tile(self, fl[rng.randi() % fl.size()], pos, Color(0.85, 0.8, 0.78) if biome == "cave" else Color(0.7, 0.8, 0.6))
 				continue
 			var tint := Color.WHITE if inside else dark
+			if biome == "maidan":
+				# Втоптана земля в колі, довкола трава
+				if inside:
+					Tiles.rg_tile(self, Tiles.RG_DIRT[rng.randi() % Tiles.RG_DIRT.size()], pos)
+				else:
+					Tiles.tile(self, tex, Tiles.GRASS[0], pos, Color(0.82, 0.86, 0.8))
+				continue
 			if biome == "swamp":
 				tint = tint * swamp_tint
 			if mountain:

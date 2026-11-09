@@ -65,6 +65,8 @@ func _run() -> void:
 	await _suite_tower_battle()
 	_suite_events()
 	await _suite_event_battles()
+	_suite_duel()
+	await _suite_duel_battle()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -1879,6 +1881,163 @@ func _suite_event_battles() -> void:
 		if c.get_script() == game.combat.PickupScript and c.kind == "item" and int(c.item["rarity"]) >= 2:
 			chest = true
 	check(chest and not ES.has_treasure(game.world, "wild_field"), "сторож убитий — скриня з рідкісною річчю, мітка знята")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_duel() -> void:
+	suite("Герць: правила турніру")
+	var DS = load("res://scripts/game/duel_service.gd")
+	var GS = load("res://scripts/game/glory_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	var w = WorldState.new()
+	var p = _new_player()
+	check(not DS.unlocked(p), "селянина на майдан не пускають")
+	p.change_class("cossack")
+	p.level = 4
+	check(not DS.unlocked(p), "до 5 рівня — зарано")
+	p.level = 12
+	p.recalc()
+	check(DS.unlocked(p) and DS.can_fight(w, p), "козак 12 рівня може битись")
+	var s: Dictionary = DS.state(w)
+	check(int(s["round"]) == 0 and int(s["tries"]) == DS.TRIES and not DS.is_champion(w), "новий тиждень: 0 кіл, 3 спроби")
+	var lu: Array = DS.lineup()
+	check(lu.size() == 3 and lu[0] != lu[1] and lu[1] != lu[2] and lu[0] != lu[2], "три різні суперники")
+	check(lu == DS.lineup(), "склад суперників сталий протягом тижня")
+	var variety := {}
+	for i in 12:
+		variety[str(DS.lineup("W%d" % (3000 + i)))] = true
+	check(variety.size() >= 4, "щотижня склад інший")
+	for id in Acts.RIVAL_ORDER:
+		check(Acts.RIVALS.has(id) and Acts.RIVALS[id]["bio"] != "" and Acts.RIVALS[id]["style"] in ["rubaka", "spysnyk", "strilets", "kharakternyk", "bulavnyk"], "суперник %s описаний" % id)
+	var l0: Dictionary = DS.loc_for(p, "ostap", 0)
+	var l2: Dictionary = DS.loc_for(p, "ostap", 2)
+	check(l0["type"] == "duel" and l0["rival_hp"] > 0.0 and l2["rival_hp"] > l0["rival_hp"] and l2["rival_dmg"] > l0["rival_dmg"], "фінал важчий за перше коло")
+	var weak = _new_player()
+	weak.change_class("cossack")
+	weak.level = 12
+	weak.recalc()
+	p.stats["str"] = 80
+	p.stats["vit"] = 80
+	p.recalc()
+	check(DS.loc_for(p, "ostap", 0)["rival_hp"] > DS.loc_for(weak, "ostap", 0)["rival_hp"] * 1.5, "суперник міряється силою з героєм")
+	# Перемоги
+	var g0: int = p.gold
+	var m1: Array = DS.win(w, p)
+	check(int(DS.state(w)["round"]) == 1 and p.gold == g0 + DS.gold_for(0, p.level) and GS.glory(w) == Acts.DUEL_GLORY[0] and "Коло 1" in m1[0], "перше коло: гривні й слава")
+	DS.win(w, p)
+	var bag0: int = p.inventory.size()
+	var m3: Array = DS.win(w, p)
+	check(DS.is_champion(w) and int(DS.state(w)["titles"]) == 1 and not DS.can_fight(w, p), "три кола — чемпіон, більше цього тижня не б'ється")
+	check(p.inventory.size() == bag0 + 1 and p.inventory[-1]["name"] == DS.BELT_NAME and p.inventory[-1]["rarity"] == 3 and p.inventory[-1]["slot"] == "belt", "перший титул — легендарний пояс чемпіона")
+	check(GS.glory(w) == 40 and GS.rank_name(w) == "Знаний козак" and "чемпіон" in m3[0].to_lower(), "40 слави — ранг «Знаний козак»")
+	check(m3.size() >= 2 and "Слава росте" in m3[-1], "повідомлення про новий ранг")
+	check(DS.next_rival(w).is_empty(), "після фіналу суперників нема")
+	# Наступний тиждень
+	CS.now_override = 1762700000 + 7 * 86400
+	check(int(DS.state(w)["round"]) == 0 and int(DS.state(w)["tries"]) == DS.TRIES and DS.can_fight(w, p) and int(DS.state(w)["titles"]) == 1, "новий тиждень — новий турнір, титули лишаються")
+	var tr0: int = int(p.resources.get("trophy", 0))
+	for i in 3:
+		DS.win(w, p)
+	check(int(DS.state(w)["titles"]) == 2 and int(p.resources.get("trophy", 0)) == tr0 + 3 and p.inventory.size() == bag0 + 1, "другий титул — трофеї замість другого пояса")
+	# Поразки
+	CS.now_override = 1762700000 + 14 * 86400
+	var lm: String = DS.lose(w)
+	check(int(DS.state(w)["tries"]) == 2 and "2" in lm, "поразка — мінус спроба")
+	DS.lose(w)
+	DS.lose(w)
+	check(int(DS.state(w)["tries"]) == 0 and not DS.can_fight(w, p), "без спроб на майдан не вийти")
+	check(DS.days_to_reset() >= 1 and DS.days_to_reset() <= 7, "до нового турніру 1–7 днів")
+	# Слава: ранги
+	var w2 = WorldState.new()
+	var p2 = _new_player()
+	var gg: int = p2.gold
+	var st0: int = int(p2.stones.get("zabuttia", 0))
+	var gm: Array = GS.add(w2, p2, 300)
+	check(gm.size() == 3 and GS.rank_name(w2) == "Славний лицар" and p2.gold == gg + 300 + 800 + 2000 and int(p2.stones.get("zabuttia", 0)) == st0 + 1, "слава одразу через три ранги: усі нагороди й камінь")
+	check(GS.to_next(w2) == 400 and GS.add(w2, p2, 0).is_empty(), "до наступного рангу 400")
+	var w3 = WorldState.new()
+	w3.from_dict(w.to_dict())
+	check(w3.glory == w.glory and int(w3.duel["titles"]) == 2, "слава й герць зберігаються")
+	CS.now_override = 0
+
+
+func _suite_duel_battle() -> void:
+	suite("Герць: поєдинок")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "duel": true, "stones": true}
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.city_do("duel_start", null)
+	await _frames(2)
+	check(game.state == game.State.CITY, "селянин на герць не виходить")
+	p.change_class("cossack")
+	p.level = 15
+	p.stats["str"] = 40
+	p.stats["vit"] = 40
+	p.skills = {"whirl": 3}
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	game.world.companions = [{"type": "dzhura", "downed": false, "level": 10, "xp": 0}]
+	var trips0: int = int(game.EventService.state(game.world)["trips"])
+	var gold0: int = p.gold
+	game.city_do("duel_start", null)
+	await _frames(2)
+	var rival = game.combat.nearest_enemy(p.global_position, 5000.0)
+	check(game.state == game.State.PLAYING and game.combat.is_duel() and rival != null and rival.style != "" and rival.title != "", "герць почався: суперник з іменем і стилем")
+	check(game.combat.companion_nodes.is_empty() and game.combat.spectators.size() > 10, "сам на сам, довкола глядачі")
+	check(game.combat.arena == game.combat.DUEL_ARENA and game.combat.loc["biome"] == "maidan", "бій на майдані")
+	game.open_character()
+	check(game.state == game.State.PLAYING, "під час герцю торбу не відкрити")
+	var hp_full: float = rival.max_hp
+	rival.take_damage(hp_full * 0.9, Vector2.ZERO)
+	check(rival.hp > hp_full * 0.5, "суперника не зарубати одним ударом")
+	var frames := 0
+	while not game.combat.duel_over and frames < 9000 and game.state == game.State.PLAYING:
+		_bot_fight(game)
+		p.hp = p.max_hp
+		await process_frame
+		frames += 1
+	check(game.combat.duel_over and int(game.DuelService.state(game.world)["round"]) == 1 and p.gold > gold0, "коло виграно (кадрів: %d): гривні й поступ" % frames)
+	check(int(game.world.stats.get("duel", 0)) == 1 and game.GloryService.glory(game.world) > 0, "лічильник герцю й слава")
+	frames = 0
+	while game.state == game.State.PLAYING and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and game.city_id == "sich", "з порталу — назад на Січ")
+	check(int(game.EventService.state(game.world)["trips"]) == trips0, "герць — не похід: світ не робить кроку")
+	# Поразка: без втрати гривень, мінус спроба
+	game.hud.close_dialogue()
+	var gold1: int = p.gold
+	game.city_do("duel_start", null)
+	await _frames(2)
+	check(game.combat.is_duel() and game.combat.loc["round"] == 1, "друге коло")
+	p.invuln = 0.0  # після входу в місто герой мить невразливий
+	p.take_damage(p.max_hp * 20.0, null)
+	await _frames(3)
+	check(not p.alive and int(game.DuelService.state(game.world)["tries"]) == game.DuelService.TRIES - 1, "поклали на лопатки — мінус спроба")
+	frames = 0
+	while game.state != game.State.CITY and frames < 300:
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and p.alive and p.gold == gold1, "після поразки — на Січі, живий і при грошах")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

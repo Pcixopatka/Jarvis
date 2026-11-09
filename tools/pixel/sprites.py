@@ -419,6 +419,12 @@ CHARS["comp_strilets"] = dict(CHARS["cossack"], body=hexc("5a6638"), sleeve=hexc
 CHARS["comp_oksana"] = dict(CHARS["cossack"], body=hexc("596633"), sleeve=hexc("596633"), vyshyvka=hexc("e8c04a"), hat="long", hair=hexc("3a2518"), mustache=False, pants=hexc("8a3a2a"), weapon="musket")
 CHARS["comp_znakhar"] = dict(CHARS["mavka"], skin=SKIN, hair=hexc("6a4a2a"), body=hexc("f6efe0"), sleeve=hexc("f6efe0"), vyshyvka=hexc("c6281e"), pants=hexc("b03a3a"), eye=BLACK, weapon=None)
 CHARS["comp_yaryna"] = dict(CHARS["comp_znakhar"], hair=hexc("d8b060"), vyshyvka=hexc("3a9a4a"), pants=hexc("3a6a9a"))
+# Суперники в герці на майдані
+CHARS["rival_ostap"] = coss(hexc("b02a2a"), weapon="sabre", hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("c6281e"), sash=hexc("f2c23a"), vyshyvka=None)
+CHARS["rival_danylo"] = coss(hexc("3f6a3a"), weapon="pike", sash=hexc("c6281e"), pants=hexc("7a3a2a"), vyshyvka=None)
+CHARS["rival_hnat"] = coss(hexc("2f4f8a"), weapon="musket", hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("4a90d8"), sash=hexc("d8d8d8"), vyshyvka=None, mustache=False)
+CHARS["rival_marko"] = coss(hexc("1e1a22"), weapon="sabre", hat="long", hair=hexc("9a9aa2"), sash=hexc("5a2a8a"), pants=hexc("2a2a3a"), eye=hexc("6fd0ff"), vyshyvka=None, weapon_col=hexc("a8d8ff"))
+CHARS["rival_taras"] = coss(hexc("7a4a22"), weapon="mace", beard=hexc("3a2518"), sash=hexc("2a2220"), vyshyvka=None)
 # Накладки на голову
 CHARS["overlay_hat"] = dict(only_hat=True, hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("ffffff"), hair=hexc("2a2220"))
 CHARS["overlay_wolf"] = dict(only_hat=True, hat="wolf_ears", hat_col=hexc("7a7a7e"), hair=hexc("7a7a7e"))
