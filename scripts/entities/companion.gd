@@ -3,6 +3,7 @@ extends Node2D
 ## Супутник козака: джура (ближній бій), стрілець (рушниця) або знахарка (лікування).
 
 const Data := preload("res://scripts/data/data.gd")
+const Gfx := preload("res://scripts/world/gfx.gd")
 const Party := preload("res://scripts/game/party.gd")
 const OFFSETS := [Vector2(-70, 40), Vector2(70, 40), Vector2(-60, -55), Vector2(60, -55)]  # строй загону
 
@@ -23,6 +24,7 @@ var dead := false  # для сумісності з перевірками во�
 var flash := 0.0
 var facing := Vector2.RIGHT
 var walk := 0.0
+var anim_moving := false  # для спрайтів: чи рухався цього кадру
 var swing := 0.0
 var hero := ""  # id побратима або "" для найманця
 var mult := 1.0  # побратими сильніші за найманців
@@ -77,6 +79,7 @@ func _process(delta: float) -> void:
 			_attack(target)
 
 	var move := dest - global_position
+	anim_moving = move.length() > 12.0
 	if move.length() > 12.0:
 		var spd: float = info["speed"] * (1.4 if move.length() > 300.0 else 1.0)
 		position += move.normalized() * minf(spd * delta, move.length())
@@ -128,6 +131,11 @@ func take_damage(amount: float, _source = null) -> void:
 		combat.on_companion_down(self)
 
 
+func sprite_id() -> String:
+	var id := "comp_" + (hero if hero != "" else type)
+	return id if Gfx.has(id) else "comp_" + type
+
+
 func _draw() -> void:
 	var col: Color = info.get("color", Color.WHITE)
 	if flash > 0.0:
@@ -136,6 +144,38 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, 16), 0.0, Vector2(1.0, 0.38))
 	draw_circle(Vector2.ZERO, 16.0, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if Gfx.has(sprite_id()):
+		var frame := Gfx.IDLE
+		if not alive:
+			frame = Gfx.DEAD
+		elif flash > 0.0:
+			frame = Gfx.HURT
+		elif swing > 0.0:
+			frame = Gfx.attack_frame(1.0 - swing / 0.2)
+		elif anim_moving:
+			frame = Gfx.walk_frame(walk)
+		Gfx.draw(self, sprite_id(), facing, frame, Vector2(-24, -30), Color(1.6, 1.6, 1.6) if flash > 0.0 else Color.WHITE)
+		_draw_marks()
+		return
+	_draw_vector(col, side)
+	_draw_marks()
+
+
+func _draw_marks() -> void:
+	var head := Vector2(0, -22)
+	if hero != "":
+		# Побратим: золота зірочка над головою
+		var st0 := head + Vector2(0, -24)
+		var star := PackedVector2Array()
+		for i in 10:
+			star.append(st0 + Vector2.from_angle(-PI / 2 + i * PI / 5) * (6.0 if i % 2 == 0 else 2.6))
+		draw_colored_polygon(star, Color(1.0, 0.82, 0.25))
+	# Смужка здоров'я
+	draw_rect(Rect2(-16, -40, 32, 4), Color(0, 0, 0, 0.6))
+	draw_rect(Rect2(-16, -40, 32 * hp / max_hp, 4), Color(0.3, 0.9, 0.4))
+
+
+func _draw_vector(col: Color, side: float) -> void:
 	var bob := sin(walk) * 2.0
 	draw_rect(Rect2(-9, 6 + bob, 7, 10), Color(0.25, 0.22, 0.2))
 	draw_rect(Rect2(2, 6 - bob, 7, 10), Color(0.25, 0.22, 0.2))
@@ -152,13 +192,6 @@ func _draw() -> void:
 	else:
 		draw_rect(Rect2(head + Vector2(-9, -12), Vector2(18, 6)), Color(0.2, 0.15, 0.1))
 	draw_circle(head + Vector2(side * 3, -1), 1.5, Color.BLACK)
-	if hero != "":
-		# Побратим: золота зірочка над головою
-		var st0 := head + Vector2(0, -24)
-		var star := PackedVector2Array()
-		for i in 10:
-			star.append(st0 + Vector2.from_angle(-PI / 2 + i * PI / 5) * (6.0 if i % 2 == 0 else 2.6))
-		draw_colored_polygon(star, Color(1.0, 0.82, 0.25))
 	var hand := Vector2(side * 10, -4)
 	match type:
 		"dzhura":
@@ -170,6 +203,4 @@ func _draw() -> void:
 				draw_circle(hand + facing * 38.0, 7.0, Color(1, 0.8, 0.3, 0.8))
 		"znakhar":
 			draw_circle(hand, 5.0, Color(0.4, 0.8, 0.3))
-	# Смужка здоров'я
-	draw_rect(Rect2(-16, -40, 32, 4), Color(0, 0, 0, 0.6))
-	draw_rect(Rect2(-16, -40, 32 * hp / max_hp, 4), Color(0.3, 0.9, 0.4))
+

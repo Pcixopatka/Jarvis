@@ -3,25 +3,8 @@ extends RefCounted
 ## Лист: 3 ряди (вниз, вгору, вбік-ліворуч) × 10 кадрів (стоїть, крок 1–4, удар 1–3, поранений, лежить), кадр 48×48.
 
 const SIZE := 48
-const SHEETS := {
-	"cossack": preload("res://assets/gfx/sprites/cossack.png"),
-	"peasant": preload("res://assets/gfx/sprites/peasant.png"),
-	"volkhv": preload("res://assets/gfx/sprites/volkhv.png"),
-	"zarazhenyi": preload("res://assets/gfx/sprites/zarazhenyi.png"),
-	"chort": preload("res://assets/gfx/sprites/chort.png"),
-	"upyr": preload("res://assets/gfx/sprites/upyr.png"),
-	"pishchalnyk": preload("res://assets/gfx/sprites/pishchalnyk.png"),
-	"mavka": preload("res://assets/gfx/sprites/mavka.png"),
-	"bolotianyk": preload("res://assets/gfx/sprites/bolotianyk.png"),
-	"vovkulaka": preload("res://assets/gfx/sprites/vovkulaka.png"),
-	"chaklun": preload("res://assets/gfx/sprites/chaklun.png"),
-	"koshchii": preload("res://assets/gfx/sprites/koshchii.png"),
-	"putinoid": preload("res://assets/gfx/sprites/putinoid.png"),
-	"baba_yaha": preload("res://assets/gfx/sprites/baba_yaha.png"),
-	"solovei": preload("res://assets/gfx/sprites/solovei.png"),
-	"lykho": preload("res://assets/gfx/sprites/lykho.png"),
-	"oprychnyk": preload("res://assets/gfx/sprites/oprychnyk.png"),
-}
+const DIR := "res://assets/gfx/sprites/"
+static var _cache := {}  # id -> Texture2D або null, якщо листа нема
 const ROW := {"down": 0, "up": 1, "side": 2}
 const IDLE := 0
 const WALK0 := 1
@@ -30,8 +13,15 @@ const HURT := 8
 const DEAD := 9
 
 
+static func sheet(id: String) -> Texture2D:
+	if not _cache.has(id):
+		var path := DIR + id + ".png"
+		_cache[id] = load(path) if ResourceLoader.exists(path) else null
+	return _cache[id]
+
+
 static func has(id: String) -> bool:
-	return SHEETS.has(id)
+	return sheet(id) != null
 
 
 ## Напрям ряду за вектором погляду; flip — чи дивиться праворуч (кадр вбік намальовано ліворуч).
@@ -51,7 +41,7 @@ static func attack_frame(t: float) -> int:
 
 
 static func draw(ci: CanvasItem, id: String, facing: Vector2, frame: int, origin: Vector2, tint: Color = Color.WHITE) -> void:
-	var tex: Texture2D = SHEETS[id]
+	var tex: Texture2D = sheet(id)
 	var d := dir_of(facing)
 	var src := Rect2(frame * SIZE, ROW[d[0]] * SIZE, SIZE, SIZE)
 	var dst := Rect2(origin + Vector2(SIZE if d[1] else 0, 0), Vector2(-SIZE if d[1] else SIZE, SIZE))

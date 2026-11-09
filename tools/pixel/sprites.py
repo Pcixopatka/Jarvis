@@ -153,6 +153,18 @@ def hair_and_hat(p, d, hy, c, side):
         for sx in (-1, 1):
             x = CX + sx * 7 - (2 if sx < 0 else 0)
             p.poly([(x, hy + 1), (x + 3, hy + 1), (x + 1, hy - 6)], hair); p.px(x + 1, hy - 2, hexc("e8a0a0"))
+    elif style == "wolf_ears":  # вовча подоба: лише вуха й сяйво очей
+        for sx in (-1, 1):
+            x = CX + sx * 7 - (2 if sx < 0 else 0)
+            p.poly([(x, hy + 1), (x + 3, hy + 1), (x + 1, hy - 7)], hc); p.px(x + 1, hy - 2, hexc("e8a0a0"))
+        if d != "up":
+            if side: p.rect(CX - 6, hy + 8, 2, 2, hexc("ffd040"))
+            else: p.rect(CX - 5, hy + 8, 2, 2, hexc("ffd040")); p.rect(CX + 3, hy + 8, 2, 2, hexc("ffd040"))
+    elif style == "hutsul":  # гуцульський капелюх мольфара
+        p.rect(CX - 11, hy + 0, 23, 2, hc); p.rect_sh(CX - 7, hy - 6, 15, 7, hc); p.rect(CX - 7, hy - 1, 15, 1, hexc("c0302a"))
+    elif style == "oak":  # дубовий вінок волхва
+        p.rect_sh(CX - 8, hy - 1, 17, 7, hair); p.rect(CX - 9, hy + 5, 4, 10, hair); p.rect(CX + 6, hy + 5, 4, 10, hair)
+        for i in range(5): p.rect(CX - 8 + i * 4, hy - 2, 3, 2, hc if i % 2 else mul(hc, 0.8))
     elif style == "moss":  # болотяник: мох і очерет на голові
         p.rect_sh(CX - 9, hy - 2, 19, 7, hair)
         for i in range(4): p.line(CX - 7 + i * 5, hy - 2, CX - 8 + i * 5, hy - 9, hexc("8aa040"), 1); p.px(CX - 8 + i * 5, hy - 10, hexc("6a4a20"))
@@ -192,6 +204,13 @@ def face(p, d, hy, c, side):
 def humanoid(p, d, frame, c):
     ll, lr, bob, atk, swing = pose(frame)
     side = d == "side"
+    if c.get("only_hat"):
+        # Накладка: лише шапка/вуха на місці голови (для вдягненої шапки й вовчої подоби)
+        hy = GROUND - 25 + bob - 17
+        hair_and_hat(p, d, hy, c, side)
+        p.outline()
+        if frame == "dead": p.rotate_dead()
+        return
     pants = c["pants"]; boots = c["boots"]; body = c["body"]; skin = c.get("skin", hexc("f1c9a0"))
     hurt = frame == "hurt"
     by = GROUND - 25 + bob  # верх тулуба
@@ -373,6 +392,36 @@ CHARS.update({
                       skin=hexc("d9b48a"), hair=hexc("2a1a10"), hat="pointed", hat_col=hexc("141010"), eye=hexc("ff3030"), beard=hexc("2a1a10"),
                       weapon="axe", weapon_col=hexc("c8ccd6")),
 })
+
+def coss(coat, extra=None, **kw):
+    base = dict(CHARS["cossack"]); base.update(body=coat, sleeve=coat); base.update(kw)
+    if extra: base.update(extra)
+    return base
+
+SPEC_COATS = {"zaporozhets": hexc("8c1418"), "plastun": hexc("5a6638"), "samopalnyk": hexc("33407a"), "kharakternyk": hexc("2a2226")}
+for _job, _coat in SPEC_COATS.items():
+    for _w in ("sabre", "mace", "pike"):
+        CHARS[_job + "_" + _w] = coss(_coat, weapon=_w, sash=hexc("f2c23a"), vyshyvka=None if _job != "zaporozhets" else hexc("f2c23a"),
+                                      hat="oseledets" if _job != "kharakternyk" else "long", hair=hexc("3a2518") if _job != "kharakternyk" else hexc("6a6a6e"))
+CHARS["samopalnyk_pishchal"] = dict(CHARS["samopalnyk_sabre"], weapon="musket")
+for _w in ("mace", "pike"):
+    CHARS["cossack_" + _w] = coss(hexc("f6efe0"), weapon=_w, vyshyvka=hexc("c6281e"))
+CHARS["cossack_sabre"] = dict(CHARS["cossack"])
+CHARS["peasant_pike"] = dict(CHARS["peasant"])
+CHARS["volkhv_staff"] = dict(CHARS["volkhv"], hat="oak", hat_col=hexc("4a9a3a"), hair=hexc("b08a4a"), beard=None)
+CHARS["znakhar_staff"] = dict(CHARS["volkhv"], hat="oak", hat_col=hexc("6ab84a"), hair=hexc("b08a4a"), beard=None, sash=hexc("3a9a4a"), vyshyvka=hexc("3a9a4a"), orb=hexc("7fe07a"))
+CHARS["perun_zhrets_staff"] = dict(CHARS["volkhv"], hat="oak", hat_col=hexc("d8dce8"), hair=hexc("b08a4a"), beard=hexc("b08a4a"), sash=hexc("3a4ab8"), body=hexc("dfe4f2"), sleeve=hexc("dfe4f2"), orb=hexc("8ad0ff"))
+CHARS["molfar_staff"] = dict(CHARS["volkhv"], hat="hutsul", hat_col=hexc("141010"), hair=hexc("3a2a1a"), beard=hexc("3a2a1a"), sash=hexc("c0302a"), body=hexc("e8dcc4"), sleeve=hexc("4a2a1a"), orb=hexc("c080ff"))
+# Побратими й найманці
+CHARS["comp_dzhura"] = coss(hexc("c43a2a"), hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("d4a63a"), mustache=False, brows=True)
+CHARS["comp_petro"] = coss(hexc("8c3f33"), hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("4a90d8"), mustache=True, brows=True)
+CHARS["comp_strilets"] = dict(CHARS["cossack"], body=hexc("5a6638"), sleeve=hexc("5a6638"), vyshyvka=None, hat="shapka", hat_col=hexc("2a2220"), mustache=False, weapon="musket")
+CHARS["comp_oksana"] = dict(CHARS["cossack"], body=hexc("596633"), sleeve=hexc("596633"), vyshyvka=hexc("e8c04a"), hat="long", hair=hexc("3a2518"), mustache=False, pants=hexc("8a3a2a"), weapon="musket")
+CHARS["comp_znakhar"] = dict(CHARS["mavka"], skin=SKIN, hair=hexc("6a4a2a"), body=hexc("f6efe0"), sleeve=hexc("f6efe0"), vyshyvka=hexc("c6281e"), pants=hexc("b03a3a"), eye=BLACK, weapon=None)
+CHARS["comp_yaryna"] = dict(CHARS["comp_znakhar"], hair=hexc("d8b060"), vyshyvka=hexc("3a9a4a"), pants=hexc("3a6a9a"))
+# Накладки на голову
+CHARS["overlay_hat"] = dict(only_hat=True, hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("ffffff"), hair=hexc("2a2220"))
+CHARS["overlay_wolf"] = dict(only_hat=True, hat="wolf_ears", hat_col=hexc("7a7a7e"), hair=hexc("7a7a7e"))
 
 if __name__ == "__main__":
     ids = sys.argv[1:] or list(CHARS.keys())

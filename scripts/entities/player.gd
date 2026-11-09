@@ -1877,7 +1877,13 @@ func _draw() -> void:
 func sprite_id() -> String:
 	if is_peasant():
 		return "peasant"
-	return "volkhv" if Classes.is_volkhv_line(job) else "cossack"
+	var wt := "pishchal" if weapon_type == "pishchal" else ("staff" if weapon_type == "staff" else weapon_type)
+	var id := "%s_%s" % [job, wt]
+	if Gfx.has(id):
+		return id
+	if Classes.is_volkhv_line(job):
+		return "volkhv_staff" if Gfx.has("volkhv_staff") else "volkhv"
+	return "cossack_%s" % wt if Gfx.has("cossack_%s" % wt) else "cossack"
 
 
 func _draw_sprite(tint: Color) -> void:
@@ -1892,3 +1898,9 @@ func _draw_sprite(tint: Color) -> void:
 	elif moving:
 		frame = Gfx.walk_frame(walk_phase)
 	Gfx.draw(self, sprite_id(), facing, frame, Vector2(-24, -30), tint)
+	# Накладки: вдягнена шапка (шлик кольору рідкості) і вовча подоба
+	if equipment.has("head") and not Classes.is_volkhv_line(job) and wolf_timer <= 0.0 and Gfx.has("overlay_hat"):
+		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
+		Gfx.draw(self, "overlay_hat", facing, frame, Vector2(-24, -30), hc * tint)
+	if wolf_timer > 0.0 and Gfx.has("overlay_wolf"):
+		Gfx.draw(self, "overlay_wolf", facing, frame, Vector2(-24, -30), tint)
