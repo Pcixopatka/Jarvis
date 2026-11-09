@@ -11,7 +11,7 @@ var crystals := []  # [позиція, колір] — у печері біля 
 var props_parent: Node2D = null  # шар сутностей: сюди ставляться дерева й камені (сортування за y)
 var props := []
 ## Біоми, що малюються тайлами (решта — поки що процедурно)
-const TILED := ["forest", "steppe", "village", "cave", "plague"]
+const TILED := ["forest", "steppe", "village", "cave", "plague", "river", "swamp", "mountain"]
 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
@@ -77,6 +77,22 @@ func _spawn_props() -> void:
 			_scatter(rng, "hut", int(8 * area) + 2, 280.0, 90.0)
 			_scatter(rng, "tree", int(16 * area), 240.0, 80.0)
 			_scatter(rng, "post", int(20 * area), 200.0, 40.0)
+		"river":
+			_scatter(rng, "tree", int(22 * area), 260.0, 90.0)
+			_scatter(rng, "bush", int(30 * area), 180.0, 40.0)
+			_scatter(rng, "rock", int(20 * area), 200.0, 50.0)
+			_scatter(rng, "stump", int(8 * area), 180.0, 40.0)
+		"swamp":
+			_scatter(rng, "tree", int(45 * area), 240.0, 80.0)
+			_scatter(rng, "log", int(14 * area), 200.0, 60.0)
+			_scatter(rng, "stump", int(20 * area), 180.0, 40.0)
+			_scatter(rng, "bush", int(25 * area), 180.0, 40.0)
+		"mountain":
+			_scatter(rng, "boulder_big", int(24 * area) + 2, 230.0, 70.0)
+			_scatter(rng, "boulder", int(40 * area), 160.0, 40.0)
+			_scatter(rng, "pine", int(60 * area), 230.0, 60.0)
+			_scatter(rng, "pine2", int(30 * area), 230.0, 60.0)
+			_scatter(rng, "pebbles", int(30 * area), 120.0, 40.0)
 		"cave", "plague":
 			_scatter(rng, "boulder_big", int(18 * area) + 2, 230.0, 70.0)
 			_scatter(rng, "boulder", int(40 * area), 160.0, 40.0)
@@ -85,7 +101,7 @@ func _spawn_props() -> void:
 			if biome == "plague":
 				_scatter(rng, "idol", int(6 * area) + 1, 260.0, 60.0)
 	# Узлісся: щільний ряд дерев по краю арени (замість паркану)
-	if biome in ["forest", "steppe", "village"]:
+	if biome in ["forest", "steppe", "village", "river", "swamp"]:
 		var step := 58.0
 		var x := arena.position.x
 		while x < arena.end.x:
@@ -96,6 +112,18 @@ func _spawn_props() -> void:
 		while y < arena.end.y:
 			_prop("tree", Vector2(arena.position.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
 			_prop("tree", Vector2(arena.end.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
+			y += step
+	elif biome == "mountain":
+		var step := 70.0
+		var x := arena.position.x
+		while x < arena.end.x:
+			_prop("boulder_big", Vector2(x + rng.randf_range(-10, 10), arena.position.y + rng.randf_range(10, 40)))
+			_prop("boulder_big", Vector2(x + rng.randf_range(-10, 10), arena.end.y + rng.randf_range(30, 50)))
+			x += step
+		var y := arena.position.y
+		while y < arena.end.y:
+			_prop("boulder_big", Vector2(arena.position.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
+			_prop("boulder_big", Vector2(arena.end.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
 			y += step
 
 
@@ -395,6 +423,13 @@ func _draw_tiles() -> void:
 	# Доріжка через поле
 	var path_off := rng.randf_range(-300, 300)
 	var dark := Color(0.45, 0.5, 0.45) if not cave else Color(1, 1, 1)
+	var river_y := rng.randf_range(-200, 200)
+	var ponds := []  # болото: озерця 3×3 клітинки
+	if biome == "swamp":
+		for i in int(34 * arena.get_area() / 7840000.0) + 6:
+			ponds.append(Vector2(floori(rng.randf_range(arena.position.x + 120, arena.end.x - 200) / ts), floori(rng.randf_range(arena.position.y + 120, arena.end.y - 200) / ts)))
+	var mountain := biome == "mountain"
+	var swamp_tint := Color(0.7, 0.75, 0.6)
 	for r in range(r0, r1):
 		for c in range(c0, c1):
 			var pos := Vector2(c * ts, r * ts)
@@ -408,6 +443,15 @@ func _draw_tiles() -> void:
 				Tiles.rg_tile(self, fl[rng.randi() % fl.size()], pos, Color(0.85, 0.8, 0.78) if biome == "cave" else Color(0.7, 0.8, 0.6))
 				continue
 			var tint := Color.WHITE if inside else dark
+			if biome == "swamp":
+				tint = tint * swamp_tint
+			if mountain:
+				# Гори: світлий камінь, подекуди трава й сніг
+				var st: Array = Tiles.STONE if roll > 0.07 else (Tiles.SNOW if roll < 0.03 else Tiles.STONE_DARK)
+				Tiles.rg_tile(self, st[rng.randi() % st.size()], pos, tint)
+				if inside and roll > 0.93:
+					Tiles.rg_tile(self, Tiles.RG_GRASS[rng.randi() % 2], pos, tint)
+				continue
 			var cell: Array = Tiles.GRASS[0]
 			if roll < 0.08:
 				cell = Tiles.GRASS[1 + rng.randi() % (Tiles.GRASS.size() - 1)]
@@ -415,6 +459,34 @@ func _draw_tiles() -> void:
 			if not inside:
 				continue
 			var cy := pos.y + ts / 2
+			if biome == "river":
+				# Річка: смуга води з хвилями по краях, латаття подекуди
+				var band := river_y + sin((pos.x - arena.position.x) / arena.size.x * 5.0) * 140.0
+				var dy := cy - band
+				if absf(dy) < 96.0:
+					if absf(dy) > 64.0:
+						Tiles.tile(self, tex, Tiles.WAVES[rng.randi() % Tiles.WAVES.size()], pos)
+					else:
+						Tiles.tile(self, tex, Tiles.WATER[rng.randi() % Tiles.WATER.size()], pos)
+						if roll > 0.9:
+							Tiles.tile(self, tex, Tiles.LILY[rng.randi() % Tiles.LILY.size()], pos)
+					continue
+			if biome == "swamp":
+				var in_pond := false
+				for pd in ponds:
+					var dx: int = c - int(pd.x)
+					var dyy: int = r - int(pd.y)
+					if dx >= 0 and dx < 3 and dyy >= 0 and dyy < 3:
+						Tiles.tile(self, tex, [2 + dx, 6 + dyy], pos, swamp_tint)
+						if dx == 1 and dyy == 1 and roll > 0.5:
+							Tiles.tile(self, tex, Tiles.LILY[rng.randi() % Tiles.LILY.size()], pos, swamp_tint)
+						in_pond = true
+						break
+				if in_pond:
+					continue
+				if roll > 0.8:
+					Tiles.tile(self, tex, Tiles.GRASS_TALL[rng.randi() % Tiles.GRASS_TALL.size()], pos, swamp_tint)
+				continue
 			var on_path: bool = biome != "forest" and absf(cy - (path_off + sin((pos.x - arena.position.x) / arena.size.x * 7.0) * 220.0)) < 40.0
 			if on_path:
 				Tiles.tile(self, tex, Tiles.DIRT[rng.randi() % Tiles.DIRT.size()], pos)

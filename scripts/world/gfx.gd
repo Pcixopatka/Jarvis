@@ -10,6 +10,17 @@ const SHEETS := {
 	"zarazhenyi": preload("res://assets/gfx/sprites/zarazhenyi.png"),
 	"chort": preload("res://assets/gfx/sprites/chort.png"),
 	"upyr": preload("res://assets/gfx/sprites/upyr.png"),
+	"pishchalnyk": preload("res://assets/gfx/sprites/pishchalnyk.png"),
+	"mavka": preload("res://assets/gfx/sprites/mavka.png"),
+	"bolotianyk": preload("res://assets/gfx/sprites/bolotianyk.png"),
+	"vovkulaka": preload("res://assets/gfx/sprites/vovkulaka.png"),
+	"chaklun": preload("res://assets/gfx/sprites/chaklun.png"),
+	"koshchii": preload("res://assets/gfx/sprites/koshchii.png"),
+	"putinoid": preload("res://assets/gfx/sprites/putinoid.png"),
+	"baba_yaha": preload("res://assets/gfx/sprites/baba_yaha.png"),
+	"solovei": preload("res://assets/gfx/sprites/solovei.png"),
+	"lykho": preload("res://assets/gfx/sprites/lykho.png"),
+	"oprychnyk": preload("res://assets/gfx/sprites/oprychnyk.png"),
 }
 const ROW := {"down": 0, "up": 1, "side": 2}
 const IDLE := 0

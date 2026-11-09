@@ -85,7 +85,7 @@ def pose(frame):
 def eyes(p, d, hy, c, side):
     """Очі 2×2 з білком; у «вбік» одне око."""
     col = c.get("eye", BLACK)
-    if d == "up": return
+    if d == "up" or c.get("skull") or c.get("one_eye"): return
     if side:
         p.rect(CX - 6, hy + 8, 2, 2, WHITE); p.px(CX - 6, hy + 9, col)
     else:
@@ -132,6 +132,30 @@ def hair_and_hat(p, d, hy, c, side):
             p.rect(x, hy - 4, 2, 7, hc); p.px(x + (0 if sx < 0 else 1), hy - 5, hc); p.px(x + (-1 if sx < 0 else 2), hy - 6, hc)
     elif style == "bald":
         p.rect(CX - 8, hy - 1, 17, 2, mul(c.get("skin", (0, 0, 0, 0)), 0.9))
+    elif style == "kerchief":  # хустка
+        p.ell_sh(CX - 9, hy - 3, 19, 12, hc); p.rect(CX - 9, hy + 3, 19, 3, hc); p.rect(CX - 10, hy + 6, 4, 8, hc); p.rect(CX + 7, hy + 6, 4, 8, hc)
+    elif style == "wreath":  # вінок зі стрічками
+        p.rect_sh(CX - 8, hy - 1, 17, 7, hair); p.rect(CX - 9, hy + 5, 4, 12, hair); p.rect(CX + 6, hy + 5, 4, 12, hair)
+        for i, col in enumerate((hexc("ff5a5a"), hexc("ffd23a"), hexc("5aa0ff"), hexc("ff5a5a"), hexc("ffd23a"))):
+            p.rect(CX - 8 + i * 4, hy - 2, 3, 2, col)
+        p.rect(CX + 7, hy + 1, 2, 9, hexc("ff5a5a")); p.rect(CX + 9, hy + 1, 2, 7, hexc("5aa0ff"))
+    elif style == "crown":  # зубчаста корона
+        p.rect(CX - 8, hy - 1, 17, 3, hair)
+        for i in range(4):
+            p.rect(CX - 8 + i * 5, hy - 5, 2, 5, hc); p.rect(CX - 8 + i * 5, hy - 2, 5, 2, hc)
+        p.px(CX, hy - 4, hexc("ff3030"))
+    elif style == "monomakh":  # шапка Мономаха: хутро й золотий верх із хрестиком
+        p.ell_sh(CX - 8, hy - 7, 17, 10, hc); p.rect(CX - 9, hy - 1, 19, 4, hexc("4a3324")); p.rect(CX - 1, hy - 10, 3, 3, hc); p.px(CX, hy - 11, hc)
+    elif style == "pointed":  # гостроверха шапка опричника
+        p.poly([(CX - 9, hy + 2), (CX + 9, hy + 2), (CX, hy - 11)], hc); p.rect(CX - 9, hy + 1, 19, 3, mul(hc, 0.7))
+    elif style == "ears":  # вовчі вуха
+        p.rect_sh(CX - 8, hy - 1, 17, 6, hair)
+        for sx in (-1, 1):
+            x = CX + sx * 7 - (2 if sx < 0 else 0)
+            p.poly([(x, hy + 1), (x + 3, hy + 1), (x + 1, hy - 6)], hair); p.px(x + 1, hy - 2, hexc("e8a0a0"))
+    elif style == "moss":  # болотяник: мох і очерет на голові
+        p.rect_sh(CX - 9, hy - 2, 19, 7, hair)
+        for i in range(4): p.line(CX - 7 + i * 5, hy - 2, CX - 8 + i * 5, hy - 9, hexc("8aa040"), 1); p.px(CX - 8 + i * 5, hy - 10, hexc("6a4a20"))
     elif style == "long":  # довге волосся
         p.rect_sh(CX - 8, hy - 1, 17, 7, hair); p.rect(CX - 9, hy + 5, 4, 10, hair); p.rect(CX + 6, hy + 5, 4, 10, hair)
     else:
@@ -151,6 +175,18 @@ def face(p, d, hy, c, side):
         p.px(CX - 2 if not side else CX - 5, hy + 14, WHITE); p.px(CX + 2 if not side else CX - 4, hy + 14, WHITE)
     if c.get("snout"):  # чортяча пика: ніс п'ятачком
         p.rect(CX - 1 if not side else CX - 8, hy + 11, 3, 2, mul(c["skin"], 0.75))
+    if c.get("muzzle"):  # вовча паща
+        m = c["skin"]
+        if side: p.rect(CX - 12, hy + 9, 7, 6, m); p.rect(CX - 13, hy + 11, 3, 2, BLACK); p.px(CX - 9, hy + 14, WHITE); p.px(CX - 7, hy + 14, WHITE)
+        else: p.rect(CX - 3, hy + 10, 7, 6, m); p.rect(CX - 1, hy + 11, 3, 2, BLACK); p.px(CX - 2, hy + 15, WHITE); p.px(CX + 2, hy + 15, WHITE)
+    if c.get("skull"):  # череп: порожні очниці із зеленим вогнем, зуби
+        g = hexc("6fff5a")
+        if side: p.rect(CX - 7, hy + 7, 3, 3, BLACK); p.px(CX - 6, hy + 8, g)
+        else: p.rect(CX - 6, hy + 7, 3, 3, BLACK); p.rect(CX + 3, hy + 7, 3, 3, BLACK); p.px(CX - 5, hy + 8, g); p.px(CX + 4, hy + 8, g)
+        for i in range(4): p.px(CX - 4 + i * 2 - (3 if side else 0), hy + 13, BLACK)
+    if c.get("one_eye"):
+        p.rect(CX - 4 if not side else CX - 8, hy + 5, 8 if not side else 6, 7, WHITE)
+        p.rect(CX - 1 if not side else CX - 6, hy + 7, 3, 3, hexc("d02020")); p.px(CX if not side else CX - 5, hy + 8, BLACK)
 
 
 def humanoid(p, d, frame, c):
@@ -188,6 +224,11 @@ def humanoid(p, d, frame, c):
         for i in range(3):
             p.px(CX - 1, by + 2 + i * 3, v); p.px(CX + 1, by + 3 + i * 3, v)
         p.rect(CX - 1, by + 1, 3, 1, v)
+    if c.get("feathers"):
+        f = c["feathers"]
+        for row in range(3):
+            for i in range(4):
+                p.poly([(CX - 9 + i * 5 + (row % 2) * 2, by + 2 + row * 5), (CX - 5 + i * 5 + (row % 2) * 2, by + 2 + row * 5), (CX - 7 + i * 5 + (row % 2) * 2, by + 6 + row * 5)], f if (i + row) % 2 else mul(f, 0.8))
     if c.get("sash"):
         p.rect(CX - 9, by + 10, 18, 3, c["sash"]); p.rect(CX - 9, by + 12, 18, 1, mul(c["sash"], 0.7))
         if d == "down": p.rect(CX + 4, by + 13, 2, 5, c["sash"])
@@ -259,6 +300,16 @@ def weapon(p, d, frame, c, by, atk, side):
         if atk:
             for i in range(3):
                 p.line(hx, hy, hx + (-11 if side else 9) - i, hy - 6 + i * 5, col, 2)
+    elif kind == "axe":
+        dx, dy = ({0: (-5, 10), 1: (-4, -18), 2: (-17, -8), 3: (-15, 8)} if side else {0: (5, 10), 1: (8, -18), 2: (16, -6), 3: (13, 8)})[atk]
+        p.line(hx, hy, hx + dx, hy + dy, handle, 3)
+        ex, ey = hx + dx, hy + dy
+        p.poly([(ex - 6, ey - 3), (ex + 6, ey - 3), (ex + 4, ey + 5), (ex - 4, ey + 5)], col); p.px(ex, ey, dark)
+    elif kind == "broom":
+        dx, dy = ({0: (-6, 12), 1: (-6, -14), 2: (-18, -4), 3: (-16, 10)} if side else {0: (6, 12), 1: (10, -14), 2: (17, -4), 3: (13, 10)})[atk]
+        p.line(hx, hy, hx + dx, hy + dy, handle, 2)
+        ex, ey = hx + dx, hy + dy
+        for i in range(-3, 4): p.line(ex, ey, ex + i * 2 + (dx // 3), ey + 6 + abs(i), hexc("d9b25c"), 1)
     elif kind == "scythe":
         p.line(hx, hy + 8, hx + (atk and (-6 if side else 6)), hy - 24, handle, 2)
         tip = (hx + (atk and (-6 if side else 6)), hy - 24)
@@ -292,6 +343,36 @@ CHARS = {
     "upyr": dict(pants=hexc("2a1a2a"), boots=hexc("1a0f1a"), body=hexc("5a1020"), sleeve=hexc("5a1020"), cape=hexc("3a0a18"), sash=hexc("2a0a14"),
                  skin=hexc("d8d0dc"), hair=hexc("1a1018"), eye=hexc("ff3030"), fangs=True, brows=True, weapon="claws", weapon_col=hexc("eeeeee")),
 }
+
+CHARS.update({
+    "pishchalnyk": dict(CHARS["zarazhenyi"], weapon="musket", hat_col=hexc("2a2a30")),
+    "mavka": dict(pants=hexc("5fa868"), boots=hexc("3f7a48"), body=hexc("eaf6dc"), sleeve=hexc("eaf6dc"), robe=True, vyshyvka=hexc("3a9a4a"),
+                  skin=hexc("d8f0c8"), hair=hexc("3f9a4a"), hat="wreath", eye=hexc("1a6a2a"), brows=False),
+    "bolotianyk": dict(pants=hexc("3e4a22"), boots=hexc("2a3016"), body=hexc("55642a"), sleeve=hexc("4a5826"), hump=True,
+                       skin=hexc("6f7e3a"), hair=hexc("4a6a2a"), hat="moss", eye=hexc("ffe24a"), brows=False),
+    "vovkulaka": dict(pants=hexc("5a5450"), boots=hexc("2e2a28"), body=hexc("6e6660"), sleeve=hexc("6e6660"), hump=True,
+                      skin=hexc("8a827c"), hair=hexc("5a5450"), hat="ears", eye=hexc("ffd040"), muzzle=True, gloves=hexc("3e3a38"),
+                      weapon="claws", weapon_col=hexc("f0e8dc")),
+    "chaklun": dict(pants=hexc("1e1a24"), boots=hexc("141018"), body=hexc("221c2a"), sleeve=hexc("221c2a"), robe=True, sash=hexc("9a1a1a"),
+                    skin=hexc("c9c0b8"), hair=hexc("1e1a24"), hat="hood", hat_col=hexc("2a2432"), eye=hexc("6fff5a"), brows=True,
+                    weapon="staff", orb=hexc("6fff5a"), aura=hexc("6fd63a")),
+    "koshchii": dict(pants=hexc("16121a"), boots=hexc("0e0a10"), body=hexc("1c1620"), sleeve=hexc("1c1620"), robe=True, sash=hexc("3a3010"),
+                     skin=hexc("ece8dc"), hair=hexc("ece8dc"), hat="crown", hat_col=hexc("d4a63a"), skull=True,
+                     weapon="sabre", weapon_col=hexc("c8ccd6")),
+    "putinoid": dict(pants=hexc("4a1218"), boots=hexc("2a0a0e"), body=hexc("7a1424"), sleeve=hexc("7a1424"), cape=hexc("5a0e1a"), sash=hexc("d4a63a"),
+                     skin=hexc("c9ccc4"), hair=hexc("3a3230"), hat="monomakh", hat_col=hexc("d4a63a"), eye=hexc("ff2020"), brows=True,
+                     weapon="mace", weapon_col=hexc("6fff5a"), aura=hexc("6fd63a")),
+    "baba_yaha": dict(pants=hexc("5a4a3a"), boots=hexc("3a2a1a"), body=hexc("6a5a48"), sleeve=hexc("6a5a48"), robe=True, sash=hexc("3a2a1a"),
+                      skin=hexc("cdb595"), hair=hexc("bdb3a3"), hat="kerchief", hat_col=hexc("8a2a2a"), eye=hexc("ffb020"), brows=True,
+                      weapon="broom"),
+    "solovei": dict(pants=hexc("3a3a22"), boots=hexc("2a2214"), body=hexc("4a5a2a"), sleeve=hexc("4a5a2a"), feathers=hexc("6a7a38"),
+                    skin=hexc("d9b48a"), hair=hexc("4a3220"), hat="shapka", hat_col=hexc("5a4a30"), beard=hexc("4a3220"), brows=True),
+    "lykho": dict(pants=hexc("3e3644"), boots=hexc("241e2a"), body=hexc("4e4458"), sleeve=hexc("4e4458"), hump=True,
+                  skin=hexc("8e8498"), hair=hexc("3e3644"), hat="bald", one_eye=True, gloves=hexc("6e6478"), weapon="claws", weapon_col=hexc("d8d0e0")),
+    "oprychnyk": dict(pants=hexc("141010"), boots=hexc("0c0808"), body=hexc("1c1414"), sleeve=hexc("1c1414"), sash=hexc("8a1a1a"),
+                      skin=hexc("d9b48a"), hair=hexc("2a1a10"), hat="pointed", hat_col=hexc("141010"), eye=hexc("ff3030"), beard=hexc("2a1a10"),
+                      weapon="axe", weapon_col=hexc("c8ccd6")),
+})
 
 if __name__ == "__main__":
     ids = sys.argv[1:] or list(CHARS.keys())

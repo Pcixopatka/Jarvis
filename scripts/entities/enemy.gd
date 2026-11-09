@@ -681,6 +681,10 @@ func _draw_sprite() -> void:
 		tint = Color(1.8, 1.8, 1.8)
 	elif not statuses.is_empty():
 		tint = Color.WHITE.lerp(Status.tint(self), 0.35)
+	if phase2:
+		draw_arc(Vector2(0, -10), 30.0, 0.0, TAU, 24, Color(1.0, 0.5, 0.3, 0.35 + 0.15 * sin(phase)), 2.0)
+	if is_boss and kind == "putinoid":
+		draw_circle(Vector2(0, -12), 34.0 + sin(phase) * 2.0, Color(0.4, 0.9, 0.15, 0.12 if not phase2 else 0.22))
 	Gfx.draw(self, kind, facing, frame, Vector2(-24, -30), tint)
 
 
