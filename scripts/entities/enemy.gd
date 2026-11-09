@@ -666,7 +666,11 @@ func _draw() -> void:
 
 func _draw_sprite() -> void:
 	var frame := Gfx.IDLE
-	if windup > 0.0:
+	if dead:
+		frame = Gfx.DEAD
+	elif flash > 0.0 or stun > 0.0:
+		frame = Gfx.HURT
+	elif windup > 0.0:
 		frame = Gfx.attack_frame(1.0 - windup / windup_max)
 	elif contact_cd > 0.85:
 		frame = Gfx.ATK0 + 2

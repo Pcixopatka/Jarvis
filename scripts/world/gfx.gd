@@ -1,6 +1,6 @@
 extends RefCounted
 ## Спрайти персонажів і нечисті (assets/gfx/sprites, генеруються tools/pixel/sprites.py).
-## Лист: 3 ряди (вниз, вгору, вбік-ліворуч) × 8 кадрів (стоїть, крок 1–4, удар 1–3), кадр 48×48.
+## Лист: 3 ряди (вниз, вгору, вбік-ліворуч) × 10 кадрів (стоїть, крок 1–4, удар 1–3, поранений, лежить), кадр 48×48.
 
 const SIZE := 48
 const SHEETS := {
@@ -15,6 +15,8 @@ const ROW := {"down": 0, "up": 1, "side": 2}
 const IDLE := 0
 const WALK0 := 1
 const ATK0 := 5
+const HURT := 8
+const DEAD := 9
 
 
 static func has(id: String) -> bool:

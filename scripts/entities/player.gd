@@ -1881,8 +1881,13 @@ func sprite_id() -> String:
 
 
 func _draw_sprite(tint: Color) -> void:
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)  # лежачий кадр уже намальовано на листі
 	var frame := Gfx.IDLE
-	if swing_time > 0.0 and swing_duration > 0.0:
+	if not alive:
+		frame = Gfx.DEAD
+	elif hurt_flash > 0.0 and swing_time <= 0.0:
+		frame = Gfx.HURT
+	elif swing_time > 0.0 and swing_duration > 0.0:
 		frame = Gfx.attack_frame(1.0 - swing_time / swing_duration)
 	elif moving:
 		frame = Gfx.walk_frame(walk_phase)
