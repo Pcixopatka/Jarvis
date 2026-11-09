@@ -98,3 +98,26 @@ static func skill_icon(ci: CanvasItem, id: String, pos: Vector2, size: float, ti
 	if tex == null:
 		return
 	ci.draw_texture_rect(tex, Rect2(pos - Vector2(size, size) / 2.0, Vector2(size, size)), false, tint)
+
+
+# ---------- Мури оборони (assets/gfx/sprites/defense.png, tools/pixel/defense.py) ----------
+const DEFENSE := {
+	"palisade": Rect2(0, 32, 32, 72),
+	"palisade_broken": Rect2(34, 32, 32, 72),
+	"gate": Rect2(68, 16, 96, 88),
+	"gate_broken": Rect2(166, 16, 96, 88),
+	"tower": Rect2(264, 0, 56, 104),
+	"fence": Rect2(322, 60, 32, 44),
+	"camp_gate": Rect2(356, 40, 80, 64),
+	"camp_gate_broken": Rect2(438, 40, 80, 64),
+}
+
+
+## Частина муру: опора — низ по центру, масштаб ×2.
+static func wall_part(ci: CanvasItem, name: String, base: Vector2, scale_k: float = 2.0, tint: Color = Color.WHITE) -> void:
+	var tex := sheet("defense")
+	if tex == null or not DEFENSE.has(name):
+		return
+	var r: Rect2 = DEFENSE[name]
+	var sz := r.size * scale_k
+	ci.draw_texture_rect_region(tex, Rect2(base - Vector2(sz.x / 2.0, sz.y), sz), r, tint)
