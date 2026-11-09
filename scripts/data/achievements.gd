@@ -38,6 +38,7 @@ const ACHIEVEMENTS := [
 	{"id": "defense_5", "name": "Оборонець", "desc": "Відстой 5 облог", "stat": "defense", "goal": 5, "gold": 600},
 	{"id": "travel_10", "name": "Чумацький шлях", "desc": "Переживи 10 пригод у дорозі", "stat": "travel", "goal": 10, "gold": 250},
 	{"id": "sharpen_10", "name": "Майстер точила", "desc": "10 разів вдало нагостри зброю", "stat": "sharpen", "goal": 10, "gold": 250},
+	{"id": "craft_10", "name": "Ковальська справа", "desc": "Викуй у своїй кузні 10 речей", "stat": "craft", "goal": 10, "gold": 400},
 	{"id": "bond_3", "name": "Побратими навіки", "desc": "Пройди особисті історії трьох побратимів", "stat": "bond", "goal": 3, "gold": 1000},
 	{"id": "level_10", "name": "Бувалий козак", "desc": "Досягни 10 рівня", "stat": "level", "goal": 10, "gold": 300},
 	{"id": "level_20", "name": "Сивий вояка", "desc": "Досягни 20 рівня", "stat": "level", "goal": 20, "gold": 1200},

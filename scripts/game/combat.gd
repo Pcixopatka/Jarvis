@@ -534,6 +534,7 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
+		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5, {"res": Camp.TROPHY})
 	elif e.elite:
 		Events.banner.emit("%s переможена!" % e.title if e.kind in Elites.FEMININE else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
 		for i in 3:
@@ -541,6 +542,7 @@ func _drop_loot(e: Node2D) -> void:
 		if randf() < Elites.ITEM_CHANCE:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl, 1)))
 		_resource_bundle(pos, 2)
+		spawn_pickup(pos, "res", 1, {"res": Camp.TROPHY})
 		if randf() < 0.3:
 			spawn_pickup(pos, "potion", 1)
 	else:

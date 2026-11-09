@@ -110,6 +110,7 @@ static func win(world, player, target: String) -> String:
 	s["won"] = int(s["won"]) + 1
 	var g: int = 40 * player.level
 	player.gold += g
+	player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 2
 	if target == Camp.CAMP_ID:
 		for r in Camp.RESOURCES:
 			player.resources[r] = int(player.resources.get(r, 0)) + 3 + player.level / 3

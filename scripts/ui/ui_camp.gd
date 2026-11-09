@@ -6,6 +6,7 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const AdRewards := preload("res://scripts/game/ad_rewards.gd")
+const CraftService := preload("res://scripts/game/craft_service.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -13,7 +14,7 @@ static func _do(game, action: String, arg = null) -> Callable:
 
 
 static func resources_text(p) -> String:
-	return "Гривні: %d  •  Дерево: %d  •  Залізо: %d  •  Трави: %d" % [p.gold, p.resources.get("wood", 0), p.resources.get("iron", 0), p.resources.get("herbs", 0)]
+	return "%d грн • Дерево %d • Залізо %d • Трави %d • Трофеї %d" % [p.gold, p.resources.get("wood", 0), p.resources.get("iron", 0), p.resources.get("herbs", 0), p.resources.get("trophy", 0)]
 
 
 static func build(game) -> Control:
@@ -21,12 +22,13 @@ static func build(game) -> Control:
 	var pages := [["Будівлі", _buildings(game)]]
 	if CampService.level(w, "kuznia") >= 1:
 		pages.append(["Кузня", _forge(game)])
+		pages.append(["Кування", _crafting(game)])
 	if CampService.level(w, "zillia") >= 1:
 		pages.append(["Зілляварня", _brewery(game)])
 	if CampService.level(w, "pasika") >= 1:
 		pages.append(["Пасіка", _pasika(game)])
 	var pts: int = game.player.unspent_points()
-	return UI.screen("Козацький хутір  •  " + resources_text(game.player), "На мапу", game.leave_camp,
+	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,
 		[["Козак" + ((" +%d" % pts) if pts > 0 else ""), game.open_character]])
 
@@ -130,9 +132,68 @@ static func _forge(game) -> Control:
 		det.add_child(UI.button("Заточити до +%d\n%d грн • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(370, 80), 19, p.gold >= cost))
 	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
 		det.add_child(UI.button("Переплавити на залізо (+%d)" % CampService.salvage_value(it), _do(game, "salvage", sel), Vector2(370, 56), 18))
+	_craft_item_actions(game, det, it)
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 20, game.smith_msg_color, false))
 	return h
+
+
+static func _craft_cost_text(cost: Dictionary) -> String:
+	var parts := ["%d грн" % int(cost.get("gold", 0))]
+	for r in ["iron", "wood", "herbs", "trophy"]:
+		if int(cost.get(r, 0)) > 0:
+			parts.append("%s %d" % [Camp.res_name(r), cost[r]])
+	return ", ".join(parts)
+
+
+## Перекування властивостей і оновлення до свого рівня (для вибраної речі в кузні).
+static func _craft_item_actions(game, det: VBoxContainer, it: Dictionary) -> void:
+	var w = game.world
+	var p = game.player
+	if CraftService.can_reforge(w, it):
+		var cost := CraftService.reforge_cost(it)
+		det.add_child(UI.label("Перекувати властивість (%s):" % _craft_cost_text(cost), 16, UI.MUTED, false))
+		for a in it["affixes"]:
+			var fmt: Array = Data.STAT_FMT[a]
+			var txt: String = fmt[0] % (("%." + str(fmt[1]) + "f") % it["affixes"][a])
+			det.add_child(UI.button("↻ " + txt, _do(game, "reforge", [it["uid"], a]), Vector2(370, 46), 15, CraftService.can_pay(p, cost)))
+	if CraftService.can_renew(w, it, p.level):
+		var rc := CraftService.renew_cost(it, p.level)
+		det.add_child(UI.button("Оновити до рівня %d\n%s" % [p.level, _craft_cost_text(rc)], _do(game, "renew", it["uid"]), Vector2(370, 70), 15, CraftService.can_pay(p, rc)))
+
+
+# ---------- Кування ----------
+
+static func _crafting(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Викуй річ свого рівня (%d) потрібного виду. Трофеї дають еліти, боси й виграні облоги." % p.level, 17, UI.MUTED, false))
+	var tier: int = game.craft_tier
+	var tiers := HBoxContainer.new()
+	tiers.add_theme_constant_override("separation", 10)
+	for t in range(1, 4):
+		var open := CraftService.tier_open(w, t)
+		var label: String = ("▸ " if t == tier else "") + CraftService.TIER_NAMES[t] + ("" if open else "\n(кузня %d)" % CraftService.TIER_KUZNIA[t])
+		var b := UI.button(label, _do(game, "craft_tier", t), Vector2(220, 60), 17, open)
+		if t == tier:
+			b.modulate = Data.RARITY_COLORS[t].lightened(0.3)
+		tiers.add_child(b)
+	v.add_child(tiers)
+	var grid := UI.grid(2)
+	for r in CraftService.RECIPES:
+		var cost := CraftService.forge_cost(r[0], tier, p.level)
+		var ok: bool = CraftService.tier_open(w, tier) and CraftService.can_pay(p, cost) and p.inventory.size() < p.bag_size()
+		var txt := "%s — %s\n%s" % [CraftService.recipe_name(r[0], r[1]), CraftService.TIER_NAMES[tier].to_lower(), _craft_cost_text(cost)]
+		var b := UI.button(txt, _do(game, "craft", r), Vector2(520, 66), 15, ok)
+		grid.add_child(b)
+	v.add_child(grid)
+	if p.inventory.size() >= p.bag_size():
+		v.add_child(UI.label("Торба повна — звільни місце.", 18, UI.BAD, false))
+	if game.smith_msg != "":
+		v.add_child(UI.label(game.smith_msg, 20, game.smith_msg_color, false))
+	return v
 
 
 # ---------- Зілляварня ----------

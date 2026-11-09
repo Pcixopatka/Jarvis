@@ -36,7 +36,7 @@ func _process(delta: float) -> void:
 			combat.pick_item(item)
 		elif kind == "res":
 			combat.add_resource(item["res"], value)
-			combat.float_text(global_position + Vector2(0, -30), "+%d %s" % [value, Camp.RESOURCES[item["res"]]], Camp.RESOURCE_COLORS[item["res"]].lightened(0.3))
+			combat.float_text(global_position + Vector2(0, -30), "+%d %s" % [value, Camp.res_name(item["res"])], Camp.RESOURCE_COLORS[item["res"]].lightened(0.3))
 		elif kind == "potion":
 			if p.add_potion():
 				combat.float_text(global_position + Vector2(0, -30), "+1 зілля", Color(1.0, 0.45, 0.45))

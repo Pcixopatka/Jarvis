@@ -16,6 +16,7 @@ const PlagueService := preload("res://scripts/game/plague_service.gd")
 const TravelService := preload("res://scripts/game/travel_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
+const CraftService := preload("res://scripts/game/craft_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -50,6 +51,7 @@ var city_sel_uid := -1
 var smith_msg := ""
 var smith_msg_color := Color.WHITE
 var camp_tab := 0
+var craft_tier := 1  # якість у вкладці «Кування»
 var camp_sel_uid := -1
 
 
@@ -896,6 +898,27 @@ func camp_do(action: String, arg) -> void:
 				smith_msg = "Переплавлено: +%d заліза" % v
 				smith_msg_color = UI.GOOD
 				camp_sel_uid = -1
+		"craft_tier":
+			craft_tier = arg
+			smith_msg = ""
+		"craft":
+			var it := CraftService.forge(world, player, arg[0], arg[1], craft_tier)
+			if not it.is_empty():
+				Audio.play("sharpen_ok", 0.03)
+				smith_msg = "Викувано: %s" % Data.item_title(it)
+				smith_msg_color = Data.RARITY_COLORS[it["rarity"]]
+				_record("craft")
+		"reforge":
+			var fresh := CraftService.reforge(world, player, arg[0], arg[1])
+			if fresh != "":
+				Audio.play("sharpen_ok", 0.03)
+				smith_msg = "Перековано: нова властивість!"
+				smith_msg_color = UI.GOOD
+		"renew":
+			if CraftService.renew(world, player, arg):
+				Audio.play("sharpen_ok", 0.03)
+				smith_msg = "Річ оновлено до твого рівня!"
+				smith_msg_color = UI.GOOD
 		"brew":
 			if CampService.brew(world, player, arg):
 				Audio.play("heal", 0.0)

@@ -6,7 +6,14 @@ const CAMP := {"name": "Козацький хутір", "pos": Vector2(35.9, 47.
 	"desc": "Твій власний хутір під Січчю. Тут відпочивають і будуються."}
 
 const RESOURCES := {"wood": "Дерево", "iron": "Залізо", "herbs": "Трави"}
-const RESOURCE_COLORS := {"wood": Color(0.6, 0.4, 0.2), "iron": Color(0.65, 0.68, 0.72), "herbs": Color(0.35, 0.75, 0.3)}
+const RESOURCE_COLORS := {"wood": Color(0.6, 0.4, 0.2), "iron": Color(0.65, 0.68, 0.72), "herbs": Color(0.35, 0.75, 0.3), "trophy": Color(0.95, 0.75, 0.25)}
+## Трофеї — рідкісний матеріал для кування (з еліт, босів, облог); не випадає зі звичайної нечисті
+const TROPHY := "trophy"
+const TROPHY_NAME := "Трофеї"
+
+
+static func res_name(r: String) -> String:
+	return TROPHY_NAME if r == TROPHY else RESOURCES[r]
 
 # Який ресурс найчастіше дає ландшафт
 const BIOME_RESOURCE := {"steppe": "wood", "river": "herbs", "forest": "wood", "swamp": "herbs",

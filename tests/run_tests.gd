@@ -46,6 +46,7 @@ func _run() -> void:
 	_suite_travel()
 	_suite_defense_logic()
 	_suite_challenges()
+	_suite_craft()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
@@ -760,6 +761,45 @@ func _suite_challenges() -> void:
 	w2.from_dict(w.to_dict())
 	check(w2.stats["kill"] == w.stats["kill"] and w2.challenges["ach"].has("zmii"), "лічильники й досягнення зберігаються")
 	CS.now_override = 0
+	p.free()
+
+
+func _suite_craft() -> void:
+	suite("Крафт у кузні")
+	var CR = load("res://scripts/game/craft_service.gd")
+	var p = _new_player()
+	p.level = 8
+	var w = WorldState.new()
+	p.gold = 100000
+	p.resources = {"wood": 500, "iron": 500, "herbs": 500, "trophy": 100}
+	check(CR.forge(w, p, "weapon", "mace", 1).is_empty(), "без кузні не кується")
+	w.camp = {"buildings": {"kuznia": 1}, "pasika_ts": 0}
+	var it = CR.forge(w, p, "weapon", "mace", 1)
+	check(not it.is_empty() and it["type"] == "mace" and it["rarity"] == 1 and it["ilvl"] == 8, "викувано добротну булаву свого рівня")
+	check(CR.forge(w, p, "head", "", 2).is_empty(), "рідкісне — лише з кузнею 2")
+	w.camp["buildings"]["kuznia"] = 3
+	var gold0: int = p.gold
+	var tr0: int = p.resources["trophy"]
+	var leg = CR.forge(w, p, "amulet", "", 3)
+	check(leg["rarity"] == 3 and leg["affixes"].size() == 3 and p.gold < gold0 and p.resources["trophy"] == tr0 - CR.TIER_TROPHY[3], "легендарний оберіг за трофеї")
+	check(CR.forge_cost("weapon", 3, 8)["gold"] > CR.forge_cost("weapon", 1, 8)["gold"], "краща якість — дорожче")
+	var poor = _new_player()
+	poor.gold = 0
+	check(not CR.can_pay(poor, CR.forge_cost("body", 1, 1)), "без гривень не викуєш")
+	poor.free()
+	# Перекування
+	var old_keys: Array = leg["affixes"].keys()
+	var target: String = old_keys[0]
+	var fresh: String = CR.reforge(w, p, leg["uid"], target)
+	check(fresh != "" and not leg["affixes"].has(target) and leg["affixes"].has(fresh) and leg["affixes"].size() == 3, "перекувано одну властивість")
+	check(not (fresh in old_keys) and fresh != Data.SLOT_PRIMARY["amulet"], "нова властивість не повторюється")
+	# Оновлення до рівня
+	var story_it = Data.gen_item(3, 3, "weapon", "sabre")
+	story_it["up"] = 4
+	p.add_item(story_it)
+	var dmg_before: float = story_it["base"]["flat_dmg"]
+	check(CR.renew(w, p, story_it["uid"]) and story_it["ilvl"] == 8 and story_it["base"]["flat_dmg"] > dmg_before and story_it["up"] == 4, "стару шаблю оновлено до свого рівня, заточку збережено")
+	check(not CR.can_renew(w, story_it, 8), "оновлена річ уже свого рівня")
 	p.free()
 
 
