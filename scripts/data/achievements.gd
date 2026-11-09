@@ -43,5 +43,8 @@ const ACHIEVEMENTS := [
 	{"id": "bond_3", "name": "Побратими навіки", "desc": "Пройди особисті історії трьох побратимів", "stat": "bond", "goal": 3, "gold": 1000},
 	{"id": "level_10", "name": "Бувалий козак", "desc": "Досягни 10 рівня", "stat": "level", "goal": 10, "gold": 300},
 	{"id": "level_20", "name": "Сивий вояка", "desc": "Досягни 20 рівня", "stat": "level", "goal": 20, "gold": 1200},
+	{"id": "depth_10", "name": "У надрах", "desc": "Пройди 10-ту глибину зарази", "stat": "depth", "goal": 10, "gold": 3000},
+	{"id": "depth_25", "name": "Корені зла", "desc": "Пройди 25-ту глибину зарази", "stat": "depth", "goal": 25, "gold": 10000},
+	{"id": "depth_50", "name": "Без дна", "desc": "Пройди 50-ту глибину зарази", "stat": "depth", "goal": 50, "gold": 30000},
 	{"id": "hetman", "name": "Гетьман", "desc": "Пройди всю історію", "stat": "hetman", "goal": 1, "gold": 5000},
 ]

@@ -50,12 +50,14 @@ func _run() -> void:
 	_suite_classes()
 	_suite_specs()
 	_suite_stones()
+	_suite_endgame()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
 	await _suite_mage_battle()
 	await _suite_spec_battle()
 	await _suite_volkhv_specs()
+	await _suite_depth_battle()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -1430,6 +1432,87 @@ func _suite_stones() -> void:
 	p.free()
 	sp.free()
 	m.free()
+
+
+func _suite_endgame() -> void:
+	suite("Після сюжету: крива досвіду й Глибини")
+	var DS = load("res://scripts/game/depth_service.gd")
+	var same := true
+	for l in range(1, 30):
+		if Data.xp_for_level(l) != 200 + 150 * l + 15 * l * l:
+			same = false
+	check(same, "до 30-го рівня крива без змін (сюжет не сповільнився)")
+	check(Data.xp_for_level(35) > 3 * (200 + 150 * 35 + 15 * 35 * 35), "після 30-го крива крутішає")
+	var prev := 0
+	var mono := true
+	for l in range(1, 99):
+		if Data.xp_for_level(l) <= prev:
+			mono = false
+		prev = Data.xp_for_level(l)
+	check(mono, "досвід на рівень завжди росте")
+	var w = WorldState.new()
+	check(not DS.unlocked(w), "Глибини закриті до кінця сюжету")
+	w.story = {"chapter": 6, "step": 0, "stage": "done"}
+	check(DS.unlocked(w) and DS.state(w)["max"] == 1, "після Путіноїда — перша глибина")
+	var a = DS.loc_for(1)
+	var b = DS.loc_for(20)
+	check(b["level"] > a["level"] and b["rooms"] >= a["rooms"] and b["elite_bonus"] > a["elite_bonus"], "глибше — сильніше")
+	check(DS.loc_for(200)["level"] == 99, "рівень глибини не вище 99")
+	check(DS.loc_for(7)["enemies"] == DS.loc_for(7)["enemies"], "та сама глибина — та сама печера")
+	for d in [1, 5, 12]:
+		var L: Dictionary = DS.loc_for(d)
+		check(Data.BOSS_NAMES.has(L["boss"]) and L["enemies"].size() == 3, "глибина %d: бос і нечисть" % d)
+	var m = DS.on_clear(w, 1)
+	check(DS.state(w)["max"] == 2 and DS.state(w)["best"] == 1 and "2" in m, "пройшов — відкрито наступну")
+	DS.on_clear(w, 1)
+	check(DS.state(w)["max"] == 2, "повторне проходження не відкриває зайвого")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.depths["best"] == 1, "глибини зберігаються")
+	var wq = WorldState.new()
+	var bad := false
+	for i in 200:
+		if wq._gen_quest("lviv")["loc"] == "hlybyny" or wq._gen_quest("chernihiv")["loc"] == "hlybyny":
+			bad = true
+	check(not bad, "доручення не ведуть у Глибини")
+
+
+func _suite_depth_battle() -> void:
+	suite("Глибини зарази: спуск")
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "block": true, "elite": true, "boss": true, "item": true, "map": true, "depths": true, "stones": true}
+	var p = game.player
+	game.start_depth(1)
+	await _frames(2)
+	check(game.state != game.State.PLAYING, "до кінця сюжету не пускає")
+	game.world.story = {"chapter": 6, "step": 0, "stage": "done"}
+	p.change_class("cossack")
+	p.level = 40
+	p.stats["str"] = 200
+	p.stats["vit"] = 200
+	p.skills = {"whirl": 5}
+	p.recalc()
+	p.hp = p.max_hp
+	game.start_depth(1)
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.loc.get("depth", 0) == 1 and game.combat.is_dungeon(), "спуск на глибину 1")
+	var frames := 0
+	while game.state == game.State.PLAYING and game.DepthService.state(game.world)["best"] < 1 and frames < 9000:
+		_bot_fight(game)
+		p.hp = p.max_hp
+		await process_frame
+		frames += 1
+	check(game.DepthService.state(game.world)["best"] == 1 and game.DepthService.state(game.world)["max"] == 2, "глибину 1 пройдено (кадрів: %d)" % frames)
+	check(int(game.world.stats.get("depth", 0)) == 1, "рекорд глибини записано")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
 
 
 func _suite_camp() -> void:

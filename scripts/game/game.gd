@@ -19,6 +19,7 @@ const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const CraftService := preload("res://scripts/game/craft_service.gd")
 const SpecService := preload("res://scripts/game/spec_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
+const DepthService := preload("res://scripts/game/depth_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -54,7 +55,8 @@ var smith_msg := ""
 var smith_msg_color := Color.WHITE
 var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
-var confirm_action := ""  # дія з каменем, що чекає підтвердження (друге натискання)
+var confirm_action := ""
+var depth_sel := 1  # обрана глибина на мапі  # дія з каменем, що чекає підтвердження (друге натискання)
 var camp_sel_uid := -1
 
 
@@ -522,6 +524,7 @@ func _story_dialogue(city: String) -> void:
 		_story_event("job", str(player.job_level))  # мета «майстерність» могла вже бути досягнута
 		if player.rank == "hetman" and int(world.stats.get("hetman", 0)) == 0:
 			_record("hetman")
+			hint("depths_open", "Під Кремлем відкрилися Глибини зарази — печера без дна для найсильніших. Шукай на мапі біля Москви.")
 		var texts := []
 		for m in msgs:
 			texts.append(m["text"])
@@ -551,6 +554,14 @@ func _on_location_cleared(loc_id: String) -> void:
 
 func _on_dungeon_cleared(loc_id: String) -> void:
 	world.on_dungeon(loc_id)
+	if loc_id == DepthService.LOC_ID and combat.loc.has("depth"):
+		var d: int = combat.loc["depth"]
+		hud.show_banner(DepthService.on_clear(world, d), UI.GOLD)
+		depth_sel = int(DepthService.state(world)["max"])
+		_record("depth", d)
+		if randf() < 0.15 + 0.005 * d:
+			StoneService.grant(player, "zabuttia" if randf() < 0.6 else "alatyr")
+			combat.float_text(player.global_position + Vector2(0, -150), "Камінь долі з глибин!", Color(0.85, 0.7, 1.0))
 	_cleanse(loc_id)
 	_record("dungeon")
 	_spec_event("dungeon", loc_id)
@@ -607,6 +618,11 @@ func _on_map_select(id: String) -> void:
 
 
 func _build_map_panel() -> void:
+	if map_sel == DepthService.LOC_ID:
+		hud.set_map_panel(MapPanel.build_depths(world, player, depth_sel, func(d: int):
+			depth_sel = d
+			_build_map_panel(), start_depth))
+		return
 	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world))
 	if map_sel == "":
 		var left := AdRewards.xp2_left(world)
@@ -618,12 +634,26 @@ func _build_map_panel() -> void:
 func _go_to(id: String) -> void:
 	if id == Camp.CAMP_ID:
 		enter_camp()
+	elif id == DepthService.LOC_ID:
+		start_depth(depth_sel)
 	elif DefenseService.is_besieged(world, id):
 		start_defense(id)
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
 		_travel_to(id)
+
+
+# ======================= Глибини зарази =======================
+
+func start_depth(depth: int) -> void:
+	if not DepthService.unlocked(world):
+		hud.show_banner("Глибини відкриються після перемоги над Путіноїдом", UI.BAD)
+		return
+	depth = clampi(depth, 1, int(DepthService.state(world)["max"]))
+	combat.custom_loc = DepthService.loc_for(depth)
+	enter_location(DepthService.LOC_ID)
+	hint("depths", "Глибини зарази: що глибше — то сильніші вороги й щедріша здобич. Пройдеш глибину — відкриється наступна.")
 
 
 # ======================= Оборона =======================

@@ -62,8 +62,8 @@ static func _generate(templates: Array, n: int, seed_value: int) -> Array:
 static func record(world, player, stat: String, amount: int = 1) -> Array:
 	var c := state(world)
 	var msgs := []
-	if stat == "level":
-		world.stats["level"] = maxi(int(world.stats.get("level", 0)), amount)
+	if stat in ["level", "depth"]:  # найвище досягнуте, а не сума
+		world.stats[stat] = maxi(int(world.stats.get(stat, 0)), amount)
 	else:
 		world.stats[stat] = int(world.stats.get(stat, 0)) + amount
 		for list in [c["daily"], c["weekly"]]:

@@ -29,8 +29,12 @@ static func potion_price(hero_level: int) -> int:
 
 
 ## Досвід, потрібний, щоб перейти з рівня l на l+1.
+## До 30-го рівня крива м'яка (сюжет), далі — крутішає: гра після сюжету розрахована на десятки годин.
 static func xp_for_level(l: int) -> int:
-	return 200 + 150 * l + 15 * l * l
+	var base := 200 + 150 * l + 15 * l * l
+	if l < 30:
+		return base
+	return int(base * pow(1.0 + 0.6 * (l - 29), 0.8))
 
 
 static func coin_gold(xp_value: int) -> int:
@@ -324,6 +328,10 @@ const LOCATIONS := {
 		"enemies": ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"], "desc": "Старий шлях на Москву. Кожна верста тут полита кров'ю."},
 	"mozhaisk": {"name": "Можайські болота", "type": "field", "biome": "swamp", "pos": Vector2(35.9, 55.5), "level": 20,
 		"enemies": ["pishchalnyk", "bolotianyk", "chort", "zarazhenyi"], "desc": "Останні болота перед Москвою. Зараза тут така густа, що її видно оком."},
+	# ---- Після сюжету ----
+	"hlybyny": {"name": "Глибини зарази", "type": "dungeon", "biome": "plague", "pos": Vector2(38.6, 55.35), "level": 22,
+		"rooms": 4, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "putinoid", "endless": true,
+		"desc": "Корені зарази під Кремлем: печера без дна. Відкривається після перемоги над Путіноїдом."},
 	# ---- Розділ V: Кремль ----
 	"kremlin": {"name": "Кремль", "type": "dungeon", "biome": "plague", "pos": Vector2(37.62, 55.75), "level": 22,
 		"rooms": 7, "enemies": ["zarazhenyi", "pishchalnyk", "chort", "upyr"], "boss": "putinoid",

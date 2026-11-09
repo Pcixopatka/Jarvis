@@ -22,6 +22,7 @@ var ads := {}  # денні ліміти реклами
 var stats := {}  # лічильники подій для викликів і досягнень
 var challenges := {}  # щоденні/тижневі виклики й відкриті досягнення (див. ChallengeService)
 var defense := {}  # облоги міст і хутора (див. DefenseService)
+var depths := {}  # Глибини зарази після сюжету (див. DepthService)
 var spec_trial := {}  # випробування в наставника (див. SpecService)
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
@@ -78,6 +79,8 @@ func _gen_quest(city: String) -> Dictionary:
 	var lvl: int = Data.CITIES[city]["level"] + loyalty_level(city)
 	var locs := []
 	for id in Data.LOCATIONS:
+		if Data.LOCATIONS[id].get("endless", false):
+			continue  # Глибини — не для доручень
 		var l: int = Data.LOCATIONS[id]["level"]
 		if l >= lvl - 2 and l <= lvl + 3:
 			locs.append(id)
@@ -199,7 +202,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -222,3 +225,4 @@ func from_dict(d: Dictionary) -> void:
 	stats = d.get("stats", {})
 	challenges = d.get("challenges", {})
 	spec_trial = d.get("spec_trial", {})
+	depths = d.get("depths", {})

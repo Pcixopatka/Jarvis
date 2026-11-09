@@ -55,7 +55,8 @@ var companion_nodes: Array = []
 var active := false
 var plague := 0  # рівень зарази поточної місцевості
 var boss_revives := 0
-var defense_loc := {}  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
+var defense_loc := {}
+var custom_loc := {}  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
 var wave := 0
 var wave_timer := 0.0
@@ -155,6 +156,8 @@ func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	plague_mods = PlagueService.mods(plague)
 	cloud_timer = 4.0
 	loc = Data.LOCATIONS[id]
+	if loc.get("endless", false) and not custom_loc.is_empty():
+		loc = custom_loc  # Глибини зарази: печера потрібної глибини
 	room = 1 if loc["type"] == "dungeon" else 0
 	field_kills = 0
 	field_goal = int(loc.get("goal", Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL))
@@ -652,6 +655,11 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	e.combat = self
 	e.position = pos
 	e.setup(kind, level, boss)
+	if loc.has("hp_mult"):
+		e.max_hp *= float(loc["hp_mult"])
+		e.hp = e.max_hp
+		e.damage *= float(loc["dmg_mult"])
+		e.xp_value = int(e.xp_value * float(loc["xp_mult"]))
 	if plague > 0:
 		e.max_hp *= plague_mods["hp"]
 		e.hp = e.max_hp
@@ -786,7 +794,7 @@ func spawn_blast(pos: Vector2, r: float, dur: float, dmg: float, col: Color) -> 
 func _maybe_elite(e) -> void:
 	if e == null or e.is_boss:
 		return
-	if randf() < Elites.chance(int(loc.get("level", 1)), plague):
+	if randf() < Elites.chance(int(loc.get("level", 1)), plague) + float(loc.get("elite_bonus", 0.0)):
 		e.make_elite(Elites.roll_affixes(int(loc.get("level", 1))))
 		float_text(e.global_position + Vector2(0, -60), "Еліта!", Color(1.0, 0.8, 0.2))
 		Events.hint.emit("elite", "Еліта! Золоте коло — сильніший ворог із властивостями (підпалює, морозить, вибухає...). За неї — щедра здобич.")

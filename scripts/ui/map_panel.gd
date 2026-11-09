@@ -7,6 +7,38 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 
 
+## Панель Глибин зарази: вибір глибини й спуск.
+static func build_depths(world, player, sel: int, on_change: Callable, on_go: Callable) -> Control:
+	var DS = load("res://scripts/game/depth_service.gd")
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Глибини зарази", 28, UI.GOLD, false))
+	if not DS.unlocked(world):
+		v.add_child(_wrapped("Корені зарази під Кремлем. Відкриються після перемоги над Путіноїдом.", 18, UI.MUTED))
+		return v
+	var s: Dictionary = DS.state(world)
+	var mx: int = s["max"]
+	sel = clampi(sel, 1, mx)
+	var L: Dictionary = DS.loc_for(sel)
+	v.add_child(_wrapped("Печера без дна. Пройдеш глибину — відкриється наступна. Найглибше пройдено: %d." % s["best"], 17, UI.TEXT))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(UI.button("◂", func(): on_change.call(sel - 1), Vector2(70, 60), 26, sel > 1))
+	var lab := UI.label("Глибина %d" % sel, 24, UI.GOLD)
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lab)
+	row.add_child(UI.button("▸", func(): on_change.call(sel + 1), Vector2(70, 60), 26, sel < mx))
+	v.add_child(row)
+	var danger: bool = int(L["level"]) > player.level + 2
+	v.add_child(UI.label("Рівень %d  •  кімнат: %d" % [L["level"], L["rooms"]], 19, UI.BAD if danger else UI.TEXT, false))
+	var names := []
+	for e in L["enemies"]:
+		names.append(Data.ENEMY_NAMES[e])
+	v.add_child(_wrapped("Нечисть: %s. Бос: %s. Еліти: +%d%%." % [", ".join(names), Data.BOSS_NAMES[L["boss"]], roundi(L["elite_bonus"] * 100)], 16, UI.MUTED))
+	v.add_child(UI.button("Спуститися", func(): on_go.call(sel), Vector2(350, 70), 26))
+	return v
+
+
 ## Попередження про облогу (true — місто/хутір в облозі).
 static func _siege_note(v: Control, world, sel: String) -> bool:
 	var DS = load("res://scripts/game/defense_service.gd")
