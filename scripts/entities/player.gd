@@ -518,6 +518,7 @@ func charged_strike(power: float) -> void:
 	combat.fx.ring(global_position, Color(1.0, 0.85, 0.35), 30, reach, 6, 0.35)
 	if hits > 0:
 		combat.hitstop(0.06 + 0.05 * power)
+		Events.charged_hit.emit()
 	if full:
 		combat.float_text(global_position + Vector2(0, -70), "Козацький удар!", Color(1.0, 0.85, 0.3))
 

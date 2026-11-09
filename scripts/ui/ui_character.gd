@@ -18,6 +18,7 @@ static func build(game) -> Control:
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Перки" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
+		["Виклики" + _pts(game.ChallengeService.ready_count(game.world)), _challenges(game)],
 	]
 	return UI.screen("%s — рівень %d   •   Гривні: %d" % [{"peasant": "Селянин", "hetman": "Гетьман"}.get(p.rank, "Козак"), p.level, p.gold], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i)
@@ -79,6 +80,57 @@ static func _stats(game) -> Control:
 		row.add_child(UI.label(l[1], 19, UI.TEXT, false))
 		right.add_child(row)
 	return h
+
+
+# ---------------- Виклики й досягнення ----------------
+
+static func _challenges(game) -> Control:
+	var CS = game.ChallengeService
+	var w = game.world
+	var p = game.player
+	var c: Dictionary = CS.state(w)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	var left: int = CS.seconds_to_reset()
+	v.add_child(UI.label("Щоденні виклики  (оновляться за %d год %d хв)" % [left / 3600, (left % 3600) / 60], 24, UI.GOLD, false))
+	for i in c["daily"].size():
+		v.add_child(_challenge_row(game, c["daily"][i], false, i))
+	v.add_child(UI.label("Виклики тижня", 24, UI.GOLD, false))
+	for i in c["weekly"].size():
+		v.add_child(_challenge_row(game, c["weekly"][i], true, i))
+	var A = CS.A
+	v.add_child(UI.label("Досягнення: %d / %d" % [c["ach"].size(), A.ACHIEVEMENTS.size()], 24, UI.GOLD, false))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 24)
+	grid.add_theme_constant_override("v_separation", 6)
+	for a in A.ACHIEVEMENTS:
+		var got: bool = c["ach"].has(a["id"])
+		var cur: int = int(w.stats.get(a["stat"], 0))
+		var text: String = ("✔ " if got else "") + a["name"]
+		var sub: String = a["desc"] + ("" if got else "  (%d/%d)" % [mini(cur, a["goal"]), a["goal"]])
+		var col := VBoxContainer.new()
+		col.custom_minimum_size = Vector2(520, 0)
+		col.add_child(UI.label(text, 19, UI.GOOD if got else UI.TEXT, false))
+		col.add_child(UI.label(sub, 15, UI.MUTED, false))
+		grid.add_child(col)
+	v.add_child(grid)
+	return v
+
+
+static func _challenge_row(game, ch: Dictionary, weekly: bool, i: int) -> Control:
+	var CS = game.ChallengeService
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var done: bool = int(ch["progress"]) >= int(ch["goal"])
+	col.add_child(UI.label("%s  %d/%d" % [ch["text"], ch["progress"], ch["goal"]], 20, UI.GOOD if done else UI.TEXT, false))
+	col.add_child(UI.label("Нагорода: " + CS.reward_text(weekly, game.player.level), 15, UI.MUTED, false))
+	row.add_child(col)
+	var label := "Отримано" if ch["claimed"] else "Забрати"
+	row.add_child(UI.button(label, _do(game, "claim", [weekly, i]), Vector2(170, 56), 18, CS.can_claim(ch)))
+	return row
 
 
 # ---------------- Літопис ----------------

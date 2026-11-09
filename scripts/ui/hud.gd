@@ -15,6 +15,7 @@ signal map_location_selected(id: String)
 
 const Data := preload("res://scripts/data/data.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
+const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const WorldMap := preload("res://scripts/ui/world_map.gd")
 const JoystickScript := preload("res://scripts/ui/joystick.gd")
 const ActionButtonScript := preload("res://scripts/ui/action_button.gd")
@@ -367,7 +368,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 			var b = skill_buttons[id]
 			b.visible = player.sk(id) > 0
 			b.set_cooldown(player.skill_ready_ratio(id))
-	var pts: int = player.unspent_points()
+	var pts: int = player.unspent_points() + ChallengeService.ready_count(world)
 	if pts > 0:
 		_pulse += maxf(delta, 0.016) * 5.0
 		char_btn.text = "Козак +%d" % pts

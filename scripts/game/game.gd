@@ -15,6 +15,7 @@ const HeroService := preload("res://scripts/game/hero_service.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const TravelService := preload("res://scripts/game/travel_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
+const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -86,6 +87,8 @@ func _ready() -> void:
 	Events.dungeon_cleared.connect(_on_dungeon_cleared)
 	Events.exit_requested.connect(_on_exit)
 	Events.defense_won.connect(_on_defense_won)
+	Events.parried.connect(func(): _record("parry"))
+	Events.charged_hit.connect(func(): _record("charged"))
 	Events.defense_lost.connect(_on_defense_lost)
 	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка «Козак» → вкладка «Спорядження»."))
 	Events.boss_spawned.connect(func(_e): hint("boss", "Бос! Червоні зони на землі — місця його удару. Виходь із них, поки вони не заповнились!"))
@@ -319,6 +322,13 @@ func _on_enemy_killed(e: Node2D) -> void:
 		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
 	_story_event("kill", e.kind)
 	_hero_event("kill", e.kind)
+	_record("kill")
+	_record("kill:" + e.kind)
+	if e.elite:
+		_record("elite")
+	if e.is_boss:
+		_record("boss")
+		_record("boss:" + e.kind)
 	for up in Party.gain_xp(world, player.level, roundi(e.xp_value * CampService.companion_xp_mult(world) * AdRewards.xp_mult(world))):
 		combat.companion_level_up(up[0], up[1])
 
@@ -378,6 +388,8 @@ func _hero_dialogue(city: String) -> void:
 		var texts := []
 		for m in HeroService.on_dialogue_done(world, player, d, choice):
 			texts.append(m["text"])
+		if d["kind"] == "end":
+			_record("bond")
 		if not texts.is_empty():
 			hud.show_banner("\n".join(texts), UI.GOLD)
 			Audio.play("quest", 0.0)
@@ -400,6 +412,8 @@ func _story_dialogue(city: String) -> void:
 		hud.close_dialogue()
 		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice)
 		CampService.apply_effects(world, player)  # вибір міг дати постійний наслідок
+		if player.rank == "hetman" and int(world.stats.get("hetman", 0)) == 0:
+			_record("hetman")
 		var texts := []
 		for m in msgs:
 			texts.append(m["text"])
@@ -421,6 +435,7 @@ func _on_companion_down(index: int, _name: String) -> void:
 func _on_location_cleared(loc_id: String) -> void:
 	world.cleared[loc_id] = world.cleared.get(loc_id, 0) + 1
 	_cleanse(loc_id)
+	_record("field")
 	_story_event("clear", loc_id)
 	_hero_event("clear", loc_id)
 
@@ -428,11 +443,22 @@ func _on_location_cleared(loc_id: String) -> void:
 func _on_dungeon_cleared(loc_id: String) -> void:
 	world.on_dungeon(loc_id)
 	_cleanse(loc_id)
+	_record("dungeon")
 	_story_event("dungeon", loc_id)
 	_hero_event("dungeon", loc_id)
 
 
+## Подія для викликів і досягнень; виконані показуються банером.
+func _record(stat: String, amount: int = 1) -> void:
+	var msgs := ChallengeService.record(world, player, stat, amount)
+	if msgs.is_empty():
+		return
+	hud.show_banner("\n".join(msgs), Color(1.0, 0.85, 0.35))
+	Audio.play("quest", 0.0)
+
+
 func _on_level_up(lvl: int) -> void:
+	_record("level", lvl)
 	hud.show_banner("Рівень %d!\nВідкрий «Козак», щоб прокачатися" % lvl, UI.GOLD)
 	hint("levelup", "Новий рівень! Натисни «Козак» угорі: вклади очки в характеристики, вміння й перки.")
 
@@ -506,6 +532,7 @@ func start_defense(target: String) -> void:
 func _on_defense_won(target: String) -> void:
 	defense_target = target
 	hud.show_banner(DefenseService.win(world, player, target), UI.GOLD)
+	_record("defense")
 	save_game()
 
 
@@ -543,6 +570,7 @@ func _travel_to(id: String) -> void:
 		hud.close_dialogue()
 		if choice >= 0 and choice < ev["choices"].size():
 			var summary := TravelService.apply(world, player, ev["choices"][choice]["outcome"])
+			_record("travel")
 			if summary != "":
 				hud.show_banner(summary, UI.GOLD)
 		enter_location(id))
@@ -624,6 +652,7 @@ func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> vo
 	match player.sharpen(uid, cost_mult, chance_bonus, safe):
 		"ok":
 			Audio.play("sharpen_ok", 0.03)
+			_record("sharpen")
 			smith_msg = "Успіх! Тепер +%d" % (before + 1)
 			smith_msg_color = UI.GOOD
 		"fail":
@@ -678,6 +707,12 @@ func char_do(action: String, arg) -> void:
 		"drop":
 			player.remove_from_bag(arg)
 			char_sel_uid = -1
+		"claim":
+			var text := ChallengeService.claim(world, player, arg[0], arg[1])
+			if text != "":
+				hud.show_banner(text, UI.GOLD)
+				Audio.play("quest", 0.0)
+				save_game()
 	_build_character()
 
 

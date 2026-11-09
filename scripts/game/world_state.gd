@@ -19,6 +19,8 @@ var story := {}  # стан сюжету (див. StoryService)
 var camp := {}  # хутір: будівлі, пасіка (див. CampService)
 var boosts := {}  # нагороди за рекламу: xp2 (секунди), safe_sharpen (жетони)
 var ads := {}  # денні ліміти реклами
+var stats := {}  # лічильники подій для викликів і досягнень
+var challenges := {}  # щоденні/тижневі виклики й відкриті досягнення (див. ChallengeService)
 var defense := {}  # облоги міст і хутора (див. DefenseService)
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
@@ -196,7 +198,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -216,3 +218,5 @@ func from_dict(d: Dictionary) -> void:
 	plague = d.get("plague", {})
 	travel = d.get("travel", {})
 	defense = d.get("defense", {})
+	stats = d.get("stats", {})
+	challenges = d.get("challenges", {})

@@ -45,6 +45,7 @@ func _run() -> void:
 	_suite_plague()
 	_suite_travel()
 	_suite_defense_logic()
+	_suite_challenges()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
@@ -706,6 +707,60 @@ func _suite_defense_battle() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+
+
+func _suite_challenges() -> void:
+	suite("Виклики й досягнення")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var p = _new_player()
+	var w = WorldState.new()
+	CS.now_override = 1762700000  # фіксований день
+	var c = CS.state(w)
+	check(c["daily"].size() == 3 and c["weekly"].size() == 2, "3 щоденні й 2 тижневі виклики")
+	var w_same = WorldState.new()
+	check(CS.state(w_same)["daily"][0]["text"] == c["daily"][0]["text"], "у всіх гравців того ж дня — ті самі виклики")
+	var stats := {}
+	for ch in c["daily"]:
+		stats[ch["stat"]] = true
+	check(stats.size() == 3, "щоденні виклики різні")
+	var ch0: Dictionary = c["daily"][0]
+	var msgs := []
+	for i in int(ch0["goal"]):
+		msgs.append_array(CS.record(w, p, ch0["stat"]))
+	check(ch0["progress"] == ch0["goal"] and msgs.any(func(m): return "Виклик виконано" in m), "виклик виконано")
+	check(CS.ready_count(w) >= 1, "нагорода чекає")
+	var g0: int = p.gold
+	var t = CS.claim(w, p, false, 0)
+	check(t != "" and p.gold > g0 and c["daily"][0]["claimed"], "нагороду забрано")
+	check(CS.claim(w, p, false, 0) == "", "двічі не забереш")
+	check(CS.claim(w, p, true, 0) == "" or c["weekly"][0]["progress"] >= c["weekly"][0]["goal"], "невиконаний тижневий не віддає нагороди")
+	# Новий день — нові виклики, тиждень той самий
+	CS.now_override = 1762700000 + 86400
+	var c2 = CS.state(w)
+	check(not c2["daily"][0]["claimed"] and c2["day"] != "" , "наступного дня — нові виклики")
+	# Досягнення
+	var g1: int = p.gold
+	var m2 = CS.record(w, p, "kill")
+	check(c2["ach"].has("first_blood") and p.gold == g1 + 20 and m2.any(func(m): return "Перша кров" in m), "досягнення «Перша кров»")
+	CS.record(w, p, "kill")
+	check(p.gold == g1 + 20, "досягнення відкривається лише раз")
+	CS.record(w, p, "level", 10)
+	CS.record(w, p, "level", 7)
+	check(w.stats["level"] == 10 and c2["ach"].has("level_10"), "рівень — найвищий, а не сума")
+	for i in 3:
+		CS.record(w, p, "boss:zmii")
+	check(c2["ach"].has("zmii"), "Змієборець")
+	# Тижнева нагорода
+	var wk: Dictionary = c2["weekly"][0]
+	CS.record(w, p, wk["stat"], int(wk["goal"]))
+	var tok0: int = int(w.boosts.get("safe_sharpen", 0))
+	var inv0: int = p.inventory.size()
+	check(CS.claim(w, p, true, 0) != "" and int(w.boosts["safe_sharpen"]) == tok0 + 1 and p.inventory.size() == inv0 + 1, "тижнева нагорода: річ і жетон заточки")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.stats["kill"] == w.stats["kill"] and w2.challenges["ach"].has("zmii"), "лічильники й досягнення зберігаються")
+	CS.now_override = 0
+	p.free()
 
 
 func _suite_camp() -> void:
