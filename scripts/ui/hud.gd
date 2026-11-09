@@ -33,7 +33,8 @@ var hp_bar: ProgressBar
 var xp_bar: ProgressBar
 var mana_bar: ProgressBar
 var job_bar: ProgressBar
-var skill_slots: Array = []  # позиції кнопок вмінь (до 4)
+var attack_slots: Array = []  # 3 кнопки атак праворуч, біля основного удару
+var buff_slots: Array = []  # 5 кнопок бафів знизу посередині
 var hp_label: Label
 var level_label: Label
 var quest_label: Label
@@ -89,8 +90,9 @@ func _build() -> void:
 	btn_block = _action_button("Блок", 50.0, Color(0.55, 0.42, 0.2))
 	btn_potion = _action_button("Зілля", 46.0, Color(0.75, 0.12, 0.2))
 	btn_potion.triggered.connect(func(): potion_pressed.emit())
+	var SkillInfo = load("res://scripts/data/skill_info.gd")
 	for id in Data.ACTIVE_SKILLS:
-		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0, Data.Classes.ACTIVE_COLORS[id])
+		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0 if SkillInfo.kind(id) == "attack" else 42.0, Data.Classes.ACTIVE_COLORS[id])
 		b.triggered.connect(func(): skill_pressed.emit(id))
 		b.visible = false
 		skill_buttons[id] = b
@@ -300,7 +302,12 @@ func layout() -> void:
 	joystick.queue_redraw()
 	btn_attack.position = Vector2(s.x - 140, s.y - 140)
 	btn_dodge.position = Vector2(s.x - 300, s.y - 80)
-	skill_slots = [Vector2(s.x - 120, s.y - 315), Vector2(s.x - 275, s.y - 255), Vector2(s.x - 425, s.y - 105), Vector2(s.x - 110, s.y - 470)]
+	# Атаки — дугою навколо основного удару; бафи — рядком унизу між джойстиком і ударом
+	attack_slots = [Vector2(s.x - 120, s.y - 315), Vector2(s.x - 275, s.y - 255), Vector2(s.x - 425, s.y - 105)]
+	var bx := (s.x - 540.0) / 2.0 + 60.0  # центр смуги між джойстиком (≈340) і кнопками праворуч (≈540)
+	buff_slots = []
+	for i in 5:
+		buff_slots.append(Vector2(bx + (i - 2) * 96.0, s.y - 52))
 	btn_potion.position = Vector2(s.x - 430, s.y - 250)
 	btn_block.position = Vector2(s.x - 270, s.y - 420)
 	map_view.map_rect = Rect2(Vector2(8, 96), Vector2(s.x - 410, s.y - 104))
@@ -370,13 +377,14 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 		if btn_potion.label != pl:
 			btn_potion.label = pl
 			btn_potion.queue_redraw()
-		var actives: Array = player.active_skills()
+		player.sync_panel()
 		for id in skill_buttons:
 			var b = skill_buttons[id]
-			var slot := actives.find(id)
-			b.visible = slot >= 0 and slot < skill_slots.size()
+			var ai: int = player.panel["attack"].find(id)
+			var bi: int = player.panel["buff"].find(id)
+			b.visible = ai >= 0 or bi >= 0
 			if b.visible:
-				b.position = skill_slots[slot]
+				b.position = attack_slots[ai] if ai >= 0 else buff_slots[bi]
 				var no_mana: bool = player.mana < player.skill_cost(id)
 				b.set_cooldown(1.0 if no_mana and player.skill_timers.get(id, 0.0) <= 0.0 else player.skill_ready_ratio(id))
 	var pts: int = player.unspent_points() + ChallengeService.ready_count(world)

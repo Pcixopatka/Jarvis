@@ -58,6 +58,7 @@ var smith_msg_color := Color.WHITE
 var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
 var confirm_action := ""
+var skill_sel := ""  # вміння, відкрите в картці на вкладці «Вміння»
 var depth_sel := 1  # обрана глибина на мапі
 var camp_sel_uid := -1
 
@@ -216,11 +217,12 @@ func new_game() -> void:
 	hud.show_dialogue(dlg)
 
 
-## Вміння з кнопки N (як на екрані).
-func _use_slot(i: int) -> void:
-	var a: Array = player.active_skills()
-	if i < a.size():
-		player.use_skill(a[i])
+## Вміння з комірки панелі (клавіатура: 1–3 атаки, 5–9 бафи).
+func _use_slot(kind: String, i: int) -> void:
+	player.sync_panel()
+	var arr: Array = player.panel[kind]
+	if i < arr.size() and arr[i] != "":
+		player.use_skill(arr[i])
 
 
 ## Простий хлопець із хутора: вила, сорочка, лише селянська наука.
@@ -897,6 +899,13 @@ func char_do(action: String, arg) -> void:
 				_after_class_change()
 				hud.show_banner("Алатир-камінь: тепер ти — %s!" % player.class_name_ua().to_lower(), Color(0.85, 0.7, 1.0))
 				save_game()
+		"skill_pick":
+			skill_sel = arg
+		"panel_set":
+			# arg: [kind, index, id]
+			player.set_panel(arg[0], arg[1], arg[2])
+		"panel_clear":
+			player.set_panel(arg[0], arg[1], "")
 		"claim":
 			var text := ChallengeService.claim(world, player, arg[0], arg[1])
 			if text != "":
@@ -1002,16 +1011,16 @@ func _input(event: InputEvent) -> void:
 				player.dodge()
 		KEY_L, KEY_1:
 			if playing:
-				_use_slot(0)
+				_use_slot("attack", 0)
 		KEY_I, KEY_2:
 			if playing:
-				_use_slot(1)
+				_use_slot("attack", 1)
 		KEY_O, KEY_3:
 			if playing:
-				_use_slot(2)
-		KEY_U, KEY_5:
+				_use_slot("attack", 2)
+		KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			if playing:
-				_use_slot(3)
+				_use_slot("buff", event.physical_keycode - KEY_5)
 		KEY_H, KEY_4:
 			if playing:
 				player.use_potion()

@@ -880,7 +880,27 @@ func _suite_classes() -> void:
 	check(p.sk("vyly") == 1 and p.sk("hardy") == 2, "селянська наука лишається з волхвом")
 	check(p.max_mana > 60.0 and p.mana_regen > 3.0, "волхв має великий запас наснаги (%d)" % p.max_mana)
 	check(p.learn_skill("fireball") and not p.learn_skill("vyly"), "волхв вчить вогонь, а селянське — вже ні")
-	check("fireball" in p.active_skills() and p.active_skills()[0] == "fireball", "кнопки: спершу вміння нинішнього класу")
+	check("fireball" in p.active_skills() and "fireball" in p.panel["attack"], "нове вміння саме стає на панель атак")
+	# Панель бою: 3 атаки + 5 бафів, вибір і перенесення
+	var SI = load("res://scripts/data/skill_info.gd")
+	check(SI.kind("fireball") == "attack" and SI.kind("shield") == "buff" and p.panel["attack"].size() == 3 and p.panel["buff"].size() == 5, "панель: 3 атаки й 5 бафів")
+	check(not p.set_panel("buff", 0, "fireball"), "атаку не поставиш у комірку бафа")
+	check(not p.set_panel("attack", 1, "whirl"), "невивчене на панель не стає")
+	var first: String = p.panel["attack"][0]
+	check(p.set_panel("attack", 2, first) and p.panel["attack"][2] == first and p.panel["attack"][0] != first, "перенесення в іншу комірку")
+	check(p.set_panel("attack", 2, "") and p.panel["attack"][2] == "", "комірку можна звільнити")
+	p.sync_panel()
+	check(first in p.panel["attack"], "після синхронізації вивчене вміння повертається у вільну комірку")
+	for id in SI.KIND:
+		var node: Dictionary = Classes.find_node(id)
+		check(not node.is_empty() and node.get("active", false), "довідник: %s — активне вміння" % id)
+		check(not SI.stats(id, 1, p).is_empty() or SI.KIND[id] == "buff", "довідник: %s має цифри" % id)
+		check(SI.WHAT.has(id), "довідник: %s має опис" % id)
+	for cls in Classes.TREES:
+		for b in Classes.TREES[cls]:
+			for node in b["nodes"]:
+				if node.get("active", false):
+					check(SI.KIND.has(node["id"]), "активне %s є в довіднику панелі" % node["id"])
 	var sabre = Data.gen_item(3, 1, "weapon", "sabre")
 	var staff = Data.gen_item(3, 1, "weapon", "staff")
 	p.add_item(sabre)

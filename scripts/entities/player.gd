@@ -8,6 +8,9 @@ signal leveled_up(level: int)
 const Data := preload("res://scripts/data/data.gd")
 const Status := preload("res://scripts/game/status.gd")
 const Classes := preload("res://scripts/data/classes.gd")
+const SkillInfo := preload("res://scripts/data/skill_info.gd")
+const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
+const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
 
 var combat: Combat
 
@@ -24,6 +27,7 @@ var perk_points := 0  # очки Загартування (за рівні ге�
 var stat_gifts := {}  # характеристики, подаровані сюжетом (не скидаються Каменем забуття)
 var skill_gifts := {}  # вміння, подаровані посвятою
 var stones := {}  # камені долі: zabuttia, alatyr (див. StoneService)
+var panel := {"attack": ["", "", ""], "buff": ["", "", "", "", ""]}  # що стоїть на кнопках бою
 # --- Клас і майстерність (job level) ---
 var job := "cossack"  # peasant / cossack / volkhv (нова гра починається селянином)
 var job_level := 1
@@ -283,7 +287,7 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones}
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -474,6 +478,7 @@ func learn_skill(id: String) -> bool:
 	skills[id] = sk(id) + 1
 	skill_points -= 1
 	recalc()
+	sync_panel()
 	return true
 
 
@@ -950,8 +955,8 @@ func use_skill(id: String) -> void:
 		skill_timers[id] = skill_cooldown(id)
 
 
-## Активні вміння для кнопок бою: спершу свого класу, далі набуті раніше (до 4).
-func active_skills() -> Array:
+## Усі вивчені активні вміння (свого класу і набуті раніше), у порядку дерев.
+func learned_actives() -> Array:
 	var out := []
 	var lin: Array = Classes.lineage(job)
 	lin.reverse()
@@ -960,7 +965,56 @@ func active_skills() -> Array:
 			for n in b["nodes"]:
 				if n.get("active", false) and sk(n["id"]) > 0 and not (n["id"] in out):
 					out.append(n["id"])
-	return out.slice(0, 4)
+	return out
+
+
+## Що стоїть на кнопках бою (атаки й бафи разом, без порожніх) — для перебору вміннями.
+func active_skills() -> Array:
+	sync_panel()
+	var out := []
+	for id in panel["attack"] + panel["buff"]:
+		if id != "":
+			out.append(id)
+	return out
+
+
+func panel_kind(id: String) -> String:
+	return SkillInfo.kind(id)
+
+
+## Прибирає з панелі невивчене й сам ставить нові вивчені вміння у вільні комірки свого типу.
+func sync_panel() -> void:
+	for kind in ["attack", "buff"]:
+		var size := ATTACK_SLOTS if kind == "attack" else BUFF_SLOTS
+		var arr: Array = panel.get(kind, [])
+		while arr.size() < size:
+			arr.append("")
+		for i in size:
+			var id: String = arr[i]
+			if id != "" and (sk(id) <= 0 or panel_kind(id) != kind):
+				arr[i] = ""
+		panel[kind] = arr
+	for id in learned_actives():
+		if id in panel["attack"] or id in panel["buff"]:
+			continue
+		var arr: Array = panel[panel_kind(id)]
+		var free := arr.find("")
+		if free >= 0:
+			arr[free] = id
+
+
+## Поставити вміння в комірку (або прибрати, якщо id == ""). Якщо воно вже стоїть деінде — переносимо.
+func set_panel(kind: String, index: int, id: String) -> bool:
+	if not panel.has(kind) or index < 0 or index >= panel[kind].size():
+		return false
+	if id != "" and (sk(id) <= 0 or panel_kind(id) != kind):
+		return false
+	var arr: Array = panel[kind]
+	var old := arr.find(id) if id != "" else -1
+	if old >= 0:
+		arr[old] = arr[index]
+	arr[index] = id
+	return true
 
 
 # ---------- Селянин ----------
