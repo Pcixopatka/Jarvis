@@ -43,6 +43,7 @@ func _run() -> void:
 	_suite_camp()
 	_suite_heroes()
 	_suite_plague()
+	_suite_travel()
 	await _suite_gameplay()
 	await _suite_moves()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -520,6 +521,81 @@ func _suite_plague() -> void:
 	for i in 5:
 		PS.tick(w3)
 	check(PS.infected_count(w3) == 1, "після перемоги над Путіноїдом зараза не повзе")
+
+
+func _suite_travel() -> void:
+	suite("Події в дорозі")
+	var TS = load("res://scripts/game/travel_service.gd")
+	var p = _new_player()
+	var w = WorldState.new()
+	p.rank = "peasant"
+	w.travel = {"cooldown": 0, "seen": {}}
+	var none := true
+	for i in 30:
+		if not TS.roll(w, p).is_empty():
+			none = false
+	check(none, "селянин до посвяти пригод не має")
+	p.rank = "cossack"
+	p.level = 6
+	p.gold = 5000
+	p.potions = 1
+	p.resources = {"wood": 10, "iron": 5, "herbs": 5}
+	seed(3)
+	var got := 0
+	var streak_ok := true
+	var last_hit := -10
+	for i in 200:
+		var ev = TS.roll(w, p)
+		if not ev.is_empty():
+			got += 1
+			if i - last_hit <= TS.COOLDOWN:
+				streak_ok = false
+			last_hit = i
+	check(got > 15 and got < 90, "пригоди трапляються іноді (%d зі 200)" % got)
+	check(streak_ok, "між пригодами — перерва")
+	for id in TS.EVENTS:
+		var ev = TS.prepare(w, p, id)
+		check(not ev["lines"].is_empty() and ev["choices"].size() >= 2, "%s: текст і щонайменше два варіанти" % id)
+		for c in ev["choices"]:
+			check(c.has("text") and c.has("reply") and c.has("outcome"), "%s: варіант «%s» повний" % [id, c["text"]])
+	# Бідний козак без зілля й ресурсів отримує лише доступні варіанти
+	var poor = _new_player()
+	poor.rank = "cossack"
+	poor.gold = 0
+	poor.potions = 0
+	poor.resources = {}
+	for id in TS.EVENTS:
+		var ev = TS.prepare(w, poor, id)
+		var ok := true
+		for c in ev["choices"]:
+			var o: Dictionary = c["outcome"]
+			if int(o.get("gold", 0)) < 0 or int(o.get("potions", 0)) < 0:
+				ok = false
+			for r in o.get("res", {}):
+				if int(o["res"][r]) < 0:
+					ok = false
+		check(ok and ev["choices"].size() >= 1, "%s: бідному не пропонують того, на що не стає" % id)
+	poor.free()
+	# Наслідки
+	var g0: int = p.gold
+	var hp0: float = p.max_hp
+	p.hp = p.max_hp
+	var msg = TS.apply(w, p, {"gold": -30, "hp_pct": -0.25, "loyalty": {"kyiv": 50}, "res": {"wood": -2}})
+	check(p.gold == g0 - 30 and is_equal_approx(p.hp, hp0 * 0.75) and w.loyalty_points("kyiv") == 50 and p.resources["wood"] == 8 and msg != "", "наслідки застосовано")
+	p.hp = 1.0
+	TS.apply(w, p, {"hp_pct": -0.9})
+	check(p.hp >= 1.0, "пригода не вбиває")
+	var dmg0: float = p.damage
+	TS.apply(w, p, {"trip": "inspired"})
+	check(p.damage > dmg0 and p.trip_buffs.has("inspired"), "дума кобзаря надихає на похід")
+	p.equip_new(Data.gen_item(5, 1, "weapon", "sabre"))
+	var up0: int = p.equipment["weapon"]["up"]
+	TS.apply(w, p, {"sharpen": true})
+	check(p.equipment["weapon"]["up"] == up0 + 1, "мандрівний коваль гострить зброю")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.travel.has("seen") and not w2.travel["seen"].is_empty(), "пригоди зберігаються")
+	p.free()
 
 
 func _suite_camp() -> void:

@@ -30,6 +30,11 @@ const NPCS := {
 	"hanna": {"name": "Ганна Острозька", "role": "комендантка Кам'янця"},
 	"opryshok": {"name": "Іван Чорногорець", "role": "ватажок опришків"},
 	"koshchii": {"name": "Кощій", "role": "воєвода Путіноїда"},
+	"chumak": {"name": "Чумак", "role": "подорожній"},
+	"gonets": {"name": "Гонець", "role": "поранений"},
+	"koval": {"name": "Мандрівний коваль", "role": ""},
+	"bizhenka": {"name": "Біженка", "role": ""},
+	"doroha": {"name": "У дорозі", "role": "пригода"},
 }
 
 const CHAPTERS := [

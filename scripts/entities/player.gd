@@ -298,6 +298,8 @@ func recalc() -> void:
 	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_str + 0.08 * pk("sharp") + eq("dmg_pct") / 100.0)
 	if trip_buffs.has("strength"):
 		damage *= 1.3
+	if trip_buffs.has("inspired"):
+		damage *= 1.15  # дума кобзаря біля вогнища
 	plague_immune = trip_buffs.has("antiplague")
 	attack_range = 95.0 * weapon["range"] * (1.0 + 0.08 * pk("reach"))
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
@@ -315,7 +317,7 @@ func recalc() -> void:
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0)
-	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0)
 	gold_mult = 1.0 + eq("gold") / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
 	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + eq("skill_power") / 100.0

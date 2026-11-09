@@ -13,6 +13,7 @@ const CityService := preload("res://scripts/game/city_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const HeroService := preload("res://scripts/game/hero_service.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
+const TravelService := preload("res://scripts/game/travel_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -468,7 +469,25 @@ func _go_to(id: String) -> void:
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
+		_travel_to(id)
+
+
+## Дорога до місцевості: іноді трапляється пригода, а вже потім — похід.
+func _travel_to(id: String) -> void:
+	var ev := TravelService.roll(world, player)
+	if ev.is_empty():
 		enter_location(id)
+		return
+	var dlg = DialogueScript.new()
+	dlg.setup(ev["lines"], ev["choices"])
+	dlg.finished.connect(func(choice: int):
+		hud.close_dialogue()
+		if choice >= 0 and choice < ev["choices"].size():
+			var summary := TravelService.apply(world, player, ev["choices"][choice]["outcome"])
+			if summary != "":
+				hud.show_banner(summary, UI.GOLD)
+		enter_location(id))
+	hud.show_dialogue(dlg)
 
 
 # ======================= Місто =======================
