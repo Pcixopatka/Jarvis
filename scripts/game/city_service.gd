@@ -74,6 +74,48 @@ static func sell_junk(player: Player) -> int:
 	return total
 
 
+## Чи річ із торби краща за вдягнену в той самий слот (таку масовий продаж не чіпає).
+## Для порожнього слота кращою вважається лише одна найцінніша річ торби.
+static func is_upgrade(player: Player, it: Dictionary) -> bool:
+	if it["slot"] == "weapon" and not player.can_use(it):
+		return false
+	var worn: Dictionary = player.equipment.get(it["slot"], {})
+	var price := Data.sell_price(it)
+	if not worn.is_empty():
+		return price > Data.sell_price(worn)
+	for other in player.inventory:
+		if other["slot"] == it["slot"] and int(other["uid"]) != int(it["uid"]):
+			var op := Data.sell_price(other)
+			if op > price or (op == price and int(other["uid"]) < int(it["uid"])):
+				return false
+	return true
+
+
+## Що продалося б «до рідкості включно»: вдягнене не чіпається, речі, кращі за вдягнені, — теж.
+static func bulk_candidates(player: Player, max_rarity: int) -> Array:
+	var out := []
+	for it in player.inventory:
+		if int(it["rarity"]) <= max_rarity and not is_upgrade(player, it):
+			out.append(it)
+	return out
+
+
+static func sell_up_to(player: Player, max_rarity: int) -> int:
+	var total := 0
+	for it in bulk_candidates(player, max_rarity):
+		total += sell(player, it["uid"])
+	return total
+
+
+## Продати обрані речі (за uid). Повертає виторг.
+static func sell_many(player: Player, uids: Array) -> int:
+	var total := 0
+	for uid in uids:
+		if not player.is_equipped(uid):
+			total += sell(player, uid)
+	return total
+
+
 static func hire(world, player: Player, city: String, type: String) -> bool:
 	if not can_hire(world, player, city, type):
 		return false

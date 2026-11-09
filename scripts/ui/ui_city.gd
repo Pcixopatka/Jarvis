@@ -118,12 +118,42 @@ static func _shop(game, city: String) -> Control:
 
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
-	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
+	var head := HBoxContainer.new()
+	var bl := UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false)
+	bl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(bl)
+	head.add_child(UI.button("✓ Вибрати кілька" if not game.sell_multi else "Готово", _do(game, "sell_multi"), Vector2(190, 44), 15))
+	bag.add_child(head)
 	var bg := UI.grid(3)
 	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d грн" % Data.sell_price(it)))
+		var marked: bool = game.sell_marked.has(it["uid"])
+		if game.sell_multi:
+			bg.add_child(UI.item_button(it, _do(game, "mark", it["uid"]), marked, ("✓ " if marked else "") + "+%d грн" % Data.sell_price(it)))
+		else:
+			bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d грн" % Data.sell_price(it)))
 	bag.add_child(bg)
-	bag.add_child(UI.button("Продати всі звичайні", _do(game, "sell_junk"), Vector2(300, 52), 18))
+	if game.sell_multi:
+		var total := 0
+		for uid in game.sell_marked:
+			var mi: Dictionary = p.find_item(uid)
+			if not mi.is_empty():
+				total += Data.sell_price(mi)
+		bag.add_child(UI.button("Продати вибране (%d) за %d грн" % [game.sell_marked.size(), total], _do(game, "sell_marked"), Vector2(300, 56), 17, not game.sell_marked.is_empty()))
+	else:
+		var CS = game.CityService
+		var row := HFlowContainer.new()
+		row.add_theme_constant_override("h_separation", 6)
+		row.add_theme_constant_override("v_separation", 6)
+		for r in 3:
+			var cands: Array = CS.bulk_candidates(p, r)
+			var sum := 0
+			for c in cands:
+				sum += Data.sell_price(c)
+			var name: String = ["звичайні", "до добротних", "до рідкісних"][r]
+			row.add_child(UI.button("Продати %s\n%d шт • +%d грн" % [name, cands.size(), sum], _do(game, "sell_upto", r), Vector2(150, 56), 13, not cands.is_empty()))
+		bag.add_child(row)
+		bag.add_child(UI.label("Речі, кращі за вдягнені, не продаються.", 13, UI.MUTED, false))
+		bag.add_child(UI.button(("☑ " if game.combat.autosell else "☐ ") + "Автопродаж звичайних при повній торбі", _do(game, "autosell"), Vector2(300, 44), 13))
 	h.add_child(bag)
 
 	var det := VBoxContainer.new()

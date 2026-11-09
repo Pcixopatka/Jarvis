@@ -51,6 +51,7 @@ func _run() -> void:
 	_suite_specs()
 	_suite_stones()
 	_suite_endgame()
+	_suite_bulk_sell()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
@@ -723,6 +724,27 @@ func _suite_defense_battle() -> void:
 		frames += 1
 	check(game.state == game.State.CITY and game.city_id == "chyhyryn", "з порталу — просто в урятоване місто")
 	game.hud.close_dialogue()
+	# Облога хутора: кнопка з мапи має вести в бій, а не на хутір
+	game.world.camp = {"buildings": {"kurin": 1}, "pasika_ts": 0}
+	game.world.defense["sieges"]["hutir"] = 3
+	game._go_to("hutir")
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null and game.combat.gate.camp, "обложений хутір — бій біля тину, а не екран хутора")
+	frames = 0
+	while not game.combat.defense_over and frames < 6000:
+		_bot_fight(game)
+		if game.combat.gate != null and is_instance_valid(game.combat.gate):
+			game.combat.gate.hp = game.combat.gate.max_hp
+		p.hp = p.max_hp
+		await process_frame
+		frames += 1
+	check(game.combat.defense_over and not game.DefenseService.is_besieged(game.world, "hutir"), "хутір відстояно")
+	frames = 0
+	while game.state == game.State.PLAYING and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CAMP, "з порталу — просто на хутір")
 	# Поразка: браму зламано
 	game.world.defense["sieges"]["kyiv"] = 2
 	game._go_to("kyiv")
@@ -1515,6 +1537,39 @@ func _suite_depth_battle() -> void:
 	SaveSystem.delete(TEST_SAVE)
 
 
+func _suite_bulk_sell() -> void:
+	suite("Масовий продаж")
+	var p = _new_player()
+	p.inventory.clear()
+	p.gold = 0
+	var junk_a = Data.gen_item(3, 0, "head")
+	var junk_b = Data.gen_item(3, 0, "belt")
+	var good = Data.gen_item(3, 1, "head")
+	var rare = Data.gen_item(3, 2, "boots")
+	var best_sabre = Data.gen_item(9, 0, "weapon", "sabre")  # краща за вдягнену «Стару шаблю» — лишається
+	var cheap_sabre = Data.gen_item(1, 0, "weapon", "sabre")
+	for it in [junk_a, junk_b, good, rare, best_sabre, cheap_sabre]:
+		p.add_item(it)
+	check(CityService.is_upgrade(p, best_sabre) and not CityService.is_upgrade(p, cheap_sabre), "краща за вдягнену шабля — покращення")
+	check(CityService.is_upgrade(p, good) and not CityService.is_upgrade(p, junk_a), "у порожній слот лишається лише найкраща шапка")
+	var c0: Array = CityService.bulk_candidates(p, 0)
+	check(c0.size() == 2 and (junk_a in c0) and (cheap_sabre in c0) and not (best_sabre in c0) and not (junk_b in c0), "звичайні: без кращої шаблі й без єдиного пояса")
+	var c2: Array = CityService.bulk_candidates(p, 2)
+	check(c2.size() == 2, "до рідкісних: єдині пояс, шапка й чоботи лишаються")
+	p.equip(good["uid"])
+	p.equip(rare["uid"])
+	p.equip(junk_b["uid"])
+	var got: int = CityService.sell_up_to(p, 1)
+	check(got > 0 and p.inventory.size() == 1 and (best_sabre in p.inventory), "продано до добротних; покращення лишилось")
+	var sabre_uid: int = best_sabre["uid"]
+	p.equip(sabre_uid)
+	var old_sabre_uid: int = p.inventory[0]["uid"]
+	var got2: int = CityService.sell_many(p, [sabre_uid, old_sabre_uid])
+	check(got2 > 0 and p.inventory.is_empty() and p.is_equipped(sabre_uid), "вибране продано, вдягнене — ні")
+	check(CityService.sell_up_to(p, 2) == 0, "порожня торба — нічого продавати")
+	p.free()
+
+
 func _suite_camp() -> void:
 	suite("Хутір і реклама")
 	var CampService = load("res://scripts/game/camp_service.gd")
@@ -1876,6 +1931,15 @@ func _suite_gameplay() -> void:
 	check(game.state == game.State.MAP, "мапа")
 	game.enter_location("wild_field")
 	check(game.combat.plague == game.PlagueService.level(game.world, "wild_field"), "бій знає рівень зарази місцевості")
+	game.combat.autosell = true
+	var full_bag := []
+	while not p.bag_full():
+		p.add_item(Data.gen_item(1, 1, "belt"))
+	var g_as: int = p.gold
+	game.combat.pick_item(Data.gen_item(1, 0, "head"))
+	check(p.gold > g_as and p.bag_full(), "автопродаж: мотлох при повній торбі одразу продано")
+	game.combat.autosell = false
+	p.inventory.clear()
 	game.combat.field_goal = 10
 	var frames = 0
 	while not game.combat.field_cleared and frames < 3600:

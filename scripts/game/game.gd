@@ -51,12 +51,14 @@ var char_sel_uid := -1
 var char_return := State.MAP
 var city_tab := 0
 var city_sel_uid := -1
+var sell_multi := false  # крамниця: режим вибору кількох речей
+var sell_marked := {}  # uid -> true
 var smith_msg := ""
 var smith_msg_color := Color.WHITE
 var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
 var confirm_action := ""
-var depth_sel := 1  # обрана глибина на мапі  # дія з каменем, що чекає підтвердження (друге натискання)
+var depth_sel := 1  # обрана глибина на мапі
 var camp_sel_uid := -1
 
 
@@ -69,6 +71,7 @@ func _ready() -> void:
 
 	combat = CombatScript.new()
 	add_child(combat)
+	combat.autosell = settings.get("autosell", false)
 	combat.move_input = _move_input
 	combat.block_input = func() -> bool:
 		return hud.btn_block.held or Input.is_physical_key_pressed(KEY_E) or Input.is_physical_key_pressed(KEY_B)
@@ -328,6 +331,8 @@ func enter_city(id: String) -> void:
 	hud.show_map(false)
 	hud.set_mode(false, false)
 	city_sel_uid = -1
+	sell_multi = false
+	sell_marked.clear()
 	smith_msg = ""
 	_build_city()
 	_story_event("visit", id)
@@ -632,12 +637,12 @@ func _build_map_panel() -> void:
 
 
 func _go_to(id: String) -> void:
-	if id == Camp.CAMP_ID:
+	if DefenseService.is_besieged(world, id):
+		start_defense(id)  # обложене місто чи хутір — спершу бій біля брами
+	elif id == Camp.CAMP_ID:
 		enter_camp()
 	elif id == DepthService.LOC_ID:
 		start_depth(depth_sel)
-	elif DefenseService.is_besieged(world, id):
-		start_defense(id)
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
@@ -761,6 +766,30 @@ func city_do(action: String, arg) -> void:
 			city_sel_uid = -1
 		"sell_junk":
 			CityService.sell_junk(player)
+		"sell_upto":
+			var got := CityService.sell_up_to(player, arg)
+			if got > 0:
+				Audio.play("coin", 0.0)
+				hud.show_banner("Продано: +%d грн" % got, UI.GOLD)
+			sell_marked.clear()
+		"sell_multi":
+			sell_multi = not sell_multi
+			sell_marked.clear()
+			city_sel_uid = -1
+		"mark":
+			if sell_marked.has(arg):
+				sell_marked.erase(arg)
+			else:
+				sell_marked[arg] = true
+		"sell_marked":
+			var got := CityService.sell_many(player, sell_marked.keys())
+			if got > 0:
+				Audio.play("coin", 0.0)
+				hud.show_banner("Продано: +%d грн" % got, UI.GOLD)
+			sell_marked.clear()
+		"autosell":
+			combat.autosell = not combat.autosell
+			_save_settings()
 		"sharpen":
 			_sharpen(arg)
 		"hire":
@@ -958,7 +987,7 @@ func _add_sound_toggles(refresh: Callable) -> void:
 
 
 func _save_settings() -> void:
-	SaveSystem.save_settings({"sound": Audio.sound_on, "music": Audio.music_on})
+	SaveSystem.save_settings({"sound": Audio.sound_on, "music": Audio.music_on, "autosell": combat.autosell})
 
 
 # ======================= Клавіатура й система =======================

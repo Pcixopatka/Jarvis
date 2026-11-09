@@ -56,7 +56,8 @@ var active := false
 var plague := 0  # рівень зарази поточної місцевості
 var boss_revives := 0
 var defense_loc := {}
-var custom_loc := {}  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
+var custom_loc := {}
+var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
 var wave := 0
 var wave_timer := 0.0
@@ -580,6 +581,11 @@ func add_resource(r: String, amount: int) -> void:
 
 func pick_item(item: Dictionary) -> void:
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	if autosell and int(item["rarity"]) == 0 and player.bag_full():
+		var g0 := Data.sell_price(item)
+		player.gold += g0
+		float_text(player.global_position + Vector2(0, -70), "Мотлох продано: +%d грн" % g0, col)
+		return
 	if player.add_item(item):
 		float_text(player.global_position + Vector2(0, -70), item["name"], col)
 		Audio.play("item", 0.0)
