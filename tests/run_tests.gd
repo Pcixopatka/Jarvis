@@ -725,6 +725,67 @@ func _suite_moves() -> void:
 	ch.blink_timer = 0.0
 	ch._process(0.016)
 	check(ch.global_position.distance_to(p.global_position) < 150.0, "чорт вигулькує поруч")
+	# Стани
+	var Status = load("res://scripts/game/status.gd")
+	var Elites = load("res://scripts/data/elites.gd")
+	var dummy = {"statuses": {}}
+	Status.apply(dummy, "burn", 1.0, 10.0)
+	check(is_equal_approx(Status.tick(dummy, 0.5), 5.0), "горіння б'є раз на пів секунди")
+	Status.tick(dummy, 0.6)
+	check(dummy["statuses"].is_empty(), "стан минає")
+	p.statuses.clear()
+	p.invuln = 0.0
+	p.plague_immune = false
+	p.plague_resist = 0.0
+	p.add_status("chill", 2.0)
+	check(Status.speed_mult(p) < 1.0, "холод сповільнює козака")
+	p.add_status("plague", 2.0, 0.0)
+	p.hp = p.max_hp * 0.5
+	var h0: float = p.hp
+	p.heal(20.0, false)
+	check(is_equal_approx(p.hp - h0, 10.0), "зараза вдвічі слабшить лікування")
+	p.statuses.clear()
+	p.plague_immune = true
+	p.add_status("plague", 2.0, 5.0)
+	check(p.statuses.is_empty(), "оберіг від зарази — імунітет")
+	p.plague_immune = false
+	p.add_status("bleed", 2.0, 10.0)
+	var h1: float = p.hp
+	p._process(0.6)
+	check(p.hp < h1, "кровотеча ранить козака навіть крізь невразливість")
+	p.statuses.clear()
+	p.hp = p.max_hp
+	# Удар ворога з властивістю накладає стан
+	var el = _moves_dummy(game, "upyr")
+	el.make_elite(["fiery", "vampire"])
+	check(el.elite and el.title == "Вогняний упирячий Упир" and el.base_scale > 1.0, "еліта: ім'я «%s»" % el.title)
+	el.hp = el.max_hp * 0.5
+	var eh: float = el.hp
+	el.on_hit(p)
+	check(p.statuses.has("burn") and el.hp > eh, "вогняна еліта підпалює, упиряча — п'є кров")
+	p.statuses.clear()
+	var ir = _moves_dummy(game, "vovkulaka")
+	var ir_hp: float = ir.hp
+	ir.take_damage(100.0, Vector2.ZERO)
+	var plain: float = ir_hp - ir.hp
+	ir.make_elite(["iron"])
+	ir.hp = ir.max_hp
+	ir.take_damage(100.0, Vector2.ZERO)
+	check(ir.max_hp - ir.hp < plain * 0.7, "залізна еліта тримає удар")
+	check(Elites.title("mavka", "Мавка", ["frost"]) == "Крижана Мавка", "жіночий рід: «Крижана Мавка»")
+	check(Elites.chance(1, 0) == 0.0 and Elites.chance(5, 2) > Elites.chance(5, 0), "еліт немає на старті, у заразі — частіше")
+	var ex = _moves_dummy(game, "mavka")
+	ex.make_elite(["explosive"])
+	var tele_before: int = game.combat.effects.get_child_count()
+	ex.take_damage(ex.max_hp * 10.0, Vector2.ZERO)
+	check(game.combat.effects.get_child_count() > tele_before, "вибухова еліта після смерті вибухає")
+	var cb = _moves_dummy(game, "upyr")
+	p.crit_chance = 1.0
+	p.attack_timer = 0.0
+	p.combo_timer = 0.0
+	p.attack()
+	check(cb.statuses.has("bleed"), "критичний удар лишає кровотечу")
+	p.crit_chance = 0.0
 	# Кощій встає, поки голка ціла
 	game.combat.boss_revives = 1
 	game.combat.spawn_enemy("koshchii", 16, true, p.global_position + Vector2(300, 0))

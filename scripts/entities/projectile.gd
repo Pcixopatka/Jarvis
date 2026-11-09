@@ -10,6 +10,7 @@ var radius := 9.0
 var life := 3.5
 var friendly := false  # true — куля козака: пробиває ворогів наскрізь
 var crit := false
+var source = null  # ворог, що вистрілив (щоб удар міг накласти стан)
 var _hit_ids := []
 
 
@@ -26,7 +27,8 @@ func _process(delta: float) -> void:
 	else:
 		for p in combat.allies():
 			if global_position.distance_to(p.global_position) < radius + p.radius:
-				p.take_damage(damage)
+				if p.take_damage(damage) == true and source != null and is_instance_valid(source):
+					source.on_hit(p)
 				queue_free()
 				return
 	if life <= 0.0 or not combat.arena.has_point(global_position):

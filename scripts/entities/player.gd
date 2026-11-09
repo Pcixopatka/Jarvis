@@ -6,6 +6,7 @@ signal died
 signal leveled_up(level: int)
 
 const Data := preload("res://scripts/data/data.gd")
+const Status := preload("res://scripts/game/status.gd")
 
 var combat: Combat
 
@@ -88,7 +89,8 @@ var block_held := false
 var blocking := false
 var block_time := 0.0
 var block_cd := 0.0
-var swing_reach := 0.0  # радіус кругового сліду для зарядженого удару (0 — як у Вихору)
+var swing_reach := 0.0
+var statuses := {}  # кровотеча, горіння, зараза, холод, слабкість (див. Status)  # радіус кругового сліду для зарядженого удару (0 — як у Вихору)
 var storm_timer := -1.0
 var hurt_flash := 0.0
 var walk_phase := 0.0
@@ -252,6 +254,7 @@ func from_dict(d: Dictionary) -> void:
 
 
 func revive() -> void:
+	statuses.clear()
 	alive = true
 	hp = max_hp
 	invuln = 1.0
@@ -414,6 +417,11 @@ func _process(delta: float) -> void:
 		return
 	attack_timer = maxf(0.0, attack_timer - delta)
 	combo_timer = maxf(0.0, combo_timer - delta)
+	var dot := Status.tick(self, delta)
+	if dot > 0.0:
+		_take_dot(dot)
+		if not alive:
+			return
 	block_cd = maxf(0.0, block_cd - delta)
 	_update_block(delta)
 	dodge_timer = maxf(0.0, dodge_timer - delta)
@@ -439,7 +447,7 @@ func _process(delta: float) -> void:
 		if pk("dash_strike") > 0:
 			_dash_strike()
 	else:
-		position += input_vec * speed * (0.45 if blocking else 1.0) * delta
+		position += input_vec * speed * (0.45 if blocking else 1.0) * Status.speed_mult(self) * delta
 		if input_vec.length() > 0.1:
 			moving = true
 			if swing_time <= 0.0:
@@ -544,6 +552,8 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 	if e.dead:
 		return
 	e.take_damage(dmg, kb, crit)
+	if crit and not e.dead:
+		Status.apply(e, "bleed", 3.0, dmg * 0.1)  # критичний удар лишає кровотечу
 	if lifesteal > 0.0:
 		heal(dmg * lifesteal, false)
 
@@ -586,6 +596,8 @@ func attack() -> void:
 		if dist < 1.0 or absf(facing.angle_to(to)) <= arc * 0.5:
 			var r := _roll(COMBO_MULT[step])
 			hit(e, r[0], to.normalized() * 280.0 * weapon["kb"] * (2.2 if finisher else 1.0), r[1])
+			if finisher and weapon_type == "mace" and not e.dead and not e.is_boss:
+				e.stun = maxf(e.stun, 0.6)  # завершальний удар булавою оглушує
 			hits += 1
 			crit_any = crit_any or r[1]
 	if hits > 0:
@@ -764,13 +776,14 @@ func _musket() -> bool:
 
 # ================= Отримання шкоди =================
 
-func take_damage(amount: float, source = null) -> void:
+## Повертає true, якщо удар таки поранив (не блок-парирування, не невразливість).
+func take_damage(amount: float, source = null) -> bool:
 	if not alive or invuln > 0.0:
-		return
+		return false
 	if blocking:
 		if block_time <= PARRY_WINDOW:
 			_parry(source)
-			return
+			return false
 		amount *= BLOCK_MULT
 		combat.float_text(global_position + Vector2(0, -70), "Блок", Color(0.75, 0.85, 1.0))
 	if source != null and thorns > 0.0 and not source.dead:
@@ -785,21 +798,51 @@ func take_damage(amount: float, source = null) -> void:
 	Audio.play("hurt", 0.1)
 	Events.player_hurt.emit()
 	combat.float_text(global_position + Vector2(0, -50), str(int(amount)), Color(1.0, 0.35, 0.3))
-	if hp <= 0.0:
-		if pk("unbreak") > 0 and unbreak_ready:
-			unbreak_ready = false
-			hp = 1.0
-			invuln = 1.5
-			Events.banner.emit("Незламний!", Color(1.0, 0.85, 0.3))
+	_check_death()
+	return true
+
+
+## Шкода від станів: оминає блок і невразливість, але не броню.
+func _take_dot(amount: float) -> void:
+	amount *= (1.0 - armor * 0.5)
+	hp -= amount
+	combat.float_text(global_position + Vector2(randf_range(-20, 20), -40), str(maxi(1, int(amount))), Status.tint(self))
+	_check_death()
+
+
+func _check_death() -> void:
+	if hp > 0.0:
+		return
+	if pk("unbreak") > 0 and unbreak_ready:
+		unbreak_ready = false
+		hp = 1.0
+		invuln = 1.5
+		statuses.clear()
+		Events.banner.emit("Незламний!", Color(1.0, 0.85, 0.3))
+		return
+	hp = 0.0
+	alive = false
+	queue_redraw()
+	died.emit()
+	Events.player_died.emit()
+
+
+## Накласти стан на козака (від удару ворога).
+func add_status(id: String, dur: float, dps: float = 0.0) -> void:
+	if not alive:
+		return
+	if id == "plague":
+		if plague_immune:
 			return
-		hp = 0.0
-		alive = false
-		queue_redraw()
-		died.emit()
-		Events.player_died.emit()
+		dps *= 1.0 - plague_resist
+	var fresh := not statuses.has(id)
+	Status.apply(self, id, dur, dps)
+	if fresh and _in_combat():
+		combat.float_text(global_position + Vector2(0, -95), Status.INFO[id]["name"] + "!", Status.INFO[id]["color"])
 
 
 func heal(amount: float, show: bool = true) -> void:
+	amount *= Status.heal_mult(self)
 	var before := hp
 	hp = minf(max_hp, hp + amount)
 	var gained := int(hp - before)
@@ -923,6 +966,9 @@ func _draw() -> void:
 		else:
 			var a0 := facing.angle() - attack_arc * 0.5
 			draw_arc(Vector2.ZERO, attack_range * 0.75, a0, a0 + attack_arc, 24, Color(1, 1, 1, 0.6 * alpha), 16.0)
+
+	if not statuses.is_empty():
+		Status.draw_icons(self, -76.0)
 
 	# Блок: схрещена шабля перед козаком; заряд — золоте кільце, що наповнюється
 	if blocking:

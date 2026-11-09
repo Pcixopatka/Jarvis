@@ -23,6 +23,8 @@ func _process(delta: float) -> void:
 			if a.global_position.distance_to(global_position) < radius + a.radius:
 				var resist = a.get("plague_resist")
 				a.take_damage(dps * 0.5 * (1.0 - (resist if resist != null else 0.0)), null)
+				if a.has_method("add_status"):
+					a.add_status("plague", 2.0)  # у хмарі зарази рани гояться вдвічі гірше
 	queue_redraw()
 
 

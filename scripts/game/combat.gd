@@ -13,6 +13,8 @@ const PickupScript := preload("res://scripts/entities/pickup.gd")
 const PortalScript := preload("res://scripts/entities/portal.gd")
 const FloatTextScript := preload("res://scripts/world/float_text.gd")
 const BoltScript := preload("res://scripts/world/bolt.gd")
+const Elites := preload("res://scripts/data/elites.gd")
+const TelegraphScript := preload("res://scripts/world/telegraph.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
 const GroundScript := preload("res://scripts/world/ground.gd")
@@ -165,6 +167,7 @@ func leave() -> void:
 		player.trip_buffs.clear()  # зілля «на похід» діє лише один похід
 		player.recalc()
 	active = false
+	player.statuses.clear()
 	Engine.time_scale = 1.0
 	_clear()
 	set_visible_world(false)
@@ -289,6 +292,7 @@ func _update_field(delta: float) -> void:
 			if randf() < plague_mods.get("infected", 0.0):
 				kind = "zarazhenyi"  # зараза жене своїх солдатів
 			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
+			_maybe_elite(_last_enemy())
 
 
 func _spawn_room() -> void:
@@ -299,6 +303,7 @@ func _spawn_room() -> void:
 	for i in Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER:
 		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 80, arena.position.y + arena.size.y * 0.55))
 		spawn_enemy(en[randi() % en.size()], minion_level, false, pos)
+		_maybe_elite(_last_enemy())
 	if room == int(loc["rooms"]):
 		spawn_enemy(loc["boss"], loc["level"], true, Vector2(0, arena.position.y + 220))
 		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
@@ -429,6 +434,15 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
+	elif e.elite:
+		Events.banner.emit("%s переможена!" % e.title if e.kind in Elites.FEMININE else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
+		for i in 3:
+			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 3))
+		if randf() < Elites.ITEM_CHANCE:
+			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl, 1)))
+		_resource_bundle(pos, 2)
+		if randf() < 0.3:
+			spawn_pickup(pos, "potion", 1)
 	else:
 		spawn_pickup(pos, "coin", e.xp_value)
 		if randf() < 0.05 * (1 + player.varenyk_bonus):
@@ -555,10 +569,39 @@ func _new_projectile(pos: Vector2, vel: Vector2, dmg: float) -> Projectile:
 	return p
 
 
-func spawn_projectile(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: Color, r: float) -> void:
+func spawn_projectile(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: Color, r: float, source = null) -> void:
 	var p := _new_projectile(pos, dir * spd, dmg)
 	p.color = col
 	p.radius = r
+	p.source = source
+
+
+## Вибух без джерела (напр. вибухова еліта після смерті): попередження, потім удар.
+func spawn_blast(pos: Vector2, r: float, dur: float, dmg: float, col: Color) -> void:
+	var t = TelegraphScript.new()
+	t.combat = self
+	t.shape = "circle"
+	t.position = pos
+	t.radius = r
+	t.duration = dur
+	t.damage = dmg
+	t.color = col
+	effects.add_child(t)
+
+
+## Можливо, перетворює щойно народжену нечисть на еліту.
+func _maybe_elite(e) -> void:
+	if e == null or e.is_boss:
+		return
+	if randf() < Elites.chance(int(loc.get("level", 1)), plague):
+		e.make_elite(Elites.roll_affixes(int(loc.get("level", 1))))
+		float_text(e.global_position + Vector2(0, -60), "Еліта!", Color(1.0, 0.8, 0.2))
+		Events.hint.emit("elite", "Еліта! Золоте коло — сильніший ворог із властивостями (підпалює, морозить, вибухає...). За неї — щедра здобич.")
+
+
+func _last_enemy():
+	var list := get_tree().get_nodes_in_group("enemies")
+	return list[-1] if not list.is_empty() else null
 
 
 func spawn_bullet(pos: Vector2, dir: Vector2, dmg: float, crit: bool) -> void:

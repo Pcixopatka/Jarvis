@@ -15,7 +15,7 @@ const SOURCE_RANGE := 4.0  # градусів: місцевості ближче
 const NEIGHBOR_RANGE := 3.6  # з якої відстані перекидається від сусіда
 const SPREAD_CHANCE := 0.22
 const MAX_SPREAD_PER_TRIP := 2
-const START := {"ridne_selo": 1, "wild_field": 1, "black_forest": 2, "polissia": 1, "bryansk_forest": 3, "chaklun_lair": 3}
+const START := {"ridne_selo": 1, "wild_field": 1, "black_forest": 1, "polissia": 1, "bryansk_forest": 3, "chaklun_lair": 3}
 ## Які краї очищає завершення розділу (номер розділу в Story.CHAPTERS)
 const CHAPTER_CLEANSE := {
 	1: ["wild_field", "rapids", "black_forest", "zmii_cave", "ridne_selo"],
@@ -42,7 +42,7 @@ static func set_level(world, loc: String, lvl: int) -> void:
 
 ## Як зараза змінює місцевість: множники здоров'я/шкоди ворогів і нагороди, шанс зараженого.
 static func mods(lvl: int) -> Dictionary:
-	return {"hp": 1.0 + 0.15 * lvl, "dmg": 1.0 + 0.1 * lvl, "reward": 1.0 + 0.25 * lvl,
+	return {"hp": 1.0 + 0.12 * lvl, "dmg": 1.0 + 0.08 * lvl, "reward": 1.0 + 0.25 * lvl,
 		"infected": 0.12 * lvl, "cloud_every": 0.0 if lvl < 2 else (11.0 - 3.0 * lvl)}
 
 

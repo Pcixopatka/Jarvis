@@ -341,6 +341,8 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	xp_bar.max_value = player.xp_next
 	xp_bar.value = player.xp
 	level_label.text = "Рівень %d    Гривні: %d" % [player.level, player.gold]
+	if not player.statuses.is_empty() and not combat_info.is_empty():
+		level_label.text += "    " + player.Status.describe(player)
 	var ql := []
 	if story_line != "":
 		ql.append(story_line)

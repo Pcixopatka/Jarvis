@@ -4,6 +4,12 @@ extends Node2D
 
 const Data := preload("res://scripts/data/data.gd")
 const TelegraphScript := preload("res://scripts/world/telegraph.gd")
+const Status := preload("res://scripts/game/status.gd")
+const Elites := preload("res://scripts/data/elites.gd")
+## Який стан може накласти удар цього ворога (шанс HIT_STATUS_CHANCE)
+const HIT_STATUS := {"zarazhenyi": "plague", "pishchalnyk": "plague", "bolotianyk": "plague", "chaklun": "plague", "putinoid": "plague",
+	"vovkulaka": "bleed", "upyr": "bleed", "chort": "burn", "zmii": "burn", "mavka": "chill", "koshchii": "chill"}
+const HIT_STATUS_CHANCE := 0.3
 
 var combat: Combat
 var kind := "mavka"
@@ -36,6 +42,12 @@ var windup_max := 0.35
 var ability_timer := 4.0
 var ability_step := 0
 var stun := 0.0  # приголомшений: не рухається й не б'є
+var statuses := {}  # стани (див. Status)
+var elite := false
+var affixes := []  # властивості еліти (див. Elites.AFFIXES)
+var title := ""  # ім'я еліти над головою
+var dmg_taken_mult := 1.0
+var base_scale := 1.0
 var blink_timer := 2.5  # чорт: телепорт до цілі
 var phase2 := false  # боси Кощій і Путіноїд лютішають на половині здоров'я
 
@@ -95,7 +107,8 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 		damage *= 1.5
 		xp_value *= Data.BOSS_XP_MULT
 		if k != "zmii":
-			scale = Vector2.ONE * 2.0
+			base_scale = 2.0
+			scale = Vector2.ONE * base_scale
 			radius *= 2.0
 			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
@@ -125,7 +138,7 @@ func _process(delta: float) -> void:
 		dying -= delta
 		var k := clampf(dying / 0.35, 0.0, 1.0)
 		modulate = Color(1.6, 1.6, 1.6, k)
-		scale = Vector2.ONE * (2.0 if is_boss and kind != "zmii" else 1.0) * (0.6 + 0.4 * k)
+		scale = Vector2.ONE * base_scale * (0.6 + 0.4 * k)
 		if dying <= 0.0:
 			queue_free()
 		return
@@ -135,6 +148,11 @@ func _process(delta: float) -> void:
 	contact_cd = maxf(0.0, contact_cd - delta)
 	lunge_timer = maxf(0.0, lunge_timer - delta)
 	phase += delta * 6.0
+	var dot := Status.tick(self, delta)
+	if dot > 0.0:
+		take_damage(dot, Vector2.ZERO)
+		if dead:
+			return
 	if stun > 0.0:
 		stun -= delta
 		windup = 0.0
@@ -182,7 +200,7 @@ func _process(delta: float) -> void:
 		if l < min_d and l > 0.01:
 			sep += d / l * (min_d - l) / min_d
 
-	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0) * (0.15 if windup > 0.0 else 1.0)
+	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0) * (0.15 if windup > 0.0 else 1.0) * Status.speed_mult(self)
 	var vel := desired * spd + sep * speed * 1.5 + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	position += vel * delta
@@ -195,7 +213,8 @@ func _process(delta: float) -> void:
 		if windup <= 0.0:
 			contact_cd = 1.0
 			if p != null and dist < radius + p.radius + 24.0:
-				p.take_damage(damage, self)
+				if p.take_damage(damage * Status.damage_mult(self), self) == true:
+					on_hit(p)
 	elif p != null and dist < radius + p.radius + 10.0 and contact_cd <= 0.0:
 		windup = windup_max
 
@@ -210,30 +229,33 @@ func _process(delta: float) -> void:
 			shoot_timer = shoot_cd
 			if kind == "zmii":
 				for a in [-0.35, 0.0, 0.35]:
-					combat.spawn_projectile(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.6, Color(1.0, 0.5, 0.1), 13.0)
+					_shoot(global_position + dir * 40.0, dir.rotated(a), 300.0, damage * 0.6, Color(1.0, 0.5, 0.1), 13.0)
 			elif kind == "pishchalnyk":
-				combat.spawn_projectile(global_position + dir * 24.0, dir, 420.0, damage, Color(1.0, 0.75, 0.3), 7.0)
+				_shoot(global_position + dir * 24.0, dir, 420.0, damage, Color(1.0, 0.75, 0.3), 7.0)
 			elif kind == "koshchii":
 				for a in [-0.2, 0.0, 0.2]:
-					combat.spawn_projectile(global_position, dir.rotated(a), 300.0, damage * 0.55, Color(0.9, 0.9, 0.8), 10.0)
+					_shoot(global_position, dir.rotated(a), 300.0, damage * 0.55, Color(0.9, 0.9, 0.8), 10.0)
 			elif kind == "putinoid":
 				var n := 7 if phase2 else 5
 				for i in n:
-					combat.spawn_projectile(global_position, dir.rotated((i - (n - 1) / 2.0) * 0.18), 270.0, damage * 0.5, Color(0.5, 1.0, 0.2), 11.0)
+					_shoot(global_position, dir.rotated((i - (n - 1) / 2.0) * 0.18), 270.0, damage * 0.5, Color(0.5, 1.0, 0.2), 11.0)
 			elif kind == "chaklun":
 				for a in [-0.3, -0.1, 0.1, 0.3]:
-					combat.spawn_projectile(global_position, dir.rotated(a), 250.0, damage * 0.5, Color(0.45, 0.95, 0.2), 11.0)
+					_shoot(global_position, dir.rotated(a), 250.0, damage * 0.5, Color(0.45, 0.95, 0.2), 11.0)
 			elif is_boss:
 				for a in [-0.25, 0.0, 0.25]:
-					combat.spawn_projectile(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
+					_shoot(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
 			else:
-				combat.spawn_projectile(global_position, dir, 220.0, damage, Color(0.55, 0.85, 0.2), 9.0)
+				_shoot(global_position, dir, 220.0, damage, Color(0.55, 0.85, 0.2), 9.0)
 	queue_redraw()
 
 
 func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	if dead:
 		return
+	amount *= dmg_taken_mult
+	if "iron" in affixes:
+		kb *= 0.2
 	hp -= amount
 	flash = 0.12
 	knockback += kb * (0.15 if is_boss else 1.0)
@@ -258,9 +280,51 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 		dead = true
 		dying = 0.35
 		remove_from_group("enemies")
-		if kind == "zarazhenyi":
+		if kind == "zarazhenyi" or "plague" in affixes:
 			combat.spawn_plague(global_position, damage * 0.6)
+		if "explosive" in affixes:
+			combat.spawn_blast(global_position, 140.0, 0.9, damage * 1.6, Color(1.0, 0.35, 0.1))
 		Events.enemy_killed.emit(self)
+
+
+## Снаряд цього ворога (через нього удар може накласти стан).
+func _shoot(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: Color, r: float) -> void:
+	combat.spawn_projectile(pos, dir, spd, dmg * Status.damage_mult(self), col, r, self)
+
+
+## Удар ворога влучив і поранив ціль: стани, вампіризм еліти.
+func on_hit(target) -> void:
+	if dead or not is_instance_valid(target) or not target.has_method("add_status"):
+		return
+	var st: String = HIT_STATUS.get(kind, "")
+	if st != "" and randf() < (HIT_STATUS_CHANCE * 0.5 if is_boss else HIT_STATUS_CHANCE):
+		target.add_status(st, 3.0, damage * 0.1)
+	for a in affixes:
+		var info: Dictionary = Elites.AFFIXES[a]
+		if info.has("status"):
+			target.add_status(info["status"], 3.5, damage * 0.15)
+		if a == "vampire":
+			hp = minf(max_hp, hp + damage * 0.8)
+			combat.fx.burst(global_position, Color(0.85, 0.1, 0.2), 6, 90, 4, 0.4)
+
+
+## Перетворює на еліту з властивостями.
+func make_elite(affs: Array) -> void:
+	elite = true
+	affixes = affs
+	max_hp *= Elites.HP_MULT
+	hp = max_hp
+	damage *= Elites.DMG_MULT
+	xp_value *= Elites.XP_MULT
+	base_scale = 1.25
+	scale = Vector2.ONE * base_scale
+	radius *= 1.25
+	if "swift" in affs:
+		speed *= 1.35
+		windup_max *= 0.8
+	if "iron" in affs:
+		dmg_taken_mult = 0.55
+	title = Elites.title(kind, Data.ENEMY_NAMES[kind], affs)
 
 
 # --- Особливі атаки босів ---
@@ -348,7 +412,7 @@ func _boss_ability(target) -> void:
 					global_position = best
 					combat.fx.burst(global_position, Color(0.35, 0.8, 0.15), 30, 260, 8, 0.6)
 					for i in 10:
-						combat.spawn_projectile(global_position, Vector2.from_angle(TAU * i / 10.0), 220.0, damage * 0.45, Color(0.45, 0.95, 0.2), 10.0)
+						_shoot(global_position, Vector2.from_angle(TAU * i / 10.0), 220.0, damage * 0.45, Color(0.45, 0.95, 0.2), 10.0)
 		"koshchii":
 			ability_timer = 3.8 if phase2 else 5.0
 			match ability_step % 3:
@@ -397,7 +461,7 @@ func _boss_ability(target) -> void:
 					# Кільце зарази з-під трону
 					combat.fx.burst(global_position, Color(0.35, 0.8, 0.15), 30, 260, 8, 0.6)
 					for i in 14:
-						combat.spawn_projectile(global_position, Vector2.from_angle(TAU * i / 14.0), 230.0, damage * 0.45, Color(0.45, 0.95, 0.2), 10.0)
+						_shoot(global_position, Vector2.from_angle(TAU * i / 14.0), 230.0, damage * 0.45, Color(0.45, 0.95, 0.2), 10.0)
 		_:
 			ability_timer = 6.0
 			var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
@@ -426,6 +490,8 @@ func _summon_infected() -> void:
 func _c(c: Color) -> Color:
 	if flash > 0.0:
 		return Color(1, 1, 1, c.a)
+	if not statuses.is_empty():
+		c = c.lerp(Color(Status.tint(self), c.a), 0.3)
 	if windup > 0.0:
 		return c.lerp(Color(1.0, 0.25, 0.2, c.a), 0.55 * (1.0 - windup / windup_max))
 	return c
@@ -467,6 +533,16 @@ func _draw() -> void:
 			_draw_zmii()
 	if slow_timer > 0.0:
 		draw_arc(Vector2(0, -r_draw * 0.5), r_draw * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
+	if elite:
+		var ac: Color = Elites.AFFIXES[affixes[0]]["color"]
+		draw_arc(Vector2(0, r_draw * 0.6), r_draw * 1.25, 0.0, TAU, 32, Color(1.0, 0.8, 0.2, 0.8), 2.5)
+		draw_arc(Vector2(0, r_draw * 0.6), r_draw * 1.05, 0.0, TAU, 32, Color(ac, 0.6), 2.0)
+		var font := ThemeDB.fallback_font
+		var ty := -r_draw * 2.0 - 22.0
+		draw_string_outline(font, Vector2(-130, ty), title, HORIZONTAL_ALIGNMENT_CENTER, 260, 11, 3, Color(0, 0, 0, 0.8))
+		draw_string(font, Vector2(-130, ty), title, HORIZONTAL_ALIGNMENT_CENTER, 260, 11, Color(1.0, 0.85, 0.35))
+	if not statuses.is_empty():
+		Status.draw_icons(self, -r_draw * 2.0 - 4.0)
 	if stun > 0.0:
 		# Зірочки довкола голови
 		for i in 3:
