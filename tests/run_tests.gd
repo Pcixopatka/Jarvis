@@ -178,7 +178,7 @@ func _suite_player() -> void:
 	p.skill_points = 99
 	p.perk_points = 99
 	var Classes = load("res://scripts/data/classes.gd")
-	for i in 6:
+	for i in 8:
 		for b in Classes.TREES["cossack"]:
 			for n in b["nodes"]:
 				p.learn_skill(n["id"])
@@ -196,6 +196,44 @@ func _suite_player() -> void:
 				check(p.pk(pk["id"]) == pk["max"], "перк %s на максимумі" % pk["id"])
 	check(not p.learn_skill("whirl"), "не можна перевищити максимум")
 	check(p.armor <= 0.75 and p.crit_chance <= 0.8 and p.skill_cd_mult >= 0.3, "межі показників")
+	# Дерево Загартування розраховане на 99 рівень: очок (49) менше, ніж вузлів, — є з чого вибирати
+	var perk_total := 0
+	for b in Data.PERK_BRANCHES:
+		for t in b["tiers"]:
+			for pk in t:
+				perk_total += int(pk["max"])
+	check(perk_total > Classes.BASE_LEVEL_MAX / Classes.HARDEN_EVERY, "Загартування: вузлів (%d) більше за очки на 99 рівні" % perk_total)
+	check(Data.PERK_BRANCHES.size() == 3, "Загартування: три гілки")
+	# Нові перки діють
+	var q0 = _new_player()
+	q0.perk_points = 99
+	var hp0: float = q0.max_hp
+	var dmg0: float = q0.damage
+	var pot0: int = q0.potion_max()
+	for i in 5:
+		q0.learn_perk("h_body")
+		q0.learn_perk("h_hand")
+	check(q0.pk("h_body") == 5 and q0.max_hp > hp0 * 1.19 and q0.damage > dmg0 * 1.14, "Міцна кістка й Важкий удар")
+	q0.learn_perk("h_skin")
+	q0.learn_perk("h_blood")
+	q0.learn_perk("purse")
+	q0.learn_perk("kobzar")
+	q0.learn_perk("h_gold")
+	q0.learn_perk("h_eye")
+	q0.learn_perk("h_flask")
+	check(q0.gold_mult > 1.07 and q0.potion_max() == pot0 + 1 and q0.regen >= 0.5, "Торгова жилка, баклага, Живуча кров")
+	q0.learn_perk("luck")
+	q0.learn_perk("luck")
+	check(q0.learn_perk("h_crit") and q0.crit_mult == 2.25, "Жорстокий крит")
+	for i in 3:
+		q0.learn_perk("sich")
+	check(q0.pk("sich") == 0, "Загартований закритий, поки гілка «Тіло» не набрала 8 очок")
+	for i in 3:
+		q0.learn_perk("varenyk")
+		q0.learn_perk("h_potion")
+		q0.learn_perk("h_roll")
+	var str0: int = q0.stat("str")
+	check(q0.learn_perk("sich") and q0.stat("str") == str0 + 2, "Загартований: +2 до характеристик за ранг")
 	# Спорядження
 	var helm = Data.gen_item(5, 2, "head")
 	check(p.add_item(helm), "річ у торбу")

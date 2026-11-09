@@ -113,6 +113,7 @@ var walk_phase := 0.0
 var moving := false
 var alive := true
 var unbreak_ready := true
+var berehynia_ready := true  # Берегиня (Загартування): раз на бій
 # --- Дії вмінь у часі ---
 var cry_timer := 0.0  # Бойовий клич
 var cry_bonus := 0.0
@@ -181,7 +182,7 @@ func bag_full() -> bool:
 
 
 func potion_max() -> int:
-	return Data.POTION_MAX + potion_bonus
+	return Data.POTION_MAX + potion_bonus + pk("h_flask")
 
 
 ## Додає річ у торбу. Повертає false, якщо місця немає.
@@ -369,7 +370,7 @@ func change_class(cls: String) -> bool:
 
 ## Значення характеристики з урахуванням перків і спорядження.
 func stat(id: String) -> int:
-	return stats[id] + (2 if pk("sich") > 0 else 0) + int(eq(id))
+	return stats[id] + 2 * pk("sich") + int(eq(id))
 
 
 func _bonus(id: String) -> int:
@@ -386,7 +387,7 @@ func recalc() -> void:
 
 	# Волхв із посохом черпає силу з Характерництва, усі інші — із Сили
 	var s_main := s_spi if weapon_type == "staff" else (s_agi if weapon_type == "pishchal" else s_str)
-	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + 0.08 * pk("porokh") + eq("dmg_pct") / 100.0)
+	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + 0.08 * pk("porokh") + 0.03 * pk("h_hand") + eq("dmg_pct") / 100.0)
 	if weapon_type == "mace":
 		damage *= 1.0 + 0.1 * pk("mace_master")
 	if trip_buffs.has("strength"):
@@ -400,31 +401,31 @@ func recalc() -> void:
 	elif weapon_type == "pishchal":
 		attack_range = 480.0
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
-	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + eq("aspd") / 100.0)
+	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
 	if weapon_type == "pishchal":
 		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
 	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0)
-	crit_mult = 3.0 if pk("deadly") > 0 else 2.0
+	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit")
 	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0
 
-	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist")) * float(class_info().get("hp_mult", 1.0))
+	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist") + 0.04 * pk("h_body")) * float(class_info().get("hp_mult", 1.0))
 	damage *= float(class_info().get("dmg_mult", 1.0))
-	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + eq("armor") / 100.0, 0.0, 0.75)
-	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + eq("regen")
-	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok"))
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0, 0.0, 0.75)
+	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen")
+	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll"))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0)
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0)
-	gold_mult = 1.0 + eq("gold") / 100.0
-	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
-	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + eq("skill_power") / 100.0
+	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0
+	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
+	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0
 	var ci := class_info()
 	var old_mana := max_mana
 	max_mana = (40.0 + 5.0 * s_spi) * float(ci["mana_mult"]) * (1.0 + 0.2 * pk("deep_well") + 0.1 * pk("steel_will"))
-	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow"))
+	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow") + 0.1 * pk("h_breath"))
 	if max_mana > old_mana:
 		mana += max_mana - old_mana
 	mana = minf(mana, max_mana)
@@ -683,6 +684,8 @@ func _parry(source) -> void:
 	combat.fx.ring(global_position, Color(1.0, 0.95, 0.6), 20, 120, 5, 0.3)
 	combat.float_text(global_position + Vector2(0, -70), "Парирування!" if source != null else "Відбито!", Color(1.0, 0.95, 0.5))
 	Events.parried.emit()
+	if pk("h_parry") > 0:
+		heal(max_hp * 0.04 * pk("h_parry"), false)
 	if source != null and is_instance_valid(source) and not source.dead:
 		source.windup = 0.0
 		source.stun = maxf(source.stun, 0.6 if source.is_boss else 1.5)
@@ -734,6 +737,8 @@ func _roll(mult: float) -> Array:
 func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 	if e.dead:
 		return
+	if pk("h_execute") > 0 and e.hp < e.max_hp * 0.3:
+		dmg *= 1.2
 	e.take_damage(dmg, kb, crit)
 	if zamova_timer > 0.0 and not _chaining:
 		_zamova_chain(e, dmg)
@@ -814,9 +819,10 @@ func use_potion() -> bool:
 	if not alive or potions <= 0 or potion_timer > 0.0 or (hp >= max_hp and mana >= max_mana * 0.6):
 		return false
 	potions -= 1
-	potion_timer = Data.POTION_CD
-	heal(max_hp * Data.POTION_HEAL)
-	mana = minf(max_mana, mana + max_mana * Data.POTION_HEAL)  # зілля відновлює й наснагу
+	potion_timer = Data.POTION_CD * (1.0 - 0.15 * pk("h_sip"))
+	var part := Data.POTION_HEAL * (1.0 + 0.1 * pk("h_potion"))
+	heal(max_hp * part)
+	mana = minf(max_mana, mana + max_mana * part)  # зілля відновлює й наснагу
 	return true
 
 
@@ -1601,6 +1607,14 @@ func _check_death() -> void:
 		invuln = 1.5
 		statuses.clear()
 		Events.banner.emit("Незламний!", Color(1.0, 0.85, 0.3))
+		return
+	if pk("h_berehynia") > 0 and berehynia_ready:
+		berehynia_ready = false
+		hp = 1.0
+		invuln = 1.5
+		statuses.clear()
+		heal(max_hp * 0.3, false)
+		Events.banner.emit("Берегиня вберегла!", Color(0.6, 0.9, 1.0))
 		return
 	hp = 0.0
 	alive = false

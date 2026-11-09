@@ -165,6 +165,7 @@ func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	field_cleared = false
 	spawn_timer = 1.0
 	player.unbreak_ready = true
+	player.berehynia_ready = true
 	_setup_arena(companions)
 	set_visible_world(true)
 	active = true
@@ -210,6 +211,7 @@ func enter_defense(dl: Dictionary, companions: Array) -> void:
 	defense_over = false
 	field_cleared = false
 	player.unbreak_ready = true
+	player.berehynia_ready = true
 	_setup_arena(companions)
 	set_visible_world(true)
 	active = true
@@ -540,7 +542,7 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
-		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5, {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy"), {"res": Camp.TROPHY})
 	elif e.elite:
 		Events.banner.emit("%s переможена!" % e.title if e.kind in Elites.FEMININE else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
 		for i in 3:
@@ -548,7 +550,7 @@ func _drop_loot(e: Node2D) -> void:
 		if randf() < Elites.ITEM_CHANCE:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl, 1)))
 		_resource_bundle(pos, 2)
-		spawn_pickup(pos, "res", 1, {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 1 + player.pk("h_trophy"), {"res": Camp.TROPHY})
 		if randf() < 0.3:
 			spawn_pickup(pos, "potion", 1)
 	else:
@@ -576,6 +578,8 @@ func _resource_bundle(pos: Vector2, n: int) -> void:
 
 
 func add_resource(r: String, amount: int) -> void:
+	if r != Camp.TROPHY and randf() < 0.15 * player.pk("h_eye"):
+		amount *= 2  # Зіркий погляд (Загартування)
 	player.resources[r] = int(player.resources.get(r, 0)) + amount
 
 

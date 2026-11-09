@@ -745,7 +745,7 @@ func _go_to(id: String) -> void:
 	var dist: float = a.distance_to(b)  # градуси; Січ–Київ ≈ 5.3
 	travel_to = id
 	travel_t = 0.0
-	travel_dur = clampf(1.2 + dist * 0.45, 1.5, 4.0)
+	travel_dur = clampf(1.2 + dist * 0.45, 1.5, 4.0) / (1.0 + 0.15 * player.pk("h_horse"))
 	travel_boost = 1.0
 	travel_paused = false
 	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)

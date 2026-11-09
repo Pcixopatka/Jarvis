@@ -106,8 +106,11 @@ const SPEC_ORDER := {
 const SPEC_WEAPON := {"zaporozhets": "mace", "plastun": "pike", "samopalnyk": "pishchal", "kharakternyk": "sabre",
 	"znakhar": "staff", "perun_zhrets": "staff", "molfar": "staff"}
 const SPEC_BASE := {"znakhar": "volkhv", "perun_zhrets": "volkhv", "molfar": "volkhv"}
-const PERK_ORDER := ["boots", "luck", "kobzar", "luck", "boots", "steel_will", "varenyk", "luck", "kobzar", "steel_will",
-	"boots", "purse", "sich", "kobzar", "varenyk", "steel_will", "purse"]
+const PERK_ORDER := ["h_body", "h_hand", "luck", "h_body", "h_skin", "h_fast", "h_body", "h_hand", "luck", "h_crit",
+	"kobzar", "h_blood", "h_body", "h_body", "h_potion", "h_hand", "h_fast", "steel_will", "h_hand", "h_hand",
+	"h_crit", "luck", "h_skin", "h_skin", "h_blood", "h_blood", "h_roll", "h_parry", "h_spirit", "h_spirit",
+	"h_fast", "h_breath", "h_mind", "sich", "sich", "sich", "h_spirit", "h_mind", "h_execute", "varenyk",
+	"varenyk", "h_potion", "h_potion", "h_roll", "h_parry", "kobzar", "kobzar", "purse", "purse"]
 
 
 func _build_hero(lvl: int) -> void:

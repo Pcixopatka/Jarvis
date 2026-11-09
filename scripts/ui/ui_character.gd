@@ -428,7 +428,7 @@ static func _perks(game) -> Control:
 	v.add_child(UI.label("Очки Загартування: %d   (+1 за кожні %d рівні героя). Спільне для всіх класів. Новий ярус — за кожні %d очки в гілці." % [p.perk_points, p.Classes.HARDEN_EVERY, Data.PERK_TIER_STEP], 20, UI.GOLD if p.perk_points > 0 else UI.MUTED))
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_theme_constant_override("separation", 16)
+	h.add_theme_constant_override("separation", 12)
 	v.add_child(h)
 	for bi in Data.PERK_BRANCHES.size():
 		var branch: Dictionary = Data.PERK_BRANCHES[bi]
@@ -448,8 +448,8 @@ static func _perks(game) -> Control:
 			for pk in tiers[ti]:
 				var rank: int = p.pk(pk["id"])
 				var text := "%s  %d/%d\n%s" % [pk["name"], rank, pk["max"], pk["desc"]]
-				var w := 340.0 if tiers[ti].size() == 1 else 166.0
-				row.add_child(_tree_button(text, rank, pk["max"], p.can_learn_perk(pk["id"]), not open, 14, Vector2(w, 88), _do(game, "perk", pk["id"])))
+				var w := 356.0 if tiers[ti].size() == 1 else 174.0
+				row.add_child(_tree_button(text, rank, pk["max"], p.can_learn_perk(pk["id"]), not open, 13, Vector2(w, 84), _do(game, "perk", pk["id"])))
 			col.add_child(row)
 		h.add_child(col)
 	return v
