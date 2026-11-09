@@ -77,3 +77,37 @@ const VIGIL_TTK_STEP := 0.22
 const VIGIL_HIT := 0.025
 const VIGIL_HIT_STEP := 0.007
 const VIGIL_XP := 0.3  # множник досвіду й гривень із ворогів на варті
+
+# ======================= Чумацький шлях (торгівля крамом) =======================
+## Крам: назва й базова ціна одиниці (множиться на «заможність» рівня героя).
+const TRADE_GOODS := {
+	"salt": {"name": "Сіль", "base": 12},
+	"fish": {"name": "В'ялена риба", "base": 18},
+	"honey": {"name": "Мед", "base": 28},
+	"fur": {"name": "Хутро", "base": 45},
+	"cloth": {"name": "Сукно", "base": 60},
+	"wine": {"name": "Вино", "base": 80},
+	"powder": {"name": "Порох", "base": 100},
+}
+const TRADE_ORDER := ["salt", "fish", "honey", "fur", "cloth", "wine", "powder"]
+## Ціна краму в місті відносно базової: менше 1 — тут його роблять (дешево), більше — тут він у ціні.
+const TRADE_CITIES := {
+	"sich": {"salt": 0.6, "fish": 0.7, "honey": 1.0, "fur": 1.5, "cloth": 1.5, "wine": 1.3, "powder": 1.6},
+	"chyhyryn": {"salt": 0.85, "fish": 0.6, "honey": 0.7, "fur": 1.3, "cloth": 1.3, "wine": 1.2, "powder": 1.3},
+	"poltava": {"salt": 0.9, "fish": 0.9, "honey": 0.6, "fur": 1.4, "cloth": 1.4, "wine": 1.4, "powder": 1.2},
+	"kyiv": {"salt": 1.3, "fish": 1.2, "honey": 1.1, "fur": 1.1, "cloth": 1.0, "wine": 1.3, "powder": 0.6},
+	"chernihiv": {"salt": 1.5, "fish": 1.3, "honey": 0.8, "fur": 0.6, "cloth": 1.2, "wine": 1.6, "powder": 0.9},
+	"kamianets": {"salt": 1.5, "fish": 1.5, "honey": 1.3, "fur": 1.0, "cloth": 0.8, "wine": 0.6, "powder": 1.4},
+	"lviv": {"salt": 1.7, "fish": 1.6, "honey": 1.5, "fur": 0.9, "cloth": 0.6, "wine": 0.8, "powder": 1.0},
+	"verkhovyna": {"salt": 1.9, "fish": 1.8, "honey": 1.2, "fur": 0.6, "cloth": 1.1, "wine": 1.0, "powder": 1.5},
+}
+const TRADE_WEALTH := 0.15  # ціни ростуть із рівнем героя: +15% за рівень
+const TRADE_SPREAD := 0.9  # продаєш на 10% дешевше, ніж тут купують
+const TRADE_STEP := 0.06  # кожна продана одиниця збиває ціну на 6%, куплена — піднімає
+const TRADE_STOCK := 6  # стільки одиниць кожного краму місто продасть за один торговий день
+const TRADE_PERIOD := 3  # торговий день триває стільки походів; потім ціни й запаси оновлюються
+const TRADE_CART := 6  # місткість воза; кожен рівень Складу додає TRADE_CART_SKLAD
+const TRADE_CART_SKLAD := 4
+const TRADE_AMBUSH := 0.1  # шанс нападу на валку дорогою до міста
+const TRADE_AMBUSH_UNIT := 0.02  # і ще стільки за кожну одиницю краму (не більше TRADE_AMBUSH_MAX)
+const TRADE_AMBUSH_MAX := 0.4

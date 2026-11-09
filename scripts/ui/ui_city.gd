@@ -27,6 +27,8 @@ static func build(game, city: String) -> Control:
 	]
 	if game.BountyService.unlocked(game.player):
 		pages.insert(1, ["Розшук", _bounty_tab(game, city)])
+	if game.TradeService.has_market(city) and not game.player.is_peasant():
+		pages.append(["Торг", _trade(game, city)])
 	if city == "sich":
 		pages.append(["Майдан", _maidan(game)])
 	if city == "sich" and game.PathService.choosing(game.world):
@@ -545,3 +547,50 @@ static func _bounty_row(game, b: Dictionary, mode: String) -> Control:
 		_:
 			row.add_child(UI.button("Відмовитись", _do(game, "bounty_drop", b["id"]), Vector2(170, 58), 18))
 	return row
+
+
+# ---------------- Торг: чумацький крам ----------------
+
+static func _trade(game, city: String) -> Control:
+	var TS = game.TradeService
+	var Acts = game.Acts
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Чумацький крам", 26, UI.GOLD, false))
+	v.add_child(_wrap("Купи дешево тут — продай дорого деінде. Ціни й запаси оновлюються кожні %d походи; що більше продаєш в одному місті, то дешевше беруть." % Acts.TRADE_PERIOD, 16, UI.MUTED))
+	var chance := roundi(TS.ambush_chance(w) * 100.0)
+	var head := "Віз: %d/%d   •   Гривні: %d" % [TS.cargo_count(w), TS.capacity(w), p.gold]
+	if chance > 0:
+		head += "   •   Ризик нападу в дорозі: %d%%" % chance
+	v.add_child(UI.label(head, 19, UI.TEXT, false))
+	if game.EventService.fair_city(w) == city:
+		v.add_child(UI.label("Ярмарок: крам тут беруть на чверть дорожче!", 18, UI.GOOD, false))
+	for g in Acts.TRADE_ORDER:
+		var info: Dictionary = Acts.TRADE_GOODS[g]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var tag: String = TS.tag(city, g)
+		var tag_text := "  — тут дешево" if tag == "cheap" else ("  — тут у ціні" if tag == "dear" else "")
+		var name_l := UI.label(info["name"] + tag_text, 20, UI.GOOD if tag == "cheap" else (UI.GOLD if tag == "dear" else UI.TEXT), false)
+		col.add_child(name_l)
+		var have: int = TS.cargo_n(w, g)
+		var sub := "Запас міста: %d" % TS.stock_left(w, city, g)
+		if have > 0:
+			sub += "   •   На возі: %d (брав по %d)   •   найдорожче: %s" % [have, roundi(TS.avg_cost(w, g)), Data.place_name(TS.best_city(g))]
+		col.add_child(UI.label(sub, 14, UI.MUTED, false))
+		row.add_child(col)
+		var bp: int = TS.price(w, city, g, p.level)
+		var sp: int = TS.sell_price(w, city, g, p.level)
+		var can: bool = TS.can_buy(w, p, city, g)
+		row.add_child(UI.button("Купити\n%d грн" % bp, _do(game, "trade_buy", [g, 1]), Vector2(120, 56), 15, can))
+		row.add_child(UI.button("×макс", _do(game, "trade_buy", [g, 99]), Vector2(84, 56), 15, can))
+		row.add_child(UI.button("Продати\n%d грн" % sp, _do(game, "trade_sell", [g, 1]), Vector2(120, 56), 15, have > 0))
+		row.add_child(UI.button("×усе", _do(game, "trade_sell", [g, 99]), Vector2(84, 56), 15, have > 0))
+		v.add_child(row)
+	var st: Dictionary = TS.state(w)
+	v.add_child(UI.label("Усього продано: %d од.   •   зиск за весь час: %d грн   •   Склад на хуторі збільшує віз." % [int(st["sold"]), int(st["profit"])], 15, UI.MUTED, false))
+	return v

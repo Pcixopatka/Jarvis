@@ -25,6 +25,7 @@ const EventService := preload("res://scripts/game/event_service.gd")
 const DuelService := preload("res://scripts/game/duel_service.gd")
 const BountyService := preload("res://scripts/game/bounty_service.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
+const TradeService := preload("res://scripts/game/trade_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
@@ -424,6 +425,7 @@ func enter_map() -> void:
 		news.append_array(DefenseService.tick(world, player))
 		news.append_array(EventService.tick(world, player))
 		BountyService.tick(world)
+		TradeService.tick(world)
 		mv.events = EventService.map_marks(world)
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
@@ -749,7 +751,9 @@ func _on_player_died() -> void:
 	if combat.is_defense() and not combat.defense_over:
 		combat.defense_over = true
 		var ev := EventService.battle_at(world, combat.loc["target"])
-		if not ev.is_empty():
+		if combat.loc.get("ambush", false):
+			hud.show_banner(TradeService.lose_half(world), UI.BAD)
+		elif not ev.is_empty():
 			hud.show_banner(EventService.lose(world, player, ev), UI.BAD)
 		else:
 			hud.show_banner(DefenseService.lose(world, player, combat.loc["target"]), UI.BAD)
@@ -861,7 +865,10 @@ func _arrive(id: String) -> void:
 	elif Acts.SPOTS.has(id):
 		enter_spot(id)
 	elif Data.CITIES.has(id):
-		enter_city(id)
+		if id != world.last_city and TradeService.should_ambush(world):
+			start_ambush(id)  # на валку з крамом напали дорогою
+		else:
+			enter_city(id)
 	else:
 		enter_location(id)
 
@@ -1073,7 +1080,22 @@ func start_event(ev: Dictionary) -> void:
 		"wounded": "Поранений лежить посередині. Три хвилі — і він урятований."}[ev["kind"]])
 
 
+## Напад на валку з крамом дорогою до міста: відбий три хвилі й вбережи вози.
+func start_ambush(city: String) -> void:
+	combat.defense_loc = TradeService.battle_loc(world, city, player)
+	enter_location("defense")
+	map_here = city
+	hud.show_banner("На валку напали!\nВбережи вози з крамом", UI.BAD)
+	hint("ambush", "Нечисть напала на твою валку. Відбий три хвилі: якщо вози розіб'ють, половина краму пропаде.")
+
+
 func _on_defense_won(target: String) -> void:
+	if combat.loc.get("ambush", false):
+		defense_target = target  # з порталу — у місто, куди їхав
+		hud.show_banner("Напад відбито! Крам цілий.", UI.GOLD)
+		_record("ambush")
+		save_game()
+		return
 	var ev := EventService.battle_at(world, target)
 	if not ev.is_empty():
 		defense_target = ""  # з порталу — на мапу
@@ -1090,6 +1112,13 @@ func _on_defense_won(target: String) -> void:
 
 
 func _on_defense_lost(target: String) -> void:
+	if combat.loc.get("ambush", false):
+		hud.show_banner(TradeService.lose_half(world), UI.BAD)
+		save_game()
+		await get_tree().create_timer(2.5).timeout
+		if state == State.PLAYING and combat.is_defense():
+			enter_city(target)
+		return
 	var ev := EventService.battle_at(world, target)
 	if not ev.is_empty():
 		hud.show_banner(EventService.lose(world, player, ev), UI.BAD)
@@ -1231,6 +1260,17 @@ func city_do(action: String, arg) -> void:
 		"duel_start":
 			start_duel()
 			return
+		"trade_buy":
+			if TradeService.buy(world, player, city_id, arg[0], arg[1]) > 0:
+				Audio.play("coin", 0.0)
+		"trade_sell":
+			var tr := TradeService.sell(world, player, city_id, arg[0], arg[1])
+			if int(tr["n"]) > 0:
+				Audio.play("coin", 0.0)
+				hud.show_banner("Продано %d од.: +%d грн (зиск %s%d)" % [tr["n"], tr["gold"], "+" if int(tr["profit"]) >= 0 else "", tr["profit"]], UI.GOLD if int(tr["profit"]) >= 0 else UI.BAD)
+				if int(tr["profit"]) > 0:
+					_record("trade_profit", int(tr["profit"]))
+				_record("trade_sold", int(tr["n"]))
 		"bounty_take":
 			BountyService.take(world, city_id, arg, player)
 		"bounty_drop":

@@ -71,6 +71,8 @@ func _run() -> void:
 	await _suite_bounty_battle()
 	_suite_vigil()
 	await _suite_vigil_battle()
+	_suite_trade()
+	await _suite_trade_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -1885,6 +1887,155 @@ func _suite_event_battles() -> void:
 		if c.get_script() == game.combat.PickupScript and c.kind == "item" and int(c.item["rarity"]) >= 2:
 			chest = true
 	check(chest and not ES.has_treasure(game.world, "wild_field"), "сторож убитий — скриня з рідкісною річчю, мітка знята")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_trade() -> void:
+	suite("Чумацький шлях: торгівля")
+	var TS = load("res://scripts/game/trade_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	for g in Acts.TRADE_ORDER:
+		var lo := 9.0
+		var hi := 0.0
+		for c in Acts.TRADE_CITIES:
+			check(Acts.TRADE_CITIES[c].has(g), "%s: у місті %s є ціна" % [g, c])
+			lo = minf(lo, Acts.TRADE_CITIES[c][g])
+			hi = maxf(hi, Acts.TRADE_CITIES[c][g])
+		check(Acts.TRADE_GOODS.has(g) and lo <= 0.7 and hi >= 1.5, "%s: є де купити дешево й продати дорого" % g)
+	for c in Acts.TRADE_CITIES:
+		check(Data.CITIES.has(c) and TS.has_market(c), "%s — торгове місто" % c)
+	check(not TS.has_market("kapyshche"), "на Капищі крамом не торгують")
+	var w = WorldState.new()
+	var p = _new_player()
+	p.level = 10
+	p.gold = 100000
+	check(TS.capacity(w) == Acts.TRADE_CART and TS.cargo_count(w) == 0 and TS.ambush_chance(w) == 0.0 and not TS.should_ambush(w, 0.0), "порожній віз: 6 місць, нападів нема")
+	w.camp = {"buildings": {"sklad": 2}, "pasika_ts": 0}
+	check(TS.capacity(w) == Acts.TRADE_CART + 2 * Acts.TRADE_CART_SKLAD, "Склад збільшує віз")
+	var cheap: int = TS.price(w, "sich", "salt", 10)
+	var dear: int = TS.price(w, "lviv", "salt", 10)
+	check(dear > cheap * 2 and TS.price(w, "sich", "salt", 10) == cheap, "сіль на Січі дешева, у Львові дорога; ціна стала протягом дня")
+	check(TS.price(w, "sich", "salt", 30) > cheap * 2, "ціни ростуть із рівнем героя")
+	check(TS.sell_price(w, "sich", "salt", 10) < cheap, "продаж дешевший за купівлю в тому самому місті")
+	var fl: float = TS.fluct(w, "kyiv", "wine")
+	check(fl >= 0.88 and fl <= 1.12, "денне коливання в межах 12%")
+	check(TS.tag("sich", "salt") == "cheap" and TS.tag("lviv", "salt") == "dear" and TS.tag("poltava", "fish") == "" and TS.best_city("salt") == "verkhovyna" and TS.best_city("salt", "verkhovyna") == "lviv", "позначки «дешево/у ціні» і найкраще місто збуту")
+	# Купівля
+	var g0: int = p.gold
+	check(TS.buy(w, p, "sich", "salt", 1) == 1 and p.gold == g0 - cheap and TS.cargo_n(w, "salt") == 1, "купив одиницю солі")
+	check(TS.price(w, "sich", "salt", 10) > cheap, "після купівлі ціна підросла")
+	check(TS.buy(w, p, "sich", "salt", 99) == Acts.TRADE_STOCK - 1 and TS.stock_left(w, "sich", "salt") == 0 and not TS.can_buy(w, p, "sich", "salt"), "запас міста — 6 одиниць на торговий день")
+	var avg: float = TS.avg_cost(w, "salt")
+	check(avg > cheap and avg < cheap * 1.4, "середня ціна купленого трохи вища за першу")
+	check(TS.buy(w, p, "sich", "fish", 99) == Acts.TRADE_STOCK and TS.buy(w, p, "sich", "honey", 99) == 2 and TS.free_space(w) == 0, "віз повний — більше не влазить")
+	check(absf(TS.ambush_chance(w) - minf(Acts.TRADE_AMBUSH_MAX, Acts.TRADE_AMBUSH + Acts.TRADE_AMBUSH_UNIT * 14)) < 0.001 and TS.should_ambush(w, 0.0) and not TS.should_ambush(w, 0.99), "повний віз — напад імовірніший")
+	var poor = _new_player()
+	poor.gold = 0
+	check(not TS.can_buy(w, poor, "kyiv", "powder"), "без гривень не купиш")
+	# Продаж
+	var before: int = p.gold
+	var sp1: int = TS.sell_price(w, "lviv", "salt", 10)
+	var r1: Dictionary = TS.sell(w, p, "lviv", "salt", 1)
+	check(r1["n"] == 1 and r1["gold"] == sp1 and p.gold == before + sp1 and r1["profit"] > 0 and TS.cargo_n(w, "salt") == 5, "продав одиницю у Львові з зиском")
+	check(TS.sell_price(w, "lviv", "salt", 10) < sp1, "після продажу ціна впала")
+	var r2: Dictionary = TS.sell(w, p, "lviv", "salt", 99)
+	check(r2["n"] == 5 and TS.cargo_n(w, "salt") == 0 and not TS.state(w)["cargo"].has("salt") and r2["profit"] > 0, "продав решту — крам зник із воза")
+	check(int(TS.state(w)["sold"]) == 6 and int(TS.state(w)["profit"]) == int(r1["profit"]) + int(r2["profit"]), "лічильники торгівлі")
+	check(TS.sell(w, p, "lviv", "salt", 1)["n"] == 0 and TS.sell(w, p, "kapyshche", "fish", 1)["n"] == 0, "нема краму чи ринку — нема продажу")
+	# Купив і продав у тому самому місті — у збитку
+	var w2 = WorldState.new()
+	var p2 = _new_player()
+	p2.level = 10
+	p2.gold = 10000
+	TS.buy(w2, p2, "kyiv", "powder", 3)
+	TS.sell(w2, p2, "kyiv", "powder", 3)
+	check(p2.gold < 10000, "перепродати в тому самому місті — у збитку")
+	# Новий торговий день
+	check(TS.stock_left(w, "sich", "salt") == 0, "запас солі на Січі вичерпано")
+	for i in Acts.TRADE_PERIOD:
+		TS.tick(w)
+	check(TS.stock_left(w, "sich", "salt") == Acts.TRADE_STOCK and TS.state(w)["moves"].is_empty(), "новий торговий день: запаси й ціни відновились")
+	# Ярмарок
+	var norm: int = TS.sell_price(w, "kyiv", "fish", 10)
+	w.events = {"fair": {"city": "kyiv", "left": 2}}
+	check(TS.sell_price(w, "kyiv", "fish", 10) > norm, "на ярмарку крам беруть дорожче")
+	w.events = {}
+	# Напад: половина краму
+	var n_before: int = TS.cargo_count(w)
+	var lm: String = TS.lose_half(w)
+	check(TS.cargo_count(w) == n_before - (3 + 1) and "половину" in lm, "вози розбито — половина краму пропала (риба 6→3, мед 2→1)")
+	var bl: Dictionary = TS.battle_loc(w, "kyiv", p)
+	check(bl["type"] == "defense" and bl["variant"] == "caravan" and bl["ambush"] and bl["waves"] == 3 and bl["target"] == "kyiv", "бій за вози")
+	var w3 = WorldState.new()
+	w3.from_dict(w.to_dict())
+	check(TS.cargo_count(w3) == TS.cargo_count(w) and int(w3.trade["sold"]) == 6, "віз і лічильники зберігаються")
+
+
+func _suite_trade_game() -> void:
+	suite("Чумацький шлях: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	p.change_class("cossack")
+	p.level = 12
+	p.stats["str"] = 80
+	p.stats["vit"] = 80
+	p.skills = {"whirl": 3}
+	p.recalc()
+	p.hp = p.max_hp
+	p.gold = 5000
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "ambush": true, "defense": true, "stones": true}
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	var TS = game.TradeService
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.city_do("trade_buy", ["salt", 4])
+	check(TS.cargo_n(game.world, "salt") == 4 and p.gold < 5000, "купив сіль на Січі через вкладку «Торг»")
+	# Напад дорогою: відбити
+	game.start_ambush("kyiv")
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate.variant == "caravan" and game.combat.loc["ambush"], "напад на валку: бій біля возів")
+	var frames := 0
+	while not game.combat.defense_over and frames < 7000:
+		_bot_fight(game)
+		game.combat.gate.hp = game.combat.gate.max_hp
+		p.hp = p.max_hp
+		await process_frame
+		frames += 1
+	check(game.combat.defense_over and TS.cargo_n(game.world, "salt") == 4 and int(game.world.stats.get("ambush", 0)) == 1, "напад відбито, крам цілий (кадрів: %d)" % frames)
+	frames = 0
+	while game.state == game.State.PLAYING and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and game.city_id == "kyiv", "з порталу — у місто, куди їхав")
+	game.hud.close_dialogue()
+	var g1: int = p.gold
+	game.city_do("trade_sell", ["salt", 2])
+	check(p.gold > g1 and TS.cargo_n(game.world, "salt") == 2 and int(game.world.stats.get("trade_sold", 0)) == 2 and int(game.world.stats.get("trade_profit", 0)) > 0, "продав у Києві із зиском; лічильники")
+	# Напад програно: вози розбито
+	game.start_ambush("chernihiv")
+	await _frames(2)
+	game.combat.gate.take_damage(1.0e9)
+	await _frames(3)
+	check(game.combat.defense_over and TS.cargo_n(game.world, "salt") == 1, "вози розбито — половина краму пропала")
+	frames = 0
+	while game.state != game.State.CITY and frames < 400:
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and game.city_id == "chernihiv", "після розгрому все одно дістався міста")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
