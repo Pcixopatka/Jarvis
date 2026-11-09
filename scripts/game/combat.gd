@@ -24,6 +24,8 @@ const ZoneScript := preload("res://scripts/world/zone.gd")
 const SpectatorScript := preload("res://scripts/world/spectator.gd")
 const CampfireScript := preload("res://scripts/world/campfire.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
+const TrailService := preload("res://scripts/game/trail_service.gd")
+const TrailScript := preload("res://scripts/world/trail.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
@@ -74,6 +76,7 @@ var _vigil_fire = null
 var _vigil_day := Color.WHITE
 var torch_base := 1.15  # сила смолоскипа: у печері яскравий, уночі надворі — слабший, щоб не засвічувати
 var spectators: Array = []  # глядачі на майдані
+var trail = null  # стежка слідів у місцевості (TrailScript) або null
 var _duel_hp := 0.0  # здоров'я суперника минулого кадру (щоб глядачі раділи влучанням)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
@@ -205,7 +208,11 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	elif loc["type"] == "dungeon":
 		_spawn_room()
 	else:
-		Events.banner.emit(loc["name"] + ("\nНічний похід" if loc.get("night", false) else ""), Color(1, 0.92, 0.7))
+		var with_trail: bool = is_field() and TrailService.should_spawn(player, randf())
+		var trail_note := ""
+		if with_trail:
+			trail_note = "\nОко пластуна: бачиш усю стежку слідів" if player.job == "plastun" else "\nНеподалік чиїсь сліди"
+		Events.banner.emit(loc["name"] + ("\nНічний похід" if loc.get("night", false) else "") + trail_note, Color(1, 0.92, 0.7))
 		var en: Array = loc["enemies"]
 		for i in 5:
 			var pos: Vector2 = player.position + Vector2.from_angle(randf() * TAU) * randf_range(450, 650)
@@ -224,6 +231,78 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 			g.hp = g.max_hp
 			g.treasure_guard = true
 			g.title = "Сторож скарбу: " + g.title
+		if with_trail:
+			spawn_trail(TrailService.roll_kind(randf()))
+
+
+## Покласти на арену стежку слідів, що веде до знахідки (cache | den | beast).
+func spawn_trail(kind: String, seed_value: int = -1) -> void:
+	_drop_trail()
+	var rng := RandomNumberGenerator.new()
+	if seed_value >= 0:
+		rng.seed = seed_value
+	else:
+		rng.randomize()
+	trail = TrailScript.new().setup(TrailService.make_points(player.position, arena, rng), kind, player.job == "plastun")
+	ground.add_child(trail)
+
+
+func _drop_trail() -> void:
+	if trail != null and is_instance_valid(trail):
+		trail.queue_free()
+	trail = null
+
+
+## Герой дійшов до чергової точки стежки: відкриваємо наступний відтинок або знахідку.
+func _update_trail() -> void:
+	if trail == null or not is_instance_valid(trail) or trail.found:
+		return
+	if player.global_position.distance_to(trail.target()) > Acts.TRAIL_REACH:
+		return
+	if trail.step < trail.points.size() - 1:
+		trail.step += 1
+		Audio.play("coin", 0.2, -8.0)
+		if trail.step == 1:
+			Events.banner.emit("Свіжі сліди! Іди по них", Color(1.0, 0.9, 0.55))
+			Events.hint.emit("trail", "Сліди на землі ведуть до знахідки: схованки, лігва нечисті чи пораненого звіра. Іди від відбитка до відбитка, стежка відкривається частинами.")
+		return
+	trail.found = true
+	_trail_found()
+
+
+func _trail_found() -> void:
+	var pos: Vector2 = trail.points[-1]
+	var lvl := int(loc.get("level", 1))
+	var info: Dictionary = Acts.TRAIL_KINDS[trail.kind]
+	match str(trail.kind):
+		"cache":
+			Events.banner.emit(info["text"], Color(1.0, 0.85, 0.35))
+			for i in 5:
+				spawn_pickup(pos, "coin", TrailService.cache_gold(lvl) / 5)
+			_resource_bundle(pos, 3)
+			if randf() < Acts.TRAIL_CACHE_ITEM:
+				spawn_pickup(pos, "item", 0, Data.gen_item(lvl, Data.roll_rarity(lvl, 1)))
+		"den":
+			Events.banner.emit(info["text"], Color(1.0, 0.5, 0.4))
+			var en: Array = loc["enemies"]
+			for i in 3:
+				spawn_enemy(en[randi() % en.size()], lvl, false, _clamp_in(pos + Vector2.from_angle(i * TAU / 3.0 + 0.5) * 150.0, 60.0))
+			var boss = _last_enemy()
+			if boss != null and not boss.elite:
+				boss.make_elite(Elites.roll_affixes(lvl))
+			# Купа здобичі посеред лігва
+			spawn_pickup(pos, "item", 0, Data.gen_item(lvl, maxi(1, Data.roll_rarity(lvl, 1))))
+			for i in 4:
+				spawn_pickup(pos, "coin", TrailService.cache_gold(lvl) / 8)
+			shake(6.0)
+		"beast":
+			var meat := TrailService.beast_meat(randf())
+			player.resources["meat"] = int(player.resources.get("meat", 0)) + meat
+			Events.banner.emit("%s\n+%d м'яса для казана" % [info["text"], meat], Color(1.0, 0.85, 0.35))
+			float_text(pos + Vector2(0, -40), "+%d м'яса" % meat, Color(1.0, 0.8, 0.6))
+			spawn_pickup(pos, "res", 1 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+	Audio.play("quest", 0.0)
+	Events.trail_found.emit(str(trail.kind))
 
 
 ## Ціль із дошки розшуку: іменована еліта десь у місцевості, сама йде на козака.
@@ -638,6 +717,7 @@ func _start_pos() -> Vector2:
 
 func _clear() -> void:
 	spectators.clear()
+	_drop_trail()
 	for c in entities.get_children():
 		if c == player:
 			continue
@@ -738,6 +818,7 @@ func _update_plague(delta: float) -> void:
 
 func _update_field(delta: float) -> void:
 	_update_plague(delta)
+	_update_trail()
 	if field_cleared:
 		_check_exit_portal()
 		return

@@ -77,6 +77,8 @@ func _run() -> void:
 	await _suite_outdoor_game()
 	_suite_tavern()
 	await _suite_tavern_game()
+	_suite_trail()
+	await _suite_trail_battle()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -2415,6 +2417,125 @@ func _suite_tavern_game() -> void:
 	game.enter_map()
 	await _frames(2)
 	check(not TS.state(game.world)["rumor_done"], "після походу знову можна слухати чутки")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_trail() -> void:
+	suite("Сліди: правила")
+	var TS = load("res://scripts/game/trail_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var p = _new_player()
+	check(TS.should_spawn(p, 0.1) and not TS.should_spawn(p, 0.9), "стежка трапляється не в кожному поході")
+	p.job = "plastun"
+	check(TS.chance(p) > Acts.TRAIL_CHANCE and TS.should_spawn(p, 0.5), "пластун натрапляє на сліди частіше")
+	check(TS.roll_kind(0.0) == "cache" and TS.roll_kind(0.5) == "den" and TS.roll_kind(0.99) == "beast", "три знахідки за вагою")
+	var seen := {}
+	for i in 200:
+		seen[TS.roll_kind(randf())] = true
+	check(seen.size() == Acts.TRAIL_KINDS.size(), "трапляються всі знахідки")
+	var arena := Rect2(-1400, -1400, 2800, 2800)
+	var ok := true
+	var min_seg := 1.0e9
+	for sd in 40:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = sd
+		# і з центру, і з кута арени
+		var start := Vector2.ZERO if sd % 2 == 0 else Vector2(1300, -1300)
+		var pts: Array = TS.make_points(start, arena, rng)
+		ok = ok and pts.size() == Acts.TRAIL_POINTS
+		for i in pts.size():
+			ok = ok and arena.grow(-100.0).has_point(pts[i])
+			if i > 0:
+				min_seg = minf(min_seg, pts[i].distance_to(pts[i - 1]))
+	check(ok, "точки стежки завжди в межах арени")
+	check(min_seg > 150.0, "відтинки не вироджуються навіть у кутку (найкоротший: %.0f)" % min_seg)
+	check(TS.cache_gold(10) > TS.cache_gold(1) and TS.beast_meat(0.0) == 2 and TS.beast_meat(0.99) == 4, "нагороди: гривні ростуть із рівнем, м'яса 2–4")
+
+
+func _suite_trail_battle() -> void:
+	suite("Сліди: у бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true}
+	p.change_class("cossack")
+	p.level = 10
+	p.stats["str"] = 80
+	p.stats["vit"] = 80
+	p.recalc()
+	p.hp = p.max_hp
+	for kind in ["cache", "beast", "den"]:
+		game.enter_location("wild_field")
+		await _frames(3)
+		c.spawn_trail(kind, 5)
+		await _frames(2)
+		var tr = c.trail
+		check(tr != null and tr.points.size() == game.Acts.TRAIL_POINTS and tr.step == 0 and tr.revealed() == 0 and not tr.found, "%s: стежка лежить, видно лише початок" % kind)
+		var gold0: int = p.gold
+		var meat0: int = int(p.resources.get("meat", 0))
+		var enemies0: int = c.alive_enemy_count()
+		var trails0: int = int(game.world.stats.get("trail", 0))
+		for i in tr.points.size():
+			p.global_position = tr.points[i]
+			p.invuln = 5.0
+			await _frames(2)
+			if i < tr.points.size() - 1:
+				check(tr.step == i + 1 and not tr.found, "%s: точка %d відкрила наступний відтинок" % [kind, i + 1])
+		check(tr.found and int(game.world.stats.get("trail", 0)) == trails0 + 1 and int(game.world.stats.get("trail:" + kind, 0)) >= 1, "%s: знахідку знайдено, лічильник росте" % kind)
+		match kind:
+			"cache":
+				p.invuln = 5.0
+				await _frames(90)
+				check(p.gold > gold0, "схованка: гривні підібрано (+%d)" % (p.gold - gold0))
+			"beast":
+				var got: int = int(p.resources.get("meat", 0)) - meat0
+				check(got >= 2 and got <= 4, "поранений вепр: +%d м'яса" % got)
+			"den":
+				var elite := 0
+				for e in c.get_tree().get_nodes_in_group("enemies"):
+					if e.elite:
+						elite += 1
+				check(c.alive_enemy_count() >= enemies0 + 3 and elite >= 1, "лігво: зграя з елітою вискочила")
+		# Удруге та сама стежка нічого не дає
+		p.global_position = tr.points[-1]
+		await _frames(2)
+		check(int(game.world.stats.get("trail", 0)) == trails0 + 1, "%s: знахідка одноразова" % kind)
+		game.enter_map()
+		await _frames(2)
+		check(c.trail == null, "після виходу стежку прибрано")
+	# Пластун бачить усю стежку
+	p.job = "plastun"
+	game.enter_location("wild_field")
+	await _frames(3)
+	c.spawn_trail("cache", 9)
+	await _frames(2)
+	check(c.trail.show_all and c.trail.revealed() == game.Acts.TRAIL_POINTS - 1 and c.trail.step == 0, "пластун бачить усю стежку одразу, але пройти її треба")
+	p.job = "cossack"
+	# У печері слідів нема
+	game.enter_map()
+	await _frames(2)
+	var saw := false
+	for i in 12:
+		game.enter_location("zmii_cave")
+		await _frames(2)
+		if c.is_dungeon() and c.trail != null:
+			saw = true
+		game.enter_map()
+		await _frames(1)
+	check(not saw, "у печерах стежок не буває")
+	check(game.account.challenges["ach"].has("trail_1"), "досягнення «Слідопит»")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

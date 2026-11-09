@@ -144,6 +144,9 @@ func _ready() -> void:
 			hud.show_banner(m, UI.GOLD)
 			_record("bounty_kill"))
 	Events.parried.connect(func(): _record("parry"))
+	Events.trail_found.connect(func(kind: String):
+		_record("trail")
+		_record("trail:" + kind))
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
 		if player.can_change_class() and player.is_peasant():

@@ -32,3 +32,4 @@ signal vigil_minute(minute: int)  # варта: вистояно ще одну �
 # Повідомлення для інтерфейсу
 signal banner(text: String, color: Color)
 signal hint(id: String, text: String)
+signal trail_found(kind)  # стежку слідів пройдено: cache | den | beast
