@@ -86,6 +86,7 @@ var attack_timer := 0.0
 var dodge_timer := 0.0
 var skill_timers := {"whirl": 0.0, "lightning": 0.0, "musket": 0.0}
 var dodge_time_left := 0.0
+var push := Vector2.ZERO  # поштовх від босів Башти (посвист, ланцюг)
 var dodge_dir := Vector2.RIGHT
 var dodge_hits := []
 var invuln := 0.0
@@ -590,6 +591,9 @@ func _process(delta: float) -> void:
 			_dash_strike()
 	else:
 		position += input_vec * speed * (0.45 if blocking else 1.0) * Status.speed_mult(self) * (1.2 if cry_timer > 0.0 else 1.0) * (1.4 if wolf_timer > 0.0 else 1.0) * delta
+		if push.length() > 1.0:
+			position += push * delta
+			push = push.move_toward(Vector2.ZERO, 2600.0 * delta)
 		if input_vec.length() > 0.1:
 			moving = true
 			if swing_time <= 0.0:
@@ -726,6 +730,7 @@ func _roll(mult: float) -> Array:
 		mult *= 1.2 + 0.2 * sk("tin")
 		tin_timer = 0.0
 	var dmg := damage * mult * (crit_mult if crit else 1.0) * randf_range(0.9, 1.1) * (1.0 + (cry_bonus if cry_timer > 0.0 else 0.0))
+	dmg *= Status.damage_mult(self)
 	if wolf_timer > 0.0:
 		dmg *= 1.25
 	if pk("nevhamovnyi") > 0:

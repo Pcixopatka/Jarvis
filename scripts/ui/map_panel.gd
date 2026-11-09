@@ -39,6 +39,41 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 	return v
 
 
+## Панель Башти Кощія: вибір поверху й підйом.
+static func build_tower(world, player, sel: int, on_change: Callable, on_go: Callable) -> Control:
+	var TS = load("res://scripts/game/tower_service.gd")
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Башта Кощія", 28, UI.GOLD, false))
+	if not TS.unlocked(player):
+		v.add_child(_wrapped("Кістяна башта посеред Москви: безкінечний підйом. Відкриється з %d-го рівня героя." % TS.OPEN_LEVEL, 18, UI.MUTED))
+		return v
+	var s: Dictionary = TS.state(world)
+	var mx: int = s["max"]
+	sel = clampi(sel, 1, mx)
+	var L: Dictionary = TS.loc_for(sel)
+	v.add_child(_wrapped("Поверх — хвилі нечисті й міні-бос; кожен п'ятий — супербос. Пройшов — відкривається вищий. Рекорд: поверх %d." % s["best"], 17, UI.TEXT))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(UI.button("◂", func(): on_change.call(sel - 1), Vector2(70, 60), 26, sel > 1))
+	var lab := UI.label("Поверх %d" % sel, 24, UI.GOLD)
+	lab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(lab)
+	row.add_child(UI.button("▸", func(): on_change.call(sel + 1), Vector2(70, 60), 26, sel < mx))
+	v.add_child(row)
+	var danger: bool = int(L["level"]) > player.level + 2
+	v.add_child(UI.label("Рівень %d  •  хвиль: %d" % [L["level"], L["waves"]], 19, UI.BAD if danger else UI.TEXT, false))
+	var names := []
+	for e in L["enemies"]:
+		names.append(Data.ENEMY_NAMES[e])
+	var boss_line: String = ("СУПЕРБОС: %s." % Data.BOSS_NAMES[L["boss"]]) if L["boss"] != "" else ("%s: %s." % [L["mini_title"], Data.ENEMY_NAMES[L["mini"]]])
+	v.add_child(_wrapped("Нечисть: %s. %s Еліти: +%d%%." % [", ".join(names), boss_line, roundi(L["elite_bonus"] * 100)], 16, UI.MUTED))
+	if sel > int(s["best"]):
+		v.add_child(_wrapped("Перше проходження: +%d грн%s." % [TS.first_gold(sel), ", легендарна річ і камінь долі" if TS.is_super(sel) else " і річ"], 16, UI.GOLD))
+	v.add_child(UI.button("Піднятися", func(): on_go.call(sel), Vector2(350, 70), 26))
+	return v
+
+
 ## Попередження про облогу (true — місто/хутір в облозі).
 static func _siege_note(v: Control, world, sel: String) -> bool:
 	var DS = load("res://scripts/game/defense_service.gd")

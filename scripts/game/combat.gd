@@ -57,6 +57,7 @@ var plague := 0  # рівень зарази поточної місцевост
 var boss_revives := 0
 var defense_loc := {}
 var custom_loc := {}
+var tower_boss_spawned := false  # Башта: міні-бос/супербос поверху вже на арені
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
 var wave := 0
@@ -169,7 +170,9 @@ func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	_setup_arena(companions)
 	set_visible_world(true)
 	active = true
-	if loc["type"] == "dungeon":
+	if is_tower():
+		_start_floor()
+	elif loc["type"] == "dungeon":
 		_spawn_room()
 	else:
 		Events.banner.emit(loc["name"], Color(1, 0.92, 0.7))
@@ -196,6 +199,103 @@ func is_dungeon() -> bool:
 
 func is_defense() -> bool:
 	return loc.get("type", "") == "defense"
+
+
+func is_tower() -> bool:
+	return loc.get("type", "") == "tower"
+
+
+# ======================= Башта Кощія =======================
+
+## Поверх: хвилі нечисті, потім міні-бос (іменована еліта) або супербос. Пройшов — портал «Вище».
+func _start_floor() -> void:
+	wave = 0
+	wave_timer = 1.5
+	tower_boss_spawned = false
+	field_cleared = false
+	room_cleared = false
+	Events.banner.emit("%s\n%s" % [loc["name"], ("Супербос: %s!" % Data.BOSS_NAMES[loc["boss"]]) if loc["boss"] != "" else "Хвиль: %d, далі — %s" % [loc["waves"], loc["mini_title"].to_lower()]], Color(1.0, 0.7, 0.4))
+
+
+## Наступний поверх без виходу з бою (поранені побратими лишаються пораненими).
+func next_floor(new_loc: Dictionary) -> void:
+	collect_all()
+	custom_loc = new_loc
+	loc = new_loc
+	var comps := _companion_states()
+	room += 1
+	_setup_arena(comps)
+	_start_floor()
+
+
+func _update_tower(delta: float) -> void:
+	_update_plague(delta)
+	if field_cleared:
+		if _player_in_portal():
+			Audio.play("portal", 0.0)
+			Events.tower_next.emit(int(loc["floor"]))
+		return
+	if alive_enemy_count() > 0:
+		return
+	if tower_boss_spawned:
+		_tower_complete()
+		return
+	wave_timer -= delta
+	if wave_timer > 0.0:
+		return
+	if wave < int(loc["waves"]):
+		wave += 1
+		wave_timer = 2.5
+		_spawn_tower_wave()
+	else:
+		tower_boss_spawned = true
+		_spawn_tower_boss()
+
+
+func _spawn_tower_wave() -> void:
+	var en: Array = loc["enemies"]
+	var lvl := int(loc["level"])
+	Events.banner.emit("Хвиля %d/%d" % [wave, loc["waves"]], Color(1.0, 0.7, 0.4))
+	for i in 5 + wave + int(loc["floor"]) / 6:
+		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 80, arena.position.y + arena.size.y * 0.5))
+		spawn_enemy(en[randi() % en.size()], maxi(1, lvl - 1), false, pos)
+		_maybe_elite(_last_enemy())
+
+
+func _spawn_tower_boss() -> void:
+	var lvl := int(loc["level"])
+	var pos := Vector2(0, arena.position.y + 220)
+	if loc["boss"] != "":
+		spawn_enemy(loc["boss"], lvl, true, pos)
+		var b = _last_enemy()
+		b.max_hp *= float(loc.get("boss_hp_mult", 1.0))
+		b.hp = b.max_hp
+		b.damage *= float(loc.get("boss_dmg_mult", 1.0))
+		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
+		return
+	# Міні-бос: іменована еліта з 2–3 властивостями, удвічі міцніша за звичайну
+	spawn_enemy(loc["mini"], lvl, false, pos)
+	var e = _last_enemy()
+	var keys := Elites.AFFIXES.keys()
+	keys.shuffle()
+	e.make_elite(keys.slice(0, int(loc["mini_affixes"])))
+	e.max_hp *= 3.0
+	e.hp = e.max_hp
+	e.damage *= 1.25
+	e.xp_value *= 3
+	e.base_scale = 1.5
+	e.scale = Vector2.ONE * e.base_scale
+	e.title = "%s: %s" % [loc["mini_title"], e.title]
+	Audio.play("roar", 0.05, -4.0)
+	shake(8.0)
+	Events.banner.emit("%s!" % e.title, Color(1.0, 0.75, 0.3))
+
+
+func _tower_complete() -> void:
+	field_cleared = true
+	Audio.play("quest", 0.0)
+	_spawn_portal("Вище", Vector2(0, arena.position.y + 110))
+	Events.tower_cleared.emit(int(loc["floor"]))
 
 
 # ======================= Оборона =======================
@@ -284,8 +384,8 @@ func on_gate_destroyed() -> void:
 
 func _setup_arena(companions: Array) -> void:
 	_clear()
-	arena = DUNGEON_ARENA if is_dungeon() else (DEFENSE_ARENA if is_defense() else FIELD_ARENA)
-	player.position = Vector2(0, arena.end.y - 160) if is_dungeon() else (Vector2(0, arena.end.y - 330) if is_defense() else Vector2.ZERO)
+	arena = DUNGEON_ARENA if (is_dungeon() or is_tower()) else (DEFENSE_ARENA if is_defense() else FIELD_ARENA)
+	player.position = Vector2(0, arena.end.y - 160) if (is_dungeon() or is_tower()) else (Vector2(0, arena.end.y - 330) if is_defense() else Vector2.ZERO)
 	ground.setup(arena, loc["biome"], hash(loc_id) + room * 31)
 	_setup_atmosphere(loc["biome"])
 	camera.limit_left = int(arena.position.x - 120)
@@ -364,7 +464,9 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2.ZERO
 	player.attack_held = attack_input.call()
 	player.block_held = block_input.call()
-	if is_dungeon():
+	if is_tower():
+		_update_tower(delta)
+	elif is_dungeon():
 		_update_dungeon()
 	elif is_defense():
 		_update_defense(delta)
@@ -522,7 +624,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 		hitstop(0.15)
 	else:
 		hitstop(0.03)
-	if not is_dungeon() and not is_defense() and not field_cleared:
+	if not is_dungeon() and not is_defense() and not is_tower() and not field_cleared:
 		field_kills += 1
 		if field_kills >= field_goal:
 			_field_complete()

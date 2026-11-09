@@ -97,6 +97,21 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			radius = 52.0; max_hp = 60.0; speed = 70.0; damage = 17.0; xp_value = 6
 			color = Color(0.2, 0.55, 0.25)
 			ranged = true; shoot_cd = 2.6
+		# ---- Супербоси Башти ----
+		"baba_yaha":
+			radius = 22.0; max_hp = 150.0; speed = 125.0; damage = 24.0; xp_value = 9
+			color = Color(0.35, 0.28, 0.22)
+			ranged = true; keep_distance = 280.0; shoot_cd = 2.3
+		"solovei":
+			radius = 23.0; max_hp = 170.0; speed = 110.0; damage = 22.0; xp_value = 9
+			color = Color(0.3, 0.35, 0.2)
+			ranged = true; keep_distance = 240.0; shoot_cd = 3.0
+		"lykho":
+			radius = 30.0; max_hp = 260.0; speed = 80.0; damage = 32.0; xp_value = 10
+			color = Color(0.25, 0.22, 0.28)
+		"oprychnyk":
+			radius = 24.0; max_hp = 200.0; speed = 120.0; damage = 28.0; xp_value = 10
+			color = Color(0.12, 0.1, 0.1)
 	r_draw = radius
 	max_hp *= s
 	damage *= 1.0 + Data.ENEMY_DMG_PER_LEVEL * (lvl - 1)
@@ -252,6 +267,15 @@ func _process(delta: float) -> void:
 			elif kind == "chaklun":
 				for a in [-0.3, -0.1, 0.1, 0.3]:
 					_shoot(global_position, dir.rotated(a), 250.0, damage * 0.5, Color(0.45, 0.95, 0.2), 11.0)
+			elif kind == "baba_yaha":
+				# Жар із печі: дві повільні вогняні кулі, що підпалюють
+				for a in [-0.15, 0.15]:
+					_shoot(global_position, dir.rotated(a), 240.0, damage * 0.55, Color(1.0, 0.5, 0.1), 12.0)
+			elif kind == "solovei":
+				# Посвист: кільце звукових хвиль
+				var n := 10 if phase2 else 8
+				for i in n:
+					_shoot(global_position, Vector2.from_angle(TAU * i / n + phase * 0.1), 200.0, damage * 0.4, Color(0.8, 0.9, 1.0), 9.0)
 			elif is_boss:
 				for a in [-0.25, 0.0, 0.25]:
 					_shoot(global_position, dir.rotated(a), 280.0, damage * 0.6, Color(0.55, 0.85, 0.2), 12.0)
@@ -278,7 +302,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
 		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
-	if is_boss and kind in ["koshchii", "putinoid"] and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
+	if is_boss and kind in ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk"] and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
 		_enter_phase2()
 	if hp <= 0.0 and kind == "koshchii" and combat.boss_revives > 0:
 		# Кощієва смерть схована в голці — поки голка ціла, він встає знову
@@ -475,6 +499,105 @@ func _boss_ability(target) -> void:
 					combat.fx.burst(global_position, Color(0.35, 0.8, 0.15), 30, 260, 8, 0.6)
 					for i in 14:
 						_shoot(global_position, Vector2.from_angle(TAU * i / 14.0), 230.0, damage * 0.45, Color(0.45, 0.95, 0.2), 10.0)
+		"baba_yaha":
+			# Баба Яга: літає в ступі — переліт у місце цілі з ударом; мітла мете конусом; кличе мавок
+			ability_timer = 3.6 if phase2 else 4.8
+			match ability_step % 3:
+				1:
+					var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
+					t.radius = 130.0
+					t.color = Color(1.0, 0.6, 0.2)
+					t.on_fire = func():
+						if not dead:
+							combat.fx.burst(global_position, Color(0.5, 0.4, 0.3), 20, 200, 7, 0.5)
+							global_position = t.global_position
+							combat.fx.burst(global_position, Color(1.0, 0.6, 0.2), 24, 240, 8, 0.5)
+					Audio.play("roar", 0.1, -5.0)
+				2:
+					var t = _telegraph("cone", global_position, 0.9, damage * 1.1)
+					t.dir = to_t
+					t.length = 380.0
+					t.half_angle = 0.6
+					t.color = Color(0.8, 0.6, 0.3)
+					t.on_fire = func():
+						if is_instance_valid(target) and "push" in target and target.global_position.distance_to(global_position) < 380.0:
+							target.push = to_t * 900.0
+				0:
+					Audio.play("roar", 0.05, -4.0)
+					_summon(["mavka", "upyr"], 3 if phase2 else 2)
+		"solovei":
+			# Соловей-розбійник: посвист валить хвилею від себе; свистить з дуба — стріли дощем
+			ability_timer = 3.4 if phase2 else 5.0
+			match ability_step % 2:
+				1:
+					var t = _telegraph("circle", global_position, 1.2, damage * 1.5)
+					t.radius = 260.0
+					t.color = Color(0.75, 0.9, 1.0)
+					t.on_fire = func():
+						if is_instance_valid(target) and "push" in target and target.global_position.distance_to(global_position) < 320.0:
+							target.push = (target.global_position - global_position).normalized() * 1400.0
+					Audio.play("roar", 0.3, -3.0)
+				0:
+					for i in (6 if phase2 else 4):
+						var pos: Vector2 = target.global_position + (Vector2.ZERO if i == 0 else Vector2.from_angle(randf() * TAU) * 160.0)
+						var t = _telegraph("circle", pos, 1.0, damage * 0.9)
+						t.radius = 80.0
+						t.color = Color(0.6, 0.75, 0.5)
+		"lykho":
+			# Лихо Однооке: топче землю — хвиля по всій залі з вузькими безпечними щілинами; хапає й кидає; злий погляд
+			ability_timer = 4.0 if phase2 else 5.5
+			match ability_step % 3:
+				1:
+					Audio.play("boom", 0.0, -4.0)
+					for a in [-0.9, -0.3, 0.3, 0.9]:
+						var t = _telegraph("line", global_position, 1.2, damage * 1.4)
+						t.dir = to_t.rotated(a)
+						t.length = 700.0
+						t.width = 120.0
+						t.color = Color(0.55, 0.4, 0.6)
+				2:
+					var t = _telegraph("circle", target.global_position, 0.8, damage * 1.2)
+					t.radius = 110.0
+					t.color = Color(0.7, 0.3, 0.6)
+					t.on_fire = func():
+						if is_instance_valid(target) and "push" in target and target.global_position.distance_to(t.global_position) < 110.0:
+							target.push = (target.global_position - global_position).normalized() * 1600.0
+				0:
+					# Злий погляд: накладає слабкість на всіх у смузі
+					var t = _telegraph("cone", global_position, 1.0, damage * 0.8)
+					t.dir = to_t
+					t.length = 520.0
+					t.half_angle = 0.35
+					t.color = Color(0.9, 0.2, 0.3)
+					t.on_fire = func():
+						if is_instance_valid(target) and target.global_position.distance_to(global_position) < 520.0 and "statuses" in target:
+							Status.apply(target, "weak", 5.0)
+		"oprychnyk":
+			# Опричник-кат: мітла та собача голова — ривок із сокирою; кидає ланцюг, що тягне до себе; кличе опричників
+			ability_timer = 3.2 if phase2 else 4.5
+			match ability_step % 3:
+				1:
+					var t = _telegraph("line", global_position, 0.7, damage * 1.5)
+					t.dir = to_t
+					t.length = 460.0
+					t.width = 100.0
+					t.color = Color(0.9, 0.2, 0.15)
+					t.on_fire = func():
+						if not dead:
+							knockback = to_t * 1800.0
+				2:
+					# Ланцюг: тягне ціль до ката
+					var t = _telegraph("line", global_position, 0.9, damage * 0.7)
+					t.dir = to_t
+					t.length = 560.0
+					t.width = 60.0
+					t.color = Color(0.7, 0.7, 0.75)
+					t.on_fire = func():
+						if is_instance_valid(target) and "push" in target and target.global_position.distance_to(global_position) < 560.0:
+							target.push = (global_position - target.global_position).normalized() * 1500.0
+				0:
+					Audio.play("roar", 0.15, -4.0)
+					_summon(["zarazhenyi", "pishchalnyk"], 3 if phase2 else 2)
 		_:
 			ability_timer = 6.0
 			var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
@@ -488,9 +611,17 @@ func _enter_phase2() -> void:
 	ability_timer = 1.0
 	combat.shake(12.0)
 	Audio.play("roar", 0.0)
-	var text := "Путіноїд скидає личину!" if kind == "putinoid" else "Кощій лютує!"
+	var text: String = {"putinoid": "Путіноїд скидає личину!", "koshchii": "Кощій лютує!", "baba_yaha": "Яга розпалює піч!",
+		"solovei": "Соловей свище на повну!", "lykho": "Лихо шаленіє!", "oprychnyk": "Кат спускає псів!"}.get(kind, "Бос лютує!")
 	Events.banner.emit(text, Color(1.0, 0.4, 0.3))
-	_summon(["zarazhenyi", "pishchalnyk"] if kind == "koshchii" else ["zarazhenyi", "pishchalnyk", "chort"], 3)
+	var kinds: Array = ["zarazhenyi", "pishchalnyk", "chort"]
+	match kind:
+		"koshchii": kinds = ["zarazhenyi", "pishchalnyk"]
+		"baba_yaha": kinds = ["mavka", "upyr"]
+		"solovei": kinds = ["vovkulaka", "chort"]
+		"lykho": kinds = ["upyr", "bolotianyk"]
+		"oprychnyk": kinds = ["zarazhenyi", "pishchalnyk", "vovkulaka"]
+	_summon(kinds, 3)
 
 
 func _summon_infected() -> void:
@@ -546,6 +677,14 @@ func _draw() -> void:
 			_draw_chaklun(side)
 		"zmii":
 			_draw_zmii()
+		"baba_yaha":
+			_draw_baba_yaha(side)
+		"solovei":
+			_draw_solovei(side)
+		"lykho":
+			_draw_lykho(side)
+		"oprychnyk":
+			_draw_oprychnyk(side)
 	if slow_timer > 0.0:
 		draw_arc(Vector2(0, -r_draw * 0.5), r_draw * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
 	if elite:
@@ -795,3 +934,102 @@ func _draw_zmii() -> void:
 	var w := 160.0
 	draw_rect(Rect2(-w / 2, -radius - 70, w, 9), Color(0, 0, 0, 0.7))
 	draw_rect(Rect2(-w / 2, -radius - 70, w * hp / max_hp, 9), Color(0.95, 0.35, 0.1))
+
+
+# --- Супербоси Башти ---
+
+func _draw_baba_yaha(side: float) -> void:
+	var bob := sin(phase * 1.2) * 3.0
+	# Ступа
+	draw_colored_polygon(PackedVector2Array([Vector2(-16, -4 + bob), Vector2(16, -4 + bob), Vector2(12, 18 + bob), Vector2(-12, 18 + bob)]), _c(Color(0.45, 0.3, 0.15)))
+	draw_line(Vector2(-16, -4 + bob), Vector2(16, -4 + bob), _c(Color(0.6, 0.45, 0.25)), 3.0)
+	# Мітла позаду
+	draw_line(Vector2(-side * 10, 2 + bob), Vector2(-side * 30, -14 + bob), _c(Color(0.55, 0.4, 0.2)), 2.5)
+	for i in 4:
+		draw_line(Vector2(-side * 30, -14 + bob), Vector2(-side * (36 + i * 2), -8 + i * 3 + bob), _c(Color(0.8, 0.65, 0.3)), 1.5)
+	# Баба: хустка, гачкуватий ніс
+	draw_colored_polygon(PackedVector2Array([Vector2(-9, -6 + bob), Vector2(9, -6 + bob), Vector2(7, -22 + bob), Vector2(-7, -22 + bob)]), _c(color))
+	var h := Vector2(0, -30 + bob)
+	draw_circle(h, 9.0, _c(Color(0.8, 0.7, 0.55)))
+	draw_colored_polygon(PackedVector2Array([h + Vector2(-10, -2), h + Vector2(10, -2), h + Vector2(0, -14)]), _c(Color(0.6, 0.15, 0.15)))
+	draw_line(h + Vector2(side * 4, 0), h + Vector2(side * 11, 4), _c(Color(0.75, 0.6, 0.45)), 2.5)
+	draw_circle(h + Vector2(side * 3, -2), 1.8, Color(1.0, 0.6, 0.1))
+	# Іскри з печі
+	for i in 3:
+		var a := phase * 0.9 + i * TAU / 3.0
+		draw_circle(Vector2(cos(a) * 20.0, 8 + sin(a) * 6.0 + bob), 2.2, Color(1.0, 0.55, 0.1, 0.8))
+	if phase2:
+		draw_arc(Vector2(0, -8), 32.0, 0.0, TAU, 24, Color(1.0, 0.5, 0.1, 0.5), 2.0)
+
+
+func _draw_solovei(side: float) -> void:
+	var sway := sin(phase * 0.7) * 2.0
+	# Дубова гілка-пень під ним
+	draw_rect(Rect2(Vector2(-14, 8), Vector2(28, 10)), _c(Color(0.35, 0.25, 0.12)))
+	# Пір'яний плащ
+	draw_colored_polygon(PackedVector2Array([Vector2(-14, -16), Vector2(14, -16), Vector2(20 + sway, 10), Vector2(-20 + sway, 10)]), _c(color))
+	for i in 5:
+		var x := -16.0 + i * 8.0
+		draw_line(Vector2(x, -10), Vector2(x + sway, 10), _c(Color(0.2, 0.25, 0.12)), 1.5)
+	# Голова: шапка, борода, роздуті щоки
+	var h := Vector2(0, -26)
+	draw_circle(h, 10.0, _c(Color(0.85, 0.7, 0.55)))
+	draw_circle(h + Vector2(side * 6, 2), 4.0, _c(Color(0.95, 0.75, 0.6)))
+	draw_colored_polygon(PackedVector2Array([h + Vector2(-6, 6), h + Vector2(6, 6), h + Vector2(0, 16)]), _c(Color(0.3, 0.2, 0.1)))
+	draw_colored_polygon(PackedVector2Array([h + Vector2(-11, -4), h + Vector2(11, -4), h + Vector2(8, -14), h + Vector2(-8, -14)]), _c(Color(0.4, 0.3, 0.2)))
+	draw_circle(h + Vector2(side * 3, -1), 1.8, Color(0.1, 0.1, 0.1))
+	# Звукові хвилі з рота
+	for i in 3:
+		var r := 8.0 + fmod(phase * 6.0 + i * 7.0, 20.0)
+		draw_arc(h + Vector2(side * 10, 3), r, -0.6 if side > 0 else PI - 0.6, 0.6 if side > 0 else PI + 0.6, 8, Color(0.8, 0.9, 1.0, 0.7 - r / 40.0), 1.5)
+	if phase2:
+		draw_arc(Vector2(0, -8), 32.0, 0.0, TAU, 24, Color(0.7, 0.85, 1.0, 0.5), 2.0)
+
+
+func _draw_lykho(side: float) -> void:
+	var sway := sin(phase * 0.5) * 2.5
+	# Велетенське кощаве тіло в лахмітті
+	draw_colored_polygon(PackedVector2Array([Vector2(-18, -28), Vector2(18, -28), Vector2(26 + sway, 20), Vector2(-26 + sway, 20)]), _c(color))
+	for i in 4:
+		var x := -20.0 + i * 13.0
+		draw_line(Vector2(x, 20), Vector2(x + sway, 28), _c(Color(0.18, 0.15, 0.2)), 2.0)
+	# Довгі руки до землі
+	draw_line(Vector2(-18, -20), Vector2(-34 + sway, 22), _c(Color(0.5, 0.45, 0.5)), 4.0)
+	draw_line(Vector2(18, -20), Vector2(34 + sway, 22), _c(Color(0.5, 0.45, 0.5)), 4.0)
+	# Голова з одним оком
+	var h := Vector2(0, -40)
+	draw_circle(h, 14.0, _c(Color(0.55, 0.5, 0.55)))
+	draw_circle(h + Vector2(side * 2, -1), 6.5, Color(0.95, 0.95, 0.9))
+	var glow := 0.7 + 0.3 * sin(phase * 2.5)
+	draw_circle(h + Vector2(side * 3, -1), 3.5, Color(0.9, 0.15, 0.2, glow))
+	draw_circle(h + Vector2(side * 3, -1), 1.5, Color(0.05, 0.0, 0.0))
+	# Зуби
+	for i in 4:
+		draw_colored_polygon(PackedVector2Array([h + Vector2(-7 + i * 4, 8), h + Vector2(-4 + i * 4, 8), h + Vector2(-5.5 + i * 4, 13)]), Color(0.9, 0.9, 0.8))
+	if phase2:
+		draw_arc(Vector2(0, -12), 40.0, 0.0, TAU, 24, Color(0.9, 0.2, 0.3, 0.5), 2.0)
+
+
+func _draw_oprychnyk(side: float) -> void:
+	var sway := sin(phase * 0.8) * 1.5
+	# Чорний каптан
+	draw_colored_polygon(PackedVector2Array([Vector2(-11, -18), Vector2(11, -18), Vector2(16 + sway, 16), Vector2(-16 + sway, 16)]), _c(color))
+	draw_line(Vector2(0, -18), Vector2(0 + sway, 16), _c(Color(0.5, 0.1, 0.1)), 1.5)
+	# Сокира в руці
+	var hand := Vector2(side * 14, -6)
+	draw_line(Vector2(side * 6, -14), hand, _c(Color(0.3, 0.25, 0.25)), 2.5)
+	draw_line(hand + Vector2(0, 14), hand + Vector2(0, -24), _c(Color(0.45, 0.3, 0.15)), 2.5)
+	draw_colored_polygon(PackedVector2Array([hand + Vector2(0, -24), hand + Vector2(side * 14, -20), hand + Vector2(side * 12, -8), hand + Vector2(0, -12)]), _c(Color(0.7, 0.72, 0.78)))
+	# Собача голова на сідлі (на поясі) й мітла
+	draw_circle(Vector2(-side * 12, 6), 4.5, _c(Color(0.4, 0.3, 0.2)))
+	draw_line(Vector2(-side * 8, -4), Vector2(-side * 22, 20), _c(Color(0.5, 0.4, 0.2)), 2.0)
+	# Голова в гостроверхій шапці, червоні очі
+	var h := Vector2(0, -28)
+	draw_circle(h, 9.0, _c(Color(0.75, 0.65, 0.55)))
+	draw_colored_polygon(PackedVector2Array([h + Vector2(-10, -3), h + Vector2(10, -3), h + Vector2(0, -22)]), _c(Color(0.1, 0.08, 0.08)))
+	draw_rect(Rect2(h + Vector2(-10, -5), Vector2(20, 4)), _c(Color(0.5, 0.1, 0.1)))
+	draw_circle(h + Vector2(-3, 0), 1.6, Color(0.95, 0.1, 0.1))
+	draw_circle(h + Vector2(3, 0), 1.6, Color(0.95, 0.1, 0.1))
+	draw_line(h + Vector2(-4, 6), h + Vector2(4, 6), Color(0.3, 0.2, 0.2), 1.5)
+	if phase2:
+		draw_arc(Vector2(0, -10), 30.0, 0.0, TAU, 24, Color(1.0, 0.25, 0.2, 0.5), 2.0)

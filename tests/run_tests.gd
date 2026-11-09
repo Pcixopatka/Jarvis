@@ -61,6 +61,8 @@ func _run() -> void:
 	await _suite_spec_battle()
 	await _suite_volkhv_specs()
 	await _suite_depth_battle()
+	_suite_tower()
+	await _suite_tower_battle()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -1630,6 +1632,128 @@ func _suite_depth_battle() -> void:
 		frames += 1
 	check(game.DepthService.state(game.world)["best"] == 1 and game.DepthService.state(game.world)["max"] == 2, "глибину 1 пройдено (кадрів: %d)" % frames)
 	check(int(game.world.stats.get("depth", 0)) == 1, "рекорд глибини записано")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_tower() -> void:
+	suite("Башта Кощія: правила")
+	var TS = load("res://scripts/game/tower_service.gd")
+	var w = WorldState.new()
+	var p = _new_player()
+	p.level = 14
+	check(not TS.unlocked(p), "до 15 рівня Башта закрита")
+	p.level = 15
+	check(TS.unlocked(p) and TS.state(w)["max"] == 1 and TS.state(w)["best"] == 0, "з 15 рівня — перший поверх")
+	check(Data.LOCATIONS.has(TS.LOC_ID) and Data.LOCATIONS[TS.LOC_ID].get("endless", false) and Data.LOCATIONS[TS.LOC_ID].get("tower", false), "Башта на мапі")
+	var a = TS.loc_for(1)
+	var b = TS.loc_for(30)
+	check(a["type"] == "tower" and a["level"] == 15 and a["boss"] == "" and a["mini"] != "" and a["waves"] == 2, "поверх 1: рівень 15, хвилі, міні-бос")
+	check(b["level"] > a["level"] and b["waves"] > a["waves"] and b["hp_mult"] > a["hp_mult"] and b["mini_affixes"] == 3, "вище — сильніше")
+	check(TS.loc_for(200)["level"] == 99, "рівень поверху не вище 99")
+	check(TS.loc_for(7)["enemies"] == TS.loc_for(7)["enemies"], "той самий поверх — ті самі вороги")
+	var supers := {}
+	for f in [5, 10, 15, 20]:
+		var L: Dictionary = TS.loc_for(f)
+		check(TS.is_super(f) and L["boss"] != "" and Data.BOSS_NAMES.has(L["boss"]) and Data.ENEMY_NAMES.has(L["boss"]), "поверх %d: супербос %s" % [f, L["boss"]])
+		supers[L["boss"]] = true
+	check(supers.size() == 4, "чотири різні супербоси за перші 20 поверхів")
+	check(not TS.is_super(4) and TS.loc_for(4)["boss"] == "", "4-й поверх — міні-бос")
+	for f in [1, 2, 3, 6, 11]:
+		var L: Dictionary = TS.loc_for(f)
+		check(not (L["mini"] in L["enemies"]) and Data.ENEMY_NAMES.has(L["mini"]), "поверх %d: міні-бос не з рядової нечисті" % f)
+	var r = TS.on_clear(w, 1)
+	check(TS.state(w)["max"] == 2 and TS.state(w)["best"] == 1 and r[1] == true and "2" in r[0], "пройшов 1-й — відкрито 2-й, перше проходження")
+	r = TS.on_clear(w, 1)
+	check(TS.state(w)["max"] == 2 and r[1] == false, "повторне проходження — не перше й не відкриває зайвого")
+	check(TS.first_gold(5) > TS.first_gold(4) * 2, "за супербоса нагорода більша")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.tower["best"] == 1, "Башта зберігається")
+	var wq = WorldState.new()
+	var bad := false
+	for i in 200:
+		if wq._gen_quest("lviv")["loc"] == TS.LOC_ID or wq._gen_quest("chernihiv")["loc"] == TS.LOC_ID:
+			bad = true
+	check(not bad, "доручення не ведуть у Башту")
+	# Нові боси: є назви й камінь за першу перемогу
+	var SS = load("res://scripts/game/stone_service.gd")
+	for k in TS.SUPER_BOSSES:
+		check(SS.FIRST_KILL.has(k) and Data.ENEMY_PLURAL.has(k), "%s: камінь за першу перемогу" % k)
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	var w3 = WorldState.new()
+	var p3 = _new_player()
+	CS.record(w3, p3, "tower", 7)
+	CS.record(w3, p3, "tower", 3)
+	check(int(w3.stats.get("tower", 0)) == 7 and CS.state(w3)["ach"].has("tower_5"), "рекорд Башти — найвищий поверх, досягнення є")
+	CS.now_override = 0
+
+
+func _suite_tower_battle() -> void:
+	suite("Башта Кощія: підйом")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "block": true, "elite": true, "boss": true, "item": true, "map": true, "tower": true, "stones": true, "cleared": true}
+	var p = game.player
+	game.start_tower(1)
+	await _frames(2)
+	check(game.state != game.State.PLAYING, "до 15 рівня не пускає")
+	p.change_class("cossack")
+	p.level = 40
+	p.stats["str"] = 200
+	p.stats["vit"] = 200
+	p.skills = {"whirl": 5}
+	p.recalc()
+	p.hp = p.max_hp
+	var gold0: int = p.gold
+	game.start_tower(1)
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.loc.get("floor", 0) == 1 and game.combat.is_tower(), "підйом на поверх 1")
+	var frames := 0
+	var saw_mini := false
+	while game.state == game.State.PLAYING and game.TowerService.state(game.world)["best"] < 1 and frames < 9000:
+		_bot_fight(game)
+		p.hp = p.max_hp
+		if game.combat.tower_boss_spawned and not saw_mini:
+			for e in game.combat.get_tree().get_nodes_in_group("enemies"):
+				if e.elite and ":" in e.title:
+					saw_mini = true
+		await process_frame
+		frames += 1
+	check(game.TowerService.state(game.world)["best"] == 1 and game.TowerService.state(game.world)["max"] == 2, "поверх 1 пройдено (кадрів: %d)" % frames)
+	check(saw_mini, "міні-бос з іменем був на арені")
+	check(p.gold > gold0 and int(game.world.stats.get("tower", 0)) == 1, "нагорода за перше проходження й рекорд")
+	# Портал «Вище» веде на другий поверх без виходу на мапу
+	frames = 0
+	while game.combat.loc.get("floor", 0) == 1 and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.PLAYING and game.combat.loc.get("floor", 0) == 2 and game.combat.is_tower(), "портал «Вище» — поверх 2 без виходу (кадрів: %d)" % frames)
+	# Супербоси створюються й б'ються без помилок
+	for k in game.TowerService.SUPER_BOSSES:
+		game.combat.spawn_enemy(k, 20, true, Vector2(0, -300))
+		var e = game.combat._last_enemy()
+		check(e.is_boss and e.kind == k and e.max_hp > 1000.0, "супербос %s на арені" % k)
+		e._boss_ability(p)
+		e._boss_ability(p)
+		e._boss_ability(p)
+		e.take_damage(e.max_hp * 0.6, Vector2.ZERO)
+		check(e.phase2, "%s лютує на половині здоров'я" % k)
+		e.take_damage(e.max_hp, Vector2.ZERO)
+	await _frames(3)
+	check(p.alive, "герой живий після здібностей босів")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

@@ -362,7 +362,14 @@ func _draw() -> void:
 		_markers[id] = c
 		var danger: bool = L["level"] > hero_level + 2
 		var r := 14.0 * k
-		if L["type"] == "dungeon":
+		if L.get("tower", false):
+			# Башта: кістяна вежа із зубцями
+			draw_circle(c, r, Color(0.12, 0.08, 0.06))
+			draw_rect(Rect2(c + Vector2(-6, -12) * k, Vector2(12, 22) * k), Color(0.85, 0.82, 0.7))
+			for dx in [-6, -1, 4]:
+				draw_rect(Rect2(c + Vector2(dx, -16) * k, Vector2(3, 5) * k), Color(0.85, 0.82, 0.7))
+			draw_rect(Rect2(c + Vector2(-2, 2) * k, Vector2(4, 5) * k), Color(0.3, 0.9, 0.2))
+		elif L["type"] == "dungeon":
 			draw_circle(c, r, Color(0.12, 0.08, 0.06))
 			draw_arc(c + Vector2(0, 4) * k, r * 0.68, PI, TAU, 12, Color(0.85, 0.6, 0.3), 4.0 * k)
 		else:

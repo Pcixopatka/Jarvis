@@ -12,7 +12,8 @@ const Data := preload("res://scripts/data/data.gd")
 const NAMES := {"zabuttia": "Камінь забуття", "alatyr": "Алатир-камінь"}
 const CHANCE := {"zabuttia": 0.12, "alatyr": 0.06}
 ## Перша перемога над цим босом — гарантований камінь
-const FIRST_KILL := {"zmii": ["zabuttia"], "chaklun": ["zabuttia"], "koshchii": ["alatyr"], "putinoid": ["alatyr", "zabuttia"]}
+const FIRST_KILL := {"zmii": ["zabuttia"], "chaklun": ["zabuttia"], "koshchii": ["alatyr"], "putinoid": ["alatyr", "zabuttia"],
+	"baba_yaha": ["zabuttia"], "solovei": ["alatyr"], "lykho": ["zabuttia"], "oprychnyk": ["alatyr"]}
 
 
 static func count(player, id: String) -> int:

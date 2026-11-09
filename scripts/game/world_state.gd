@@ -24,6 +24,7 @@ var challenges := {}  # щоденні/тижневі виклики й відк
 var defense := {}  # облоги міст і хутора (див. DefenseService)
 var path_talks := {}  # з ким із представників доріг уже поговорив (див. PathService)
 var depths := {}  # Глибини зарази після сюжету (див. DepthService)
+var tower := {}  # Башта Кощія в Москві (див. TowerService)
 var spec_trial := {}  # випробування в наставника (див. SpecService)
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
@@ -203,7 +204,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -227,4 +228,5 @@ func from_dict(d: Dictionary) -> void:
 	challenges = d.get("challenges", {})
 	spec_trial = d.get("spec_trial", {})
 	depths = d.get("depths", {})
+	tower = d.get("tower", {})
 	path_talks = d.get("path_talks", {})

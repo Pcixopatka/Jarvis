@@ -356,6 +356,9 @@ const LOCATIONS := {
 	"hlybyny": {"name": "Глибини зарази", "type": "dungeon", "biome": "plague", "pos": Vector2(38.6, 55.35), "level": 22,
 		"rooms": 4, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "putinoid", "endless": true,
 		"desc": "Корені зарази під Кремлем: печера без дна. Відкривається після перемоги над Путіноїдом."},
+	"bashta": {"name": "Башта Кощія", "type": "dungeon", "biome": "cave", "pos": Vector2(36.9, 56.05), "level": 15,
+		"rooms": 2, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "koshchii", "endless": true, "tower": true,
+		"desc": "Кістяна башта посеред Москви: безкінечний підйом. Відкривається з 15-го рівня героя."},
 	# ---- Розділ V: Кремль ----
 	"kremlin": {"name": "Кремль", "type": "dungeon", "biome": "plague", "pos": Vector2(37.62, 55.75), "level": 22,
 		"rooms": 7, "enemies": ["zarazhenyi", "pishchalnyk", "chort", "upyr"], "boss": "putinoid",
@@ -363,11 +366,14 @@ const LOCATIONS := {
 }
 
 const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит",
-	"zmii": "Змій", "chaklun": "Чаклун Путіноїда", "chort": "Чорт", "pishchalnyk": "Заражений пищальник", "koshchii": "Кощій", "putinoid": "Путіноїд"}
+	"zmii": "Змій", "chaklun": "Чаклун Путіноїда", "chort": "Чорт", "pishchalnyk": "Заражений пищальник", "koshchii": "Кощій", "putinoid": "Путіноїд",
+	"baba_yaha": "Баба Яга", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Опричник-кат"}
 const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених",
-	"zmii": "зміїв", "chaklun": "чаклунів", "chort": "чортів", "pishchalnyk": "пищальників", "koshchii": "кощіїв", "putinoid": "путіноїдів"}
+	"zmii": "зміїв", "chaklun": "чаклунів", "chort": "чортів", "pishchalnyk": "пищальників", "koshchii": "кощіїв", "putinoid": "путіноїдів",
+	"baba_yaha": "бабів яг", "solovei": "солов'їв", "lykho": "лих", "oprychnyk": "опричників"}
 const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда",
-	"koshchii": "Кощій Безсмертний", "putinoid": "Путіноїд, кремлівський упир-цар"}
+	"koshchii": "Кощій Безсмертний", "putinoid": "Путіноїд, кремлівський упир-цар",
+	"baba_yaha": "Баба Яга Кістяна Нога", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Малюта, опричник-кат"}
 const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази",
 	"chort": "Чортів ріг", "pishchalnyk": "Наказ воєводи"}
 

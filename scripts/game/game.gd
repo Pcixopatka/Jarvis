@@ -20,6 +20,7 @@ const CraftService := preload("res://scripts/game/craft_service.gd")
 const SpecService := preload("res://scripts/game/spec_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
 const DepthService := preload("res://scripts/game/depth_service.gd")
+const TowerService := preload("res://scripts/game/tower_service.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
 const Paths := preload("res://scripts/data/paths.gd")
 const AccountScript := preload("res://scripts/game/account.gd")
@@ -76,6 +77,7 @@ var travel_boost := 1.0  # дотик по мапі прискорює
 var travel_event_at := -1.0  # на якому t чекає пригода (-1 — без пригоди)
 var travel_paused := false  # зупинились на пригоду  # яка картка розгорнута на екрані «Дорога»  # вміння, відкрите в картці на вкладці «Вміння»
 var depth_sel := 1  # обрана глибина на мапі
+var tower_sel := 1  # обраний поверх Башти на мапі
 var camp_sel_uid := -1
 
 
@@ -108,6 +110,8 @@ func _ready() -> void:
 	hud.map_view.travel_tapped.connect(_travel_speed_up)
 
 	Events.enemy_killed.connect(_on_enemy_killed)
+	Events.tower_cleared.connect(_on_tower_cleared)
+	Events.tower_next.connect(_on_tower_next)
 	Events.level_up.connect(_on_level_up)
 	Events.player_died.connect(_on_player_died)
 	Events.companion_down.connect(_on_companion_down)
@@ -168,6 +172,13 @@ func _combat_info() -> Dictionary:
 		sub = "Хвиля %d/%d  •  Брама %d%%" % [combat.wave, L["waves"], gp]
 		if combat.defense_over and combat.field_cleared:
 			sub = "Оборону виграно! Портал веде до брами"
+	elif combat.is_tower():
+		if combat.field_cleared:
+			sub = "Поверх пройдено! Портал веде вище"
+		elif combat.tower_boss_spawned:
+			sub = "Рівень %d  •  %s" % [L["level"], ("Супербос: %s" % Data.BOSS_NAMES[L["boss"]]) if L["boss"] != "" else L["mini_title"]]
+		else:
+			sub = "Рівень %d  •  Хвиля %d/%d" % [L["level"], combat.wave, L["waves"]]
 	elif combat.is_dungeon():
 		sub = "Кімната %d/%d" % [combat.room, L["rooms"]]
 	elif combat.field_cleared:
@@ -313,6 +324,8 @@ func load_game() -> bool:
 	meta = d.get("meta", meta)
 	_load_account()
 	_attach_account()
+	tower_sel = int(TowerService.state(world)["max"])
+	depth_sel = int(DepthService.state(world)["max"])
 	_new_hero(d["player"])
 	_sync_class()
 	Party.normalize(world, player.level)
@@ -725,6 +738,11 @@ func _build_map_panel() -> void:
 			depth_sel = d
 			_build_map_panel(), start_depth))
 		return
+	if map_sel == TowerService.LOC_ID:
+		hud.set_map_panel(MapPanel.build_tower(world, player, tower_sel, func(f: int):
+			tower_sel = f
+			_build_map_panel(), start_tower))
+		return
 	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world))
 	if map_sel == "":
 		var left := AdRewards.xp2_left(world)
@@ -750,7 +768,7 @@ func _go_to(id: String) -> void:
 	travel_paused = false
 	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)
 	travel_event_at = -1.0
-	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and not DefenseService.is_besieged(world, id):
+	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not DefenseService.is_besieged(world, id):
 		pending_event = TravelService.roll(world, player)
 		if not pending_event.is_empty():
 			travel_event_at = randf_range(0.4, 0.65)
@@ -773,6 +791,8 @@ func _arrive(id: String) -> void:
 		enter_camp()
 	elif id == DepthService.LOC_ID:
 		start_depth(depth_sel)
+	elif id == TowerService.LOC_ID:
+		start_tower(tower_sel)
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
@@ -828,6 +848,52 @@ func start_depth(depth: int) -> void:
 	combat.custom_loc = DepthService.loc_for(depth)
 	enter_location(DepthService.LOC_ID)
 	hint("depths", "Глибини зарази: що глибше — то сильніші вороги й щедріша здобич. Пройдеш глибину — відкриється наступна.")
+
+
+# ======================= Башта Кощія =======================
+
+func start_tower(floor_: int) -> void:
+	if not TowerService.unlocked(player):
+		hud.show_banner("Башта відкриється з %d-го рівня героя" % TowerService.OPEN_LEVEL, UI.BAD)
+		return
+	floor_ = clampi(floor_, 1, int(TowerService.state(world)["max"]))
+	tower_sel = floor_
+	combat.custom_loc = TowerService.loc_for(floor_)
+	enter_location(TowerService.LOC_ID)
+	hint("tower", "Башта Кощія: кожен поверх — хвилі нечисті й міні-бос, кожен п'ятий — супербос. Пройшов поверх — портал веде вище; вийти можна кнопкою «На мапу», коли поруч нема ворогів.")
+
+
+func _on_tower_cleared(floor_: int) -> void:
+	var r := TowerService.on_clear(world, floor_)
+	var first: bool = r[1]
+	var msg: String = r[0]
+	tower_sel = clampi(floor_ + 1, 1, int(TowerService.state(world)["max"]))
+	_record("tower", floor_)
+	var lvl := TowerService.level_of(floor_)
+	var pos: Vector2 = player.global_position + Vector2(0, -120)
+	if first:
+		var g := TowerService.first_gold(floor_)
+		player.add_gold(g)
+		msg += "\n+%d грн за перше проходження" % g
+		if TowerService.is_super(floor_):
+			var stone := "alatyr" if randf() < 0.4 else "zabuttia"
+			StoneService.grant(player, stone)
+			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl + 1, 3))
+			combat.float_text(pos + Vector2(0, -40), "Знайдено: %s!" % StoneService.NAMES[stone], Color(0.85, 0.7, 1.0))
+			msg += "\nЛегендарна річ і камінь долі!"
+		else:
+			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl, Data.roll_rarity(lvl, 1)))
+	combat._resource_bundle(pos, 3 + floor_ / 5)
+	hud.show_banner(msg, UI.GOLD)
+	save_game()
+
+
+func _on_tower_next(floor_: int) -> void:
+	var nxt := floor_ + 1
+	if nxt > int(TowerService.state(world)["max"]):
+		return
+	tower_sel = nxt
+	combat.next_floor(TowerService.loc_for(nxt))
 
 
 # ======================= Оборона =======================

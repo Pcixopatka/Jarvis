@@ -46,5 +46,8 @@ const ACHIEVEMENTS := [
 	{"id": "depth_10", "name": "У надрах", "desc": "Пройди 10-ту глибину зарази", "stat": "depth", "goal": 10, "gold": 3000},
 	{"id": "depth_25", "name": "Корені зла", "desc": "Пройди 25-ту глибину зарази", "stat": "depth", "goal": 25, "gold": 10000},
 	{"id": "depth_50", "name": "Без дна", "desc": "Пройди 50-ту глибину зарази", "stat": "depth", "goal": 50, "gold": 30000},
+	{"id": "tower_5", "name": "Перший супербос", "desc": "Пройди 5-й поверх Башти Кощія", "stat": "tower", "goal": 5, "gold": 1500},
+	{"id": "tower_20", "name": "Вище хмар", "desc": "Пройди 20-й поверх Башти Кощія", "stat": "tower", "goal": 20, "gold": 6000},
+	{"id": "tower_50", "name": "До самого неба", "desc": "Пройди 50-й поверх Башти Кощія", "stat": "tower", "goal": 50, "gold": 25000},
 	{"id": "hetman", "name": "Гетьман", "desc": "Пройди всю історію", "stat": "hetman", "goal": 1, "gold": 5000},
 ]
