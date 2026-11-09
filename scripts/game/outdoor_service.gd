@@ -37,16 +37,22 @@ static func food(player, id: String) -> int:
 	return int(player.resources.get(id, 0))
 
 
-static func _weighted(table: Dictionary, rng: RandomNumberGenerator) -> String:
+## Випадковий запис за вагою; boost — множники ваги для окремих записів (0 — не трапляється).
+static func _weighted(table: Dictionary, rng: RandomNumberGenerator, boost: Dictionary = {}) -> String:
 	var total := 0
 	for id in table:
-		total += int(table[id]["weight"])
+		total += int(table[id]["weight"]) * int(boost.get(id, 1))
 	var roll := rng.randi_range(1, total)
 	for id in table:
-		roll -= int(table[id]["weight"])
+		roll -= int(table[id]["weight"]) * int(boost.get(id, 1))
 		if roll <= 0:
 			return id
 	return table.keys()[0]
+
+
+## Чутка з шинку: наступне заняття буде багатим (великий звір, більше сомів).
+static func rich(world, kind: String) -> bool:
+	return bool(state(world).get("rich_hunt" if kind == "hunt" else "rich_fish", false))
 
 
 # ======================= Полювання =======================
@@ -56,7 +62,7 @@ static func arrows_for(player) -> int:
 	return Acts.HUNT_ARROWS + (1 if player.job in ["plastun", "samopalnyk"] else 0)
 
 
-static func new_hunt(player, seed_value: int = -1) -> Dictionary:
+static func new_hunt(player, seed_value: int = -1, rich_day: bool = false) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	if seed_value >= 0:
 		rng.seed = seed_value
@@ -64,8 +70,8 @@ static func new_hunt(player, seed_value: int = -1) -> Dictionary:
 		rng.randomize()
 	var queue := []
 	for i in Acts.HUNT_PASSES:
-		queue.append(_weighted(Acts.HUNT_ANIMALS, rng))
-	return {"arrows": arrows_for(player), "shots": 0, "queue": queue, "index": 0, "meat": 0, "hits": 0, "bull": 0, "wounded": false, "bag": []}
+		queue.append(_weighted(Acts.HUNT_ANIMALS, rng, {"hare": 0} if rich_day else {}))
+	return {"arrows": arrows_for(player), "shots": 0, "queue": queue, "index": 0, "meat": 0, "hits": 0, "bull": 0, "wounded": false, "bag": [], "rich": rich_day}
 
 
 ## Який звір зараз на галявині ("" — полювання скінчилось).
@@ -119,6 +125,8 @@ static func escaped(h: Dictionary) -> void:
 static func finish_hunt(world, player, h: Dictionary) -> Array:
 	var s := state(world)
 	s["hunt_ready"] = false
+	if h.get("rich", false):
+		s["rich_hunt"] = false
 	s["hunts"] = int(s["hunts"]) + 1
 	var meat := int(h["meat"])
 	s["meat"] = int(s["meat"]) + meat
@@ -139,17 +147,17 @@ static func finish_hunt(world, player, h: Dictionary) -> Array:
 
 # ======================= Рибалка =======================
 
-static func new_fishing(seed_value: int = -1) -> Dictionary:
+static func new_fishing(seed_value: int = -1, rich_day: bool = false) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	if seed_value >= 0:
 		rng.seed = seed_value
 	else:
 		rng.randomize()
-	return {"bait": Acts.FISH_BAIT, "ryba": 0, "caught": [], "rng": rng}
+	return {"bait": Acts.FISH_BAIT, "ryba": 0, "caught": [], "rng": rng, "rich": rich_day}
 
 
 static func roll_fish(f: Dictionary) -> String:
-	return _weighted(Acts.FISH, f["rng"])
+	return _weighted(Acts.FISH, f["rng"], {"som": 4, "shchuka": 2} if f.get("rich", false) else {})
 
 
 ## Скільки чекати клювання (секунд).
@@ -184,6 +192,8 @@ static func fishing_over(f: Dictionary) -> bool:
 static func finish_fishing(world, player, f: Dictionary) -> Array:
 	var s := state(world)
 	s["fish_ready"] = false
+	if f.get("rich", false):
+		s["rich_fish"] = false
 	s["fishings"] = int(s["fishings"]) + 1
 	var n := int(f["ryba"])
 	s["ryba"] = int(s["ryba"]) + n

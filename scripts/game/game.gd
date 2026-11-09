@@ -27,6 +27,7 @@ const BountyService := preload("res://scripts/game/bounty_service.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
+const TavernService := preload("res://scripts/game/tavern_service.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -430,6 +431,7 @@ func enter_map() -> void:
 		BountyService.tick(world)
 		TradeService.tick(world)
 		OutdoorService.tick(world)
+		TavernService.tick(world)
 		mv.events = EventService.map_marks(world)
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
@@ -1029,6 +1031,20 @@ func _soft_defeat(text: String, city: String) -> void:
 			leave_notice = ""
 
 
+## Партію в кості розсуджено: звук, лічильники для досягнень.
+func _dice_done() -> void:
+	var dg := TavernService.game(world)
+	_record("dice")
+	match str(dg["result"]):
+		"win":
+			Audio.play("quest", 0.0)
+			_record("dice_win")
+			if dg.get("twelve", false):
+				_record("dice_12")
+		"lose":
+			Audio.play("hurt", 0.1, -6.0)
+
+
 # ======================= Місця занять на мапі =======================
 
 func enter_spot(id: String) -> void:
@@ -1074,7 +1090,7 @@ func start_hunt() -> void:
 		hud.show_banner(why, UI.BAD)
 		enter_map()
 		return
-	_open_activity(HuntGame.new().setup(OutdoorService.new_hunt(player), player.sprite_id(), finish_hunt))
+	_open_activity(HuntGame.new().setup(OutdoorService.new_hunt(player, -1, OutdoorService.rich(world, "hunt")), player.sprite_id(), finish_hunt))
 	hint("hunt", "Полювання: звірі перебігають галявину. Торкнись звіра, щоб пустити стрілу. Стріл мало, тож бий напевно. Вепра бери в серцевину або двома стрілами.")
 
 
@@ -1098,7 +1114,7 @@ func start_fishing() -> void:
 		hud.show_banner(why, UI.BAD)
 		enter_map()
 		return
-	_open_activity(FishGame.new().setup(OutdoorService.new_fishing(), player.sprite_id(), finish_fishing))
+	_open_activity(FishGame.new().setup(OutdoorService.new_fishing(-1, OutdoorService.rich(world, "fish")), player.sprite_id(), finish_fishing))
 	hint("fish", "Рибалка: закинь вудку й чекай. Заклювало — тисни «Підсікти». Далі тримай кнопку, щоб тягти, й відпускай, щоб попустити: натяг має бути в зеленій смузі.")
 
 
@@ -1273,6 +1289,26 @@ func city_do(action: String, arg) -> void:
 		"select":
 			city_sel_uid = arg
 			smith_msg = ""
+		"dice_start":
+			if TavernService.start(world, player, arg):
+				Audio.play("coin", 0.1, -4.0)
+		"dice_roll":
+			var dr := TavernService.roll(world, player)
+			if dr != "":
+				Audio.play("hurt" if dr == "bust" else "coin", 0.15, -4.0)
+				if dr == "bust":
+					_dice_done()
+		"dice_stand":
+			if TavernService.stand(world, player) != "":
+				_dice_done()
+		"dice_clear":
+			TavernService.clear(world)
+		"rumor":
+			var rumor := TavernService.buy_rumor(world, player, city_id)
+			if rumor != "":
+				Audio.play("quest", 0.0)
+				hud.show_banner("Чутка!", UI.GOLD)
+				_record("rumor")
 		"buy":
 			if CityService.buy(world, player, city_id, arg):
 				Audio.play("coin", 0.0)

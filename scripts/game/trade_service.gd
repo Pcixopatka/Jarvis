@@ -94,7 +94,15 @@ static func price(world, city: String, good: String, level: int) -> int:
 ## За скільки місто купить у тебе одиницю краму (на ярмарку — на чверть дорожче).
 static func sell_price(world, city: String, good: String, level: int) -> int:
 	var fair: float = 1.25 if str(world.events.get("fair", {}).get("city", "")) == city else 1.0
-	return maxi(1, int(price(world, city, good, level) * Acts.TRADE_SPREAD * fair))
+	return maxi(1, int(price(world, city, good, level) * Acts.TRADE_SPREAD * fair * tip_bonus(world, city, good)))
+
+
+## Чутка з шинку: поки вона свіжа, названий крам у названому місті беруть дорожче.
+static func tip_bonus(world, city: String, good: String) -> float:
+	var t: Dictionary = world.tavern.get("tip", {})
+	if not t.is_empty() and t.get("city", "") == city and t.get("good", "") == good:
+		return Acts.RUMOR_TIP_BONUS
+	return 1.0
 
 
 ## Скільки одиниць краму місто ще продасть цього торгового дня.

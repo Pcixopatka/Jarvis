@@ -24,6 +24,7 @@ static func build(game, city: String) -> Control:
 		["Крамниця", _shop(game, city)],
 		["Коваль", _smith(game)],
 		["Корчма", _tavern(game, city)],
+		["Шинок", _shynok(game, city)],
 	]
 	if game.BountyService.unlocked(game.player):
 		pages.insert(1, ["Розшук", _bounty_tab(game, city)])
@@ -362,6 +363,95 @@ static func _mentors(game, city: String) -> Control:
 		row.add_child(UI.button(label, _do(game, "spec_start", spec), Vector2(200, 64), 18, ok))
 	if not trial.is_empty():
 		v.add_child(UI.label(SS.objective_line(w), 19, UI.GOLD, false))
+	return v
+
+
+# ---------------- Шинок: кості й чутки ----------------
+
+static func _shynok(game, city: String) -> Control:
+	var TS = game.TavernService
+	var Acts = game.Acts
+	var DiceRow = load("res://scripts/ui/dice_row.gd")
+	var w = game.world
+	var p = game.player
+	var s: Dictionary = TS.state(w)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(_wrap("Гамір, дим і стукіт кісток об стіл. Тут грають у «дванадцять» і розносять чутки з усього краю.", 17, UI.MUTED))
+	v.add_child(UI.label("Кості: партій сьогодні %d/%d  •  виграно %d, програно %d  •  найдовша серія %d" % [int(s["games"]), Acts.DICE_GAMES, int(s["wins"]), int(s["losses"]), int(s["best_streak"])], 19, UI.GOLD, false))
+	var g: Dictionary = TS.game(w)
+	if g.is_empty():
+		v.add_child(_wrap("Кидаєш по одній кості й додаєш очки. Понад %d — перебір і програш. Зупинишся — кидає суперник: у кого більше, того й ставка. Рівно %d — виграш у півтора раза." % [Acts.DICE_LIMIT, Acts.DICE_LIMIT], 16, UI.TEXT))
+		for id in Acts.DICE_ORDER:
+			var R: Dictionary = Acts.DICE_RIVALS[id]
+			var st: int = TS.stake(id, p.level)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 14)
+			var info := VBoxContainer.new()
+			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info.add_child(UI.label("%s  •  ставка %d грн" % [R["name"], st], 21, UI.TEXT, false))
+			info.add_child(_wrap(R["desc"], 15, UI.MUTED))
+			row.add_child(info)
+			row.add_child(UI.button("Грати", _do(game, "dice_start", id), Vector2(200, 64), 20, TS.can_start(w, p, id)))
+			v.add_child(row)
+		if TS.games_left(w) <= 0:
+			v.add_child(_wrap("На сьогодні досить: шинкар ховає кості до завтра.", 17, UI.BAD))
+	else:
+		var R2: Dictionary = Acts.DICE_RIVALS[g["rival"]]
+		var mine: int = TS.total(g["mine"])
+		v.add_child(UI.label("Проти: %s  •  на кону %d грн" % [R2["name"], int(g["stake"]) * 2], 21, UI.TEXT, false))
+		var r1 := HBoxContainer.new()
+		r1.add_theme_constant_override("separation", 16)
+		var l1 := UI.label("Ти: %d" % mine, 26, UI.BAD if mine > Acts.DICE_LIMIT else UI.GOLD, false)
+		l1.custom_minimum_size = Vector2(230, 0)
+		r1.add_child(l1)
+		r1.add_child(DiceRow.new().setup(g["mine"]))
+		v.add_child(r1)
+		var r2 := HBoxContainer.new()
+		r2.add_theme_constant_override("separation", 16)
+		var theirs: int = TS.total(g["theirs"])
+		var l2 := UI.label(("Суперник: %d" % theirs) if not g["theirs"].is_empty() else "Суперник чекає", 26, UI.BAD if theirs > Acts.DICE_LIMIT else UI.TEXT, false)
+		l2.custom_minimum_size = Vector2(230, 0)
+		r2.add_child(l2)
+		r2.add_child(DiceRow.new().setup(g["theirs"], Color(0.8, 0.62, 0.5)))
+		v.add_child(r2)
+		if g["over"]:
+			var col: Color = UI.GOOD if g["result"] == "win" else (UI.TEXT if g["result"] == "draw" else UI.BAD)
+			v.add_child(UI.label(TS.result_text(g), 26, col, false))
+			for m in g.get("msgs", []):
+				v.add_child(UI.label(m, 18, UI.GOLD, false))
+			var back := UI.button("До столів", _do(game, "dice_clear"), Vector2(260, 64), 20)
+			back.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			v.add_child(back)
+		else:
+			var btns := HBoxContainer.new()
+			btns.add_theme_constant_override("separation", 14)
+			btns.add_child(UI.button("Кинути ще", _do(game, "dice_roll"), Vector2(260, 76), 24))
+			btns.add_child(UI.button("Досить", _do(game, "dice_stand"), Vector2(260, 76), 24))
+			v.add_child(btns)
+			v.add_child(_wrap("До перебору лишилось %d. %s" % [Acts.DICE_LIMIT - mine, R2["desc"]], 15, UI.MUTED))
+	# Чутки
+	v.add_child(UI.label("Чутки", 24, UI.GOLD, false))
+	v.add_child(_wrap("Пригости шинок — і язики розв'яжуться: хтось чув про скарб, хтось про нічну нечисть, вигідний торг чи багаті угіддя. Одна чутка за похід.", 16, UI.MUTED))
+	var cost: int = TS.rumor_cost(p.level)
+	var why := ""
+	if s["rumor_done"]:
+		why = "Усе вже розказано. Нові чутки будуть після походу."
+	elif TS.rumor_kinds(w, p, city).is_empty():
+		why = "Сьогодні в шинку самі байки."
+	var rrow := HBoxContainer.new()
+	rrow.add_theme_constant_override("separation", 14)
+	rrow.add_child(UI.button("Пригостити шинок\n%d грн" % cost, _do(game, "rumor"), Vector2(300, 70), 18, TS.can_rumor(w, p, city)))
+	if why != "":
+		var wl := _wrap(why, 16, UI.MUTED)
+		wl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rrow.add_child(wl)
+	v.add_child(rrow)
+	if str(s["rumor_text"]) != "":
+		v.add_child(_wrap("Остання чутка: " + str(s["rumor_text"]), 17, UI.TEXT))
+	var tip: Dictionary = TS.tip(w)
+	if not tip.is_empty():
+		v.add_child(_wrap("Торгова порада ще свіжа: %s у місті %s, походів лишилось %d." % [Acts.TRADE_GOODS[tip["good"]]["name"], Data.place_name(tip["city"]), int(tip["left"])], 16, UI.GOOD))
 	return v
 
 

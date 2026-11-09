@@ -139,3 +139,20 @@ const RECIPES := {
 	"pechenia": {"name": "Печеня", "need": {"meat": 2, "ryba": 2}, "desc": "+10% шкоди на похід"},
 }
 const RECIPE_ORDER := ["kulish", "yushka", "pechenia"]
+
+# ======================= Шинок: кості й чутки =======================
+## Гра «дванадцять»: кидаєш по кості й додаєш очки; понад DICE_LIMIT — перебір.
+const DICE_LIMIT := 12
+const DICE_GAMES := 8  # партій на день
+const DICE_TWELVE := 1.5  # рівно дванадцять — виграш у півтора раза
+## Суперники: stake — множник ставки, style — як грає (див. TavernService.rival_goes).
+const DICE_RIVALS := {
+	"shynkar": {"name": "Шинкар Панько", "style": "cautious", "stake": 1, "desc": "Грає обережно: на дев'яти завжди спиняється, хоч би що ти викинув."},
+	"chumak": {"name": "Чумак Савка", "style": "reckless", "stake": 3, "desc": "Гаряча голова: менш як на десяти не спиняється, тож часто перебирає."},
+	"sotnyk": {"name": "Сотник Вовгура", "style": "steady", "stake": 6, "desc": "Холодний розум: кидає рівно доти, доки не переб'є тебе. Перемога над ним додає слави."},
+}
+const DICE_ORDER := ["shynkar", "chumak", "sotnyk"]
+const DICE_GLORY := 1  # слава за першу за день перемогу над сотником
+## Чутки: скільки походів живе торгова порада й наскільки вона піднімає ціну.
+const RUMOR_TIP_TRIPS := 3
+const RUMOR_TIP_BONUS := 1.15

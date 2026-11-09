@@ -75,6 +75,8 @@ func _run() -> void:
 	await _suite_trade_game()
 	_suite_outdoor()
 	await _suite_outdoor_game()
+	_suite_tavern()
+	await _suite_tavern_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -2237,6 +2239,182 @@ func _suite_outdoor_game() -> void:
 	await _frames(2)
 	check(OS2.eaten(p) == "" and absf(p.max_hp - hp0) < 1.0, "після походу страва вивітрилась")
 	check(OS2.ready(game.world, "hunt") and OS2.ready(game.world, "fish"), "після походу знову можна полювати й рибалити")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_tavern() -> void:
+	suite("Шинок: кості й чутки")
+	var TS = load("res://scripts/game/tavern_service.gd")
+	var TR = load("res://scripts/game/trade_service.gd")
+	var OS2 = load("res://scripts/game/outdoor_service.gd")
+	var ES = load("res://scripts/game/event_service.gd")
+	var GS = load("res://scripts/game/glory_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 10
+	p.recalc()
+	p.gold = 10000
+	var st: int = TS.stake("shynkar", 10)
+	check(st == 120 and TS.stake("chumak", 10) == 360 and TS.stake("sotnyk", 10) == 720, "ставки ростуть із рівнем і суперником")
+	check(TS.games_left(w) == Acts.DICE_GAMES and TS.can_start(w, p, "shynkar"), "вісім партій на день")
+	# Перемога: 6 + 5 = 11, шинкар добирає 4 + 5 = 9 і спиняється
+	check(TS.start(w, p, "shynkar", 6) and p.gold == 10000 - st and TS.playing(w), "сів до столу: ставка на кону, перша кість кинута")
+	check(not TS.can_start(w, p, "chumak"), "дві партії одночасно не грають")
+	check(TS.roll(w, p, 5) == "ok" and TS.total(TS.game(w)["mine"]) == 11, "докинув: 11")
+	check(TS.stand(w, p, [4, 5]) == "win" and p.gold == 10000 + st and int(TS.game(w)["gold"]) == st and TS.game(w)["theirs"] == [4, 5], "11 проти 9: виграв ставку")
+	check(not TS.playing(w) and TS.roll(w, p, 1) == "" and TS.stand(w, p) == "", "партію скінчено: кидати нема чого")
+	check("Твоя взяла" in TS.result_text(TS.game(w)), "текст перемоги")
+	TS.clear(w)
+	check(TS.game(w).is_empty() and int(TS.state(w)["wins"]) == 1 and int(TS.state(w)["streak"]) == 1, "стіл прибрано, перемога в заліку")
+	# Перебір
+	TS.start(w, p, "shynkar", 6)
+	TS.roll(w, p, 4)
+	check(TS.roll(w, p, 3) == "bust" and TS.game(w)["over"] and TS.game(w)["result"] == "lose" and p.gold == 10000, "13 — перебір, ставка пропала")
+	check("Перебір" in TS.result_text(TS.game(w)) and int(TS.state(w)["streak"]) == 0, "серія обірвалась")
+	TS.clear(w)
+	# Рівно дванадцять
+	TS.start(w, p, "shynkar", 6)
+	TS.roll(w, p, 6)
+	check(TS.stand(w, p, [3, 3, 3]) == "win" and p.gold == 10000 + int(st * 1.5) and int(TS.state(w)["twelves"]) == 1, "дванадцять: виграш у півтора раза")
+	TS.clear(w)
+	# Нічия
+	var g0: int = p.gold
+	TS.start(w, p, "shynkar", 5)
+	TS.roll(w, p, 4)
+	check(TS.stand(w, p, [6, 3]) == "draw" and p.gold == g0, "порівну — ставки назад")
+	TS.clear(w)
+	# Суперник перебрав
+	TS.start(w, p, "chumak", 4)
+	check(TS.stand(w, p, [6, 3, 5]) == "win" and "перебрав" in TS.result_text(TS.game(w)), "чумак женеться до десяти й перебирає")
+	TS.clear(w)
+	# Як грають суперники
+	check(TS.rival_goes("cautious", 8, 3) and not TS.rival_goes("cautious", 9, 12), "шинкар: до дев'яти й годі")
+	check(TS.rival_goes("reckless", 9, 2) and not TS.rival_goes("reckless", 10, 12), "чумак: до десяти")
+	check(TS.rival_goes("steady", 9, 10) and not TS.rival_goes("steady", 6, 5) and TS.rival_goes("steady", 7, 7) and not TS.rival_goes("steady", 10, 10), "сотник: перебити, на малій нічиїй ризикнути")
+	# Сотник і слава
+	var gl: int = GS.glory(w)
+	TS.start(w, p, "sotnyk", 6)
+	TS.roll(w, p, 5)
+	TS.stand(w, p, [6, 4, 6])
+	check(GS.glory(w) == gl + Acts.DICE_GLORY and not TS.game(w)["msgs"].is_empty(), "перша за день перемога над сотником: слава")
+	TS.clear(w)
+	TS.start(w, p, "sotnyk", 6)
+	TS.roll(w, p, 5)
+	TS.stand(w, p, [6, 4, 6])
+	check(GS.glory(w) == gl + Acts.DICE_GLORY, "удруге за день слави не дають")
+	TS.clear(w)
+	# Денна межа
+	while TS.games_left(w) > 0:
+		TS.start(w, p, "shynkar", 6)
+		TS.stand(w, p, [5, 5])
+		TS.clear(w)
+	check(not TS.can_start(w, p, "shynkar"), "вісім партій зіграно — на сьогодні все")
+	CS.now_override = 1762700000 + 86400
+	check(TS.games_left(w) == Acts.DICE_GAMES and TS.can_start(w, p, "shynkar"), "завтра знову можна")
+	p.gold = 5
+	check(not TS.can_start(w, p, "shynkar"), "без гривень до столу не сядеш")
+	# Чутки
+	p.gold = 10000
+	var kinds: Array = TS.rumor_kinds(w, p, "sich")
+	check("treasure" in kinds and "night" in kinds and "trade" in kinds and "outdoor" in kinds, "на Січі доступні всі чутки: %s" % str(kinds))
+	var cost: int = TS.rumor_cost(10)
+	var text: String = TS.buy_rumor(w, p, "sich", "treasure")
+	check(text != "" and p.gold == 10000 - cost and ES.state(w)["treasure"].size() == 1, "чутка про скарб: мітка на мапі")
+	check(not TS.can_rumor(w, p, "sich") and TS.buy_rumor(w, p, "sich") == "", "одна чутка за похід")
+	TS.tick(w)
+	check(TS.can_rumor(w, p, "sich") and not ("treasure" in TS.rumor_kinds(w, p, "sich")), "після походу — нова чутка; про скарб уже знаємо")
+	text = TS.buy_rumor(w, p, "sich", "night")
+	check(text != "" and ES.state(w)["night"].size() == 1, "чутка про нічний похід")
+	TS.tick(w)
+	text = TS.buy_rumor(w, p, "sich", "trade")
+	var tip: Dictionary = TS.tip(w)
+	check(text != "" and not tip.is_empty() and tip["city"] != "sich" and int(tip["left"]) == Acts.RUMOR_TIP_TRIPS, "торгова порада: %s у %s" % [tip.get("good", "?"), tip.get("city", "?")])
+	var base: int = TR.sell_price(w, "sich", tip["good"], 10)
+	var w3 = WorldState.new()
+	check(TR.sell_price(w, tip["city"], tip["good"], 10) > TR.sell_price(w3, tip["city"], tip["good"], 10) and base == TR.sell_price(w3, "sich", tip["good"], 10), "порада піднімає ціну лише в названому місті")
+	for i in Acts.RUMOR_TIP_TRIPS:
+		TS.tick(w)
+	check(TS.tip(w).is_empty(), "за три походи порада застаріла")
+	OS2.finish_hunt(w, p, OS2.new_hunt(p, 1))
+	text = TS.buy_rumor(w, p, "sich", "outdoor")
+	check(text != "" and OS2.rich(w, "hunt") and OS2.rich(w, "fish") and OS2.ready(w, "hunt"), "чутка про багаті угіддя: звір повернувся")
+	var hq: Array = OS2.new_hunt(p, 4, true)["queue"]
+	check(not ("hare" in hq), "на багатих угіддях зайців нема: %s" % str(hq))
+	var h: Dictionary = OS2.new_hunt(p, 4, OS2.rich(w, "hunt"))
+	OS2.shoot(h, 1.0)
+	OS2.finish_hunt(w, p, h)
+	check(not OS2.rich(w, "hunt") and OS2.rich(w, "fish"), "багате полювання використано, рибалка ще чекає")
+	var pe = _new_player()
+	pe.job = "peasant"
+	pe.gold = 1000
+	check(not ("trade" in TS.rumor_kinds(WorldState.new(), pe, "sich")), "селянинові торгових порад не дають")
+	# Збереження
+	TS.start(w, p, "shynkar", 4)
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(TS.playing(w2) and TS.game(w2)["mine"] == [4] and int(TS.state(w2)["wins"]) == int(TS.state(w)["wins"]), "недограна партія переживає збереження")
+	CS.now_override = 0
+
+
+func _suite_tavern_game() -> void:
+	suite("Шинок: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var TS = game.TavernService
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true}
+	p.change_class("cossack")
+	p.level = 10
+	p.recalc()
+	p.gold = 5000
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	var tabs: Array = []
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		tabs.append(tc.get_tab_title(i))
+	check("Шинок" in tabs, "у місті є вкладка «Шинок»: %s" % str(tabs))
+	game.city_do("dice_start", "shynkar")
+	check(TS.playing(game.world) and p.gold == 5000 - TS.stake("shynkar", 10), "сів грати через вкладку")
+	# Грати до кінця: добирати до десяти
+	var guard := 0
+	while TS.playing(game.world) and guard < 20:
+		if TS.total(TS.game(game.world)["mine"]) < 10:
+			game.city_do("dice_roll", null)
+		else:
+			game.city_do("dice_stand", null)
+		guard += 1
+	var g: Dictionary = TS.game(game.world)
+	check(g["over"] and g["result"] in ["win", "lose", "draw"] and int(game.world.stats.get("dice", 0)) == 1, "партію дограно: %s" % g["result"])
+	check(game.state == game.State.CITY, "лишились у місті")
+	game.city_do("dice_clear", null)
+	check(TS.game(game.world).is_empty(), "стіл прибрано")
+	var gold0: int = p.gold
+	game.city_do("rumor", null)
+	check(p.gold == gold0 - TS.rumor_cost(10) and str(TS.state(game.world)["rumor_text"]) != "" and int(game.world.stats.get("rumor", 0)) == 1, "чутку куплено")
+	game.city_do("rumor", null)
+	check(int(game.world.stats.get("rumor", 0)) == 1, "друга чутка за той самий похід не продається")
+	# Похід — і в шинку нові язики
+	game.enter_location("wild_field")
+	await _frames(3)
+	game.enter_map()
+	await _frames(2)
+	check(not TS.state(game.world)["rumor_done"], "після походу знову можна слухати чутки")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
