@@ -202,7 +202,7 @@ func _spawn_companions(companions: Array) -> void:
 			continue
 		var c: Companion = CompanionScript.new()
 		c.combat = self
-		c.setup(data["type"], int(data.get("level", player.level)), data.get("index", i))
+		c.setup(data["type"], int(data.get("level", player.level)), data.get("index", i), data)
 		c.position = player.position + CompanionScript.OFFSETS[c.index % CompanionScript.OFFSETS.size()]
 		entities.add_child(c)
 		companion_nodes.append(c)
@@ -314,7 +314,8 @@ func _companion_states() -> Array:
 	var out := []
 	for c in companion_nodes:
 		if is_instance_valid(c):
-			out.append({"type": c.type, "downed": not c.alive, "index": c.index, "level": c.level})
+			out.append({"type": c.type, "downed": not c.alive, "index": c.index, "level": c.level,
+				"hero": c.hero, "mult": c.mult, "name": c.display_name, "color": c.info["color"]})
 	out.sort_custom(func(a, b): return a["index"] < b["index"])
 	return out
 
@@ -450,7 +451,7 @@ func companion_level_up(index: int, lvl: int) -> void:
 
 
 func on_companion_down(c: Companion) -> void:
-	var name: String = Data.COMPANIONS[c.type]["name"]
+	var name: String = c.display_name
 	float_text(c.global_position + Vector2(0, -40), "%s поранений!" % name, Color(1.0, 0.5, 0.45))
 	Events.companion_down.emit(c.index, name)
 

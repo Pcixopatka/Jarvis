@@ -15,7 +15,8 @@ func _draw() -> void:
 		skin = Color(0.78, 0.8, 0.76)  # мертвотно-бліда шкіра
 		draw_circle(c, r, Color(0.12, 0.06, 0.08))
 		draw_circle(c + Vector2(0, -10) * s, r * 0.9, Color(0.25, 0.05, 0.08))
-	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1), "selianyn": Color(0.95, 0.94, 0.9)}.get(npc, Color.GRAY)
+	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1), "selianyn": Color(0.95, 0.94, 0.9),
+		"petro": Color(0.55, 0.25, 0.2), "yaryna": Color(0.95, 0.92, 0.8), "oksana": Color(0.3, 0.38, 0.2)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
 	if npc == "znakharka":
@@ -58,6 +59,31 @@ func _draw() -> void:
 			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.6, 0.35, 0.3), 2.0 * s)
 			for i in 6:
 				draw_circle(c + Vector2(-30 + i * 12, 52) * s, 3.0 * s, Color(0.8, 0.12, 0.12))
+		"petro":
+			# Молодий козак: русявий оселедець, короткі вуса, слід зарази на щоці
+			_chub(c, s, Color(0.75, 0.6, 0.35))
+			_brows(c, s, Color(0.6, 0.45, 0.25), 2.5)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.7, 0.55, 0.3), 12.0)
+			draw_line(c + Vector2(14, 2) * s, c + Vector2(22, 14) * s, Color(0.3, 0.35, 0.25), 2.5 * s)
+			draw_line(c + Vector2(18, 4) * s, c + Vector2(24, 8) * s, Color(0.3, 0.35, 0.25), 2.0 * s)
+		"yaryna":
+			# Дівчина з косами й вінком
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, 0), Vector2(-28, -24), Vector2(0, -34), Vector2(28, -24), Vector2(30, 0), Vector2(18, -18), Vector2(-18, -18)]), Color(0.55, 0.35, 0.15))
+			draw_line(c + Vector2(-28, 0) * s, c + Vector2(-34, 50) * s, Color(0.55, 0.35, 0.15), 8.0 * s)
+			draw_line(c + Vector2(28, 0) * s, c + Vector2(34, 50) * s, Color(0.55, 0.35, 0.15), 8.0 * s)
+			_eyes(c, s, eye_y, false)
+			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.8, 0.3, 0.3), 2.5 * s)
+			var flowers := [Color(0.9, 0.15, 0.15), Color(0.2, 0.4, 0.9), Color(1.0, 0.85, 0.2)]
+			for i in 7:
+				draw_circle(c + Vector2(-27 + i * 9, -30 + absf(i - 3) * 2.5) * s, 4.5 * s, flowers[i % 3])
+		"oksana":
+			# Мисливиця: зелений каптур, лук за плечем
+			draw_line(c + Vector2(-50, 60) * s, c + Vector2(-20, -40) * s, Color(0.45, 0.28, 0.12), 4.0 * s)
+			draw_colored_polygon(_pts(c, s, [Vector2(-36, 20), Vector2(-32, -26), Vector2(0, -42), Vector2(32, -26), Vector2(36, 20), Vector2(24, -12), Vector2(0, -22), Vector2(-24, -12)]), Color(0.28, 0.36, 0.18))
+			_brows(c, s, Color(0.3, 0.2, 0.1), 2.5)
+			_eyes(c, s, eye_y, false)
+			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.65, 0.35, 0.3), 2.0 * s)
 		"hero":
 			_chub(c, s, Color(0.22, 0.14, 0.08))
 			_brows(c, s, Color(0.25, 0.15, 0.08), 2.5)

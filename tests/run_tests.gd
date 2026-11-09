@@ -41,6 +41,7 @@ func _run() -> void:
 	_suite_story()
 	_suite_party()
 	_suite_camp()
+	_suite_heroes()
 	await _suite_gameplay()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -420,6 +421,63 @@ func _suite_party() -> void:
 
 
 # ======================= 7. Хутір і реклама =======================
+
+func _suite_heroes() -> void:
+	suite("Побратими")
+	var HS = load("res://scripts/game/hero_service.gd")
+	var p = _new_player()
+	p.level = 8
+	var w = WorldState.new()
+	# Розділ I пройдено, полоненого врятовано
+	w.story = {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 0, "potion": 1}}
+	check(not HS.can_meet(w, "petro", "kyiv") and HS.can_meet(w, "petro", "chyhyryn"), "Петро чекає в Чигирині")
+	check(not HS.can_meet(w, "oksana", "chernihiv"), "Оксана — лише після зразків Іларіона")
+	var d = HS.city_dialogue(w, "chyhyryn")
+	check(d.get("kind", "") == "meet" and d["hero"] in ["petro", "yaryna"] and d["choices"].size() == 2, "розмова-знайомство з вибором")
+	HS.on_dialogue_done(w, p, d, 0)
+	var first = d["hero"]
+	check(HS.in_party(w, first) and w.companions[0].get("hero", "") == first, "%s у загоні" % first)
+	var d2 = HS.city_dialogue(w, "chyhyryn")
+	HS.on_dialogue_done(w, p, d2, 1)
+	check(HS.waiting(w).size() == 1 and not HS.in_party(w, d2["hero"]), "відмовлений побратим чекає в корчмі")
+	check(HS.city_dialogue(w, "chyhyryn").is_empty(), "двічі не знайомляться")
+	HS.join(w, p, d2["hero"])
+	check(w.companions.size() == 2 and HS.waiting(w).is_empty(), "покликали з корчми")
+	check(not w.has_companion("dzhura") and not w.has_companion("znakhar"), "побратими не займають місце найманців")
+	check(HS.member_name(w.companions[0]) != Data.COMPANIONS[w.companions[0]["type"]]["name"], "побратима звуть на ймення")
+	check(HS.power(w, "petro") > 1.0, "побратим сильніший за найманця")
+	var w2 = WorldState.new()
+	w2.story = {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 1}}
+	check(not HS.can_meet(w2, "petro", "chyhyryn"), "не врятував полоненого — Петра немає")
+	# Дружба й особисте завдання Петра
+	for i in 59:
+		HS.on_event(w, "kill", "vovk")
+	check(HS.city_dialogue(w, "kyiv").is_empty(), "до потрібної дружби завдання немає")
+	HS.on_event(w, "kill", "vovk")
+	var dq = HS.city_dialogue(w, "kyiv")
+	check(dq.get("kind", "") == "quest" and dq["hero"] == "petro", "Петро розповідає про сестру")
+	HS.on_dialogue_done(w, p, dq, -1)
+	check(HS.objective_lines(w).size() == 1 and "black_forest" in HS.targets(w), "мета й позначка на мапі")
+	HS.on_event(w, "clear", "wild_field")
+	check(HS.st(w, "petro")["quest"] == "active", "чужа місцевість не рахується")
+	var before: float = HS.power(w, "petro")
+	HS.on_event(w, "clear", "black_forest")
+	var de = HS.city_dialogue(w, "lviv")
+	check(de.get("kind", "") == "end", "повернення в будь-яке місто")
+	HS.on_dialogue_done(w, p, de, -1)
+	check(HS.st(w, "petro")["quest"] == "done" and HS.power(w, "petro") > before, "побратим навіки — сильнішає")
+	var Party = load("res://scripts/game/party.gd")
+	check(Party.stats("dzhura", 5, 1.5)["hp"] > Party.stats("dzhura", 5)["hp"], "множник сили побратима")
+	var CompanionScript = load("res://scripts/entities/companion.gd")
+	var cn = CompanionScript.new()
+	cn.setup("dzhura", 5, 0, {"hero": "petro", "mult": 1.5, "name": "Петро Канівець", "color": Color.RED})
+	check(cn.display_name == "Петро Канівець" and is_equal_approx(cn.max_hp, Party.stats("dzhura", 5)["hp"] * 1.5), "побратим у бою")
+	cn.free()
+	var w3 = WorldState.new()
+	w3.from_dict(w.to_dict())
+	check(w3.heroes["petro"]["quest"] == "done" and w3.companions.size() == 2, "побратими зберігаються")
+	p.free()
+
 
 func _suite_camp() -> void:
 	suite("Хутір і реклама")

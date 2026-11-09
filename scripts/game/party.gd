@@ -47,12 +47,12 @@ static func gain_xp(world, hero_level: int, amount: int) -> Array:
 	return ups
 
 
-static func stats(type: String, level: int) -> Dictionary:
+static func stats(type: String, level: int, mult: float = 1.0) -> Dictionary:
 	var info: Dictionary = Data.COMPANIONS[type]
 	var out := {
-		"hp": info["hp"] + info["hp_lvl"] * (level - 1),
-		"dmg": info["dmg"] + info["dmg_lvl"] * (level - 1),
+		"hp": (info["hp"] + info["hp_lvl"] * (level - 1)) * mult,
+		"dmg": (info["dmg"] + info["dmg_lvl"] * (level - 1)) * mult,
 	}
 	if info.has("heal"):
-		out["heal"] = info["heal"] + info["heal_lvl"] * (level - 1)
+		out["heal"] = (info["heal"] + info["heal_lvl"] * (level - 1)) * mult
 	return out

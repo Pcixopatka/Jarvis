@@ -199,6 +199,18 @@ static func _smith(game) -> Control:
 
 # ---------------- Корчма ----------------
 
+static func _hero_status(w, HS, hid: String) -> String:
+	var h: Dictionary = HS.info(hid)
+	var s: Dictionary = HS.st(w, hid)
+	match s["quest"]:
+		"done":
+			return "Побратим навіки. " + h["bio"]
+		"active", "turnin":
+			return "Особисте завдання: " + h["quest"]["objective"]["text"]
+		"offer":
+			return "Хоче з тобою поговорити — зайди в місто."
+	return "Дружба: %d/%d (росте з кожним ворогом, переможеним разом)" % [mini(s["bond"], h["quest_bond"]), h["quest_bond"]]
+
 static func _tavern(game, city: String) -> Control:
 	var w = game.world
 	var p = game.player
@@ -214,11 +226,35 @@ static func _tavern(game, city: String) -> Control:
 		var clvl: int = int(c.get("level", 1))
 		var cst: Dictionary = game.Party.stats(c["type"], clvl)
 		var xp_text := "макс. (рівень козака)" if clvl >= p.level else "досвід %d/%d" % [c.get("xp", 0), game.Party.xp_for_level(clvl)]
-		var l := UI.label("%s — рівень %d • здоров'я %d, шкода %d • %s%s" % [Data.COMPANIONS[c["type"]]["name"], clvl, cst["hp"], cst["dmg"], xp_text, "  (поранений)" if c["downed"] else ""], 20, UI.TEXT, false)
-		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(l)
+		var HS = game.HeroService
+		var hid: String = c.get("hero", "")
+		if hid != "":
+			cst = game.Party.stats(c["type"], clvl, HS.power(w, hid))
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var l := UI.label("%s%s — рівень %d • здоров'я %d, шкода %d • %s%s" % ["★ " if hid != "" else "", HS.member_name(c), clvl, cst["hp"], cst["dmg"], xp_text, "  (поранений)" if c["downed"] else ""], 20, UI.GOLD if hid != "" else UI.TEXT, false)
+		col.add_child(l)
+		if hid != "":
+			col.add_child(UI.label(_hero_status(w, HS, hid), 16, UI.MUTED, false))
+		row.add_child(col)
 		row.add_child(UI.button("Відпустити", _do(game, "dismiss", i), Vector2(190, 54), 18))
 		v.add_child(row)
+	var waiting: Array = game.HeroService.waiting(w)
+	if not waiting.is_empty():
+		v.add_child(UI.label("Побратими чекають у корчмі", 24, UI.GOLD, false))
+		for hid in waiting:
+			var h: Dictionary = game.HeroService.info(hid)
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 12)
+			var col := VBoxContainer.new()
+			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			col.add_child(UI.label("★ " + h["name"], 22, UI.GOLD, false))
+			var bio := UI.label(h["bio"], 16, UI.MUTED, false)
+			bio.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			col.add_child(bio)
+			row.add_child(col)
+			row.add_child(UI.button("Покликати", _do(game, "hero_join", hid), Vector2(190, 70), 18, w.companions.size() < game.CityService.party_size(w)))
+			v.add_child(row)
 	v.add_child(UI.label("Найняти", 24, UI.GOLD, false))
 	var lvl: int = w.loyalty_level(city)
 	for type in Data.COMPANIONS:

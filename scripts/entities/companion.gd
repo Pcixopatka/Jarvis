@@ -24,12 +24,21 @@ var flash := 0.0
 var facing := Vector2.RIGHT
 var walk := 0.0
 var swing := 0.0
+var hero := ""  # id побратима або "" для найманця
+var mult := 1.0  # побратими сильніші за найманців
+var display_name := ""
 
 
-func setup(t: String, lvl: int, idx: int) -> void:
+## data — запис загону: {"type", "level", "hero", "mult", "name", "color"}.
+func setup(t: String, lvl: int, idx: int, data: Dictionary = {}) -> void:
 	type = t
 	index = idx
-	info = Data.COMPANIONS[t]
+	info = Data.COMPANIONS[t].duplicate()
+	hero = data.get("hero", "")
+	mult = float(data.get("mult", 1.0))
+	display_name = data.get("name", info["name"])
+	if data.has("color"):
+		info["color"] = data["color"]
 	set_level(lvl)
 	hp = max_hp
 
@@ -37,7 +46,7 @@ func setup(t: String, lvl: int, idx: int) -> void:
 ## Новий рівень: показники ростуть, здоров'я відновлюється повністю.
 func set_level(lvl: int) -> void:
 	level = lvl
-	var st := Party.stats(type, lvl)
+	var st := Party.stats(type, lvl, mult)
 	max_hp = st["hp"]
 	damage = st["dmg"]
 	heal_amount = st.get("heal", 0.0)
@@ -141,6 +150,13 @@ func _draw() -> void:
 	else:
 		draw_rect(Rect2(head + Vector2(-9, -12), Vector2(18, 6)), Color(0.2, 0.15, 0.1))
 	draw_circle(head + Vector2(side * 3, -1), 1.5, Color.BLACK)
+	if hero != "":
+		# Побратим: золота зірочка над головою
+		var st0 := head + Vector2(0, -24)
+		var star := PackedVector2Array()
+		for i in 10:
+			star.append(st0 + Vector2.from_angle(-PI / 2 + i * PI / 5) * (6.0 if i % 2 == 0 else 2.6))
+		draw_colored_polygon(star, Color(1.0, 0.82, 0.25))
 	var hand := Vector2(side * 10, -4)
 	match type:
 		"dzhura":

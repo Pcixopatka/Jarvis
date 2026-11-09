@@ -11,6 +11,7 @@ const MapPanel := preload("res://scripts/ui/map_panel.gd")
 const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
+const HeroService := preload("res://scripts/game/hero_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -93,6 +94,8 @@ func _process(delta: float) -> void:
 		AdRewards.tick(world, delta)
 	player.xp_boost = AdRewards.xp_mult(world)
 	var top := StoryService.objective_line(world)
+	for l in HeroService.objective_lines(world):
+		top += "\n" + l
 	if AdRewards.xp2_left(world) > 0.0:
 		top = "×2 досвіду: %s\n%s" % [AdRewards.format_time(AdRewards.xp2_left(world)), top]
 	hud.update(player, world, _combat_info(), delta, top.strip_edges())
@@ -217,6 +220,8 @@ func enter_map() -> void:
 	mv.selected = map_sel
 	mv.hero_level = player.level
 	mv.targets = world.quest_targets()
+	for loc in HeroService.targets(world):
+		mv.targets[loc] = true
 	mv.story_target = StoryService.target(world)
 	_build_map_panel()
 	save_game()
@@ -257,7 +262,7 @@ func enter_location(id: String) -> void:
 	hud.close_dialogue()
 	hud.close_overlay()
 	hud.show_map(false)
-	combat.enter(id, world.companions)
+	combat.enter(id, _party_data())
 	hud.set_mode(true, true)
 	state = State.PLAYING
 	get_tree().paused = false
@@ -286,6 +291,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 	for m in world.on_kill(e.kind):
 		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
 	_story_event("kill", e.kind)
+	_hero_event("kill", e.kind)
 	for up in Party.gain_xp(world, player.level, roundi(e.xp_value * CampService.companion_xp_mult(world) * AdRewards.xp_mult(world))):
 		combat.companion_level_up(up[0], up[1])
 
@@ -300,10 +306,56 @@ func _story_event(type: String, arg: String) -> void:
 			combat.float_text(player.global_position + Vector2(0, -110), m["text"], UI.GOLD)
 
 
+## Загін для бою: записи світу + сила, ім'я й колір побратимів.
+func _party_data() -> Array:
+	var out := []
+	for c in world.companions:
+		var d: Dictionary = c.duplicate()
+		var id: String = c.get("hero", "")
+		if id != "":
+			d["mult"] = HeroService.power(world, id)
+			d["name"] = HeroService.info(id)["name"]
+			d["color"] = HeroService.info(id)["color"]
+		out.append(d)
+	return out
+
+
+func _hero_event(type: String, arg: String) -> void:
+	for m in HeroService.on_event(world, type, arg):
+		if m["big"]:
+			hud.show_banner(m["text"], UI.GOLD)
+			Audio.play("quest", 0.0)
+		elif combat.active:
+			combat.float_text(player.global_position + Vector2(0, -130), m["text"], Color(0.7, 0.9, 1.0))
+
+
+## Побратим хоче поговорити в цьому місті (зустріч, особисте завдання, його завершення).
+func _hero_dialogue(city: String) -> void:
+	var d := HeroService.city_dialogue(world, city)
+	if d.is_empty():
+		return
+	var dlg = DialogueScript.new()
+	dlg.setup(d["lines"], d["choices"])
+	dlg.finished.connect(func(choice: int):
+		hud.close_dialogue()
+		var texts := []
+		for m in HeroService.on_dialogue_done(world, player, d, choice):
+			texts.append(m["text"])
+		if not texts.is_empty():
+			hud.show_banner("\n".join(texts), UI.GOLD)
+			Audio.play("quest", 0.0)
+		save_game()
+		if state == State.CITY and city_id == city:
+			_build_city()
+			_hero_dialogue(city))
+	hud.show_dialogue(dlg)
+
+
 ## Якщо в цьому місті на козака чекає сюжетна розмова — показує її (і наступну, якщо їх кілька поспіль).
 func _story_dialogue(city: String) -> void:
 	var d := StoryService.city_dialogue(world, city)
 	if d.is_empty():
+		_hero_dialogue(city)  # сюжет мовчить — може, побратим хоче поговорити
 		return
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], d["choices"])
@@ -332,11 +384,13 @@ func _on_companion_down(index: int, _name: String) -> void:
 func _on_location_cleared(loc_id: String) -> void:
 	world.cleared[loc_id] = world.cleared.get(loc_id, 0) + 1
 	_story_event("clear", loc_id)
+	_hero_event("clear", loc_id)
 
 
 func _on_dungeon_cleared(loc_id: String) -> void:
 	world.on_dungeon(loc_id)
 	_story_event("dungeon", loc_id)
+	_hero_event("dungeon", loc_id)
 
 
 func _on_level_up(lvl: int) -> void:
@@ -453,6 +507,9 @@ func city_do(action: String, arg) -> void:
 			return
 		"dismiss":
 			CityService.dismiss(world, arg)
+		"hero_join":
+			for m in HeroService.join(world, player, arg):
+				hud.show_banner(m["text"], UI.GOLD)
 	save_game()
 	_build_city()
 
