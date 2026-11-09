@@ -302,7 +302,8 @@ func on_hit(target) -> void:
 	if dead or not is_instance_valid(target) or not target.has_method("add_status"):
 		return
 	var st: String = HIT_STATUS.get(kind, "")
-	if st != "" and randf() < (HIT_STATUS_CHANCE * 0.5 if is_boss else HIT_STATUS_CHANCE):
+	# Слабка нечисть перших місць станів не накладає — новачкові й так непросто
+	if st != "" and level >= 4 and randf() < (HIT_STATUS_CHANCE * 0.5 if is_boss else HIT_STATUS_CHANCE):
 		target.add_status(st, 3.0, damage * 0.1)
 	for a in affixes:
 		var info: Dictionary = Elites.AFFIXES[a]

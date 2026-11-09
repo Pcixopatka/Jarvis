@@ -3,7 +3,7 @@ extends RefCounted
 
 const CHANCE := 0.04  # базовий шанс, що звичайний ворог — еліта
 const CHANCE_PER_PLAGUE := 0.025
-const MIN_LEVEL := 2  # у найперших місцях еліт немає
+const MIN_LEVEL := 4  # у найперших місцях еліт немає
 const SECOND_AFFIX_LEVEL := 8  # з цього рівня місцевості еліта може мати дві властивості
 const HP_MULT := 2.6
 const DMG_MULT := 1.25
