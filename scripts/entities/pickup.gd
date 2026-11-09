@@ -3,6 +3,7 @@ extends Node2D
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
+const Gfx := preload("res://scripts/world/gfx.gd")
 
 var combat: Combat
 var kind := "coin"  # "coin", "varenyk" або "item"
@@ -55,6 +56,9 @@ func _draw() -> void:
 	draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 9.0, Color(0, 0, 0, 0.25))
 	draw_set_transform(Vector2(0, hover - 4), 0.0, Vector2.ONE)
+	if Gfx.has("icons"):
+		_draw_icon()
+		return
 	if kind == "item":
 		var col: Color = Data.RARITY_COLORS[item["rarity"]]
 		draw_circle(Vector2.ZERO, 20.0 + sin(phase * 2.0) * 3.0, Color(col, 0.25))
@@ -99,3 +103,21 @@ func _draw() -> void:
 		for i in 7:
 			draw_circle(Vector2.from_angle(PI + i * PI / 6.0) * 13.0, 2.5, Color(0.92, 0.85, 0.7))
 		draw_line(Vector2(-13, 0), Vector2(13, 0), Color(0.85, 0.78, 0.62), 2.0)
+
+
+## Нова графіка: значки з атласу замість малюнків кодом.
+func _draw_icon() -> void:
+	match kind:
+		"item":
+			var col: Color = Data.RARITY_COLORS[item["rarity"]]
+			draw_circle(Vector2.ZERO, 20.0 + sin(phase * 2.0) * 3.0, Color(col, 0.25))
+			Gfx.icon(self, "chest", Vector2(0, -2), 2.0)
+			draw_circle(Vector2(10, -12), 3.0, col)
+		"res":
+			Gfx.icon(self, item["res"], Vector2(0, -2), 2.0)
+		"potion":
+			Gfx.icon(self, "potion", Vector2(0, -2), 2.0)
+		"coin":
+			Gfx.icon(self, "coin" if value >= 8 else "coin_small", Vector2.ZERO, 1.5 + minf(value, 20) * 0.03)
+		_:
+			Gfx.icon(self, "varenyk", Vector2(0, -2), 2.0)

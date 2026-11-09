@@ -46,3 +46,25 @@ static func draw(ci: CanvasItem, id: String, facing: Vector2, frame: int, origin
 	var src := Rect2(frame * SIZE, ROW[d[0]] * SIZE, SIZE, SIZE)
 	var dst := Rect2(origin + Vector2(SIZE if d[1] else 0, 0), Vector2(-SIZE if d[1] else SIZE, SIZE))
 	ci.draw_texture_rect_region(tex, dst, src, tint)
+
+
+# ---------- Значки здобичі ----------
+const OBJECTS := preload("res://assets/gfx/cc0/objects.png")  # Zelda-like objects (CC0): скриня, монети, серце
+const ICON_ORDER := ["potion", "wood", "iron", "herbs", "trophy", "varenyk"]  # assets/gfx/sprites/icons.png
+const OBJ := {"chest": [0, 0], "chest_open": [1, 0], "coin": [0, 4], "coin_small": [3, 4], "heart": [0, 3]}
+
+
+## Значок 16×16 у масштабі scale (за замовчуванням ×2) із центром у pos.
+static func icon(ci: CanvasItem, id: String, pos: Vector2, scale: float = 2.0, tint: Color = Color.WHITE) -> void:
+	var size := Vector2(16, 16) * scale
+	if OBJ.has(id):
+		var c: Array = OBJ[id]
+		ci.draw_texture_rect_region(OBJECTS, Rect2(pos - size / 2.0, size), Rect2(c[0] * 16, c[1] * 16, 16, 16), tint)
+		return
+	var i := ICON_ORDER.find(id)
+	if i < 0:
+		return
+	var tex := sheet("icons")
+	if tex == null:
+		return
+	ci.draw_texture_rect_region(tex, Rect2(pos - size / 2.0, size), Rect2(i * 16, 0, 16, 16), tint)
