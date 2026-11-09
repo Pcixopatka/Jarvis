@@ -27,6 +27,7 @@ signal defense_lost(target: String)
 signal exit_requested  # гравець зайшов у портал виходу
 signal duel_won  # герць: суперник упав
 signal bounty_killed(id: int)  # ціль із дошки розшуку вбито
+signal vigil_minute(minute: int)  # варта: вистояно ще одну хвилину
 
 # Повідомлення для інтерфейсу
 signal banner(text: String, color: Color)

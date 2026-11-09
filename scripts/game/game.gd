@@ -24,6 +24,7 @@ const TowerService := preload("res://scripts/game/tower_service.gd")
 const EventService := preload("res://scripts/game/event_service.gd")
 const DuelService := preload("res://scripts/game/duel_service.gd")
 const BountyService := preload("res://scripts/game/bounty_service.gd")
+const VigilService := preload("res://scripts/game/vigil_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
@@ -84,6 +85,7 @@ var travel_paused := false  # зупинились на пригоду  # яка
 var depth_sel := 1  # обрана глибина на мапі
 var tower_sel := 1  # обраний поверх Башти на мапі
 var theft_notice := ""  # крадіжка на хуторі між заходами (показати після завантаження)
+var leave_notice := ""  # підсумок бою, який треба показати після виходу з нього (варта тощо)
 var camp_sel_uid := -1
 
 
@@ -130,6 +132,7 @@ func _ready() -> void:
 	Events.exit_requested.connect(_on_exit)
 	Events.defense_won.connect(_on_defense_won)
 	Events.duel_won.connect(_on_duel_won)
+	Events.vigil_minute.connect(_on_vigil_minute)
 	Events.bounty_killed.connect(func(id: int):
 		var m := BountyService.on_kill(world, id)
 		if m != "":
@@ -180,7 +183,11 @@ func _combat_info() -> Dictionary:
 		return {}
 	var L: Dictionary = combat.loc
 	var sub := ""
-	if combat.is_duel():
+	if combat.is_vigil():
+		sub = "Варта %s / %s  •  Вбито %d" % [VigilService.time_text(combat.vigil_time), VigilService.time_text(float(L["goal"])), combat.vigil_kills]
+		if combat.vigil_done:
+			sub = "Вистояно! %s  •  Вбито %d  •  портал відкрито" % [VigilService.time_text(combat.vigil_time), combat.vigil_kills]
+	elif combat.is_duel():
 		var rv = combat.nearest_enemy(player.global_position, 5000.0)
 		sub = "Коло %d із %d  •  Суперник: %d%%" % [int(L["round"]) + 1, DuelService.ROUNDS, roundi(100.0 * rv.hp / rv.max_hp) if rv != null else 0]
 		if combat.duel_over:
@@ -368,6 +375,8 @@ func _continue_game() -> void:
 func _leave_combat() -> void:
 	hud.close_dialogue()
 	if combat.active:
+		if combat.is_vigil():
+			leave_notice = "\n".join(VigilService.finish(world, player, combat.vigil_time, combat.vigil_kills))
 		combat.collect_all()
 		combat.leave()
 
@@ -401,8 +410,14 @@ func enter_map() -> void:
 	if theft_notice != "":
 		hud.show_banner(theft_notice, UI.BAD)
 		theft_notice = ""
+	if leave_notice != "" and not from_trip:
+		hud.show_banner(leave_notice, UI.GOLD)
+		leave_notice = ""
 	if from_trip:
 		var news := []
+		if leave_notice != "":
+			news.append(leave_notice)
+			leave_notice = ""
 		var spread := PlagueService.tick(world)
 		if not spread.is_empty():
 			news.append("Зараза повзе далі: " + ", ".join(spread))
@@ -728,6 +743,9 @@ func _on_player_died() -> void:
 	if combat.is_duel():
 		_duel_lost()
 		return
+	if combat.is_vigil():
+		_soft_defeat("Варту знято: нечисть прорвалась.\nПобратими винесли тебе з могили.", world.last_city)
+		return
 	if combat.is_defense() and not combat.defense_over:
 		combat.defense_over = true
 		var ev := EventService.battle_at(world, combat.loc["target"])
@@ -784,6 +802,9 @@ func _build_map_panel() -> void:
 			tower_sel = f
 			_build_map_panel(), start_tower))
 		return
+	if Acts.SPOTS.has(map_sel):
+		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to))
+		return
 	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world))
 	if map_sel == "":
 		var left := AdRewards.xp2_left(world)
@@ -809,7 +830,7 @@ func _go_to(id: String) -> void:
 	travel_paused = false
 	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)
 	travel_event_at = -1.0
-	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
+	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not Acts.SPOTS.has(id) and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
 		pending_event = TravelService.roll(world, player)
 		if not pending_event.is_empty():
 			travel_event_at = randf_range(0.4, 0.65)
@@ -837,6 +858,8 @@ func _arrive(id: String) -> void:
 		start_depth(depth_sel)
 	elif id == TowerService.LOC_ID:
 		start_tower(tower_sel)
+	elif Acts.SPOTS.has(id):
+		enter_spot(id)
 	elif Data.CITIES.has(id):
 		enter_city(id)
 	else:
@@ -977,14 +1000,65 @@ func _on_duel_won() -> void:
 
 ## Поразка чи здача в герці: без втрат, лише мінус спроба; повертаємось на Січ.
 func _duel_lost() -> void:
+	_soft_defeat(DuelService.lose(world), "sich")
+
+
+## Поразка без втрат (герць, варта): показати повідомлення й за мить отямитись у місті.
+func _soft_defeat(text: String, city: String) -> void:
 	hud.close_overlay()
-	hud.show_banner(DuelService.lose(world), UI.BAD)
+	hud.show_banner(text, UI.BAD)
 	state = State.DEAD
 	hud.set_mode(true, false)
 	get_tree().paused = false
 	await get_tree().create_timer(1.6).timeout
 	if state == State.DEAD:
-		enter_city("sich")
+		enter_city(city)
+		if leave_notice != "":
+			hud.show_banner(leave_notice, UI.GOLD)
+			leave_notice = ""
+
+
+# ======================= Місця занять на мапі =======================
+
+func enter_spot(id: String) -> void:
+	map_here = id
+	match str(Acts.SPOTS[id]["kind"]):
+		"vigil":
+			start_vigil()
+		_:
+			enter_map()
+
+
+# ======================= Козацька варта =======================
+
+func start_vigil() -> void:
+	if not VigilService.unlocked(player):
+		hud.show_banner("На варту беруть із %d-го рівня й лише тих, хто обрав дорогу" % int(Acts.SPOTS[VigilService.SPOT_ID]["level"]), UI.BAD)
+		return
+	combat.defense_loc = VigilService.battle_loc(player)
+	enter_location("vigil")
+	map_here = VigilService.SPOT_ID
+	hint("vigil", "Варта: нечисть суне без упину й щохвилини лютішає. Вистій п'ять хвилин — відкриється портал. Можна стояти й далі, на рекорд. Смерті на варті нема.")
+
+
+func _on_vigil_minute(m: int) -> void:
+	var r := VigilService.on_minute(world, player, m)
+	var goal_min := int(Acts.VIGIL_GOAL / 60.0)
+	var text := "Хвилина %d вистояна!" % m
+	if m == goal_min:
+		text = "Варту вистояно!\nПортал відкрито — або стій далі, на рекорд"
+	if r["paid"]:
+		text += "\n+%d грн, +%d слави" % [r["gold"], r["glory"]]
+		var pos: Vector2 = player.global_position + Vector2(0, -110)
+		if int(r["item"]) >= 0:
+			combat.spawn_pickup(pos, "item", 0, Data.gen_item(player.level, int(r["item"])))
+		for msg in r["msgs"]:
+			text += "\n" + msg
+	elif m <= goal_min:
+		text += "\n(нагороду за цю хвилину сьогодні вже взято)"
+	hud.show_banner(text, UI.GOLD)
+	_record("vigil", m)
+	save_game()
 
 
 ## Бій події (набіг, валка, облога Січі, полон, поранений) — як оборона, але з іншою «брамою».

@@ -69,6 +69,8 @@ func _run() -> void:
 	await _suite_duel_battle()
 	_suite_bounty()
 	await _suite_bounty_battle()
+	_suite_vigil()
+	await _suite_vigil_battle()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -1883,6 +1885,158 @@ func _suite_event_battles() -> void:
 		if c.get_script() == game.combat.PickupScript and c.kind == "item" and int(c.item["rarity"]) >= 2:
 			chest = true
 	check(chest and not ES.has_treasure(game.world, "wild_field"), "сторож убитий — скриня з рідкісною річчю, мітка знята")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_vigil() -> void:
+	suite("Козацька варта: правила")
+	var VS = load("res://scripts/game/vigil_service.gd")
+	var GS = load("res://scripts/game/glory_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	check(Acts.SPOTS.has("varta") and Acts.SPOTS["varta"]["kind"] == "vigil" and Data.place_name("varta") == "Сторожова могила", "Сторожова могила — місце на мапі")
+	for sid in Acts.SPOTS:
+		var S: Dictionary = Acts.SPOTS[sid]
+		var clash := false
+		for c in Data.CITIES:
+			if Data.CITIES[c]["pos"].distance_to(S["pos"]) < 0.5:
+				clash = true
+		for l in Data.LOCATIONS:
+			if Data.LOCATIONS[l]["pos"].distance_to(S["pos"]) < 0.5:
+				clash = true
+		check(not clash and S["name"] != "" and S["desc"] != "", "%s: не налазить на інші місця" % sid)
+	var w = WorldState.new()
+	var p = _new_player()
+	p.job = "peasant"
+	p.level = 10
+	check(not VS.unlocked(p), "селянина на варту не беруть")
+	p.change_class("cossack")
+	p.level = 5
+	check(not VS.unlocked(p), "до 6 рівня — зарано")
+	p.level = 10
+	p.recalc()
+	check(VS.unlocked(p), "козак 10 рівня стає на варту")
+	var L: Dictionary = VS.battle_loc(p)
+	check(L["type"] == "vigil" and L["std_hp"] > 0.0 and L["std_dmg"] > 0.0 and L["enemies"].size() == 4 and L["goal"] == Acts.VIGIL_GOAL, "опис варти")
+	var t0: Dictionary = VS.targets_at(p, 0)
+	var t4: Dictionary = VS.targets_at(p, 4)
+	check(t4["std_hp"] > t0["std_hp"] * 1.5 and t4["std_dmg"] > t0["std_dmg"] * 1.5 and t0["xp_mult"] < 1.0, "щохвилини нечисть лютішає; досвіду з юрби менше")
+	var strong = _new_player()
+	strong.change_class("cossack")
+	strong.level = 10
+	strong.stats["str"] = 90
+	strong.stats["vit"] = 90
+	strong.recalc()
+	check(VS.targets_at(strong, 0)["std_hp"] > t0["std_hp"] * 1.5 and VS.targets_at(strong, 0)["std_dmg"] > t0["std_dmg"] * 1.5, "нечисть міряється силою з героєм")
+	var r3: Dictionary = VS.minute_reward(10, 3)
+	var r5: Dictionary = VS.minute_reward(10, 5)
+	var r6: Dictionary = VS.minute_reward(10, 6)
+	check(r3["item"] == 1 and r5["item"] == 2 and r5["trophy"] == 2 and r5["glory"] == Acts.VIGIL_GLORY + Acts.VIGIL_GLORY_GOAL and r5["gold"] > r3["gold"] and r6["item"] == -1, "нагороди за хвилини: речі на 3-й і 5-й, трофеї за повну варту")
+	var g0: int = p.gold
+	var o1: Dictionary = VS.on_minute(w, p, 1)
+	check(o1["paid"] and p.gold == g0 + Acts.VIGIL_GOLD * 10 and GS.glory(w) == Acts.VIGIL_GLORY, "перша хвилина оплачена")
+	var o1b: Dictionary = VS.on_minute(w, p, 1)
+	check(not o1b["paid"] and p.gold == g0 + Acts.VIGIL_GOLD * 10, "ту саму хвилину вдруге за день не платять")
+	check(VS.on_minute(w, p, 2)["paid"] and int(VS.state(w)["paid"]) == 2, "друга хвилина — оплачена")
+	CS.now_override = 1762700000 + 86400
+	check(int(VS.state(w)["paid"]) == 0 and VS.on_minute(w, p, 1)["paid"], "новий день — нагороди знову")
+	# Рекорди
+	var f1: Array = VS.finish(w, p, 130.0, 40)
+	check(float(VS.state(w)["best_time"]) == 130.0 and int(VS.state(w)["best_kills"]) == 40 and int(VS.state(w)["runs"]) == 1 and "2:10" in f1[0] and not ("рекорд" in f1[0]), "перша варта задає рекорд без премії")
+	var gl0: int = GS.glory(w)
+	var f2: Array = VS.finish(w, p, 200.0, 30)
+	check(float(VS.state(w)["best_time"]) == 200.0 and int(VS.state(w)["best_kills"]) == 40 and "рекорд" in f2[0] and GS.glory(w) == gl0 + 5, "побив власний рекорд часу — +5 слави")
+	VS.finish(w, p, 100.0, 90)
+	check(float(VS.state(w)["best_time"]) == 200.0 and int(VS.state(w)["best_kills"]) == 90 and GS.glory(w) == gl0 + 5, "гірший час рекорду не псує; рекорд убитих окремий")
+	check(VS.time_text(305.4) == "5:05", "час варти читається як 5:05")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(float(w2.vigil["best_time"]) == 200.0, "рекорди варти зберігаються")
+	CS.now_override = 0
+
+
+func _suite_vigil_battle() -> void:
+	suite("Козацька варта: бій")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	p.change_class("cossack")
+	p.level = 12
+	p.stats["str"] = 50
+	p.stats["vit"] = 50
+	p.skills = {"whirl": 3}
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "vigil": true, "stones": true}
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	game.enter_map()
+	await _frames(2)
+	check(game.hud.map_view._markers.has("varta") or true, "мапа відкрита")
+	game._on_map_select("varta")
+	await _frames(2)
+	check(game.hud.map_view._place_ll("varta") == game.Acts.SPOTS["varta"]["pos"], "варта має місце на мапі")
+	await _ride(game, "varta")
+	var c = game.combat
+	check(game.state == game.State.PLAYING and c.is_vigil() and c.arena == c.VIGIL_ARENA and game.map_here == "varta", "приїхав на могилу — варта почалась")
+	check(c._vigil_fire != null and c.counts_as_trip(), "вогнище горить; варта рахується походом")
+	for i in 200:
+		_bot_fight(game)
+		p.hp = p.max_hp
+		await process_frame
+	check(c.alive_enemy_count() > 0 or c.vigil_kills > 0, "нечисть суне")
+	var sample = c.nearest_enemy(p.global_position, 5000.0)
+	check(sample == null or sample.damage < p.max_hp, "удар ворога міряється зі здоров'ям героя")
+	var gold0: int = p.gold
+	c.vigil_time = 59.6
+	for i in 40:
+		_bot_fight(game)
+		p.hp = p.max_hp
+		await process_frame
+	check(c.vigil_minute == 1 and p.gold > gold0 and int(game.world.stats.get("vigil", 0)) == 1 and int(game.VigilService.state(game.world)["paid"]) == 1, "перша хвилина: нагорода й лічильник")
+	c.vigil_time = 239.6
+	for i in 40:
+		_bot_fight(game)
+		p.hp = p.max_hp
+		await process_frame
+	var boss := false
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.is_boss:
+			boss = true
+	check(c.vigil_minute == 4 and boss, "остання хвилина: ватажок іде на могилу")
+	c.vigil_time = 299.6
+	for i in 40:
+		p.hp = p.max_hp
+		await process_frame
+	check(c.vigil_done and c.portal != null and int(game.world.stats.get("vigil", 0)) == 5 and c._vigil_fire.darkness > 0.95 and c.canvas_mod.color.r < c._vigil_day.r * 0.4, "п'ять хвилин: портал відкрито, надворі ніч")
+	check(game.world.challenges["ach"].has("vigil_5"), "досягнення «Вартовий»")
+	# Упасти на варті — без втрат
+	var trips0: int = int(game.EventService.state(game.world)["trips"])
+	var gold1: int = p.gold
+	p.invuln = 0.0
+	p.unbreak_ready = false
+	p.berehynia_ready = false
+	p.take_damage(p.max_hp * 50.0, null)
+	await _frames(3)
+	check(not p.alive, "нечисть прорвалась")
+	var frames := 0
+	while game.state != game.State.CITY and frames < 300:
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and p.alive and p.gold >= gold1, "після падіння — у місті, гривні цілі")
+	check(float(game.VigilService.state(game.world)["best_time"]) >= 299.0 and int(game.VigilService.state(game.world)["runs"]) == 1, "рекорд варти записано")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

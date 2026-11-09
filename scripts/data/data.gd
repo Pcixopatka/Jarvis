@@ -415,4 +415,7 @@ static func place_name(id: String) -> String:
 		return LOCATIONS[id]["name"]
 	if id == "hutir":
 		return "Козацький хутір"
+	var spots: Dictionary = load("res://scripts/data/activities.gd").SPOTS
+	if spots.has(id):
+		return spots[id]["name"]
 	return id

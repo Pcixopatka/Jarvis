@@ -14,6 +14,10 @@ func setup(k: String, pos: Vector2) -> void:
 
 
 func _draw() -> void:
+	if kind.begins_with("wall:"):
+		# Частина муру з листа оборони (вежа на сторожовій могилі тощо)
+		load("res://scripts/world/gfx.gd").wall_part(self, kind.substr(5), Vector2(0, 8), 2.0)
+		return
 	var info: Dictionary = Tiles.PROPS[kind]
 	var r: Array = info["r"]
 	var w: float = r[2] * Tiles.TILE

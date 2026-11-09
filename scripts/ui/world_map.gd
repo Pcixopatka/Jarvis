@@ -7,9 +7,10 @@ signal travel_tapped  # дотик під час подорожі — приск
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
+const Acts := preload("res://scripts/data/activities.gd")
 const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
 const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
-const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest"]
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice"]
 # Кольори чорнила старовинної мапи
 const INK := Color(0.23, 0.16, 0.1)
 const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
@@ -217,6 +218,8 @@ func _place_ll(id: String) -> Vector2:
 		return Data.LOCATIONS[id]["pos"]
 	if id == Camp.CAMP_ID:
 		return Camp.CAMP["pos"]
+	if Acts.SPOTS.has(id):
+		return Acts.SPOTS[id]["pos"]
 	return Vector2(31, 49)
 
 
@@ -269,8 +272,7 @@ func _zoom_at(screen_pt: Vector2, factor: float) -> void:
 
 
 func focus_on(id: String) -> void:
-	var ll: Vector2 = Data.CITIES[id]["pos"] if Data.CITIES.has(id) else (Data.LOCATIONS[id]["pos"] if Data.LOCATIONS.has(id) else Vector2(31, 49))
-	center = _unit(ll)
+	center = _unit(_place_ll(id))
 
 
 # ---------- Керування: тап, перетягування, щипок, коліщатко ----------
@@ -452,6 +454,16 @@ func _draw() -> void:
 	_markers[Camp.CAMP_ID] = hc
 	_icon("camp", hc, 40.0 * k)
 	labels.append([45, Camp.CAMP_ID, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.2, 0.4, 0.15)])
+	# Місця занять: варта, полювання, рибалка
+	for sid in Acts.SPOTS:
+		var S: Dictionary = Acts.SPOTS[sid]
+		var sc := _proj(S["pos"])
+		_markers[sid] = sc
+		var locked: bool = hero_level < int(S["level"])
+		draw_circle(sc, 16.0 * k, Color(0.96, 0.92, 0.8, 0.9))
+		draw_arc(sc, 16.0 * k, 0, TAU, 24, Color(0.2, 0.4, 0.15) if not locked else Color(INK, 0.4), 2.0)
+		_icon(S["icon"], sc, 26.0 * k, Color.WHITE if not locked else Color(1, 1, 1, 0.45))
+		labels.append([12, sid, sc + Vector2(0, 16 * k + label_fs + 2), S["name"], label_fs, Color(0.2, 0.4, 0.15) if not locked else Color(INK, 0.5)])
 	_draw_labels(font, labels)
 
 	# Завдання

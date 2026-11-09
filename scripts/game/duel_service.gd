@@ -8,6 +8,7 @@ const Acts := preload("res://scripts/data/activities.gd")
 const Data := preload("res://scripts/data/data.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
+const Power := preload("res://scripts/game/power.gd")
 
 const ROUNDS := 3
 const TRIES := 3
@@ -74,20 +75,14 @@ static func gold_for(round_i: int, level: int) -> int:
 	return int(Acts.DUEL_GOLD[round_i]) * level
 
 
-## Приблизна шкода героя за секунду (удари з критами, серії та вміння).
-static func player_dps(player) -> float:
-	var crit: float = 1.0 + player.crit_chance * (player.crit_mult - 1.0)
-	return player.damage / maxf(player.attack_cooldown, 0.1) * crit * 1.6
-
-
 ## Опис бою з конкретним суперником у конкретному колі. Суперник міряється силою з героєм:
 ## здоров'я — від шкоди героя, удар — від його здоров'я, тож герць чесний на будь-якому рівні.
 static func loc_for(player, rival_id: String, round_i: int) -> Dictionary:
 	return {"name": "Герць: " + str(Acts.RIVALS[rival_id]["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
 		"rival": rival_id, "round": round_i,
-		"rival_hp": player_dps(player) * float(Acts.DUEL_SECONDS[round_i]),
+		"rival_hp": Power.dps(player) * float(Acts.DUEL_SECONDS[round_i]),
 		"rival_cap": 1.0 / (0.6 * float(Acts.DUEL_SECONDS[round_i])),  # найшвидший герць — 60% від розрахункового часу
-		"rival_dmg": player.max_hp * float(Acts.DUEL_HIT[round_i]) * hit_scale(player.level) / maxf(0.25, 1.0 - player.armor), "desc": ""}
+		"rival_dmg": Power.hit(player, float(Acts.DUEL_HIT[round_i]) * hit_scale(player.level)), "desc": ""}
 
 
 ## Досвідчений герой краще лікується в бою (вампіризм, вміння), тож суперник б'є трохи сильніше.

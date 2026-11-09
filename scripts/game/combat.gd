@@ -22,6 +22,8 @@ const GateScript := preload("res://scripts/entities/gate.gd")
 const TrapScript := preload("res://scripts/world/trap.gd")
 const ZoneScript := preload("res://scripts/world/zone.gd")
 const SpectatorScript := preload("res://scripts/world/spectator.gd")
+const CampfireScript := preload("res://scripts/world/campfire.gd")
+const VigilService := preload("res://scripts/game/vigil_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
@@ -31,6 +33,7 @@ const AmbientScript := preload("res://scripts/world/ambient.gd")
 const FIELD_ARENA := Rect2(-1400, -1400, 2800, 2800)
 const DUNGEON_ARENA := Rect2(-750, -550, 1500, 1100)
 const DUEL_ARENA := Rect2(-480, -360, 960, 720)  # майдан для герцю
+const VIGIL_ARENA := Rect2(-1000, -800, 2000, 1600)  # сторожова могила
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
@@ -63,6 +66,13 @@ var defense_loc := {}
 var custom_loc := {}
 var tower_boss_spawned := false  # Башта: міні-бос/супербос поверху вже на арені
 var duel_over := false  # герць: суперник упав
+var vigil_time := 0.0  # варта: скільки секунд вистояно
+var vigil_kills := 0
+var vigil_minute := 0
+var vigil_done := false  # мету (5 хв) досягнуто, портал відкрито
+var _vigil_fire = null
+var _vigil_day := Color.WHITE
+var torch_base := 1.15  # сила смолоскипа: у печері яскравий, уночі надворі — слабший, щоб не засвічувати
 var spectators: Array = []  # глядачі на майдані
 var _duel_hp := 0.0  # здоров'я суперника минулого кадру (щоб глядачі раділи влучанням)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
@@ -162,10 +172,13 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	loc_id = id
 	if not Data.LOCATIONS.has(id):
 		# Особливі бої, описані службами (оборона, події, герць...)
-		if defense_loc.get("type", "") == "duel":
-			enter_duel(defense_loc)
-		else:
-			enter_defense(defense_loc, companions)
+		match str(defense_loc.get("type", "")):
+			"duel":
+				enter_duel(defense_loc)
+			"vigil":
+				enter_vigil(defense_loc, companions)
+			_:
+				enter_defense(defense_loc, companions)
 		return
 	plague = plague_level
 	plague_mods = PlagueService.mods(plague)
@@ -261,9 +274,79 @@ func is_field() -> bool:
 	return loc.get("type", "") == "field"
 
 
+func is_vigil() -> bool:
+	return loc.get("type", "") == "vigil"
+
+
 ## Чи рахується цей бій походом (після нього світ робить крок: зараза, облоги, події).
 func counts_as_trip() -> bool:
 	return not is_duel()
+
+
+# ======================= Козацька варта =======================
+
+## Варта на сторожовій могилі: нечисть суне без упину й лютішає щохвилини; вечоріє, далі — ніч.
+func enter_vigil(dl: Dictionary, companions: Array) -> void:
+	loc = dl
+	plague = 0
+	plague_mods = PlagueService.mods(0)
+	room = 0
+	vigil_time = 0.0
+	vigil_kills = 0
+	vigil_minute = 0
+	vigil_done = false
+	field_cleared = false
+	spawn_timer = 2.5
+	player.unbreak_ready = true
+	player.berehynia_ready = true
+	_setup_arena(companions)
+	_vigil_day = canvas_mod.color
+	ground._prop("wall:tower", Vector2(0, -150))
+	_vigil_fire = CampfireScript.new()
+	_vigil_fire.position = Vector2(90, -60)
+	entities.add_child(_vigil_fire)
+	_vigil_fire.setup(light_tex)
+	set_visible_world(true)
+	active = true
+	Events.banner.emit("Козацька варта\nВистій %d хвилин" % int(float(dl["goal"]) / 60.0), Color(1.0, 0.85, 0.4))
+
+
+func _update_vigil(delta: float) -> void:
+	vigil_time += delta
+	# Вечоріє: з першої хвилини світ темнішає, згодом світить лише вогнище на могилі
+	var k := clampf((vigil_time - 45.0) / 200.0, 0.0, 1.0)
+	canvas_mod.color = _vigil_day.lerp(_vigil_day * Color(0.3, 0.32, 0.5), k)
+	if _vigil_fire != null and is_instance_valid(_vigil_fire):
+		_vigil_fire.darkness = k
+	var m := int(vigil_time / 60.0)
+	if m > vigil_minute:
+		vigil_minute = m
+		_vigil_minute_up()
+	spawn_timer -= delta
+	if spawn_timer <= 0.0:
+		spawn_timer = maxf(0.45, 1.3 - 0.14 * vigil_minute)
+		if alive_enemy_count() < 8 + 3 * vigil_minute:
+			var en: Array = loc["enemies"]
+			spawn_enemy(en[randi() % en.size()], int(loc["level"]) + vigil_minute / 2)
+			var e = _last_enemy()
+			if e != null and int(loc["level"]) >= Elites.MIN_LEVEL and randf() < 0.05 + 0.03 * vigil_minute:
+				e.make_elite(Elites.roll_affixes(int(loc["level"])))
+	if vigil_done:
+		_check_exit_portal()
+
+
+func _vigil_minute_up() -> void:
+	loc.merge(VigilService.targets_at(player, vigil_minute), true)
+	Audio.play("roar", 0.1, -6.0)
+	var goal_min := int(float(loc["goal"]) / 60.0)
+	if vigil_minute == goal_min - 1:
+		# Остання хвилина: на могилу йде ватажок
+		spawn_enemy(loc["enemies"][0], int(loc["level"]) + 1, true)
+	if vigil_minute >= goal_min and not vigil_done:
+		vigil_done = true
+		field_cleared = true
+		_spawn_portal("З варти", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
+	Events.vigil_minute.emit(vigil_minute)
 
 
 # ======================= Герць на майдані =======================
@@ -538,6 +621,8 @@ func _setup_arena(companions: Array) -> void:
 func _arena_rect() -> Rect2:
 	if is_duel():
 		return DUEL_ARENA
+	if is_vigil():
+		return VIGIL_ARENA
 	if is_dungeon() or is_tower():
 		return DUNGEON_ARENA
 	return DEFENSE_ARENA if is_defense() else FIELD_ARENA
@@ -587,6 +672,7 @@ func _setup_atmosphere(biome: String) -> void:
 	if night:
 		canvas_mod.color = canvas_mod.color * Color(0.3, 0.32, 0.5)  # ніч: синя пітьма, світить лише смолоскип героя
 	torch.enabled = biome in ["cave", "plague"] or night
+	torch_base = 1.15 if biome in ["cave", "plague"] else 0.6
 	for c in lights.get_children():
 		c.queue_free()
 	if biome in ["cave", "plague"]:
@@ -613,7 +699,7 @@ func _process(delta: float) -> void:
 		return
 	_time += delta
 	if torch.enabled:
-		torch.energy = 1.15 + sin(_time * 13.0) * 0.05 + randf() * 0.06
+		torch.energy = torch_base + sin(_time * 13.0) * 0.05 + randf() * 0.06
 	camera.global_position = player.global_position
 	if shake_strength > 0.0:
 		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_strength
@@ -624,6 +710,8 @@ func _process(delta: float) -> void:
 	player.block_held = block_input.call()
 	if is_duel():
 		_update_duel(delta)
+	elif is_vigil():
+		_update_vigil(delta)
 	elif is_tower():
 		_update_tower(delta)
 	elif is_dungeon():
@@ -784,6 +872,8 @@ func _on_enemy_killed(e: Node2D) -> void:
 		hitstop(0.15)
 	else:
 		hitstop(0.03)
+	if is_vigil():
+		vigil_kills += 1
 	if is_field() and not field_cleared:
 		field_kills += 1
 		if field_kills >= field_goal:
@@ -943,7 +1033,14 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	e.combat = self
 	e.position = pos
 	e.setup(kind, level, boss)
-	if loc.has("hp_mult"):
+	if loc.has("std_hp"):
+		# Варта: нечисть міряється силою з героєм (std — звичайний заражений; інші види — у своїй пропорції)
+		var s0: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (level - 1))
+		e.max_hp = e.max_hp / (70.0 * s0) * float(loc["std_hp"])
+		e.hp = e.max_hp
+		e.damage = e.damage / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))) * float(loc["std_dmg"])
+		e.xp_value = maxi(1, int(e.xp_value * float(loc.get("xp_mult", 1.0))))
+	elif loc.has("hp_mult"):
 		e.max_hp *= float(loc["hp_mult"])
 		e.hp = e.max_hp
 		e.damage *= float(loc["dmg_mult"])

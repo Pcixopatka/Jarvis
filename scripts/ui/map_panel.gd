@@ -39,6 +39,41 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 	return v
 
 
+## Панель місця занять: варта, полювання, рибалка.
+static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
+	var Acts = load("res://scripts/data/activities.gd")
+	var S: Dictionary = Acts.SPOTS[sel]
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label(S["name"], 28, UI.GOLD, false))
+	v.add_child(_wrapped(S["desc"], 18, UI.TEXT))
+	if player.level < int(S["level"]):
+		v.add_child(_wrapped("Відкриється з %d-го рівня героя." % int(S["level"]), 18, UI.BAD))
+		return v
+	match str(S["kind"]):
+		"vigil":
+			var VS = load("res://scripts/game/vigil_service.gd")
+			if not VS.unlocked(player):
+				v.add_child(_wrapped("На варту беруть лише тих, хто вже обрав свою дорогу.", 18, UI.BAD))
+				return v
+			var s: Dictionary = VS.state(world)
+			var goal_min := int(Acts.VIGIL_GOAL / 60.0)
+			v.add_child(_wrapped("Вистій %d хвилин: нечисть суне без упину й щохвилини лютішає. Смерті нема — варту просто знято." % goal_min, 17, UI.TEXT))
+			v.add_child(UI.label("Рекорд: %s  •  убитих: %d" % [VS.time_text(float(s["best_time"])), int(s["best_kills"])], 19, UI.GOLD, false))
+			var paid := int(s["paid"])
+			if paid >= goal_min:
+				v.add_child(_wrapped("Сьогоднішню нагороду вже взято (хвилин: %d). Стій далі — на рекорд і нові хвилини." % paid, 16, UI.MUTED))
+			else:
+				var total := 0
+				for m in range(paid + 1, goal_min + 1):
+					total += int(VS.minute_reward(player.level, m)["gold"])
+				v.add_child(_wrapped("Нагорода сьогодні: до %d грн, слава за кожну хвилину, речі на 3-й і %d-й, 2 трофеї за повну варту." % [total, goal_min], 16, UI.GOLD))
+			v.add_child(UI.button("Стати на варту", on_go.bind(sel), Vector2(350, 70), 26))
+		_:
+			v.add_child(UI.button("Вирушити", on_go.bind(sel), Vector2(350, 70), 26))
+	return v
+
+
 ## Панель Башти Кощія: вибір поверху й підйом.
 static func build_tower(world, player, sel: int, on_change: Callable, on_go: Callable) -> Control:
 	var TS = load("res://scripts/game/tower_service.gd")
