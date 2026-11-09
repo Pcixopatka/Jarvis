@@ -25,6 +25,8 @@ static func build(game, city: String) -> Control:
 		["Коваль", _smith(game)],
 		["Корчма", _tavern(game, city)],
 	]
+	if game.BountyService.unlocked(game.player):
+		pages.insert(1, ["Розшук", _bounty_tab(game, city)])
 	if city == "sich":
 		pages.append(["Майдан", _maidan(game)])
 	if city == "sich" and game.PathService.choosing(game.world):
@@ -495,3 +497,51 @@ static func _maidan(game) -> Control:
 		if not s["belt"]:
 			v.add_child(UI.label("Перший чемпіонський титул — легендарний «%s»." % DS.BELT_NAME, 16, UI.GOLD, false))
 	return v
+
+
+# ---------------- Розшук (у вкладці «Завдання») ----------------
+
+static func _bounty_tab(game, city: String) -> Control:
+	var BS = game.BountyService
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(UI.label("Розшук   (шукаєш голів: %d/%d)" % [BS.state(w)["active"].size(), game.Acts.BOUNTY_ACTIVE], 24, UI.GOLD, false))
+	v.add_child(UI.label("Іменована нечисть у навколишніх місцях. Убий і принеси голову сюди — отримаєш гривні, славу й лояльність.", 16, UI.MUTED, false))
+	for b in BS.mine(w, city):
+		v.add_child(_bounty_row(game, b, "killed" if b["killed"] else "active"))
+	for b in BS.board(w, city, p):
+		v.add_child(_bounty_row(game, b, "take"))
+	var elsewhere := []
+	for b in BS.state(w)["active"]:
+		if b["city"] != city:
+			elsewhere.append("%s (%s) — %s" % [b["name"], Data.place_name(b["loc"]), ("голову здобуто, неси в місто %s" % Data.place_name(b["city"])) if b["killed"] else "ще ходить"])
+	if not elsewhere.is_empty():
+		v.add_child(UI.label("Оголошення інших міст:", 18, UI.MUTED, false))
+	for t in elsewhere:
+		v.add_child(UI.label("• " + t, 16, UI.MUTED, false))
+	v.add_child(UI.label("Дошка оновлюється кожні %d походів. Слава: %d — %s." % [game.Acts.BOUNTY_REFRESH, game.GloryService.glory(w), game.GloryService.rank_name(w)], 16, UI.MUTED, false))
+	return v
+
+
+static func _bounty_row(game, b: Dictionary, mode: String) -> Control:
+	var BS = game.BountyService
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var head := "☠ %s — %s" % [b["name"], Data.place_name(b["loc"])]
+	if mode == "killed":
+		head += "   (голову здобуто)"
+	info.add_child(UI.label(head, 21, UI.GOOD if mode == "killed" else UI.TEXT, false))
+	info.add_child(UI.label("%s: %s.  Нагорода: %d грн, +%d слави, +30 лояльності" % [Data.ENEMY_NAMES[b["kind"]], BS.traits(b), b["gold"], b["glory"]], 16, UI.MUTED, false))
+	row.add_child(info)
+	match mode:
+		"take":
+			row.add_child(UI.button("Взяти", _do(game, "bounty_take", b["id"]), Vector2(170, 58), 22, BS.can_take(game.world)))
+		"killed":
+			row.add_child(UI.button("Здати голову", _do(game, "bounty_turn_in", b["id"]), Vector2(170, 58), 18))
+		_:
+			row.add_child(UI.button("Відмовитись", _do(game, "bounty_drop", b["id"]), Vector2(170, 58), 18))
+	return row

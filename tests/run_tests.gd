@@ -67,6 +67,8 @@ func _run() -> void:
 	await _suite_event_battles()
 	_suite_duel()
 	await _suite_duel_battle()
+	_suite_bounty()
+	await _suite_bounty_battle()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -1881,6 +1883,140 @@ func _suite_event_battles() -> void:
 		if c.get_script() == game.combat.PickupScript and c.kind == "item" and int(c.item["rarity"]) >= 2:
 			chest = true
 	check(chest and not ES.has_treasure(game.world, "wild_field"), "сторож убитий — скриня з рідкісною річчю, мітка знята")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_bounty() -> void:
+	suite("Дошка розшуку: правила")
+	var BS = load("res://scripts/game/bounty_service.gd")
+	var GS = load("res://scripts/game/glory_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Elites = load("res://scripts/data/elites.gd")
+	for id in Data.LOCATIONS:
+		var L: Dictionary = Data.LOCATIONS[id]
+		if L["type"] != "field":
+			continue
+		var named := false
+		for k in L["enemies"]:
+			if Acts.BOUNTY_NAMES.has(k):
+				named = true
+		check(named, "%s: є кого розшукувати" % id)
+	var w = WorldState.new()
+	var p = _new_player()
+	p.level = 3
+	check(not BS.unlocked(p) and BS.board(w, "kyiv", p).is_empty(), "до 4 рівня розшуку нема")
+	p.level = 10
+	var b: Array = BS.board(w, "kyiv", p)
+	check(b.size() == Acts.BOUNTY_BOARD, "на дошці два оголошення")
+	var ok := true
+	for bt in b:
+		var L: Dictionary = Data.LOCATIONS[bt["loc"]]
+		if L["type"] != "field" or not (bt["kind"] in L["enemies"]) or not (bt["name"] in Acts.BOUNTY_NAMES[bt["kind"]]):
+			ok = false
+		if bt["affixes"].size() < 2 or bt["affixes"].size() > 3 or int(bt["gold"]) <= 0 or int(bt["glory"]) <= 0 or bt["killed"]:
+			ok = false
+		for a in bt["affixes"]:
+			if not Elites.AFFIXES.has(a):
+				ok = false
+		if int(L["level"]) > p.level + 3:
+			ok = false
+	check(ok, "оголошення: дика місцевість до снаги, вид звідти, ім'я, властивості, нагорода")
+	check(b[0]["name"] != b[1]["name"] and b[0]["id"] != b[1]["id"], "оголошення різні")
+	check(BS.board(w, "kyiv", p) == b, "дошка не змінюється без походів")
+	for c in Data.CITIES:
+		check(BS.board(w, c, p).size() == Acts.BOUNTY_BOARD and not BS.candidates(c, p).is_empty(), "%s: дошка розшуку заповнена" % c)
+	# Узяти
+	var first: Dictionary = b[0]
+	check(BS.take(w, "kyiv", first["id"], p) and BS.state(w)["active"].size() == 1 and BS.board(w, "kyiv", p).size() == 1, "узяв — з дошки зникло")
+	check(BS.mine(w, "kyiv").size() == 1 and BS.mine(w, "lviv").is_empty(), "узяте видно в тому самому місті")
+	check(BS.target_at(w, first["loc"])["id"] == first["id"] and first["loc"] in BS.targets(w), "ціль ходить у своїй місцевості")
+	var m: Dictionary = BS.mods_for(w, first["loc"], p)
+	check(m.has("bounty") and int(m["bounty"]["level"]) >= p.level and m["bounty"]["name"] == first["name"], "ціль не слабша за героя")
+	check(BS.mods_for(w, "kremlin", p).is_empty(), "в інших місцях цілі нема")
+	var second: Dictionary = BS.board(w, "kyiv", p)[0]
+	BS.take(w, "kyiv", second["id"], p)
+	var lb: Array = BS.board(w, "lviv", p)
+	check(not BS.can_take(w) and not BS.take(w, "lviv", lb[0]["id"], p), "більше двох голів водночас не шукають")
+	BS.drop(w, second["id"])
+	check(BS.state(w)["active"].size() == 1, "відмовився — оголошення знято")
+	# Убити й здати
+	check(BS.turn_in(w, p, first["id"]).is_empty(), "живу ціль не здати")
+	var km: String = BS.on_kill(w, first["id"])
+	check(first["name"] in km and BS.target_at(w, first["loc"]).is_empty() and BS.on_kill(w, first["id"]) == "" and BS.on_kill(w, 9999) == "", "ціль убито один раз")
+	var g0: int = p.gold
+	var loy0: int = w.loyalty_points("kyiv")
+	var tm: Array = BS.turn_in(w, p, first["id"])
+	check(not tm.is_empty() and p.gold == g0 + int(first["gold"]) and w.loyalty_points("kyiv") == loy0 + 30 and GS.glory(w) == int(first["glory"]) and int(BS.state(w)["done"]) == 1, "здав голову: гривні, слава, лояльність")
+	check(BS.state(w)["active"].is_empty() and BS.turn_in(w, p, first["id"]).is_empty(), "двічі не здати")
+	check(BS.traits(first) != "", "властивості цілі описані словами")
+	# Оновлення дошки
+	var old_ids := []
+	for bt in BS.board(w, "lviv", p):
+		old_ids.append(bt["id"])
+	for i in Acts.BOUNTY_REFRESH:
+		BS.tick(w)
+	var fresh := true
+	for bt in BS.board(w, "lviv", p):
+		if bt["id"] in old_ids:
+			fresh = false
+	check(fresh and BS.board(w, "lviv", p).size() == Acts.BOUNTY_BOARD, "за шість походів дошка нова")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(int(w2.bounties["done"]) == 1 and w2.bounties["boards"].has("lviv"), "розшук зберігається")
+
+
+func _suite_bounty_battle() -> void:
+	suite("Дошка розшуку: полювання на ціль")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	p.change_class("cossack")
+	p.level = 12
+	p.stats["str"] = 60
+	p.stats["vit"] = 60
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "bounty": true, "stones": true}
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	game.enter_city("kyiv")
+	game.hud.close_dialogue()
+	var BS = game.BountyService
+	var bt: Dictionary = BS.board(game.world, "kyiv", p)[0]
+	game.city_do("bounty_take", bt["id"])
+	check(BS.state(game.world)["active"].size() == 1, "узяв оголошення в місті")
+	game.enter_map()
+	await _frames(2)
+	check(game.hud.map_view.targets.has(bt["loc"]), "місцевість цілі позначена на мапі")
+	await _ride(game, bt["loc"])
+	var target = null
+	for e in game.combat.get_tree().get_nodes_in_group("enemies"):
+		if e.bounty_id == bt["id"]:
+			target = e
+	check(game.state == game.State.PLAYING and target != null and target.elite and target.title == bt["name"] and target.level >= p.level, "ціль на місцевості: еліта з іменем, не слабша за героя")
+	check(target.affixes == bt["affixes"], "властивості — як в оголошенні")
+	target.take_damage(target.max_hp * 5.0, Vector2.ZERO)
+	await _frames(3)
+	check(BS.state(game.world)["active"][0]["killed"] and int(game.world.stats.get("bounty_kill", 0)) == 1, "ціль убито — голову здобуто")
+	game.enter_map()
+	await _frames(2)
+	check(not game.hud.map_view.targets.has(bt["loc"]) or not game.world.quest_targets().is_empty(), "позначка з мапи зникла")
+	var g0: int = p.gold
+	game.enter_city("kyiv")
+	game.hud.close_dialogue()
+	game.city_do("bounty_turn_in", bt["id"])
+	check(p.gold >= g0 + int(bt["gold"]) and BS.state(game.world)["active"].is_empty() and int(game.world.stats.get("bounty", 0)) == 1, "здав голову в місті — нагорода")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

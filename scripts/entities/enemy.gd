@@ -54,6 +54,7 @@ var blink_timer := 2.5  # чорт: телепорт до цілі
 var phase2 := false  # боси Кощій і Путіноїд лютішають на половині здоров'я
 var anim_moving := false  # для спрайтів: чи рухався цього кадру
 var treasure_guard := false  # подія «Знахідка»: після смерті лишає скриню
+var bounty_id := 0  # ціль із дошки розшуку (див. BountyService)
 var style := ""  # суперник у герці: rubaka | spysnyk | strilets | kharakternyk | bulavnyk (див. Activities.RIVALS)
 var sprite := ""  # лист спрайтів, якщо він не збігається з kind
 var cast_time := 0.0  # стоїть і заносить удар (серія рубаки, удар булави)

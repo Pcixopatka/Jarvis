@@ -28,6 +28,7 @@ var tower := {}  # Башта Кощія в Москві (див. TowerService)
 var events := {}  # події світу: набіги, валки, полон, ніч, ярмарок (див. EventService)
 var glory := 0  # слава героя (див. GloryService)
 var duel := {}  # герць на майдані: тижневий турнір (див. DuelService)
+var bounties := {}  # дошка розшуку: оголошення й узяті голови (див. BountyService)
 var spec_trial := {}  # випробування в наставника (див. SpecService)
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
@@ -207,7 +208,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -235,4 +236,5 @@ func from_dict(d: Dictionary) -> void:
 	events = d.get("events", {})
 	glory = int(d.get("glory", 0))
 	duel = d.get("duel", {})
+	bounties = d.get("bounties", {})
 	path_talks = d.get("path_talks", {})

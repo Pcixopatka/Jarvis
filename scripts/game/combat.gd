@@ -197,16 +197,37 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 		for i in 5:
 			var pos: Vector2 = player.position + Vector2.from_angle(randf() * TAU) * randf_range(450, 650)
 			spawn_enemy(en[randi() % en.size()], loc["level"], false, _clamp_in(pos, 60.0))
+		if loc.has("bounty"):
+			_spawn_bounty(loc["bounty"])
 		if loc.get("treasure", false):
 			# Сторож скарбу: еліта з двома властивостями, після неї — скриня
 			var gp := _clamp_in(player.position + Vector2.from_angle(randf() * TAU) * 700.0, 80.0)
 			spawn_enemy(en[randi() % en.size()], int(loc["level"]) + 1, false, gp)
 			var g = _last_enemy()
-			g.make_elite(Elites.roll_affixes(99).slice(0, 2) if Elites.roll_affixes(99).size() >= 2 else ["iron", "fiery"])
+			var gk := Elites.AFFIXES.keys()
+			gk.shuffle()
+			g.make_elite(gk.slice(0, 2))
 			g.max_hp *= 1.5
 			g.hp = g.max_hp
 			g.treasure_guard = true
 			g.title = "Сторож скарбу: " + g.title
+
+
+## Ціль із дошки розшуку: іменована еліта десь у місцевості, сама йде на козака.
+func _spawn_bounty(b: Dictionary) -> void:
+	var pos := _clamp_in(player.position + Vector2.from_angle(randf() * TAU) * 820.0, 100.0)
+	spawn_enemy(b["kind"], int(b["level"]), false, pos)
+	var e = _last_enemy()
+	e.make_elite(b["affixes"])
+	e.max_hp *= 2.5
+	e.hp = e.max_hp
+	e.damage *= 1.2
+	e.xp_value *= 3
+	e.base_scale = 1.45
+	e.scale = Vector2.ONE * e.base_scale
+	e.title = b["name"]
+	e.bounty_id = int(b["id"])
+	Events.hint.emit("bounty", "Розшукувана нечисть десь тут і сама тебе знайде. Золоте коло й ім'я над головою — це вона. Убий і неси голову в місто.")
 
 
 func leave() -> void:
@@ -786,6 +807,13 @@ func _drop_loot(e: Node2D) -> void:
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
 		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+	elif e.bounty_id > 0:
+		for i in 6:
+			spawn_pickup(pos, "coin", maxi(2, e.xp_value / 5))
+		spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, maxi(1, Data.roll_rarity(ilvl, 1))))
+		_resource_bundle(pos, 3)
+		spawn_pickup(pos, "res", 2 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+		Events.bounty_killed.emit(e.bounty_id)
 	elif e.treasure_guard:
 		Events.banner.emit("Сторожа скарбу вбито!\nСкриня твоя", Color(1.0, 0.85, 0.35))
 		spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, maxi(2, Data.roll_rarity(ilvl, 2))))

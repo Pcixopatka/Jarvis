@@ -175,6 +175,9 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	for q in world.quests:
 		if q["loc"] == sel and not world.is_done(q):
 			v.add_child(_wrapped("! " + q["text"], 16, UI.GOLD))
+	var bt: Dictionary = load("res://scripts/game/bounty_service.gd").target_at(world, sel)
+	if not bt.is_empty():
+		v.add_child(_wrapped("Розшук: тут ходить %s." % bt["name"], 17, UI.GOLD))
 	if _event_note(v, world, sel, on_go):
 		return v
 	v.add_child(UI.button("Вирушити", on_go.bind(sel), Vector2(350, 70), 26))

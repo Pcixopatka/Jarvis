@@ -46,6 +46,8 @@ const ACHIEVEMENTS := [
 	{"id": "depth_10", "name": "У надрах", "desc": "Пройди 10-ту глибину зарази", "stat": "depth", "goal": 10, "gold": 3000},
 	{"id": "depth_25", "name": "Корені зла", "desc": "Пройди 25-ту глибину зарази", "stat": "depth", "goal": 25, "gold": 10000},
 	{"id": "depth_50", "name": "Без дна", "desc": "Пройди 50-ту глибину зарази", "stat": "depth", "goal": 50, "gold": 30000},
+	{"id": "bounty_1", "name": "Перша голова", "desc": "Закрий оголошення з дошки розшуку", "stat": "bounty", "goal": 1, "gold": 300},
+	{"id": "bounty_10", "name": "Мисливець за головами", "desc": "Закрий 10 оголошень розшуку", "stat": "bounty", "goal": 10, "gold": 2500},
 	{"id": "duel_1", "name": "Перша кров на майдані", "desc": "Виграй коло в герці", "stat": "duel", "goal": 1, "gold": 300},
 	{"id": "duel_champion", "name": "Чемпіон Січі", "desc": "Виграй турнір на майдані", "stat": "duel_champion", "goal": 1, "gold": 2000},
 	{"id": "duel_champion_5", "name": "Лицар майдану", "desc": "Стань чемпіоном майдану 5 разів", "stat": "duel_champion", "goal": 5, "gold": 8000},

@@ -23,6 +23,7 @@ const DepthService := preload("res://scripts/game/depth_service.gd")
 const TowerService := preload("res://scripts/game/tower_service.gd")
 const EventService := preload("res://scripts/game/event_service.gd")
 const DuelService := preload("res://scripts/game/duel_service.gd")
+const BountyService := preload("res://scripts/game/bounty_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
@@ -129,6 +130,11 @@ func _ready() -> void:
 	Events.exit_requested.connect(_on_exit)
 	Events.defense_won.connect(_on_defense_won)
 	Events.duel_won.connect(_on_duel_won)
+	Events.bounty_killed.connect(func(id: int):
+		var m := BountyService.on_kill(world, id)
+		if m != "":
+			hud.show_banner(m, UI.GOLD)
+			_record("bounty_kill"))
 	Events.parried.connect(func(): _record("parry"))
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
@@ -387,6 +393,8 @@ func enter_map() -> void:
 	var stg := SpecService.target(world)
 	if stg != "":
 		mv.targets[stg] = true
+	for loc in BountyService.targets(world):
+		mv.targets[loc] = true
 	mv.story_target = StoryService.target(world)
 	mv.plague = PlagueService.state(world)["levels"]
 	mv.events = EventService.map_marks(world)
@@ -400,6 +408,7 @@ func enter_map() -> void:
 			news.append("Зараза повзе далі: " + ", ".join(spread))
 		news.append_array(DefenseService.tick(world, player))
 		news.append_array(EventService.tick(world, player))
+		BountyService.tick(world)
 		mv.events = EventService.map_marks(world)
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
@@ -447,7 +456,9 @@ func enter_location(id: String) -> void:
 	hud.close_overlay()
 	hud.show_map(false)
 	combat.boss_revives = 0 if StoryService.effect(world, "koshchii_mortal") > 0.0 else 1
-	combat.enter(id, _party_data(), PlagueService.level(world, id), EventService.mods_for(world, id))
+	var extra := EventService.mods_for(world, id)
+	extra.merge(BountyService.mods_for(world, id, player))
+	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
 	hud.set_mode(true, true)
 	state = State.PLAYING
 	get_tree().paused = false
@@ -1146,6 +1157,16 @@ func city_do(action: String, arg) -> void:
 		"duel_start":
 			start_duel()
 			return
+		"bounty_take":
+			BountyService.take(world, city_id, arg, player)
+		"bounty_drop":
+			BountyService.drop(world, arg)
+		"bounty_turn_in":
+			var bm := BountyService.turn_in(world, player, arg)
+			if not bm.is_empty():
+				Audio.play("quest", 0.0)
+				hud.show_banner("\n".join(bm), UI.GOLD)
+				_record("bounty")
 	save_game()
 	_build_city()
 
