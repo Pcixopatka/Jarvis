@@ -51,8 +51,26 @@ const BUILDINGS := {
 			{"gold": 800, "wood": 35, "iron": 5, "herbs": 15, "text": "Дохід 40 грн/год"},
 			{"gold": 2000, "wood": 60, "iron": 15, "herbs": 30, "text": "Дохід 60 грн/год"},
 		]},
+	"horod": {"name": "Город", "desc": "Грядки ростуть самі, поки ти в поході: зілля, городина на борщ і хміль на продаж.",
+		"levels": [
+			{"gold": 250, "wood": 15, "iron": 0, "herbs": 5, "text": "Дві грядки"},
+			{"gold": 700, "wood": 30, "iron": 5, "herbs": 15, "text": "Три грядки"},
+			{"gold": 1800, "wood": 50, "iron": 10, "herbs": 30, "text": "Чотири грядки, усе росте на чверть швидше"},
+		]},
 }
-const BUILD_ORDER := ["kurin", "kuznia", "zillia", "sklad", "pasika"]
+const BUILD_ORDER := ["kurin", "kuznia", "zillia", "sklad", "pasika", "horod"]
+
+# Город: скільки грядок на кожному рівні й що можна садити
+const GARDEN_BEDS := [0, 2, 3, 4]
+const GARDEN_FAST := 0.75  # на 3-му рівні час росту множиться на це
+## Культури: скільки годин росте, що дає (ресурс або "gold"), скільки, ціна насіння.
+## Хміль продається за гривні, які ростуть із рівнем героя (як мед із пасіки).
+const CROPS := {
+	"herbs": {"name": "Зілля", "hours": 2.0, "gives": "herbs", "amount": 6, "seed": 10, "desc": "+6 трав для зілляварні й казана"},
+	"veg": {"name": "Городина", "hours": 4.0, "gives": "veg", "amount": 4, "seed": 20, "desc": "+4 городини: буряк і капуста на борщ"},
+	"khmil": {"name": "Хміль", "hours": 8.0, "gives": "gold", "amount": 200, "seed": 30, "desc": "шинкарі заберуть за гривні"},
+}
+const CROP_ORDER := ["herbs", "veg", "khmil"]
 
 # Варіння (Зілляварня)
 const BREW := {

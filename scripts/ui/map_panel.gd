@@ -182,6 +182,9 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		var honey := CampService.pasika_ready(world, player.level)
 		if honey > 0:
 			v.add_child(UI.label("Пасіка: готово %d грн" % honey, 17, UI.GOOD, false))
+		var ripe: int = load("res://scripts/game/garden_service.gd").ready_count(world)
+		if ripe > 0:
+			v.add_child(UI.label("Город: достигло грядок — %d" % ripe, 17, UI.GOOD, false))
 		if _event_note(v, world, sel, on_go):
 			return v
 		if _siege_note(v, world, sel):

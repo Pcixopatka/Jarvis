@@ -28,6 +28,7 @@ const VigilService := preload("res://scripts/game/vigil_service.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const TavernService := preload("res://scripts/game/tavern_service.gd")
+const GardenService := preload("res://scripts/game/garden_service.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -1803,11 +1804,30 @@ func camp_do(action: String, arg) -> void:
 		"brew":
 			if CampService.brew(world, player, arg):
 				Audio.play("heal", 0.0)
+		"plant":
+			if GardenService.plant(world, player, arg[0], arg[1]):
+				Audio.play("coin", 0.1, -6.0)
+				_record("plant")
+		"harvest":
+			var hm := GardenService.harvest(world, player, arg)
+			if hm != "":
+				Audio.play("heal", 0.0)
+				hud.show_banner(hm, UI.GOOD)
+				_record("harvest")
+		"harvest_all":
+			var hms := GardenService.harvest_all(world, player)
+			if not hms.is_empty():
+				Audio.play("heal", 0.0)
+				hud.show_banner("\n".join(hms), UI.GOOD)
+				_record("harvest", hms.size())
+		"uproot":
+			GardenService.uproot(world, arg)
 		"cook":
 			if OutdoorService.cook(player, arg):
 				Audio.play("heal", 0.0)
 				hud.show_banner("%s готовий! %s" % [Acts.RECIPES[arg]["name"], Acts.RECIPES[arg]["desc"]], UI.GOOD)
 				_record("cook")
+				_record("cook:" + str(arg))
 		"collect":
 			var g := CampService.collect_pasika(world, player)
 			if g > 0:

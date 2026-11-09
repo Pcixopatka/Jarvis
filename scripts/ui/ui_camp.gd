@@ -9,6 +9,7 @@ const AdRewards := preload("res://scripts/game/ad_rewards.gd")
 const CraftService := preload("res://scripts/game/craft_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
+const GardenService := preload("res://scripts/game/garden_service.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -29,6 +30,9 @@ static func build(game) -> Control:
 		pages.append(["Зілляварня", _brewery(game)])
 	if CampService.level(w, "pasika") >= 1:
 		pages.append(["Пасіка", _pasika(game)])
+	if GardenService.level(w) >= 1:
+		var ripe := GardenService.ready_count(w)
+		pages.append(["Город" + ((" (%d)" % ripe) if ripe > 0 else ""), _garden(game)])
 	pages.append(["Казан", _kazan(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
@@ -288,6 +292,61 @@ static func _brewery(game) -> Control:
 	return v
 
 
+# ---------- Город ----------
+
+static func _garden(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	v.add_child(UI.label("Грядки ростуть самі, навіть коли гра закрита. Город спільний для всіх твоїх персонажів.", 16, UI.MUTED, false))
+	v.add_child(UI.label(food_text(p) + "  •  Гривні: %d" % p.gold, 19, UI.TEXT, false))
+	if GardenService.ready_count(w) > 1:
+		var all := UI.button("Зібрати все достигле", _do(game, "harvest_all"), Vector2(360, 60), 20)
+		all.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		v.add_child(all)
+	for i in GardenService.beds_count(w):
+		var b: Dictionary = GardenService.bed(w, i)
+		var box := PanelContainer.new()
+		box.add_theme_stylebox_override("panel", UI.style(Color(0.16, 0.13, 0.09), Color(0.45, 0.36, 0.2), 10, 10))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		box.add_child(row)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(info)
+		if b.is_empty():
+			info.add_child(UI.label("Грядка %d: порожня" % (i + 1), 21, UI.TEXT, false))
+			info.add_child(UI.label("Обери, що посадити. Насіння коштує кілька гривень.", 15, UI.MUTED, false))
+			for crop in Camp.CROP_ORDER:
+				var c: Dictionary = Camp.CROPS[crop]
+				var txt := "%s\n%s, %d грн" % [c["name"], GardenService.time_text(int(GardenService.grow_time(w, crop))), int(c["seed"])]
+				row.add_child(UI.button(txt, _do(game, "plant", [i, crop]), Vector2(200, 70), 15, GardenService.can_plant(w, p, i, crop)))
+		else:
+			var c2: Dictionary = Camp.CROPS[b["crop"]]
+			var ripe2 := GardenService.ready(w, i)
+			var gives: String = ("+%d грн" % GardenService.yield_of(b["crop"], p.level)) if c2["gives"] == "gold" else str(c2["desc"])
+			info.add_child(UI.label("Грядка %d: %s%s" % [i + 1, c2["name"], "  — достигло!" if ripe2 else ""], 21, UI.GOOD if ripe2 else UI.TEXT, false))
+			var bar := ProgressBar.new()
+			bar.min_value = 0.0
+			bar.max_value = 1.0
+			bar.value = GardenService.progress(w, i)
+			bar.show_percentage = false
+			bar.custom_minimum_size = Vector2(0, 14)
+			bar.add_theme_stylebox_override("background", UI.style(Color(0.08, 0.07, 0.05), Color(0.3, 0.25, 0.15), 6, 0))
+			bar.add_theme_stylebox_override("fill", UI.style(Color(0.35, 0.7, 0.3) if not ripe2 else Color(0.95, 0.8, 0.3), Color(0, 0, 0, 0), 6, 0))
+			info.add_child(bar)
+			info.add_child(UI.label(("Урожай: %s" % gives) if ripe2 else "Достигне за %s  •  урожай: %s" % [GardenService.time_text(GardenService.time_left(w, i)), gives], 15, UI.MUTED, false))
+			if ripe2:
+				row.add_child(UI.button("Зібрати", _do(game, "harvest", i), Vector2(200, 70), 20))
+			else:
+				row.add_child(UI.button("Викорчувати", _do(game, "uproot", i), Vector2(200, 60), 16))
+		v.add_child(box)
+	if GardenService.level(w) < CampService.max_level("horod"):
+		v.add_child(UI.label("Більше грядок дасть наступний рівень городу (вкладка «Будівлі»).", 15, UI.MUTED, false))
+	return v
+
+
 # ---------- Казан: страви зі здобичі ----------
 
 static func food_text(p) -> String:
@@ -311,7 +370,7 @@ static func _kazan(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	v.add_child(UI.label(food_text(p), 20, UI.TEXT, false))
-	v.add_child(UI.label("М'ясо добувають на полюванні, рибу — на рибальській тоні (обидва місця на мапі біля Січі). Страва діє один похід; нова замінює попередню.", 16, UI.MUTED, false))
+	v.add_child(UI.label("М'ясо добувають на полюванні, рибу — на рибальській тоні, городина росте на городі. Страва діє один похід; нова замінює попередню.", 16, UI.MUTED, false))
 	var now := OutdoorService.eaten(p)
 	for id in Acts.RECIPE_ORDER:
 		var r: Dictionary = Acts.RECIPES[id]

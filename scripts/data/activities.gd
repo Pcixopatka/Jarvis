@@ -137,8 +137,9 @@ const RECIPES := {
 	"kulish": {"name": "Куліш", "need": {"meat": 2, "herbs": 2}, "desc": "+15% здоров'я на похід"},
 	"yushka": {"name": "Юшка", "need": {"ryba": 2, "herbs": 2}, "desc": "+30% відновлення наснаги й +1 здоров'я/с на похід"},
 	"pechenia": {"name": "Печеня", "need": {"meat": 2, "ryba": 2}, "desc": "+10% шкоди на похід"},
+	"borshch": {"name": "Борщ", "need": {"meat": 1, "veg": 3}, "desc": "+10% здоров'я й +10% досвіду на похід"},
 }
-const RECIPE_ORDER := ["kulish", "yushka", "pechenia"]
+const RECIPE_ORDER := ["kulish", "yushka", "pechenia", "borshch"]
 
 # ======================= Шинок: кості й чутки =======================
 ## Гра «дванадцять»: кидаєш по кості й додаєш очки; понад DICE_LIMIT — перебір.

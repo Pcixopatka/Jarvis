@@ -79,6 +79,8 @@ func _run() -> void:
 	await _suite_tavern_game()
 	_suite_trail()
 	await _suite_trail_battle()
+	_suite_garden()
+	await _suite_garden_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -2540,6 +2542,124 @@ func _suite_trail_battle() -> void:
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_garden() -> void:
+	suite("Город: правила")
+	var GS = load("res://scripts/game/garden_service.gd")
+	var CampService = load("res://scripts/game/camp_service.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var OS2 = load("res://scripts/game/outdoor_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var T0 := 1762700000
+	CS.now_override = T0
+	var w = WorldState.new()
+	var p = _new_player()
+	p.level = 10
+	p.gold = 100000
+	p.resources = {"wood": 1000, "iron": 1000, "herbs": 100}
+	check(GS.beds_count(w) == 0 and not GS.plant(w, p, 0, "veg"), "без городу грядок нема")
+	check(CampService.build(w, p, "horod") and GS.beds_count(w) == 2, "город 1 рівня: дві грядки")
+	var gold0: int = p.gold
+	check(GS.plant(w, p, 0, "veg") and p.gold == gold0 - int(Camp.CROPS["veg"]["seed"]) and not GS.bed(w, 0).is_empty(), "посадив городину: насіння оплачено")
+	check(not GS.plant(w, p, 0, "herbs") and not GS.can_plant(w, p, 5, "herbs"), "зайняту чи неіснуючу грядку не засадиш")
+	check(GS.progress(w, 0) == 0.0 and not GS.ready(w, 0) and GS.time_left(w, 0) == 4 * 3600 and GS.harvest(w, p, 0) == "", "щойно посаджене не зібрати")
+	CS.now_override = T0 + 2 * 3600
+	check(absf(GS.progress(w, 0) - 0.5) < 0.01 and GS.time_text(GS.time_left(w, 0)) == "2 год", "за дві години — половина")
+	CS.now_override = T0 + 4 * 3600
+	check(GS.ready(w, 0) and GS.ready_count(w) == 1, "за чотири години достигло")
+	var msg: String = GS.harvest(w, p, 0)
+	check(msg != "" and OS2.food(p, "veg") == 4 and GS.bed(w, 0).is_empty() and GS.harvest(w, p, 0) == "", "зібрав: +4 городини, грядка вільна")
+	# Зілля й хміль
+	var herbs0: int = int(p.resources["herbs"])
+	GS.plant(w, p, 0, "herbs")
+	GS.plant(w, p, 1, "khmil")
+	CS.now_override = T0 + 4 * 3600 + 2 * 3600
+	check(GS.ready(w, 0) and not GS.ready(w, 1), "зілля достигає за 2 години, хміль іще росте")
+	CS.now_override = T0 + 4 * 3600 + 8 * 3600
+	gold0 = p.gold
+	var all: Array = GS.harvest_all(w, p)
+	check(all.size() == 2 and int(p.resources["herbs"]) == herbs0 + 6 and p.gold == gold0 + GS.yield_of("khmil", 10), "зібрав усе: трави й гривні за хміль (+%d)" % (p.gold - gold0))
+	check(GS.yield_of("khmil", 20) > GS.yield_of("khmil", 10) and GS.yield_of("veg", 20) == GS.yield_of("veg", 1), "хміль дорожчає з рівнем, городина — ні")
+	# Викорчувати
+	GS.plant(w, p, 0, "khmil")
+	check(GS.uproot(w, 0) and GS.bed(w, 0).is_empty() and not GS.uproot(w, 0), "викорчував грядку")
+	# Рівні городу
+	CampService.build(w, p, "horod")
+	check(GS.beds_count(w) == 3, "другий рівень: три грядки")
+	var slow: float = GS.grow_time(w, "veg")
+	CampService.build(w, p, "horod")
+	check(GS.beds_count(w) == 4 and GS.grow_time(w, "veg") < slow, "третій рівень: чотири грядки й швидший ріст")
+	check(GS.plant(w, p, 3, "veg"), "четверта грядка працює")
+	check(GS.time_text(0) == "готово" and GS.time_text(59) == "1 хв" and GS.time_text(3600) == "1 год" and GS.time_text(3660 + 1) == "1 год 2 хв" and GS.time_text(7199) == "2 год", "текст часу")
+	# Борщ
+	p.resources["meat"] = 1
+	p.resources["veg"] = 3
+	p.recalc()
+	var hp0: float = p.max_hp
+	var xp0: float = p.xp_mult
+	check(OS2.cook(p, "borshch") and absf(p.max_hp - hp0 * 1.1) < 1.0 and absf(p.xp_mult - xp0 - 0.1) < 0.001 and OS2.food(p, "veg") == 0, "борщ: +10% здоров'я й досвіду")
+	# Збереження: город живе в спільному хуторі
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(GS.beds_count(w2) == 4 and not GS.bed(w2, 3).is_empty() and int(GS.state(w2)["harvests"]) == 3, "город переживає збереження")
+	CS.now_override = 0
+
+
+func _suite_garden_game() -> void:
+	suite("Город: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var T0 := 1762700000
+	CS.now_override = T0
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var GS = game.GardenService
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.level = 8
+	p.gold = 5000
+	p.resources = {"wood": 200, "iron": 200, "herbs": 200}
+	game.enter_camp()
+	await _frames(2)
+	var titles := func() -> Array:
+		var out := []
+		var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+		for i in tc.get_tab_count():
+			out.append(tc.get_tab_title(i))
+		return out
+	check(not ("Город" in titles.call()) and "Казан" in titles.call(), "без городу вкладки нема, казан є завжди")
+	game.camp_do("build", "horod")
+	await _frames(2)
+	check("Город" in titles.call(), "збудував город — з'явилась вкладка")
+	game.camp_do("plant", [0, "veg"])
+	game.camp_do("plant", [1, "herbs"])
+	check(not GS.bed(game.world, 0).is_empty() and int(game.world.stats.get("plant", 0)) == 2, "посадив дві грядки")
+	CS.now_override = T0 + 5 * 3600
+	game.enter_camp()
+	await _frames(2)
+	check("Город (2)" in titles.call(), "вкладка показує, скільки достигло: %s" % str(titles.call()))
+	game.camp_do("harvest_all", null)
+	check(int(p.resources.get("veg", 0)) == 4 and int(game.world.stats.get("harvest", 0)) == 2 and game.account.challenges["ach"].has("harvest_1"), "зібрав урожай: городина, лічильник, досягнення")
+	p.resources["meat"] = 2
+	game.camp_do("cook", "borshch")
+	check(game.OutdoorService.eaten(p) == "borshch" and game.account.challenges["ach"].has("borshch"), "борщ із власної городини")
+	# Город спільний: інший персонаж бачить ті самі грядки
+	game.camp_do("plant", [0, "khmil"])
+	game.save_game()
+	check(not game.account.camp.get("garden", {}).get("beds", [{}])[0].is_empty(), "грядки лежать у спільному хуторі акаунта")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	CS.now_override = 0
 
 
 func _suite_vigil() -> void:
