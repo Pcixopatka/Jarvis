@@ -22,6 +22,8 @@ const StoneService := preload("res://scripts/game/stone_service.gd")
 const DepthService := preload("res://scripts/game/depth_service.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
 const Paths := preload("res://scripts/data/paths.gd")
+const AccountScript := preload("res://scripts/game/account.gd")
+const ClassesData := preload("res://scripts/data/classes.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -42,6 +44,10 @@ var combat: Combat
 var hud: Hud
 var meta := {"playtime": 0.0, "created": 0.0}
 var save_path: String = SaveSystem.SAVE_PATH  # тести підміняють, щоб не чіпати справжнє збереження
+var account_path: String = SaveSystem.ACCOUNT_PATH  # тести підміняють
+var account := AccountScript.new()  # спільне на всіх персонажів: хутір, скриня, досягнення, виклики
+var slot := 1  # активний слот персонажа (1..5)
+var use_slots := true  # false у тестах зі своїм save_path
 
 var city_id := ""
 var map_here := "sich"
@@ -214,6 +220,8 @@ func _sync_class() -> void:
 func new_game() -> void:
 	world = WorldState.new()
 	meta = {"playtime": 0.0, "created": Time.get_unix_time_from_system()}
+	_load_account()
+	_attach_account()
 	_new_hero({})
 	_make_peasant()
 	CampService.apply_effects(world, player)
@@ -259,6 +267,41 @@ func save_game() -> void:
 	if player == null:
 		return
 	SaveSystem.save({"player": player.to_dict(), "world": world.to_dict(), "meta": meta}, save_path)
+	_save_account()
+
+
+func _save_account() -> void:
+	if account_path == SaveSystem.ACCOUNT_PATH and not use_slots:
+		return  # тести без слотів не чіпають справжній акаунт
+	var f := FileAccess.open(account_path + ".tmp", FileAccess.WRITE)
+	if f == null:
+		return
+	f.store_var(account.to_dict())
+	f.close()
+	if FileAccess.file_exists(account_path):
+		DirAccess.copy_absolute(account_path, account_path + ".bak")
+	DirAccess.rename_absolute(account_path + ".tmp", account_path)
+
+
+func _load_account() -> void:
+	account = AccountScript.new()
+	if account_path == SaveSystem.ACCOUNT_PATH and not use_slots:
+		return  # тести без слотів не читають справжній акаунт
+	for p in [account_path, account_path + ".bak"]:
+		if FileAccess.file_exists(p):
+			var f := FileAccess.open(p, FileAccess.READ)
+			if f:
+				var d = f.get_var()
+				f.close()
+				if d is Dictionary and not d.is_empty():
+					account.from_dict(d)
+					return
+
+
+## Спільне майно підключається до світу персонажа посиланнями.
+func _attach_account() -> void:
+	account.absorb_from_world(world)  # старе збереження: забрати хутір і досягнення в акаунт
+	account.attach(world)
 
 
 func load_game() -> bool:
@@ -268,6 +311,8 @@ func load_game() -> bool:
 	world = WorldState.new()
 	world.from_dict(d["world"])
 	meta = d.get("meta", meta)
+	_load_account()
+	_attach_account()
 	_new_hero(d["player"])
 	_sync_class()
 	Party.normalize(world, player.level)
@@ -1063,16 +1108,75 @@ func _show_main_menu() -> void:
 	state = State.MENU
 	Audio.play_music("calm")
 	hud.set_mode(false, false)
+	if use_slots:
+		SaveSystem.migrate_single_to_slots()  # перший запуск після оновлення: hero.save → слот 1
+		save_path = SaveSystem.slot_path(slot)
 	_open_menu()
 	hud.add_title("Козацька Звитяга", 72)
 	hud.add_title("З Кремля повзе чорна зараза Путіноїда. Козаче, рушай у похід!", 24, UI.TEXT)
-	if SaveSystem.exists(save_path):
+	if use_slots:
+		var sums := SaveSystem.slot_summaries()
+		var any := false
+		for s_ in sums:
+			if not s_.is_empty():
+				any = true
+		if any and not sums[slot - 1].is_empty():
+			hud.add_button("Продовжити: " + _slot_title(sums[slot - 1]), _continue_game)
+		hud.add_button("Персонажі", _show_heroes_menu)
+		if not any:
+			hud.add_button("Нова гра", new_game)
+	elif SaveSystem.exists(save_path):
 		hud.add_button("Продовжити", _continue_game)
 		hud.add_button("Нова гра", _confirm_new_game)
 	else:
 		hud.add_button("Нова гра", new_game)
 	_add_sound_toggles(_show_main_menu)
 	hud.add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
+
+
+## Підпис слота: «Козак 12 • Розділ II • 3 год 20 хв».
+func _slot_title(s_: Dictionary) -> String:
+	var cls: String = ClassesData.CLASSES.get(s_["job"], {}).get("name", "Герой")
+	if s_.get("rank", "") == "hetman":
+		cls = "Гетьман"
+	var story := "сюжет пройдено" if s_["done"] else ("Пролог" if s_["chapter"] == 0 else "Розділ %s" % ["", "I", "II", "III", "IV", "V"][mini(5, s_["chapter"])])
+	var h := int(s_["playtime"]) / 3600
+	var m := (int(s_["playtime"]) % 3600) / 60
+	return "%s %d • %s • %d год %02d хв" % [cls, s_["level"], story, h, m]
+
+
+## Екран «Персонажі»: до 5 слотів — грати, новий, видалити.
+func _show_heroes_menu() -> void:
+	_open_menu()
+	hud.add_title("Персонажі", 56)
+	hud.add_title("Хутір, скриня, досягнення й виклики — спільні для всіх.", 20, UI.TEXT)
+	var sums := SaveSystem.slot_summaries()
+	for i in SaveSystem.MAX_SLOTS:
+		var s_: Dictionary = sums[i]
+		var n := i + 1
+		if s_.is_empty():
+			hud.add_button("Слот %d — новий персонаж" % n, func():
+				slot = n
+				save_path = SaveSystem.slot_path(n)
+				new_game(), Vector2(620, 64))
+		else:
+			var play := UI.button(("▶ " if n == slot else "") + _slot_title(s_), func():
+				slot = n
+				save_path = SaveSystem.slot_path(n)
+				_continue_game(), Vector2(520, 64), 20)
+			var del := UI.button("✕", func(): _confirm_delete_slot(n), Vector2(84, 64), 24)
+			hud.add_row([play, del])
+	hud.add_button("Назад", _show_main_menu)
+
+
+func _confirm_delete_slot(n: int) -> void:
+	_open_menu()
+	hud.add_title("Видалити персонажа зі слота %d?" % n, 44)
+	hud.add_title("Хутір і скриня лишаться — вони спільні. Самого героя не повернути.", 22, UI.TEXT)
+	hud.add_button("Так, видалити", func():
+		SaveSystem.delete(SaveSystem.slot_path(n))
+		_show_heroes_menu())
+	hud.add_button("Ні", _show_heroes_menu)
 
 
 func _confirm_new_game() -> void:
@@ -1240,6 +1344,35 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("sharpen_ok", 0.03)
 				smith_msg = "Річ оновлено до твого рівня!"
 				smith_msg_color = UI.GOOD
+		"chest_put":
+			if account.chest_full(CampService.level(world, "sklad")):
+				smith_msg = "Скриня повна"
+				smith_msg_color = UI.BAD
+			elif player.is_equipped(arg):
+				smith_msg = "Спершу зніми річ"
+				smith_msg_color = UI.BAD
+			else:
+				var it := player.remove_from_bag(arg)
+				if not it.is_empty():
+					account.put_item(it, CampService.level(world, "sklad"))
+					smith_msg = ""
+		"chest_take":
+			if player.bag_full():
+				smith_msg = "Торба повна"
+				smith_msg_color = UI.BAD
+			else:
+				var it := account.take_item(arg)
+				if not it.is_empty():
+					player.add_item(it)
+					smith_msg = ""
+		"chest_put_gold":
+			account.put_gold(player, arg)
+		"chest_take_gold":
+			account.take_gold(player, arg)
+		"chest_put_stone":
+			account.put_stone(player, arg)
+		"chest_take_stone":
+			account.take_stone(player, arg)
 		"brew":
 			if CampService.brew(world, player, arg):
 				Audio.play("heal", 0.0)

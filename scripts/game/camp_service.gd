@@ -9,8 +9,10 @@ const StoryService := preload("res://scripts/game/story_service.gd")
 
 
 static func state(world) -> Dictionary:
+	# Заповнюємо наявний словник, а не підміняємо: хутір спільний на всіх персонажів (посилання з акаунта)
 	if world.camp.is_empty():
-		world.camp = {"buildings": {}, "pasika_ts": Time.get_unix_time_from_system()}
+		world.camp["buildings"] = {}
+		world.camp["pasika_ts"] = Time.get_unix_time_from_system()
 	return world.camp
 
 

@@ -6,7 +6,58 @@ extends RefCounted
 
 const SAVE_VERSION := 9
 const Data := preload("res://scripts/data/data.gd")
-const SAVE_PATH := "user://hero.save"
+const SAVE_PATH := "user://hero.save"  # старий єдиний файл — стає слотом 1 при першому запуску
+const ACCOUNT_PATH := "user://account.save"  # спільне на всіх персонажів
+const MAX_SLOTS := 5
+
+
+static func slot_path(slot: int) -> String:
+	return "user://hero_%d.save" % slot
+
+
+## Короткі відомості про кожен слот для екрана персонажів (порожній словник — слот вільний).
+static func slot_summaries() -> Array:
+	var out := []
+	for i in range(1, MAX_SLOTS + 1):
+		var d := load_data(slot_path(i))
+		if d.is_empty():
+			out.append({})
+			continue
+		var p: Dictionary = d.get("player", {})
+		var w: Dictionary = d.get("world", {})
+		var st: Dictionary = w.get("story", {})
+		out.append({"slot": i, "job": p.get("job", "cossack"), "level": int(p.get("level", 1)), "job_level": int(p.get("job_level", 1)),
+			"rank": p.get("rank", ""), "chapter": int(st.get("chapter", 0)), "done": st.get("stage", "") == "done",
+			"playtime": float(d.get("meta", {}).get("playtime", 0.0)), "name": p.get("name", "")})
+	return out
+
+
+## Перший запуск після оновлення: hero.save → hero_1.save.
+static func migrate_single_to_slots() -> void:
+	if exists(SAVE_PATH) and not exists(slot_path(1)):
+		for suffix in ["", ".bak"]:
+			if FileAccess.file_exists(SAVE_PATH + suffix):
+				DirAccess.rename_absolute(SAVE_PATH + suffix, slot_path(1) + suffix)
+
+
+static func save_account(data: Dictionary) -> bool:
+	var tmp := ACCOUNT_PATH + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_var(data)
+	f.close()
+	if FileAccess.file_exists(ACCOUNT_PATH):
+		DirAccess.copy_absolute(ACCOUNT_PATH, ACCOUNT_PATH + ".bak")
+	return DirAccess.rename_absolute(tmp, ACCOUNT_PATH) == OK
+
+
+static func load_account() -> Dictionary:
+	for p in [ACCOUNT_PATH, ACCOUNT_PATH + ".bak"]:
+		var d := _read(p)
+		if not d.is_empty():
+			return d
+	return {}
 const SETTINGS_PATH := "user://settings.cfg"
 
 

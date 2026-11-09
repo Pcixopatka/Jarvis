@@ -19,6 +19,7 @@ var PlayerScript
 var StoryService
 
 const TEST_SAVE := "user://test_hero.save"
+const TEST_ACCOUNT := "user://test_account.save"
 
 var failures = 0
 var checks = 0
@@ -52,6 +53,7 @@ func _run() -> void:
 	_suite_stones()
 	_suite_endgame()
 	_suite_bulk_sell()
+	_suite_account()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
@@ -230,6 +232,7 @@ func _suite_player() -> void:
 func _suite_save() -> void:
 	suite("Збереження")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	check(SaveSystem.load_data(TEST_SAVE).is_empty(), "немає збереження — порожньо")
 	var p = _new_player()
 	p.gold = 777
@@ -269,6 +272,7 @@ func _suite_save() -> void:
 	w2.from_dict(m["world"])
 	check(w2.last_city == "sich" and w2.quests.is_empty(), "світ із мінімальних даних")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	check(not SaveSystem.exists(TEST_SAVE), "видалення")
 	p.free()
 
@@ -701,8 +705,11 @@ func _suite_defense_logic() -> void:
 func _suite_defense_battle() -> void:
 	suite("Оборона: бій біля брами")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	root.get_node("Ads").instant = true
@@ -769,6 +776,7 @@ func _suite_defense_battle() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_challenges() -> void:
@@ -1003,8 +1011,11 @@ func _suite_classes() -> void:
 func _suite_mage_battle() -> void:
 	suite("Бій волхва й нові вміння")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	game.new_game()
@@ -1112,6 +1123,7 @@ func _suite_mage_battle() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_specs() -> void:
@@ -1171,8 +1183,11 @@ func _suite_specs() -> void:
 func _suite_spec_battle() -> void:
 	suite("Бій спеціалізацій")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	game.new_game()
@@ -1300,6 +1315,7 @@ func _suite_spec_battle() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_volkhv_specs() -> void:
@@ -1315,8 +1331,11 @@ func _suite_volkhv_specs() -> void:
 		places[info["where"]] = true
 		check(SS.TRIALS.has(spec) and Classes.is_volkhv_line(spec) and info["weapons"] == ["staff"], "%s: випробування, посох" % spec)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	game.new_game()
@@ -1429,6 +1448,7 @@ func _suite_volkhv_specs() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_stones() -> void:
@@ -1539,8 +1559,11 @@ func _suite_endgame() -> void:
 func _suite_depth_battle() -> void:
 	suite("Глибини зарази: спуск")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	game.new_game()
@@ -1572,6 +1595,7 @@ func _suite_depth_battle() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_bulk_sell() -> void:
@@ -1610,8 +1634,11 @@ func _suite_bulk_sell() -> void:
 func _suite_travel_ride() -> void:
 	suite("Подорож мапою")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	game.new_game()
@@ -1693,6 +1720,77 @@ func _suite_travel_ride() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_account() -> void:
+	suite("Акаунт: спільні хутір, скриня, досягнення")
+	var Account = load("res://scripts/game/account.gd")
+	var acc = Account.new()
+	var p = _new_player()
+	p.gold = 500
+	p.inventory.clear()
+	# Скриня: гривні
+	check(acc.put_gold(p, 200) == 200 and p.gold == 300 and acc.chest["gold"] == 200, "покласти гривні")
+	check(acc.put_gold(p, 9999) == 300 and p.gold == 0, "покласти більше, ніж є, — кладе все")
+	check(acc.take_gold(p, 150) == 150 and p.gold == 150 and acc.chest["gold"] == 350, "взяти гривні")
+	# Скриня: речі
+	var it = Data.gen_item(5, 2, "head")
+	p.add_item(it)
+	var uid_before: int = it["uid"]
+	var taken: Dictionary = p.remove_from_bag(uid_before)
+	check(acc.put_item(taken, 0) and acc.chest["items"].size() == 1 and int(acc.chest["items"][0]["uid"]) >= 1000000, "річ у скрині отримує свій uid")
+	var back: Dictionary = acc.take_item(acc.chest["items"][0]["uid"])
+	check(not back.is_empty() and not back.has("uid") and acc.chest["items"].is_empty(), "взяти річ зі скрині")
+	check(p.add_item(back) and p.inventory.size() == 1 and p.inventory[0]["name"] == it["name"], "річ повернулась у торбу з новим uid героя")
+	check(acc.chest_size(0) == Account.CHEST_SIZE and acc.chest_size(2) == Account.CHEST_SIZE + 2 * Account.CHEST_PER_SKLAD, "Склад збільшує скриню")
+	for i in Account.CHEST_SIZE:
+		acc.put_item(Data.gen_item(1, 0, "belt"), 0)
+	check(acc.chest_full(0) and not acc.put_item(Data.gen_item(1, 0, "belt"), 0), "повна скриня не бере")
+	check(not acc.chest_full(1), "із Складом місце є")
+	# Камені
+	p.stones = {"alatyr": 1}
+	check(acc.put_stone(p, "alatyr") and p.stones["alatyr"] == 0 and acc.chest["stones"]["alatyr"] == 1, "камінь у скриню")
+	check(not acc.put_stone(p, "alatyr"), "каменів більше немає")
+	check(acc.take_stone(p, "alatyr") and p.stones["alatyr"] == 1, "камінь зі скрині")
+	# Спільне майно — посилання: два світи бачать один хутір і одні досягнення
+	var w1 = WorldState.new()
+	var w2 = WorldState.new()
+	acc.attach(w1)
+	acc.attach(w2)
+	var CampService = load("res://scripts/game/camp_service.gd")
+	w1.camp = acc.camp
+	CampService.state(w1)["buildings"]["kuznia"] = 2
+	check(CampService.level(w2, "kuznia") == 2, "хутір спільний: збудував один — бачить другий")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	var p2 = _new_player()
+	CS.record(w1, p2, "kill")
+	check(int(w2.stats.get("kill", 0)) == 1 and CS.state(w2)["ach"].has("first_blood"), "досягнення й лічильники спільні")
+	CS.now_override = 0
+	# Серіалізація
+	var acc2 = Account.new()
+	acc2.from_dict(acc.to_dict())
+	check(acc2.chest["gold"] == 350 and acc2.chest["items"].size() == Account.CHEST_SIZE and acc2.camp["buildings"]["kuznia"] == 2, "акаунт зберігається")
+	# Старе збереження: хутір і досягнення переїжджають в акаунт
+	var old_w = WorldState.new()
+	old_w.camp = {"buildings": {"pasika": 1}, "pasika_ts": 0}
+	old_w.stats = {"kill": 42}
+	var acc3 = Account.new()
+	acc3.absorb_from_world(old_w)
+	acc3.attach(old_w)
+	check(acc3.camp["buildings"]["pasika"] == 1 and acc3.stats["kill"] == 42, "старий хутір і статистика стають спільними")
+	# Слоти збереження
+	for i in range(1, 6):
+		SaveSystem.delete(SaveSystem.slot_path(i))
+	var sums = SaveSystem.slot_summaries()
+	check(sums.size() == 5 and sums.all(func(x): return x.is_empty()), "5 порожніх слотів")
+	SaveSystem.save({"player": p.to_dict(), "world": w1.to_dict(), "meta": {"playtime": 3700.0}}, SaveSystem.slot_path(3))
+	sums = SaveSystem.slot_summaries()
+	check(sums[2]["slot"] == 3 and sums[2]["level"] == p.level and sums[2]["playtime"] == 3700.0 and sums[0].is_empty(), "слот 3 зайнятий, решта порожні")
+	SaveSystem.delete(SaveSystem.slot_path(3))
+	p.free()
+	p2.free()
 
 
 func _suite_camp() -> void:
@@ -1824,8 +1922,11 @@ func _moves_dummy(game, kind: String = "upyr"):
 func _suite_moves() -> void:
 	suite("Бойові прийоми")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(2)
 	game.new_game()
@@ -1990,13 +2091,17 @@ func _suite_moves() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_gameplay() -> void:
 	suite("Сценарій гри")
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
 	root.add_child(game)
 	await _frames(3)
 	check(game.state == game.State.MENU, "старт у головному меню")
@@ -2211,4 +2316,5 @@ func _suite_gameplay() -> void:
 	check(game.player.alive and game.player.hp == game.player.max_hp, "козак отямився в місті")
 	game.queue_free()
 	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 	await _frames(2)

@@ -19,7 +19,7 @@ static func resources_text(p) -> String:
 
 static func build(game) -> Control:
 	var w = game.world
-	var pages := [["Будівлі", _buildings(game)]]
+	var pages := [["Будівлі", _buildings(game)], ["Скриня", _chest(game)]]
 	if CampService.level(w, "kuznia") >= 1:
 		pages.append(["Кузня", _forge(game)])
 		pages.append(["Кування", _crafting(game)])
@@ -82,6 +82,70 @@ static func _ad_row(game, v: VBoxContainer) -> void:
 	row.add_child(l)
 	row.add_child(UI.button("Переглянути рекламу", _do(game, "ad_xp2"), Vector2(260, 56), 17, AdRewards.can_xp2(w)))
 	v.add_child(row)
+
+
+# ---------- Скриня (спільна на всіх персонажів) ----------
+
+static func _chest(game) -> Control:
+	var p = game.player
+	var acc = game.account
+	var w = game.world
+	var sklad: int = CampService.level(w, "sklad")
+	var size: int = acc.chest_size(sklad)
+	var items: Array = acc.chest["items"]
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Спільна скриня: усе, що тут лежить, бачать усі твої персонажі. Склад на хуторі робить її більшою.", 16, UI.MUTED, false))
+	# Гривні
+	var grow := HBoxContainer.new()
+	grow.add_theme_constant_override("separation", 8)
+	var gl := UI.label("У скрині: %d грн   •   у тебе: %d грн" % [acc.chest["gold"], p.gold], 20, UI.GOLD, false)
+	gl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grow.add_child(gl)
+	for amt in [100, 1000]:
+		grow.add_child(UI.button("↓%d" % amt, _do(game, "chest_put_gold", amt), Vector2(86, 44), 14, p.gold >= amt))
+		grow.add_child(UI.button("↑%d" % amt, _do(game, "chest_take_gold", amt), Vector2(86, 44), 14, int(acc.chest["gold"]) >= amt))
+	grow.add_child(UI.button("↓ усе", _do(game, "chest_put_gold", p.gold), Vector2(90, 44), 14, p.gold > 0))
+	grow.add_child(UI.button("↑ усе", _do(game, "chest_take_gold", int(acc.chest["gold"])), Vector2(90, 44), 14, int(acc.chest["gold"]) > 0))
+	v.add_child(grow)
+	# Камені долі
+	var SS = game.StoneService
+	var srow := HBoxContainer.new()
+	srow.add_theme_constant_override("separation", 8)
+	for id in ["zabuttia", "alatyr"]:
+		var mine: int = SS.count(p, id)
+		var there: int = int(acc.chest["stones"].get(id, 0))
+		srow.add_child(UI.label("%s: у скрині %d, у тебе %d" % [SS.NAMES[id], there, mine], 15, UI.TEXT, false))
+		srow.add_child(UI.button("↓", _do(game, "chest_put_stone", id), Vector2(44, 40), 16, mine > 0))
+		srow.add_child(UI.button("↑", _do(game, "chest_take_stone", id), Vector2(44, 40), 16, there > 0))
+	v.add_child(srow)
+	# Речі: дві колонки — скриня й торба
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 18)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_child(UI.label("Скриня %d/%d  (торкнись — забрати)" % [items.size(), size], 20, UI.GOLD, false))
+	var cg := UI.grid(3)
+	for it in items:
+		cg.add_child(UI.item_button(it, _do(game, "chest_take", it["uid"]), false, Data.SLOT_NAMES[it["slot"]]))
+	if items.is_empty():
+		left.add_child(UI.label("Порожньо.", 16, UI.MUTED, false))
+	left.add_child(cg)
+	h.add_child(left)
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.add_child(UI.label("Твоя торба %d/%d  (торкнись — покласти)" % [p.inventory.size(), p.bag_size()], 20, UI.GOLD, false))
+	var bg := UI.grid(3)
+	for it in p.inventory:
+		bg.add_child(UI.item_button(it, _do(game, "chest_put", it["uid"]), false, Data.SLOT_NAMES[it["slot"]]))
+	if p.inventory.is_empty():
+		right.add_child(UI.label("Порожньо.", 16, UI.MUTED, false))
+	right.add_child(bg)
+	h.add_child(right)
+	v.add_child(h)
+	if game.smith_msg != "":
+		v.add_child(UI.label(game.smith_msg, 18, game.smith_msg_color, false))
+	return v
 
 
 # ---------- Кузня ----------
