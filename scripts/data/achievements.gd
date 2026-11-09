@@ -46,6 +46,8 @@ const ACHIEVEMENTS := [
 	{"id": "depth_10", "name": "У надрах", "desc": "Пройди 10-ту глибину зарази", "stat": "depth", "goal": 10, "gold": 3000},
 	{"id": "depth_25", "name": "Корені зла", "desc": "Пройди 25-ту глибину зарази", "stat": "depth", "goal": 25, "gold": 10000},
 	{"id": "depth_50", "name": "Без дна", "desc": "Пройди 50-ту глибину зарази", "stat": "depth", "goal": 50, "gold": 30000},
+	{"id": "event_5", "name": "На поміч!", "desc": "Відбий 5 подій: набіги, валки, полон", "stat": "event", "goal": 5, "gold": 800},
+	{"id": "sich_siege", "name": "Січ стоїть", "desc": "Відбий велику облогу Січі", "stat": "event:sich_siege", "goal": 1, "gold": 2500},
 	{"id": "tower_5", "name": "Перший супербос", "desc": "Пройди 5-й поверх Башти Кощія", "stat": "tower", "goal": 5, "gold": 1500},
 	{"id": "tower_20", "name": "Вище хмар", "desc": "Пройди 20-й поверх Башти Кощія", "stat": "tower", "goal": 20, "gold": 6000},
 	{"id": "tower_50", "name": "До самого неба", "desc": "Пройди 50-й поверх Башти Кощія", "stat": "tower", "goal": 50, "gold": 25000},

@@ -20,6 +20,7 @@ signal item_found(item: Dictionary)
 signal field_cleared(loc_id: String)
 signal dungeon_cleared(loc_id: String)
 signal tower_cleared(floor_: int)  # Башта: поверх пройдено
+signal treasure_found(loc_id: String)  # подія «Знахідка»: сторожа вбито
 signal tower_next(floor_: int)  # Башта: гравець зайшов у портал «Вище»
 signal defense_won(target: String)
 signal defense_lost(target: String)

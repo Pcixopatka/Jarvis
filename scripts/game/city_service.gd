@@ -18,6 +18,9 @@ static func shop_stock(world, player: Player, city: String) -> Array:
 		var stock := []
 		for i in SHOP_SIZE:
 			stock.append(player.assign_uid(Data.gen_item(ilvl, Data.roll_rarity(C["level"] + loyal * 3))))
+		if load("res://scripts/game/event_service.gd").fair_city(world) == city:
+			for i in 2:  # ярмарок: купці привезли рідкісне
+				stock.append(player.assign_uid(Data.gen_item(ilvl + 1, 2)))
 		world.shops[city] = stock
 		world.shop_dirty[city] = false
 	return world.shops[city]
@@ -28,6 +31,8 @@ static func buy_price(world, city: String, item: Dictionary) -> int:
 
 
 static func hire_price(world, player: Player, city: String, type: String) -> int:
+	if load("res://scripts/game/event_service.gd").free_hire(world):
+		return 0  # звільнений бранець чи побратим пораненого — задарма
 	return int(Data.COMPANIONS[type]["cost"] * (1.0 - world.discount(city)) * (1.0 + 0.3 * (player.level - 1)))
 
 
@@ -119,7 +124,10 @@ static func sell_many(player: Player, uids: Array) -> int:
 static func hire(world, player: Player, city: String, type: String) -> bool:
 	if not can_hire(world, player, city, type):
 		return false
-	player.gold -= hire_price(world, player, city, type)
+	var price := hire_price(world, player, city, type)
+	player.gold -= price
+	if price == 0:
+		load("res://scripts/game/event_service.gd").use_free_hire(world)
 	world.companions.append(Party.new_member(type, player.level))
 	return true
 

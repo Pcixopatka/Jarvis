@@ -278,8 +278,12 @@ static func sharpen_chance(item: Dictionary) -> float:
 	return SHARPEN_CHANCE[mini(item["up"], SHARPEN_CHANCE.size() - 1)]
 
 
+## Множник ціни продажу (ярмарок у місті — ×2; виставляє гра при вході в місто).
+static var sell_mult: float = 1.0
+
+
 static func sell_price(item: Dictionary) -> int:
-	return int(8 * (1 + item["rarity"]) * (1.0 + 0.35 * item["ilvl"]) + item["spent"] * 0.3)
+	return int((8 * (1 + item["rarity"]) * (1.0 + 0.35 * item["ilvl"]) + item["spent"] * 0.3) * sell_mult)
 
 
 # ======================= Світ =======================

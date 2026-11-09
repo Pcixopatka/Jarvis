@@ -21,6 +21,7 @@ const SpecService := preload("res://scripts/game/spec_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
 const DepthService := preload("res://scripts/game/depth_service.gd")
 const TowerService := preload("res://scripts/game/tower_service.gd")
+const EventService := preload("res://scripts/game/event_service.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
 const Paths := preload("res://scripts/data/paths.gd")
 const AccountScript := preload("res://scripts/game/account.gd")
@@ -78,6 +79,7 @@ var travel_event_at := -1.0  # на якому t чекає пригода (-1 �
 var travel_paused := false  # зупинились на пригоду  # яка картка розгорнута на екрані «Дорога»  # вміння, відкрите в картці на вкладці «Вміння»
 var depth_sel := 1  # обрана глибина на мапі
 var tower_sel := 1  # обраний поверх Башти на мапі
+var theft_notice := ""  # крадіжка на хуторі між заходами (показати після завантаження)
 var camp_sel_uid := -1
 
 
@@ -112,6 +114,7 @@ func _ready() -> void:
 	Events.enemy_killed.connect(_on_enemy_killed)
 	Events.tower_cleared.connect(_on_tower_cleared)
 	Events.tower_next.connect(_on_tower_next)
+	Events.treasure_found.connect(func(loc_id: String): EventService.treasure_found(world, loc_id))
 	Events.level_up.connect(_on_level_up)
 	Events.player_died.connect(_on_player_died)
 	Events.companion_down.connect(_on_companion_down)
@@ -326,6 +329,7 @@ func load_game() -> bool:
 	_attach_account()
 	tower_sel = int(TowerService.state(world)["max"])
 	depth_sel = int(DepthService.state(world)["max"])
+	theft_notice = EventService.check_theft(world, Time.get_unix_time_from_system(), CampService.level(world, "kurin"))
 	_new_hero(d["player"])
 	_sync_class()
 	Party.normalize(world, player.level)
@@ -376,12 +380,18 @@ func enter_map() -> void:
 		mv.targets[stg] = true
 	mv.story_target = StoryService.target(world)
 	mv.plague = PlagueService.state(world)["levels"]
+	mv.events = EventService.map_marks(world)
+	if theft_notice != "":
+		hud.show_banner(theft_notice, UI.BAD)
+		theft_notice = ""
 	if from_trip:
 		var news := []
 		var spread := PlagueService.tick(world)
 		if not spread.is_empty():
 			news.append("Зараза повзе далі: " + ", ".join(spread))
 		news.append_array(DefenseService.tick(world, player))
+		news.append_array(EventService.tick(world, player))
+		mv.events = EventService.map_marks(world)
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
 	mv.sieges = DefenseService.state(world)["sieges"]
@@ -397,6 +407,7 @@ func enter_city(id: String) -> void:
 	Audio.play_music("calm")
 	get_tree().paused = true
 	city_id = id
+	Data.sell_mult = EventService.sell_mult(world, id)
 	map_here = id
 	world.last_city = id
 	player.revive()
@@ -427,7 +438,7 @@ func enter_location(id: String) -> void:
 	hud.close_overlay()
 	hud.show_map(false)
 	combat.boss_revives = 0 if StoryService.effect(world, "koshchii_mortal") > 0.0 else 1
-	combat.enter(id, _party_data(), PlagueService.level(world, id))
+	combat.enter(id, _party_data(), PlagueService.level(world, id), EventService.mods_for(world, id))
 	hud.set_mode(true, true)
 	state = State.PLAYING
 	get_tree().paused = false
@@ -693,7 +704,11 @@ func _on_level_up(lvl: int) -> void:
 func _on_player_died() -> void:
 	if combat.is_defense() and not combat.defense_over:
 		combat.defense_over = true
-		hud.show_banner(DefenseService.lose(world, player, combat.loc["target"]), UI.BAD)
+		var ev := EventService.battle_at(world, combat.loc["target"])
+		if not ev.is_empty():
+			hud.show_banner(EventService.lose(world, player, ev), UI.BAD)
+		else:
+			hud.show_banner(DefenseService.lose(world, player, combat.loc["target"]), UI.BAD)
 	state = State.DEAD
 	hud.set_mode(true, false)
 	hud.char_btn.visible = false
@@ -768,7 +783,7 @@ func _go_to(id: String) -> void:
 	travel_paused = false
 	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)
 	travel_event_at = -1.0
-	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not DefenseService.is_besieged(world, id):
+	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
 		pending_event = TravelService.roll(world, player)
 		if not pending_event.is_empty():
 			travel_event_at = randf_range(0.4, 0.65)
@@ -785,7 +800,10 @@ var pending_event := {}
 func _arrive(id: String) -> void:
 	travel_to = ""
 	hud.map_view.travel = {}
-	if DefenseService.is_besieged(world, id):
+	var ev := EventService.battle_at(world, id)
+	if not ev.is_empty():
+		start_event(ev)  # подія чекає саме тут: набіг, валка, бранці...
+	elif DefenseService.is_besieged(world, id):
 		start_defense(id)  # обложене місто чи хутір — спершу бій біля брами
 	elif id == Camp.CAMP_ID:
 		enter_camp()
@@ -909,7 +927,28 @@ func start_defense(target: String) -> void:
 	hint("defense", "Облога! Нечисть іде хвилями й ламає браму внизу. Стань між ними та брамою — коли брама впаде, оборону програно.")
 
 
+## Бій події (набіг, валка, облога Січі, полон, поранений) — як оборона, але з іншою «брамою».
+func start_event(ev: Dictionary) -> void:
+	combat.defense_loc = EventService.battle_loc(world, ev, player)
+	enter_location("defense")
+	map_here = ev["target"]
+	hint("event_" + ev["kind"], {"village_raid": "Набіг: нечисть палить хати. Стань між нею і селом — коли хати згорять, село втрачено.",
+		"caravan": "Валка: вози повільно їдуть ареною, нечисть ламає їх. Відбий усі хвилі; що більше возів уціліє, то більша нагорода.",
+		"sich_siege": "Велика облога: шість хвиль і ватажок. Якщо брама впаде, Січ зачиниться, поки не відіб'єш.",
+		"captives": "Бранці прив'язані посередині. Відбий три хвилі — і вони вільні.",
+		"wounded": "Поранений лежить посередині. Три хвилі — і він урятований."}[ev["kind"]])
+
+
 func _on_defense_won(target: String) -> void:
+	var ev := EventService.battle_at(world, target)
+	if not ev.is_empty():
+		defense_target = ""  # з порталу — на мапу
+		var part: float = combat.gate.hp / maxf(combat.gate.max_hp, 1.0) if combat.gate != null and is_instance_valid(combat.gate) else 1.0
+		hud.show_banner(EventService.win(world, player, ev, part), UI.GOLD)
+		_record("event")
+		_record("event:" + ev["kind"])
+		save_game()
+		return
 	defense_target = target
 	hud.show_banner(DefenseService.win(world, player, target), UI.GOLD)
 	_record("defense")
@@ -917,6 +956,14 @@ func _on_defense_won(target: String) -> void:
 
 
 func _on_defense_lost(target: String) -> void:
+	var ev := EventService.battle_at(world, target)
+	if not ev.is_empty():
+		hud.show_banner(EventService.lose(world, player, ev), UI.BAD)
+		save_game()
+		await get_tree().create_timer(2.5).timeout
+		if state == State.PLAYING and combat.is_defense():
+			enter_map()
+		return
 	if not DefenseService.is_besieged(world, target):
 		return
 	hud.show_banner(DefenseService.lose(world, player, target), UI.BAD)

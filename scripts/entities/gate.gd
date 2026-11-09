@@ -10,6 +10,8 @@ var alive := true
 var dead := false
 var plague_immune := true  # хмари зарази стіну не точать
 var camp := false  # тин хутора замість частоколу
+var variant := "city"  # city | camp | village | caravan | captives | wounded (події, див. EventService)
+var phase := 0.0
 var flash := 0.0
 
 
@@ -32,7 +34,18 @@ func heal(_amount: float, _show: bool = true) -> void:
 
 func _process(delta: float) -> void:
 	flash = maxf(0.0, flash - delta)
+	phase += delta
 	queue_redraw()
+
+
+func label_text() -> String:
+	match variant:
+		"camp": return "Тин хутора"
+		"village": return "Хати"
+		"caravan": return "Вози"
+		"captives": return "Бранці"
+		"wounded": return "Поранений"
+	return "Брама"
 
 
 const Gfx := preload("res://scripts/world/gfx.gd")
@@ -49,8 +62,8 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2(-bw / 2, -150), Vector2(bw, 10)), Color(0, 0, 0, 0.6))
 	draw_rect(Rect2(Vector2(-bw / 2, -150), Vector2(bw * hp / max_hp, 10)), Color(0.95, 0.75, 0.2))
 	var font := ThemeDB.fallback_font
-	draw_string_outline(font, Vector2(-100, -156), "Тин хутора" if camp else "Брама", HORIZONTAL_ALIGNMENT_CENTER, 200, 16, 4, Color(0, 0, 0, 0.7))
-	draw_string(font, Vector2(-100, -156), "Тин хутора" if camp else "Брама", HORIZONTAL_ALIGNMENT_CENTER, 200, 16, Color(1.0, 0.9, 0.6))
+	draw_string_outline(font, Vector2(-100, -156), label_text(), HORIZONTAL_ALIGNMENT_CENTER, 200, 16, 4, Color(0, 0, 0, 0.7))
+	draw_string(font, Vector2(-100, -156), label_text(), HORIZONTAL_ALIGNMENT_CENTER, 200, 16, Color(1.0, 0.9, 0.6))
 
 
 ## Нова графіка: частокіл із вежами й брамою на всю ширину арени (або тин хутора з ворітцями).
@@ -60,6 +73,9 @@ func _draw_sprites() -> void:
 		tint = Color(1.6, 1.2, 1.1)
 	elif not alive:
 		tint = Color(0.6, 0.55, 0.5)
+	if variant in ["village", "caravan", "captives", "wounded"]:
+		_draw_event(tint)
+		return
 	var half: float = combat.arena.size.x / 2.0 + 80.0 if combat != null else 900.0
 	var seg := 64.0
 	var gate_w := 192.0 if not camp else 160.0
@@ -124,3 +140,40 @@ func _draw_vector() -> void:
 		draw_polyline(PackedVector2Array([Vector2(-20, -60), Vector2(-10, -40), Vector2(-24, -22), Vector2(-8, -4)]), Color(0.1, 0.05, 0.02), 2.0)
 	if hp < max_hp * 0.25:
 		draw_polyline(PackedVector2Array([Vector2(20, -58), Vector2(10, -36), Vector2(26, -16)]), Color(0.1, 0.05, 0.02), 2.0)
+
+
+## Події: хати села, вози валки, бранці, поранений козак — замість брами.
+func _draw_event(tint: Color) -> void:
+	var part := hp / maxf(max_hp, 1.0)
+	match variant:
+		"village":
+			for h in [["hut", -170.0], ["house", 0.0], ["hut", 170.0]]:
+				var info: Dictionary = Tiles.PROPS[h[0]]
+				var r: Array = info["r"]
+				var w: float = r[2] * Tiles.TILE
+				var hh: float = r[3] * Tiles.TILE
+				draw_texture_rect_region(Tiles.sheet(info["sheet"]), Rect2(Vector2(h[1] - w / 2.0, -hh + 10.0), Vector2(w, hh)), Tiles.src(r), tint if alive else Color(0.35, 0.3, 0.28))
+				if part < 0.66 or not alive:
+					# Полум'я на даху
+					for i in 3:
+						var fx: float = h[1] + (i - 1) * 24.0 + sin(phase * 7.0 + i) * 3.0
+						var fh := 26.0 + sin(phase * 9.0 + i * 2.0) * 6.0
+						draw_colored_polygon(PackedVector2Array([Vector2(fx - 10, -hh + 30), Vector2(fx + 10, -hh + 30), Vector2(fx, -hh + 30 - fh)]), Color(1.0, 0.55, 0.15, 0.9))
+						draw_colored_polygon(PackedVector2Array([Vector2(fx - 4, -hh + 30), Vector2(fx + 4, -hh + 30), Vector2(fx, -hh + 32 - fh * 0.6)]), Color(1.0, 0.9, 0.4, 0.9))
+		"caravan":
+			for x in [-70.0, 70.0]:
+				Gfx.wall_part(self, "wagon", Vector2(x, 0), 2.0, tint if alive else Color(0.5, 0.45, 0.4))
+			if not alive:
+				draw_line(Vector2(-110, -10), Vector2(-30, -60), Color(0.1, 0.05, 0.02), 3.0)
+		"captives":
+			# Троє зв'язаних селян і стовп
+			draw_rect(Rect2(-4, -70, 8, 70), Color(0.4, 0.28, 0.14))
+			for i in 3:
+				var x := -40.0 + i * 40.0
+				Gfx.draw(self, "peasant", Vector2(0, 1), Gfx.DEAD if not alive else (Gfx.HURT if part < 0.5 else Gfx.IDLE), Vector2(x - 24, -34), tint)
+				draw_line(Vector2(x - 10, -14), Vector2(x + 10, -12), Color(0.75, 0.65, 0.45), 2.0)
+		"wounded":
+			Gfx.draw(self, "cossack_sabre", Vector2(1, 0), Gfx.DEAD, Vector2(-24, -34), tint if alive else Color(0.45, 0.4, 0.4))
+			if alive:
+				draw_rect(Rect2(-12, -8, 24, 6), Color(0.9, 0.9, 0.9))
+				draw_rect(Rect2(-6, -8, 4, 6), Color(0.8, 0.15, 0.15))

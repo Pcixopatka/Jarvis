@@ -9,9 +9,10 @@ const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
 const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
-const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town"]
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest"]
 # Кольори чорнила старовинної мапи
 const INK := Color(0.23, 0.16, 0.1)
+const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
 const INK_SOFT := Color(0.35, 0.26, 0.17, 0.8)
 const SEA := Color(0.55, 0.66, 0.68)
 const LAND_UA := Color(0.93, 0.86, 0.68)
@@ -159,6 +160,7 @@ var targets := {}  # місцевості з активними завдання
 var story_target := ""  # куди веде сюжет (зірка)
 var plague := {}  # id місцевості -> рівень зарази (0..3)
 var sieges := {}  # місто/хутір -> походів до падіння (облога)
+var events := []  # значки подій: [{"id", "ll", "icon", "label", "kind"}] (див. EventService.map_marks)
 var hero_level := 1
 ## Подорож: {"from": id, "to": id, "t": 0..1} або порожньо. Фігурка їде дугою, камера слідує.
 var travel := {}
@@ -465,6 +467,21 @@ func _draw() -> void:
 			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 200.0)
 			draw_arc(sc, (24.0 + 6.0 * pulse) * k, 0.0, TAU, 32, Color(1.0, 0.25, 0.15, 0.6 + 0.4 * pulse), 4.0 * k)
 			_text(font, sc + Vector2(0, -30 * k), "Облога! (%d)" % int(sieges[id]), int(clampf(16.0 * k, 12, 26)), Color(1.0, 0.45, 0.35))
+	# Події світу: значок біля місця (конвой із бранцями — там, куди дійшов)
+	for ev in events:
+		var ec: Vector2 = _proj(ev["ll"])
+		var off := Vector2(18, -22) * k if ev["kind"] in ["night", "treasure", "burned"] else Vector2(-20, -26) * k
+		if ev["kind"] == "captives":
+			off = Vector2.ZERO
+			_markers[ev["id"]] = ec
+		var bob := sin(_pulse * 1.3 + ec.x) * 2.0 * k if ev["kind"] in BATTLE_EV else 0.0
+		var sz := (34.0 if ev["kind"] in BATTLE_EV else 24.0) * k
+		if ev["kind"] in BATTLE_EV:
+			draw_circle(ec + off, sz * 0.62, Color(1.0, 0.92, 0.7, 0.9))
+			draw_arc(ec + off, sz * 0.62, 0, TAU, 24, Color(0.75, 0.2, 0.15), 2.0)
+		_icon(ev["icon"], ec + off + Vector2(0, bob), sz)
+		if ev["label"] != "":
+			_text(font, ec + off + Vector2(0, -sz * 0.7), ev["label"], int(clampf(14.0 * k, 11, 22)), Color(0.6, 0.12, 0.08))
 	# Сюжет — пульсуюча зірка
 	if _markers.has(story_target):
 		var sc: Vector2 = _markers[story_target] + Vector2(-18, -26) * k

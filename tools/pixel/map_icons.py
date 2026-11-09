@@ -7,7 +7,7 @@ S = 24
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites")
 def hx(h, a=255): h = h.lstrip('#'); return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
 INK = hx("3a2a1a"); INK2 = hx("5a4030"); PAPER = hx("e8d7b0"); GREEN = hx("5a7a3a"); GREEN2 = hx("7a9a4a"); GREY = hx("8a8278"); RED = hx("a83a2a"); BLUE = hx("4a7aa8"); GOLD = hx("c8a040")
-ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town"]
+ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest"]
 
 def outline(im, col=INK):
     src = im.load(); out = im.copy(); o = out.load(); w, h = im.size
@@ -64,6 +64,22 @@ def icon(kind):
         for x in (6, 10, 14): d.rectangle([x, 18, x + 1, 23], fill=hx("4a2e16"))
         d.rectangle([9, 5, 13, 12], fill=hx("c8281e")); d.ellipse([9, 1, 13, 5], fill=hx("f1c9a0")); d.rectangle([11, 0, 12, 1], fill=INK)
         d.line([(6, 12), (6, 0)], fill=INK2, width=1); d.rectangle([1, 0, 5, 2], fill=BLUE); d.rectangle([1, 3, 5, 5], fill=GOLD)
+    elif kind == "raid":  # палаюча хата
+        d.rectangle([5, 14, 18, 22], fill=hx("6a5a48")); d.polygon([(3, 14), (20, 14), (12, 7)], fill=hx("4a3a28"))
+        for x, h in ((7, 6), (12, 3), (16, 7)): d.polygon([(x - 3, 14), (x + 3, 14), (x, h)], fill=hx("ff8a2a")); d.polygon([(x - 1, 14), (x + 1, 14), (x, h + 4)], fill=hx("ffd040"))
+    elif kind == "wagon":
+        d.rectangle([3, 8, 19, 15], fill=hx("8a5a2a")); d.ellipse([3, 3, 19, 10], fill=hx("f0e6d0")); d.ellipse([3, 14, 9, 20], fill=INK2); d.ellipse([13, 14, 19, 20], fill=INK2); d.line([(19, 11), (23, 9)], fill=INK2, width=2)
+    elif kind == "chains":
+        for i in range(3): d.ellipse([3 + i * 6, 6 + (i % 2) * 6, 9 + i * 6, 12 + (i % 2) * 6], outline=GREY, width=2)
+        d.rectangle([9, 15, 15, 21], fill=hx("c8c8c8")); d.rectangle([11, 17, 13, 19], fill=INK)
+    elif kind == "wounded":
+        d.ellipse([3, 10, 21, 20], fill=hx("c8281e")); d.ellipse([4, 8, 10, 14], fill=hx("f1c9a0")); d.rectangle([13, 2, 16, 11], fill=hx("f0f0f0")); d.rectangle([10, 5, 19, 8], fill=hx("f0f0f0"))
+    elif kind == "tent":
+        d.polygon([(2, 21), (22, 21), (12, 4)], fill=hx("c8281e")); d.polygon([(6, 21), (18, 21), (12, 9)], fill=hx("f0e6d0")); d.rectangle([10, 15, 14, 21], fill=INK2); d.rectangle([11, 0, 13, 5], fill=GOLD)
+    elif kind == "moon":
+        d.ellipse([3, 3, 21, 21], fill=hx("f0e0a0")); d.ellipse([8, 1, 24, 17], fill=(0, 0, 0, 0)); d.point((7, 14), fill=hx("c8b070")); d.point((10, 18), fill=hx("c8b070"))
+    elif kind == "chest":
+        d.rectangle([3, 9, 20, 20], fill=hx("8a5a2a")); d.rectangle([3, 6, 20, 11], fill=hx("a87a3a")); d.rectangle([10, 10, 13, 14], fill=GOLD); d.rectangle([3, 12, 20, 13], fill=INK2)
     elif kind == "flag":
         d.line([(8, 22), (8, 2)], fill=INK2, width=2); d.polygon([(9, 2), (20, 6), (9, 10)], fill=RED)
     return outline(im)

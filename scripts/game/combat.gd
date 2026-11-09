@@ -152,7 +152,7 @@ func set_visible_world(v: bool) -> void:
 # ======================= Вхід і вихід =======================
 
 ## companions — список {"type", "downed"} зі стану світу.
-func enter(id: String, companions: Array, plague_level: int = 0) -> void:
+func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictionary = {}) -> void:
 	loc_id = id
 	if not Data.LOCATIONS.has(id):
 		enter_defense(defense_loc, companions)
@@ -163,6 +163,10 @@ func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	loc = Data.LOCATIONS[id]
 	if loc.get("endless", false) and not custom_loc.is_empty():
 		loc = custom_loc  # Глибини зарази: печера потрібної глибини
+	if not extra.is_empty():
+		# Модифікатори подій: ніч, скарб, спалене село (див. EventService.mods_for)
+		loc = loc.duplicate()
+		loc.merge(extra, true)
 	room = 1 if loc["type"] == "dungeon" else 0
 	field_kills = 0
 	field_goal = int(loc.get("goal", Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL))
@@ -178,11 +182,21 @@ func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	elif loc["type"] == "dungeon":
 		_spawn_room()
 	else:
-		Events.banner.emit(loc["name"], Color(1, 0.92, 0.7))
+		Events.banner.emit(loc["name"] + ("\nНічний похід" if loc.get("night", false) else ""), Color(1, 0.92, 0.7))
 		var en: Array = loc["enemies"]
 		for i in 5:
 			var pos: Vector2 = player.position + Vector2.from_angle(randf() * TAU) * randf_range(450, 650)
 			spawn_enemy(en[randi() % en.size()], loc["level"], false, _clamp_in(pos, 60.0))
+		if loc.get("treasure", false):
+			# Сторож скарбу: еліта з двома властивостями, після неї — скриня
+			var gp := _clamp_in(player.position + Vector2.from_angle(randf() * TAU) * 700.0, 80.0)
+			spawn_enemy(en[randi() % en.size()], int(loc["level"]) + 1, false, gp)
+			var g = _last_enemy()
+			g.make_elite(Elites.roll_affixes(99).slice(0, 2) if Elites.roll_affixes(99).size() >= 2 else ["iron", "fiery"])
+			g.max_hp *= 1.5
+			g.hp = g.max_hp
+			g.treasure_guard = true
+			g.title = "Сторож скарбу: " + g.title
 
 
 func leave() -> void:
@@ -321,17 +335,22 @@ func enter_defense(dl: Dictionary, companions: Array) -> void:
 	gate = GateScript.new()
 	gate.combat = self
 	gate.camp = dl.get("camp", false)
+	gate.variant = dl.get("variant", "camp" if dl.get("camp", false) else "city")
 	gate.max_hp = float(dl["gate_hp"])
 	gate.hp = gate.max_hp
 	gate.position = Vector2(0, arena.end.y - 170)
 	entities.add_child(gate)
-	Events.banner.emit(dl["name"] + "\nНе дай зламати браму!", Color(1.0, 0.6, 0.4))
+	var hint_line: String = {"village": "Не дай спалити хати!", "caravan": "Вози їдуть — не дай їх розбити!", "captives": "Вбережи бранців!", "wounded": "Вбережи пораненого!"}.get(gate.variant, "Не дай зламати браму!")
+	Events.banner.emit(dl["name"] + "\n" + hint_line, Color(1.0, 0.6, 0.4))
 
 
 func _update_defense(delta: float) -> void:
 	if defense_over:
 		_check_exit_portal()
 		return
+	if gate != null and is_instance_valid(gate) and gate.variant == "caravan" and gate.alive:
+		# Валка повільно їде вгору ареною; нечисть наздоганяє
+		gate.position.y = maxf(arena.position.y + 220.0, gate.position.y - 22.0 * delta)
 	if alive_enemy_count() > 0:
 		return
 	if wave >= int(loc["waves"]):
@@ -370,7 +389,7 @@ func _defense_complete() -> void:
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 3)
 	spawn_pickup(pos, "item", 0, Data.gen_item(int(loc["level"]), Data.roll_rarity(int(loc["level"]), 1)))
-	_spawn_portal("До брами", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
+	_spawn_portal("До брами" if not loc.has("event") else "На мапу", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
 	Events.defense_won.emit(loc["target"])
 
 
@@ -431,7 +450,10 @@ func _spawn_companions(companions: Array) -> void:
 
 func _setup_atmosphere(biome: String) -> void:
 	canvas_mod.color = BIOME_TINT.get(biome, Color.WHITE).lerp(Color(0.7, 0.95, 0.55), 0.12 * plague)  # зараза зеленить світ
-	torch.enabled = biome in ["cave", "plague"]
+	var night: bool = loc.get("night", false)
+	if night:
+		canvas_mod.color = canvas_mod.color * Color(0.3, 0.32, 0.5)  # ніч: синя пітьма, світить лише смолоскип героя
+	torch.enabled = biome in ["cave", "plague"] or night
 	for c in lights.get_children():
 		c.queue_free()
 	if biome in ["cave", "plague"]:
@@ -648,6 +670,13 @@ func _drop_loot(e: Node2D) -> void:
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
 		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+	elif e.treasure_guard:
+		Events.banner.emit("Сторожа скарбу вбито!\nСкриня твоя", Color(1.0, 0.85, 0.35))
+		spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, maxi(2, Data.roll_rarity(ilvl, 2))))
+		for i in 8:
+			spawn_pickup(pos, "coin", maxi(2, e.xp_value / 4))
+		_resource_bundle(pos, 4)
+		Events.treasure_found.emit(loc_id)
 	elif e.elite:
 		Events.banner.emit("%s переможена!" % e.title if e.kind in Elites.FEMININE else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
 		for i in 3:

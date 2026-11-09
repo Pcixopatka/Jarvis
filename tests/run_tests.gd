@@ -63,6 +63,8 @@ func _run() -> void:
 	await _suite_depth_battle()
 	_suite_tower()
 	await _suite_tower_battle()
+	_suite_events()
+	await _suite_event_battles()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -1690,6 +1692,197 @@ func _suite_tower() -> void:
 	CS.record(w3, p3, "tower", 3)
 	check(int(w3.stats.get("tower", 0)) == 7 and CS.state(w3)["ach"].has("tower_5"), "рекорд Башти — найвищий поверх, досягнення є")
 	CS.now_override = 0
+
+
+func _suite_events() -> void:
+	suite("Події світу: правила")
+	var ES = load("res://scripts/game/event_service.gd")
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 10
+	w.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	check(ES.battle_at(w, "black_forest").is_empty() and ES.state(w)["active"].is_empty(), "спочатку подій нема")
+	# Набіг
+	var m: String = ES.start(w, p, "village_raid", "black_forest")
+	check("Набіг" in m and ES.battle_at(w, "black_forest")["kind"] == "village_raid", "набіг почався там, де треба")
+	var L: Dictionary = ES.battle_loc(w, ES.active(w), p)
+	check(L["type"] == "defense" and L["variant"] == "village" and L["waves"] == 3 and L["biome"] == "forest", "бій набігу: 3 хвилі, хати, біом лісу")
+	var marks: Array = ES.map_marks(w)
+	check(marks.size() == 1 and marks[0]["icon"] == "raid" and marks[0]["id"] == "black_forest", "значок набігу на мапі")
+	var g0: int = p.gold
+	var wm: String = ES.win(w, p, ES.active(w))
+	check("врятовано" in wm and p.gold > g0 and ES.active(w).is_empty() and int(p.resources.get("trophy", 0)) >= 2, "перемога: гривні, ресурси, трофеї")
+	ES.start(w, p, "village_raid", "black_forest")
+	ES.lose(w, p, ES.active(w), true)
+	check(ES.is_burned(w, "black_forest") and ES.mods_for(w, "black_forest")["xp_mult"] < 1.0 and ES.mods_for(w, "black_forest")["hp_mult"] > 1.0, "програш: спалене село — менше досвіду, лютіша нечисть")
+	for i in ES.BURN_TRIPS:
+		ES.tick(w, p)
+	check(not ES.is_burned(w, "black_forest"), "спалене село відновлюється")
+	# Валка
+	w.events = {}
+	var cm: String = ES.start(w, p, "caravan", "kyiv")
+	var ev: Dictionary = ES.active(w)
+	check("Чумаки" in cm and ev["target"] == "kyiv" and ev["to"] != "kyiv" and Data.CITIES.has(ev["to"]), "валка: з Києва в інше місто")
+	var L2: Dictionary = ES.battle_loc(w, ev, p)
+	check(L2["variant"] == "caravan" and L2["waves"] == 4, "бій валки: вози, 4 хвилі")
+	var to: String = ev["to"]
+	var loy0: int = w.loyalty_points(to)
+	var bag0: int = p.inventory.size()
+	var wm2: String = ES.win(w, p, ev, 1.0)
+	check("цілою" in wm2 and w.loyalty_points(to) == loy0 + 40 and p.inventory.size() == bag0 + 1 and p.inventory[-1]["rarity"] == 2, "валка ціла: рідкісна річ і лояльність")
+	ES.start(w, p, "caravan", "kyiv")
+	var wm3: String = ES.win(w, p, ES.active(w), 0.4)
+	check("побиту" in wm3, "побита валка — менша нагорода")
+	# Облога Січі
+	w.events = {}
+	w.story["chapter"] = 3
+	ES.start(w, p, "sich_siege")
+	var L3: Dictionary = ES.battle_loc(w, ES.active(w), p)
+	check(L3["waves"] == 6 and L3["variant"] == "city" and L3["target"] == "sich", "облога Січі: 6 хвиль біля брами")
+	ES.lose(w, p, ES.active(w))
+	var DS = load("res://scripts/game/defense_service.gd")
+	check(DS.is_besieged(w, "sich"), "програна облога: Січ зачинена, поки не відіб'єш")
+	DS.state(w)["sieges"].erase("sich")
+	ES.start(w, p, "sich_siege")
+	var st0: int = int(p.stones.get("zabuttia", 0))
+	ES.win(w, p, ES.active(w))
+	check(int(ES.state(w)["sich_done"]) == 3 and int(p.stones.get("zabuttia", 0)) == st0 + 1, "Січ відстояно: камінь і позначка розділу")
+	# Полон: значок рухається до Кремля
+	w.events = {}
+	ES.start(w, p, "captives", "black_forest")
+	var ll0: Vector2 = ES.map_marks(w)[0]["ll"]
+	ES.tick(w, p)
+	var ll1: Vector2 = ES.map_marks(w)[0]["ll"]
+	check(ll1.distance_to(ES.KREMLIN_LL) < ll0.distance_to(ES.KREMLIN_LL) and ES.battle_at(w, "black_forest")["kind"] == "captives", "конвой рухається до Кремля, але наздогнати можна там само")
+	ES.win(w, p, ES.active(w))
+	check(ES.free_hire(w), "звільнені бранці: безкоштовний найм")
+	var CS = load("res://scripts/game/city_service.gd")
+	w.add_loyalty("sich", 300)
+	p.gold = 0
+	check(CS.hire_price(w, p, "sich", "dzhura") == 0 and CS.hire(w, p, "sich", "dzhura") and not ES.free_hire(w), "найм задарма — один раз")
+	# Поранений
+	w.events = {}
+	ES.start(w, p, "wounded", "wild_field")
+	check(ES.battle_loc(w, ES.active(w), p)["variant"] == "wounded", "поранений — свій варіант бою")
+	ES.lose(w, p, ES.active(w))
+	check(ES.active(w).is_empty(), "поранений загинув — подія скінчилась")
+	# Ніч, скарб, ярмарок
+	w.events = {}
+	ES.state(w)["night"]["wild_field"] = 2
+	ES.state(w)["treasure"]["black_forest"] = true
+	var nm: Dictionary = ES.mods_for(w, "wild_field")
+	check(nm.get("night", false) and nm["hp_mult"] > 1.2 and nm["xp_mult"] > 1.4, "ніч: сильніша нечисть, більше досвіду")
+	check(ES.mods_for(w, "black_forest").get("treasure", false) and ES.notes_for(w, "black_forest").size() == 1, "скарб: мітка й пояснення")
+	ES.treasure_found(w, "black_forest")
+	check(not ES.has_treasure(w, "black_forest"), "скарб знайдено — мітка зникає")
+	ES.state(w)["fair"] = {"city": "kyiv", "left": 2}
+	check(ES.sell_mult(w, "kyiv") == 2.0 and ES.sell_mult(w, "lviv") == 1.0, "ярмарок: продаж удвічі дорожчий лише там")
+	var fm: Array = ES.map_marks(w)
+	check(fm.size() >= 2 and fm.any(func(x): return x["icon"] == "tent") and fm.any(func(x): return x["icon"] == "moon"), "значки ярмарку й ночі")
+	ES.tick(w, p)
+	ES.tick(w, p)
+	check(ES.state(w)["fair"].is_empty(), "ярмарок закінчується")
+	# Ярмарок раз на FAIR_EVERY походів
+	w.events = {}
+	var had_fair := false
+	for i in ES.FAIR_EVERY:
+		ES.tick(w, p)
+		if not ES.state(w)["fair"].is_empty():
+			had_fair = true
+	check(had_fair, "ярмарок з'являється сам")
+	# Крадіжка на хуторі
+	w.camp = {"buildings": {"pasika": 1}, "pasika_ts": 1000.0}
+	var now := 1000.0 + 10.0 * 3600.0
+	check(ES.check_theft(w, now, 0, 0.9) == "" and float(w.camp["pasika_ts"]) == 1000.0, "крадіжки може й не бути")
+	var tm: String = ES.check_theft(w, now, 0, 0.1)
+	check("обікрали" in tm and float(w.camp["pasika_ts"]) > 1000.0, "крадіжка: частина меду зникла")
+	w.camp["pasika_ts"] = 1000.0
+	check(ES.check_theft(w, now, 2, 0.2) == "", "Курінь 2 — злодіїв сполохано")
+	check(ES.check_theft(w, 1000.0 + 3600.0, 0, 0.0) == "", "за годину не крадуть")
+	# Серіалізація
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.events.has("trips") and int(w2.events["trips"]) == int(w.events["trips"]), "події зберігаються")
+
+
+func _suite_event_battles() -> void:
+	suite("Події світу: бої")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	p.change_class("cossack")
+	p.level = 20
+	p.stats["str"] = 120
+	p.stats["vit"] = 120
+	p.skills = {"whirl": 5}
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "event_village_raid": true, "event_caravan": true}
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	var ES = game.EventService
+	ES.start(game.world, p, "village_raid", "black_forest")
+	await _ride(game, "black_forest")
+	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null and game.combat.gate.variant == "village", "набіг: бій біля хат, а не звичайний похід")
+	var frames := 0
+	while not game.combat.defense_over and frames < 7000:
+		_bot_fight(game)
+		game.combat.gate.hp = game.combat.gate.max_hp
+		p.hp = p.max_hp
+		await process_frame
+		frames += 1
+	check(game.combat.defense_over and ES.active(game.world).is_empty() and not ES.is_burned(game.world, "black_forest"), "набіг відбито (кадрів: %d)" % frames)
+	frames = 0
+	while game.state == game.State.PLAYING and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.MAP, "з порталу — на мапу")
+	# Валка: вози їдуть
+	ES.start(game.world, p, "caravan", "kyiv")
+	await _ride(game, "kyiv")
+	check(game.state == game.State.PLAYING and game.combat.gate.variant == "caravan", "валка: бій із возами, а не вхід у місто")
+	var y0: float = game.combat.gate.position.y
+	for i in 120:
+		_bot_fight(game)
+		game.combat.gate.hp = game.combat.gate.max_hp
+		p.hp = p.max_hp
+		await process_frame
+	check(game.combat.gate.position.y < y0, "вози їдуть ареною")
+	# Нічний похід зі скарбом
+	game.enter_map()
+	await _frames(2)
+	ES.state(game.world)["active"] = {}
+	ES.state(game.world)["night"]["wild_field"] = 2
+	ES.state(game.world)["treasure"]["wild_field"] = true
+	await _ride(game, "wild_field")
+	check(game.state == game.State.PLAYING and game.combat.loc.get("night", false) and game.combat.torch.enabled, "ніч: темно, смолоскип горить")
+	var guard = null
+	for e in game.combat.get_tree().get_nodes_in_group("enemies"):
+		if e.treasure_guard:
+			guard = e
+	check(guard != null and guard.elite and guard.affixes.size() == 2, "сторож скарбу з двома властивостями на арені")
+	var items0 := 0
+	guard.take_damage(guard.max_hp * 5.0, Vector2.ZERO)
+	await _frames(3)
+	var chest := false
+	for c in game.combat.entities.get_children():
+		if c.get_script() == game.combat.PickupScript and c.kind == "item" and int(c.item["rarity"]) >= 2:
+			chest = true
+	check(chest and not ES.has_treasure(game.world, "wild_field"), "сторож убитий — скриня з рідкісною річчю, мітка знята")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_tower_battle() -> void:

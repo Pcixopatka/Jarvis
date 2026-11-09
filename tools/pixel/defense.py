@@ -75,7 +75,16 @@ def camp_gate(state):
         d.rectangle([12, 30, 40, 35], fill=WOOD_L); d.polygon([(44, 62), (62, 20), (66, 62)], fill=WOOD)
     return outline(im)
 
-parts = [("palisade", palisade()), ("palisade_broken", palisade(True)), ("gate", gate("closed")), ("gate_broken", gate("broken")),
+def wagon():
+    im = Image.new("RGBA", (64, 52), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rectangle([6, 22, 57, 40], fill=WOOD); d.rectangle([6, 22, 57, 25], fill=WOOD_L)
+    d.rounded_rectangle([4, 6, 59, 28], radius=12, fill=WHITE); d.line([(14, 6), (14, 28)], fill=hx("d8ccb0"), width=2); d.line([(30, 6), (30, 28)], fill=hx("d8ccb0"), width=2); d.line([(46, 6), (46, 28)], fill=hx("d8ccb0"), width=2)
+    for cx in (16, 48):
+        d.ellipse([cx - 9, 34, cx + 9, 52], fill=WOOD_D); d.ellipse([cx - 3, 40, cx + 3, 46], fill=WOOD_L)
+    d.line([(57, 30), (63, 26)], fill=WOOD_D, width=3)
+    return outline(im)
+
+parts = [("wagon", wagon()), ("palisade", palisade()), ("palisade_broken", palisade(True)), ("gate", gate("closed")), ("gate_broken", gate("broken")),
          ("tower", tower()), ("fence", fence()), ("camp_gate", camp_gate("closed")), ("camp_gate_broken", camp_gate("broken"))]
 W = sum(p.width + 2 for _, p in parts); H = max(p.height for _, p in parts)
 sheet = Image.new("RGBA", (W, H), (0, 0, 0, 0)); x = 0; regions = {}

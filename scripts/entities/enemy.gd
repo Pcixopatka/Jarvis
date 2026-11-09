@@ -53,6 +53,7 @@ var rams_gate := false  # в обороні: іде просто на браму
 var blink_timer := 2.5  # чорт: телепорт до цілі
 var phase2 := false  # боси Кощій і Путіноїд лютішають на половині здоров'я
 var anim_moving := false  # для спрайтів: чи рухався цього кадру
+var treasure_guard := false  # подія «Знахідка»: після смерті лишає скриню
 
 
 func setup(k: String, lvl: int, boss: bool = false) -> void:

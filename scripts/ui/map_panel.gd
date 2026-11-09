@@ -74,6 +74,24 @@ static func build_tower(world, player, sel: int, on_change: Callable, on_go: Cal
 	return v
 
 
+## Подія в цьому місці (true — є бойова подія, кнопка «На поміч!» уже додана).
+static func _event_note(v: Control, world, sel: String, on_go: Callable) -> bool:
+	var ES = load("res://scripts/game/event_service.gd")
+	for n in ES.notes_for(world, sel):
+		v.add_child(_wrapped(n[0], 16, UI.GOLD if n[1] != "burned" else UI.BAD))
+	if ES.fair_city(world) == sel:
+		v.add_child(_wrapped("ЯРМАРОК: продаж удвічі дорожчий, у крамниці рідкісні речі (ще %d походи)." % int(ES.state(world)["fair"]["left"]), 16, UI.GOLD))
+	var ev: Dictionary = ES.battle_at(world, sel)
+	if ev.is_empty():
+		return false
+	var text: String = {"village_raid": "НАБІГ! Заражені палять село. Устигни за %d походи.", "caravan": "Чумаки чекають супроводу (ще %d походи).",
+		"sich_siege": "ВЕЛИКА ОБЛОГА СІЧІ! Шість хвиль і ватажок. Протримаються %d походи.", "captives": "Конвой із бранцями ще тут (%d походи), далі піде в Московію.",
+		"wounded": "Поранений козак чекає на поміч (%d походи)."}[ev["kind"]] % int(ev["left"])
+	v.add_child(_wrapped(text, 18, UI.BAD))
+	v.add_child(UI.button("На поміч!", on_go.bind(sel), Vector2(350, 70), 24))
+	return true
+
+
 ## Попередження про облогу (true — місто/хутір в облозі).
 static func _siege_note(v: Control, world, sel: String) -> bool:
 	var DS = load("res://scripts/game/defense_service.gd")
@@ -108,6 +126,8 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		var honey := CampService.pasika_ready(world, player.level)
 		if honey > 0:
 			v.add_child(UI.label("Пасіка: готово %d грн" % honey, 17, UI.GOOD, false))
+		if _event_note(v, world, sel, on_go):
+			return v
 		if _siege_note(v, world, sel):
 			v.add_child(UI.button("На оборону хутора!", on_go.bind(sel), Vector2(350, 70), 24))
 			return v
@@ -125,6 +145,8 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 				done += 1
 		if done > 0:
 			v.add_child(UI.label("Можна здати завдань: %d" % done, 18, UI.GOOD, false))
+		if _event_note(v, world, sel, on_go):
+			return v
 		if _siege_note(v, world, sel):
 			v.add_child(UI.button("На оборону міста!", on_go.bind(sel), Vector2(350, 70), 24))
 			return v
@@ -153,6 +175,8 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	for q in world.quests:
 		if q["loc"] == sel and not world.is_done(q):
 			v.add_child(_wrapped("! " + q["text"], 16, UI.GOLD))
+	if _event_note(v, world, sel, on_go):
+		return v
 	v.add_child(UI.button("Вирушити", on_go.bind(sel), Vector2(350, 70), 26))
 	return v
 
