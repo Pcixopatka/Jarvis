@@ -476,6 +476,8 @@ static func _tavern(game, city: String) -> Control:
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(UI.label("Твій загін (%d/%d). Поранені супутники одужують у будь-якому місті." % [w.companions.size(), game.CityService.party_size(w)], 22, UI.GOLD, false))
 	v.add_child(UI.label("Супутники отримують досвід за кожного ворога, вбитого в поході, і ростуть до рівня козака.", 16, UI.MUTED, false))
+	if not w.companions.is_empty():
+		v.add_child(_wrap("Супутника можна відправити у власний похід: розвідка на годину, далекий похід на чотири чи виправа на вісім. Він повернеться зі здобиччю й досвідом, та поки його нема, в бою ти без нього.", 15, UI.MUTED))
 	if w.companions.is_empty():
 		v.add_child(UI.label("Поки що ти сам.", 18, UI.MUTED, false))
 	for i in w.companions.size():
@@ -497,6 +499,23 @@ static func _tavern(game, city: String) -> Control:
 		row.add_child(col)
 		row.add_child(UI.button("Відпустити", _do(game, "dismiss", i), Vector2(190, 54), 18))
 		v.add_child(row)
+		# Власний похід супутника
+		var ES = game.ExpeditionService
+		var erow := HBoxContainer.new()
+		erow.add_theme_constant_override("separation", 10)
+		if ES.away(c):
+			var E: Dictionary = game.Acts.EXPEDITIONS[c["away"]["kind"]]
+			var el := UI.label("У поході (%s): повернеться за %s. У бій зараз не піде." % [str(E["name"]).to_lower(), ES.time_text(ES.time_left(c))], 16, UI.GOLD, false)
+			el.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			erow.add_child(el)
+			erow.add_child(UI.button("Відкликати", _do(game, "exp_recall", i), Vector2(190, 48), 16))
+		else:
+			var hl := UI.label("Відправити самого:", 16, UI.MUTED, false)
+			erow.add_child(hl)
+			for kind in game.Acts.EXPEDITION_ORDER:
+				var E2: Dictionary = game.Acts.EXPEDITIONS[kind]
+				erow.add_child(UI.button("%s, %d год" % [E2["name"], int(E2["hours"])], _do(game, "exp_send", [i, kind]), Vector2(230, 48), 16, ES.can_send(w, i, kind)))
+		v.add_child(erow)
 	var waiting: Array = game.HeroService.waiting(w)
 	if not waiting.is_empty():
 		v.add_child(UI.label("Побратими чекають у корчмі", 24, UI.GOLD, false))

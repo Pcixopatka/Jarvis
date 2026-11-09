@@ -81,6 +81,8 @@ func _run() -> void:
 	await _suite_trail_battle()
 	_suite_garden()
 	await _suite_garden_game()
+	_suite_expedition()
+	await _suite_expedition_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -2655,6 +2657,192 @@ func _suite_garden_game() -> void:
 	game.camp_do("plant", [0, "khmil"])
 	game.save_game()
 	check(not game.account.camp.get("garden", {}).get("beds", [{}])[0].is_empty(), "грядки лежать у спільному хуторі акаунта")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	CS.now_override = 0
+
+
+func _suite_expedition() -> void:
+	suite("Походи побратимів: правила")
+	var ES = load("res://scripts/game/expedition_service.gd")
+	var Party = load("res://scripts/game/party.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var T0 := 1762700000
+	CS.now_override = T0
+	var w = WorldState.new()
+	var p = _new_player()
+	p.level = 12
+	w.companions = [Party.new_member("dzhura", 12), Party.new_member("dzhura", 12)]
+	check(not ES.away(w.companions[0]) and ES.can_send(w, 0, "scout") and not ES.can_send(w, 5, "scout") and not ES.can_send(w, 0, "nope"), "вільного супутника можна відправити")
+	check(ES.send(w, 0, "raid") and ES.away(w.companions[0]) and not ES.back(w.companions[0]) and ES.time_left(w.companions[0]) == 4 * 3600, "далекий похід: чотири години")
+	check(not ES.send(w, 0, "scout") and ES.away_count(w) == 1, "двічі одного не відправиш")
+	w.companions[1]["downed"] = true
+	check(not ES.can_send(w, 1, "scout"), "пораненого в похід не шлють")
+	w.companions[1]["downed"] = false
+	# Досвід із бою йде лише тим, хто в загоні
+	Party.gain_xp(w, 12, 50)
+	check(int(w.companions[0]["xp"]) == 0 and int(w.companions[1]["xp"]) == 50, "хто в поході — досвіду з бою не має")
+	check(ES.collect(w, p, 1).is_empty(), "поки не повернувся — зустрічати нікого")
+	CS.now_override = T0 + 4 * 3600
+	check(ES.back(w.companions[0]) and ES.time_text(ES.time_left(w.companions[0])) == "уже тут", "за чотири години повернувся")
+	var gold0: int = p.gold
+	var lvl0: int = int(w.companions[0]["level"])
+	var msgs: Array = ES.collect(w, p, 1)
+	check(msgs.size() == 1 and p.gold > gold0 and not ES.away(w.companions[0]) and "повернувся" in msgs[0], "зустрів: гривні в героя, супутник знову в загоні")
+	check(int(p.resources.get("trophy", 0)) >= 1 and int(p.resources.get("wood", 0)) + int(p.resources.get("iron", 0)) + int(p.resources.get("herbs", 0)) == 6, "ресурси й трофей із далекого походу")
+	check(int(w.companions[0]["level"]) > lvl0 or int(w.companions[0]["xp"]) > 0, "сам набрався досвіду")
+	check(ES.collect(w, p, 1).is_empty(), "удруге здобичі нема")
+	# Довший похід — більша здобич; іменний побратим приносить більше
+	var rng := RandomNumberGenerator.new()
+	var c: Dictionary = Party.new_member("dzhura", 12)
+	var sums := {}
+	for kind in Acts.EXPEDITION_ORDER:
+		var total := 0
+		for i in 200:
+			total += int(ES.reward(c, kind, rng)["gold"])
+		sums[kind] = total
+	check(sums["scout"] < sums["raid"] and sums["raid"] < sums["venture"], "що довший похід, то більше гривень: %s" % str(sums))
+	var hero_c: Dictionary = c.duplicate()
+	hero_c["hero"] = "ostap"
+	var plain := 0
+	var named := 0
+	for i in 200:
+		plain += int(ES.reward(c, "raid", rng)["gold"])
+		named += int(ES.reward(hero_c, "raid", rng)["gold"])
+	check(named > plain, "іменний побратим приносить більше")
+	var weak: Dictionary = Party.new_member("dzhura", 3)
+	check(int(ES.reward(weak, "venture", rng)["gold"]) < int(ES.reward(c, "venture", rng)["gold"]), "досвідченіший супутник — більша здобич")
+	var got_item := 0
+	var wounded := 0
+	for i in 300:
+		var r: Dictionary = ES.reward(c, "venture", rng)
+		got_item += 1 if r["item"] else 0
+		wounded += 1 if r["wounded"] else 0
+	check(got_item == 300 and wounded > 20 and wounded < 110, "виправа: річ напевно, засідка приблизно в кожній п'ятій (%d із 300)" % wounded)
+	# Засідка: гривень удвічі менше, сам поранений (якщо зустрів не в місті)
+	var found := false
+	for sd in 400:
+		var w2 = WorldState.new()
+		w2.companions = [Party.new_member("dzhura", 12)]
+		CS.now_override = T0
+		ES.send(w2, 0, "venture")
+		CS.now_override = T0 + 8 * 3600
+		var p2 = _new_player()
+		p2.level = 12
+		var m2: Array = ES.collect(w2, p2, sd)
+		if "засідку" in m2[0]:
+			found = true
+			check(w2.companions[0]["downed"] and "поранений" in m2[0], "засідка в полі: супутник поранений")
+			var w3 = WorldState.new()
+			w3.companions = [Party.new_member("dzhura", 12)]
+			CS.now_override = T0
+			ES.send(w3, 0, "venture")
+			CS.now_override = T0 + 8 * 3600
+			var p3 = _new_player()
+			p3.level = 12
+			var m3: Array = ES.collect(w3, p3, sd, true)
+			check(not w3.companions[0]["downed"] and "перев'язали" in m3[0] and p3.gold == p2.gold, "у місті рани одразу перев'язують, здобич та сама")
+			break
+	check(found, "засідки трапляються")
+	# Повна торба: річ продається
+	var w4 = WorldState.new()
+	w4.companions = [Party.new_member("dzhura", 12)]
+	CS.now_override = T0
+	ES.send(w4, 0, "venture")
+	CS.now_override = T0 + 8 * 3600
+	var p4 = _new_player()
+	p4.level = 12
+	while not p4.bag_full():
+		p4.add_item(Data.gen_item(1, 0))
+	var n4: int = p4.inventory.size()
+	var m4: Array = ES.collect(w4, p4, 3)
+	check(p4.inventory.size() == n4 and "продано" in m4[0], "торба повна — річ продано")
+	# Відкликати
+	CS.now_override = T0
+	ES.send(w, 1, "venture")
+	gold0 = p.gold
+	check(ES.recall(w, 1) and not ES.away(w.companions[1]) and p.gold == gold0 and not ES.recall(w, 1), "відкликав: повернувся з порожніми руками")
+	# Супутник не обганяє героя
+	var w5 = WorldState.new()
+	w5.companions = [Party.new_member("dzhura", 12)]
+	w5.companions[0]["level"] = 12
+	ES.send(w5, 0, "venture")
+	CS.now_override = T0 + 8 * 3600
+	ES.collect(w5, p, 2)
+	check(int(w5.companions[0]["level"]) == 12 and int(w5.companions[0]["xp"]) == 0, "вище рівня героя супутник не росте")
+	# Збереження
+	CS.now_override = T0
+	ES.send(w, 1, "raid")
+	var w6 = WorldState.new()
+	w6.from_dict(w.to_dict())
+	check(ES.away(w6.companions[1]) and ES.time_left(w6.companions[1]) == 4 * 3600, "похід переживає збереження")
+	check(ES.time_text(3600) == "1 год" and ES.time_text(5400) == "1 год 30 хв" and ES.time_text(60) == "1 хв", "текст часу")
+	CS.now_override = 0
+
+
+func _suite_expedition_game() -> void:
+	suite("Походи побратимів: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var T0 := 1762700000
+	CS.now_override = T0
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var ES = game.ExpeditionService
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.change_class("cossack")
+	p.level = 10
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.companions = [game.Party.new_member("dzhura", 10), game.Party.new_member("dzhura", 10)]
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.city_do("exp_send", [0, "scout"])
+	check(ES.away(game.world.companions[0]) and int(game.world.stats.get("expedition_sent", 0)) == 1, "відправив джуру в розвідку з корчми")
+	# У бою тільки той, хто лишився, і на своєму місці в загоні
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(game.combat.companion_nodes.size() == 1 and game.combat.companion_nodes[0].index == 1, "у бій пішов лише другий супутник (місце в загоні збережено)")
+	game.enter_map()
+	await _frames(2)
+	check(ES.away(game.world.companions[0]), "година ще не минула — джура в поході")
+	# Минула година: на мапі його зустрічають зі здобиччю
+	CS.now_override = T0 + 3700
+	var gold0: int = p.gold
+	game.enter_map()
+	await _frames(2)
+	check(not ES.away(game.world.companions[0]) and p.gold > gold0 and int(game.world.stats.get("expedition", 0)) == 1, "повернувся: здобич у героя (+%d грн)" % (p.gold - gold0))
+	check(game.account.challenges["ach"].has("expedition_1"), "досягнення «Гінці повернулись»")
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(game.combat.companion_nodes.size() == 2, "тепер у бою знову обидва")
+	game.enter_map()
+	await _frames(2)
+	# Відкликати
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.city_do("exp_send", [1, "venture"])
+	game.city_do("exp_recall", 1)
+	check(not ES.away(game.world.companions[1]), "відкликав із дороги")
+	# Зустріч у місті
+	game.city_do("exp_send", [1, "scout"])
+	game.leave_city()
+	await _frames(2)
+	CS.now_override = T0 + 3700 + 3700
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	check(not ES.away(game.world.companions[1]) and not game.world.companions[1]["downed"] and int(game.world.stats.get("expedition", 0)) == 2, "у місті теж зустрічають, і поранених там нема")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

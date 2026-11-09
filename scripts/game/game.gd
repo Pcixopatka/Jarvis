@@ -29,6 +29,7 @@ const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const TavernService := preload("res://scripts/game/tavern_service.gd")
 const GardenService := preload("res://scripts/game/garden_service.gd")
+const ExpeditionService := preload("res://scripts/game/expedition_service.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -419,14 +420,18 @@ func enter_map() -> void:
 	if theft_notice != "":
 		hud.show_banner(theft_notice, UI.BAD)
 		theft_notice = ""
-	if leave_notice != "" and not from_trip:
-		hud.show_banner(leave_notice, UI.GOLD)
+	var back := _expedition_news()
+	if not from_trip and (leave_notice != "" or not back.is_empty()):
+		if leave_notice != "":
+			back.push_front(leave_notice)
+		hud.show_banner("\n".join(back), UI.GOLD)
 		leave_notice = ""
 	if from_trip:
 		var news := []
 		if leave_notice != "":
 			news.append(leave_notice)
 			leave_notice = ""
+		news.append_array(back)
 		var spread := PlagueService.tick(world)
 		if not spread.is_empty():
 			news.append("Зараза повзе далі: " + ", ".join(spread))
@@ -463,7 +468,10 @@ func enter_city(id: String) -> void:
 	sell_multi = false
 	sell_marked.clear()
 	smith_msg = ""
+	var back := _expedition_news(true)
 	_build_city()
+	if not back.is_empty():
+		hud.show_banner("\n".join(back), UI.GOLD)
 	_story_event("visit", id)
 	_story_dialogue(id)
 	save_game()
@@ -630,8 +638,12 @@ func _spec_event(type: String, arg: String) -> void:
 ## Загін для бою: записи світу + сила, ім'я й колір побратимів.
 func _party_data() -> Array:
 	var out := []
-	for c in world.companions:
+	for i in world.companions.size():
+		var c: Dictionary = world.companions[i]
+		if ExpeditionService.away(c):
+			continue  # у власному поході — в бою його нема
 		var d: Dictionary = c.duplicate()
+		d["index"] = i  # місце в загоні (а не в списку тих, хто пішов у бій)
 		var id: String = c.get("hero", "")
 		if id != "":
 			d["mult"] = HeroService.power(world, id)
@@ -1035,6 +1047,16 @@ func _soft_defeat(text: String, city: String) -> void:
 			leave_notice = ""
 
 
+## Супутники, що повернулися з власних походів: здобич герою, банер із новинами.
+func _expedition_news(healed: bool = false) -> Array:
+	var msgs := ExpeditionService.collect(world, player, -1, healed)
+	if not msgs.is_empty():
+		Audio.play("quest", 0.0)
+		var extra := ChallengeService.record(world, player, "expedition", msgs.size())
+		msgs.append_array(extra)
+	return msgs
+
+
 ## Партію в кості розсуджено: звук, лічильники для досягнень.
 func _dice_done() -> void:
 	var dg := TavernService.game(world)
@@ -1362,6 +1384,13 @@ func city_do(action: String, arg) -> void:
 			return
 		"dismiss":
 			CityService.dismiss(world, arg)
+		"exp_send":
+			if ExpeditionService.send(world, arg[0], arg[1]):
+				Audio.play("quest", 0.0)
+				hud.show_banner("%s вирушає: %s" % [HeroService.member_name(world.companions[arg[0]]), str(Acts.EXPEDITIONS[arg[1]]["name"]).to_lower()], UI.GOLD)
+				_record("expedition_sent")
+		"exp_recall":
+			ExpeditionService.recall(world, arg)
 		"spec_start":
 			_start_trial(arg)
 			return
@@ -1720,7 +1749,10 @@ func enter_camp() -> void:
 	hud.set_mode(false, false)
 	camp_sel_uid = -1
 	smith_msg = ""
+	var back := _expedition_news(true)
 	_build_camp()
+	if not back.is_empty():
+		hud.show_banner("\n".join(back), UI.GOLD)
 	save_game()
 	hint("camp", "Твій хутір! Тут козак і загін відпочивають. Будуй курінь, кузню, зілляварню, склад і пасіку за гривні та ресурси з походів.")
 

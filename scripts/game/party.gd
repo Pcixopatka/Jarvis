@@ -31,8 +31,8 @@ static func gain_xp(world, hero_level: int, amount: int) -> Array:
 	var ups := []
 	for i in world.companions.size():
 		var c: Dictionary = world.companions[i]
-		if c.get("downed", false):
-			continue
+		if c.get("downed", false) or not c.get("away", {}).is_empty():
+			continue  # поранені й ті, хто у власному поході, досвіду з бою не мають
 		var lvl: int = int(c.get("level", 1))
 		if lvl >= hero_level:
 			c["xp"] = 0  # не обганяє козака: досвід не накопичується понад стелю

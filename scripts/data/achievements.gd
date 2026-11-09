@@ -65,6 +65,8 @@ const ACHIEVEMENTS := [
 	{"id": "harvest_1", "name": "Перший урожай", "desc": "Збери врожай на городі", "stat": "harvest", "goal": 1, "gold": 150},
 	{"id": "harvest_30", "name": "Господар", "desc": "Збери 30 врожаїв на городі", "stat": "harvest", "goal": 30, "gold": 2000},
 	{"id": "borshch", "name": "Справжній борщ", "desc": "Звари борщ із власної городини", "stat": "cook:borshch", "goal": 1, "gold": 400},
+	{"id": "expedition_1", "name": "Гінці повернулись", "desc": "Дочекайся супутника з власного походу", "stat": "expedition", "goal": 1, "gold": 200},
+	{"id": "expedition_25", "name": "Отаман загону", "desc": "Зустрінь супутників із 25 походів", "stat": "expedition", "goal": 25, "gold": 2500},
 	{"id": "vigil_5", "name": "Вартовий", "desc": "Вистій на варті 5 хвилин", "stat": "vigil", "goal": 5, "gold": 1500},
 	{"id": "vigil_8", "name": "Нічна сторожа", "desc": "Вистій на варті 8 хвилин", "stat": "vigil", "goal": 8, "gold": 5000},
 	{"id": "bounty_1", "name": "Перша голова", "desc": "Закрий оголошення з дошки розшуку", "stat": "bounty", "goal": 1, "gold": 300},
