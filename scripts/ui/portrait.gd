@@ -37,7 +37,7 @@ func _draw() -> void:
 	var cloth: Color = {"otaman": Color(0.75, 0.13, 0.12), "kobzar": Color(0.4, 0.3, 0.2), "znakharka": Color(0.95, 0.94, 0.88), "hero": Color(0.78, 0.14, 0.14), "putinoid": Color(0.18, 0.14, 0.2), "polkovnyk": Color(0.18, 0.3, 0.65), "litopysets": Color(0.12, 0.1, 0.1), "selianyn": Color(0.95, 0.94, 0.9),
 		"petro": Color(0.55, 0.25, 0.2), "yaryna": Color(0.95, 0.92, 0.8), "oksana": Color(0.3, 0.38, 0.2),
 		"hanna": Color(0.35, 0.12, 0.3), "opryshok": Color(0.85, 0.82, 0.7), "koshchii": Color(0.08, 0.06, 0.08),
-		"velemyr": Color(0.95, 0.94, 0.88), "hero_volkhv": Color(0.95, 0.94, 0.9),
+		"velemyr": Color(0.95, 0.94, 0.88), "hero_volkhv": Color(0.95, 0.94, 0.9), "zoreslava": Color(0.93, 0.92, 0.86),
 		"paraska": Color(0.95, 0.92, 0.85), "hromobii": Color(0.85, 0.88, 0.95), "yakym": Color(0.35, 0.22, 0.12),
 		"myron": Color(0.55, 0.08, 0.1), "sava": Color(0.35, 0.4, 0.22), "okhrim": Color(0.2, 0.25, 0.45), "yarema": Color(0.15, 0.12, 0.14),
 		"chumak": Color(0.92, 0.9, 0.82), "gonets": Color(0.2, 0.35, 0.6), "koval": Color(0.4, 0.26, 0.15), "bizhenka": Color(0.55, 0.4, 0.3)}.get(npc, Color.GRAY)
@@ -227,6 +227,16 @@ func _draw() -> void:
 				draw_circle(c + Vector2(x, eye_y) * s, 1.5 * s, Color(0.1, 0.1, 0.1))
 			_mustache(c, s, Color(0.85, 0.85, 0.85), 40.0)
 			draw_arc(c + Vector2(0, 44) * s, 40.0 * s, PI * 1.1, PI * 1.9, 12, Color(0.5, 0.5, 0.5), 8.0 * s)
+		"zoreslava":
+			# Посланниця волхвів: довге темне волосся, вінок із барвінку, намисто-оберіг
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, 24), Vector2(-28, -20), Vector2(0, -34), Vector2(28, -20), Vector2(30, 24), Vector2(18, -14), Vector2(-18, -14)]), Color(0.2, 0.14, 0.1))
+			_brows(c, s, Color(0.2, 0.14, 0.1), 2.5)
+			_eyes(c, s, eye_y, false)
+			draw_line(c + Vector2(-6, 14) * s, c + Vector2(6, 14) * s, Color(0.7, 0.3, 0.3), 2.0 * s)
+			for i in 7:
+				draw_circle(c + Vector2(-24 + i * 8, -28 + absf(i - 3) * 2.0) * s, 3.5 * s, Color(0.35, 0.45, 0.85) if i % 2 == 0 else Color(0.3, 0.6, 0.3))
+			draw_arc(c + Vector2(0, 40) * s, 22.0 * s, PI * 0.15, PI * 0.85, 12, Color(0.85, 0.65, 0.2), 3.0 * s)
+			draw_circle(c + Vector2(0, 60) * s, 5.0 * s, Color(0.95, 0.75, 0.25))
 		"velemyr":
 			# Верховний волхв: сива борода до пояса, вінок із дубового листя, посох
 			draw_circle(c + Vector2(0, -14) * s, 26.0 * s, Color(0.9, 0.9, 0.88))

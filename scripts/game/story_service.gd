@@ -124,10 +124,11 @@ static func chronicle(world) -> Array:
 	var made: Dictionary = world.story.get("choices", {})
 	for ch in Story.CHAPTERS:
 		for st in ch["steps"]:
-			if not made.has(st["id"]):
+			var key: String = "trial" if st["id"] == "choose" else st["id"]  # вибір дороги зберігається як trial
+			if not made.has(key) or st.get("choices", []).is_empty():
 				continue
-			var choices: Array = st.get("choices", [])
-			var ci := int(made[st["id"]])
+			var choices: Array = st["choices"]
+			var ci := int(made[key])
 			if ci >= 0 and ci < choices.size():
 				out.append({"chapter": ch["title"], "text": choices[ci].get("memo", choices[ci]["text"])})
 	return out
@@ -176,6 +177,9 @@ static func on_event(world, player, type: String, arg: String) -> Array:
 			if obj["type"] == "job":
 				s["progress"] = mini(int(arg), _count(st))
 				done = int(arg) >= _count(st)
+		"choose":
+			# Вибір дороги зроблено на екрані «Дорога» (PathService уже записав choices["trial"])
+			done = obj["type"] == "choose"
 		"kill":
 			if obj.get("enemy", "") == arg:
 				if obj["type"] == "kill":

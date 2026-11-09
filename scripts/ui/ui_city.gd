@@ -25,6 +25,8 @@ static func build(game, city: String) -> Control:
 		["Коваль", _smith(game)],
 		["Корчма", _tavern(game, city)],
 	]
+	if city == "sich" and game.PathService.choosing(game.world):
+		pages.insert(0, ["★ Дорога", _path_tab(game)])
 	if not _city_specs(game, city).is_empty():
 		pages.append(["Наставники" if _city_specs(game, city).size() > 1 else "Наставник", _mentors(game, city)])
 	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int): game.city_tab = i,
@@ -229,6 +231,69 @@ static func _smith(game) -> Control:
 	return h
 
 
+# ---------------- Дорога: вибір Козак / Волхв ----------------
+
+static func _path_tab(game) -> Control:
+	var PS = game.PathService
+	var w = game.world
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var both: bool = PS.talked(w, "cossack") and PS.talked(w, "volkhv")
+	var intro := "Поговори з обома — осавулом Мироном і посланницею Зореславою — і обери свою дорогу. Не поспішай: вибір назавжди (змінити зможе лише Алатир-камінь)." if not both else "Ти вислухав обох. Обирай, коли будеш готовий — або повертайся пізніше."
+	var il := UI.label(intro, 18, UI.GOLD if not both else UI.GOOD, false)
+	il.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(il)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	v.add_child(row)
+	for cls in ["cossack", "volkhv"]:
+		var card := class_card(game, cls, true)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var talked: bool = PS.talked(w, cls)
+		var rep: String = game.Paths.REPS[cls]
+		var rep_name: String = game.StoryService.Story.NPCS[rep]["name"]
+		card.add_child(UI.button(("Поговорити з: " if not talked else "Ще раз: ") + rep_name, _do(game, "path_talk", cls), Vector2(0, 54), 16))
+		var key: String = "path_choose:" + cls
+		var t: String = ("Обрати: %s" % game.Paths.CARDS[cls]["title"]) if game.confirm_action != key else "Точно? Натисни ще раз"
+		var b := UI.button(t, _do(game, "path_choose", cls), Vector2(0, 60), 20, both)
+		if both:
+			b.add_theme_stylebox_override("normal", UI.style(Color(0.2, 0.32, 0.15), Color(0.5, 0.9, 0.4), 12, 8))
+		card.add_child(b)
+		if not talked:
+			card.add_child(UI.label("Спершу вислухай %s." % rep_name, 14, UI.MUTED, false))
+		row.add_child(card)
+	return v
+
+
+## Картка дороги чи спеціалізації: стиль, сильні/слабкі сторони, зброя, вміння, що далі.
+static func class_card(game, cls: String, big: bool = false) -> VBoxContainer:
+	var c: Dictionary = game.Paths.CARDS[cls]
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 4)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UI.style(Color(0.1, 0.09, 0.07, 0.9), Color(0.6, 0.5, 0.25), 12, 10))
+	var inner := VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 4)
+	panel.add_child(inner)
+	inner.add_child(UI.label(c["title"], 26 if big else 22, UI.GOLD, false))
+	inner.add_child(UI.label(c["where"], 14, UI.MUTED, false))
+	var st := UI.label(c["style"], 16, UI.TEXT, false)
+	st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inner.add_child(st)
+	for s_ in c["strong"]:
+		inner.add_child(UI.label("+ " + s_, 15, UI.GOOD, false))
+	for wk in c["weak"]:
+		inner.add_child(UI.label("− " + wk, 15, UI.BAD, false))
+	inner.add_child(UI.label("Вміння: " + ", ".join(c["skills"]), 14, UI.TEXT, false))
+	if not c["next"].is_empty():
+		inner.add_child(UI.label("Далі: " + ", ".join(c["next"]), 14, UI.MUTED, false))
+	var fl := UI.label(c["for"], 14, UI.GOLD, false)
+	fl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	inner.add_child(fl)
+	v.add_child(panel)
+	return v
+
+
 # ---------------- Наставники (спеціалізації Козака) ----------------
 
 ## Спеціалізації, наставники яких живуть у цьому місті (для героя відповідної гілки).
@@ -272,9 +337,12 @@ static func _mentors(game, city: String) -> Control:
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var mentor: Dictionary = game.StoryService.Story.NPCS[info["mentor"]]
 		col.add_child(UI.label("%s  •  наставник: %s" % [info["name"], mentor["name"]], 22, UI.GOLD if p.job == spec else UI.TEXT, false))
-		var d := UI.label(info["desc"], 16, UI.MUTED, false)
-		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		col.add_child(d)
+		if game.Paths.CARDS.has(spec):
+			col.add_child(class_card(game, spec))
+		else:
+			var d := UI.label(info["desc"], 16, UI.MUTED, false)
+			d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			col.add_child(d)
 		row.add_child(col)
 		var label := "Випробування"
 		var ok: bool = spec in SS.available(p)

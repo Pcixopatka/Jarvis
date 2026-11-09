@@ -20,6 +20,8 @@ const CraftService := preload("res://scripts/game/craft_service.gd")
 const SpecService := preload("res://scripts/game/spec_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
 const DepthService := preload("res://scripts/game/depth_service.gd")
+const PathService := preload("res://scripts/game/path_service.gd")
+const Paths := preload("res://scripts/data/paths.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -58,7 +60,8 @@ var smith_msg_color := Color.WHITE
 var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
 var confirm_action := ""
-var skill_sel := ""  # вміння, відкрите в картці на вкладці «Вміння»
+var skill_sel := ""
+var path_card := "cossack"  # яка картка розгорнута на екрані «Дорога»  # вміння, відкрите в картці на вкладці «Вміння»
 var depth_sel := 1  # обрана глибина на мапі
 var camp_sel_uid := -1
 
@@ -422,6 +425,34 @@ func _cleanse(loc_id: String) -> void:
 	var now := PlagueService.cleanse(world, loc_id, was if Data.LOCATIONS[loc_id]["type"] == "dungeon" else 1)
 	var text := "Зараза відступає!" if now > 0 else "Місцевість очищено від зарази!"
 	combat.float_text(player.global_position + Vector2(0, -150), text, Color(0.6, 1.0, 0.4))
+
+
+## Розмова з представником дороги (екран «Дорога» на Січі).
+func _path_talk(cls: String) -> void:
+	var dlg = DialogueScript.new()
+	dlg.setup(StoryService.lines(world, PathService.talk_lines(cls)), [])
+	dlg.finished.connect(func(_c):
+		hud.close_dialogue()
+		PathService.mark_talked(world, cls)
+		path_card = cls
+		save_game()
+		if state == State.CITY:
+			_build_city())
+	hud.show_dialogue(dlg)
+
+
+## Остаточний вибір дороги: сюжет іде далі гілкою козака або волхва.
+func _path_choose(cls: String) -> void:
+	var msgs := PathService.choose(world, player, cls)
+	if msgs.is_empty():
+		return
+	Audio.play("quest", 0.0)
+	hud.show_banner("Дорогу обрано: %s!" % Paths.CARDS[cls]["title"], UI.GOLD)
+	save_game()
+	if state == State.CITY:
+		city_tab = 0
+		_build_city()
+		_story_dialogue(city_id)  # кошовий одразу дає посвяту або лист до Велемира
 
 
 ## Посвята в спеціалізацію після випробування.
@@ -812,6 +843,17 @@ func city_do(action: String, arg) -> void:
 		"spec_start":
 			_start_trial(arg)
 			return
+		"path_talk":
+			_path_talk(arg)
+			return
+		"path_choose":
+			if confirm_action != "path_choose:" + arg:
+				confirm_action = "path_choose:" + arg
+			else:
+				confirm_action = ""
+				_path_choose(arg)
+		"path_card":
+			path_card = arg
 		"hero_join":
 			for m in HeroService.join(world, player, arg):
 				hud.show_banner(m["text"], UI.GOLD)

@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 8
+const SAVE_VERSION := 9
 const Data := preload("res://scripts/data/data.gd")
 const SAVE_PATH := "user://hero.save"
 const SETTINGS_PATH := "user://settings.cfg"
@@ -141,6 +141,19 @@ static func migrate(d: Dictionary) -> Dictionary:
 		d["meta"] = d.get("meta", {})
 		d["meta"]["notice"] = "classes"
 		v = 8
+	if v == 8:
+		# v9: у пролозі з'явився крок «Обери дорогу» (індекс 3). Хто стояв на присязі чи далі —
+		# зсувається на один; хто ще чекав на вибір у розмові з кошовим — отримує цей крок і йде
+		# розмовляти з Мироном та Зореславою.
+		var st: Dictionary = d["world"].get("story", {})
+		if not st.is_empty() and st.get("stage", "") != "done" and int(st.get("chapter", 0)) == 0 and int(st.get("step", 0)) >= 3:
+			st["step"] = int(st["step"]) + 1
+		elif not st.is_empty() and st.get("stage", "") != "done" and int(st.get("chapter", 0)) == 0 and int(st.get("step", 0)) == 2 and st.get("stage", "") == "turnin":
+			# стояв перед вибором у розмові: trial здається, далі — крок choose
+			st["step"] = 3
+			st["stage"] = "active"
+			st["progress"] = 0
+		v = 9
 	d["version"] = v
 	return d
 
