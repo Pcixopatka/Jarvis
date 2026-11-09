@@ -55,6 +55,7 @@ var hint_label: Label
 var overlay: ColorRect
 var overlay_box: VBoxContainer
 var _hint_tween: Tween
+var _banner_tween: Tween = null
 var _pulse := 0.0
 var _time := 0.0
 var _low_hp := false
@@ -145,6 +146,7 @@ func _build() -> void:
 	banner.offset_bottom = -200
 	banner.add_theme_font_size_override("font_size", 48)
 	banner.add_theme_constant_override("outline_size", 10)
+	banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	banner.modulate.a = 0.0
 	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	banner.z_index = 5
@@ -399,14 +401,35 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 		char_btn.modulate = Color.WHITE
 
 
+## Розмір шрифту банера за обсягом тексту: коротке гасло велике, довгі новини дрібніші.
+static func banner_font(text: String) -> int:
+	var lines := text.split("\n")
+	var longest := 0
+	for l in lines:
+		longest = maxi(longest, l.length())
+	if lines.size() > 4 or longest > 56:
+		return 26
+	if lines.size() > 2 or longest > 34:
+		return 34
+	return 48
+
+
+## Скільки секунд банер висить на повну яскравість: довгому тексту — більше часу.
+static func banner_hold(text: String) -> float:
+	return clampf(1.6 + 0.6 * (text.split("\n").size() - 1) + maxf(0.0, text.length() - 60) * 0.012, 1.6, 6.0)
+
+
 func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
 	banner.text = text
 	banner.add_theme_color_override("font_color", col)
-	var tw := banner.create_tween()
+	banner.add_theme_font_size_override("font_size", banner_font(text))
+	if _banner_tween and _banner_tween.is_valid():
+		_banner_tween.kill()  # новий банер не має згаснути за розкладом старого
+	_banner_tween = banner.create_tween()
 	banner.modulate.a = 0.0
-	tw.tween_property(banner, "modulate:a", 1.0, 0.25)
-	tw.tween_interval(1.6)
-	tw.tween_property(banner, "modulate:a", 0.0, 0.5)
+	_banner_tween.tween_property(banner, "modulate:a", 1.0, 0.25)
+	_banner_tween.tween_interval(banner_hold(text))
+	_banner_tween.tween_property(banner, "modulate:a", 0.0, 0.5)
 
 
 ## Підказка. На мапі — внизу ліворуч (праворуч бічна панель), в інших режимах — угорі по центру.

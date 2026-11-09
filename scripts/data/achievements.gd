@@ -67,6 +67,8 @@ const ACHIEVEMENTS := [
 	{"id": "borshch", "name": "Справжній борщ", "desc": "Звари борщ із власної городини", "stat": "cook:borshch", "goal": 1, "gold": 400},
 	{"id": "expedition_1", "name": "Гінці повернулись", "desc": "Дочекайся супутника з власного походу", "stat": "expedition", "goal": 1, "gold": 200},
 	{"id": "expedition_25", "name": "Отаман загону", "desc": "Зустрінь супутників із 25 походів", "stat": "expedition", "goal": 25, "gold": 2500},
+	{"id": "glory_rank_2", "name": "Ім'я на вустах", "desc": "Здобудь 120 слави (ранг «Бувалець»)", "stat": "glory", "goal": 120, "gold": 1000},
+	{"id": "glory_rank_4", "name": "Отаманська слава", "desc": "Здобудь 700 слави (ранг «Отаман»)", "stat": "glory", "goal": 700, "gold": 6000},
 	{"id": "vigil_5", "name": "Вартовий", "desc": "Вистій на варті 5 хвилин", "stat": "vigil", "goal": 5, "gold": 1500},
 	{"id": "vigil_8", "name": "Нічна сторожа", "desc": "Вистій на варті 8 хвилин", "stat": "vigil", "goal": 8, "gold": 5000},
 	{"id": "bounty_1", "name": "Перша голова", "desc": "Закрий оголошення з дошки розшуку", "stat": "bounty", "goal": 1, "gold": 300},

@@ -19,6 +19,7 @@ static func build(game) -> Control:
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Загартування" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
+		["Слава", _glory(game)],
 		["Виклики" + _pts(game.ChallengeService.ready_count(game.world)), _challenges(game)],
 	]
 	return UI.screen("%s — рівень %d   •   Гривні: %d" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), p.level, p.gold], "Назад", game.close_character,
@@ -158,6 +159,54 @@ static func _chronicle(game) -> Control:
 		var l := UI.label("•  " + r["text"], 20, UI.TEXT, false)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(l)
+	return v
+
+
+# ---------------- Слава й рекорди роду ----------------
+
+static func _glory(game) -> Control:
+	var GS = game.GloryService
+	var RS = game.RecordService
+	var Acts = game.Acts
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	var gl: int = GS.glory(w)
+	var next: int = GS.to_next(w)
+	v.add_child(UI.label("Слава: %d — %s%s" % [gl, GS.rank_name(w), ("   •   до наступного рангу: %d" % next) if next > 0 else "   •   найвищий ранг"], 26, UI.GOLD, false))
+	var cur: int = GS.rank_index(gl)
+	var ranks := UI.grid(2)
+	ranks.add_theme_constant_override("h_separation", 40)
+	for i in range(1, Acts.GLORY_RANKS.size()):
+		var R: Array = Acts.GLORY_RANKS[i]
+		var reward := "%d грн" % int(R[2])
+		if str(R[3]) != "":
+			reward += " і %s" % game.StoneService.NAMES[R[3]]
+		ranks.add_child(UI.label("%s %s — %d слави: %s" % ["✓" if i <= cur else "•", R[1], int(R[0]), reward], 16, UI.GOOD if i <= cur else UI.MUTED, false))
+	v.add_child(ranks)
+	v.add_child(UI.label("Звідки береться слава", 20, UI.GOLD, false))
+	for line in Acts.GLORY_SOURCES:
+		var sl := UI.label("•  " + line, 15, UI.MUTED, false)
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(sl)
+	v.add_child(UI.label("Рекорди роду", 24, UI.GOLD, false))
+	v.add_child(UI.label("Найкраще серед усіх твоїх персонажів. Золотим позначено рекорди, які тримає цей герой.", 15, UI.MUTED, false))
+	var table := UI.grid(3)
+	table.add_theme_constant_override("h_separation", 36)
+	table.add_theme_constant_override("v_separation", 6)
+	for head in ["", "Цей герой", "Рекорд роду"]:
+		table.add_child(UI.label(head, 16, UI.MUTED, false))
+	for row in RS.rows(w, p, game.slot):
+		table.add_child(UI.label(row["name"], 18, UI.TEXT, false))
+		table.add_child(UI.label(row["mine"], 18, UI.GOLD if row["holder"] else UI.TEXT, false))
+		var best: String = row["best"]
+		if row["who"] != "" and not row["holder"]:
+			best += "  (%s)" % row["who"]
+		elif row["holder"]:
+			best += "  (твій)"
+		table.add_child(UI.label(best, 18, UI.GOLD if row["holder"] else UI.TEXT, false))
+	v.add_child(table)
 	return v
 
 

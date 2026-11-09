@@ -30,6 +30,7 @@ const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const TavernService := preload("res://scripts/game/tavern_service.gd")
 const GardenService := preload("res://scripts/game/garden_service.gd")
 const ExpeditionService := preload("res://scripts/game/expedition_service.gd")
+const RecordService := preload("res://scripts/game/record_service.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -1047,13 +1048,18 @@ func _soft_defeat(text: String, city: String) -> void:
 			leave_notice = ""
 
 
-## Супутники, що повернулися з власних походів: здобич герою, банер із новинами.
+## Новини на порозі (мапа, місто, хутір): супутники, що повернулися з власних походів, і побиті рекорди роду.
 func _expedition_news(healed: bool = false) -> Array:
 	var msgs := ExpeditionService.collect(world, player, -1, healed)
 	if not msgs.is_empty():
 		Audio.play("quest", 0.0)
 		var extra := ChallengeService.record(world, player, "expedition", msgs.size())
 		msgs.append_array(extra)
+	var recs := RecordService.sync(world, player, slot)
+	if not recs.is_empty():
+		Audio.play("quest", 0.0)
+		msgs.append_array(recs)
+	msgs.append_array(ChallengeService.record(world, player, "glory", GloryService.glory(world)))
 	return msgs
 
 
@@ -1478,6 +1484,7 @@ func open_character() -> void:
 	hud.show_map(false)
 	hud.set_mode(false, false)
 	char_sel_uid = -1
+	RecordService.sync(world, player, slot)  # щоб вкладка «Слава» показувала свіже
 	_build_character()
 
 

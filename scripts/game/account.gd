@@ -4,6 +4,7 @@ extends RefCounted
 ##   chest      — спільна скриня: {"gold", "items", "stones"}; місткість — CHEST_SIZE + бонус Складу
 ##   stats      — лічильники подій для викликів і досягнень (усі персонажі разом)
 ##   challenges — щоденні/тижневі виклики й відкриті досягнення
+##   records    — рекорди роду: найкраще серед усіх персонажів (див. RecordService)
 ## WorldState кожного персонажа тримає посилання на ці словники, тож сервіси, що працюють із
 ## world.camp / world.stats / world.challenges, не змінюються.
 
@@ -17,11 +18,12 @@ var camp := {}
 var chest := {"gold": 0, "items": [], "stones": {}}
 var stats := {}
 var challenges := {}
+var records := {}
 var next_uid := 1000000  # uid речей у скрині — з окремого діапазону, щоб не збігались із героєвими
 
 
 func to_dict() -> Dictionary:
-	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "next_uid": next_uid}
+	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "records": records, "next_uid": next_uid}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -31,6 +33,7 @@ func from_dict(d: Dictionary) -> void:
 		chest["stones"] = {}
 	stats = d.get("stats", {})
 	challenges = d.get("challenges", {})
+	records = d.get("records", {})
 	next_uid = int(d.get("next_uid", 1000000))
 
 
@@ -39,6 +42,7 @@ func attach(world) -> void:
 	world.camp = camp
 	world.stats = stats
 	world.challenges = challenges
+	world.records = records
 
 
 ## Перший запуск після оновлення: забрати спільне зі старого збереження персонажа.

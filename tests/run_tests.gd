@@ -83,6 +83,8 @@ func _run() -> void:
 	await _suite_garden_game()
 	_suite_expedition()
 	await _suite_expedition_game()
+	_suite_records()
+	await _suite_records_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -2848,6 +2850,113 @@ func _suite_expedition_game() -> void:
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
 	CS.now_override = 0
+
+
+func _suite_records() -> void:
+	suite("Літопис слави: рекорди роду")
+	var RS = load("res://scripts/game/record_service.gd")
+	var GS = load("res://scripts/game/glory_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Account = load("res://scripts/game/account.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	for key in Acts.RECORD_ORDER:
+		check(Acts.RECORDS.has(key) and Acts.RECORDS[key]["name"] != "", "%s: рекорд описано" % key)
+	var acc = Account.new()
+	# Перший герой (слот 1)
+	var w1 = WorldState.new()
+	acc.attach(w1)
+	var p1 = _new_player()
+	p1.change_class("cossack")
+	p1.level = 20
+	check(RS.value_text("tower", 0) == "—" and RS.value_text("tower", 7) == "7 поверх" and RS.value_text("vigil", 325) == "5:25", "як показуємо значення")
+	var msgs: Array = RS.sync(w1, p1, 1)
+	check(msgs.is_empty() and int(RS.record(w1, "level")["value"]) == 20 and RS.record(w1, "level")["who"] == "Козак 20 рівня", "перший запис рекорду без галасу")
+	w1.tower = {"max": 5, "best": 4}
+	msgs = RS.sync(w1, p1, 1)
+	check(msgs.is_empty() and int(RS.record(w1, "tower")["value"]) == 4, "четвертий поверх: рекорд є, віхи ще нема")
+	var g0: int = GS.glory(w1)
+	w1.tower["best"] = 5
+	msgs = RS.sync(w1, p1, 1)
+	check(msgs.size() >= 1 and "+5 слави" in msgs[0] and GS.glory(w1) == g0 + 5, "п'ятий поверх — віха: +5 слави")
+	check(int(RS.record(w1, "glory")["value"]) == GS.glory(w1), "рекорд слави оновлено одразу")
+	w1.tower["best"] = 16
+	msgs = RS.sync(w1, p1, 1)
+	check(GS.glory(w1) == g0 + 5 + 10, "стрибок через дві віхи (10 і 15): +10 слави")
+	check(RS.sync(w1, p1, 1).is_empty(), "без нового рекорду — тиша")
+	w1.duel = {"titles": 1, "wins": 3}
+	w1.vigil = {"best_time": 325.0, "best_kills": 140}
+	g0 = GS.glory(w1)
+	msgs = RS.sync(w1, p1, 1)
+	check(GS.glory(w1) == g0 + 3 and int(RS.record(w1, "vigil")["value"]) == 325 and int(RS.record(w1, "vigil_kills")["value"]) == 140, "титул чемпіона — віха; варта записана")
+	# Другий герой (слот 2) того самого роду
+	var w2 = WorldState.new()
+	acc.attach(w2)
+	var p2 = _new_player()
+	p2.change_class("volkhv")
+	p2.level = 8
+	w2.tower = {"max": 4, "best": 3}
+	g0 = GS.glory(w2)
+	msgs = RS.sync(w2, p2, 2)
+	check(msgs.is_empty() and GS.glory(w2) == g0 and int(RS.record(w2, "tower")["value"]) == 16 and int(RS.record(w2, "level")["value"]) == 20, "молодший герой рекордів роду не чіпає й слави за них не має")
+	var rows: Array = RS.rows(w2, p2, 2)
+	var tower_row: Dictionary = rows.filter(func(r): return r["key"] == "tower")[0]
+	check(tower_row["mine"] == "3 поверх" and tower_row["best"] == "16 поверх" and tower_row["who"] == "Козак 20 рівня" and not tower_row["holder"], "рядок літопису: свій результат і рекорд роду з власником")
+	w2.tower["best"] = 17
+	msgs = RS.sync(w2, p2, 2)
+	check(msgs.size() >= 1 and "побито" in msgs[0] and "Козак 20 рівня" in msgs[0] and int(RS.record(w2, "tower")["slot"]) == 2, "перевершив рекорд іншого персонажа: окреме повідомлення")
+	tower_row = RS.rows(w2, p2, 2).filter(func(r): return r["key"] == "tower")[0]
+	check(tower_row["holder"], "тепер рекорд тримає другий герой")
+	check(not RS.rows(w1, p1, 1).filter(func(r): return r["key"] == "tower")[0]["holder"] and RS.rows(w1, p1, 1).filter(func(r): return r["key"] == "level")[0]["holder"], "перший герой утратив Башту, але тримає рівень")
+	# Збереження акаунта
+	var acc2 = Account.new()
+	acc2.from_dict(acc.to_dict())
+	check(int(acc2.records["tower"]["value"]) == 17 and acc2.records["tower"]["who"] == "Волхв 8 рівня", "рекорди лежать в акаунті й переживають збереження")
+	CS.now_override = 0
+
+
+func _suite_records_game() -> void:
+	suite("Літопис слави: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var RS = game.RecordService
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.change_class("cossack")
+	p.level = 15
+	p.recalc()
+	game.enter_map()
+	await _frames(2)
+	check(int(game.account.records.get("level", {}).get("value", 0)) == 15, "на мапі рекорди роду звірено")
+	game.open_character()
+	await _frames(2)
+	var tabs: Array = []
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		tabs.append(tc.get_tab_title(i))
+	check("Слава" in tabs, "на екрані героя є вкладка «Слава»: %s" % str(tabs))
+	game.close_character()
+	# Новий рекорд Башти — слава й новина на мапі
+	var g0: int = game.GloryService.glory(game.world)
+	game.TowerService.state(game.world)["best"] = 5
+	game.enter_map()
+	await _frames(2)
+	check(game.GloryService.glory(game.world) == g0 + 5 and int(game.account.records["tower"]["value"]) == 5, "п'ятий поверх Башти: +5 слави за рекорд роду")
+	game.save_game()
+	var raw = FileAccess.open(TEST_ACCOUNT, FileAccess.READ).get_var()
+	check(raw is Dictionary and int(raw.get("records", {}).get("tower", {}).get("value", 0)) == 5, "рекорди записано у файл акаунта")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_vigil() -> void:
