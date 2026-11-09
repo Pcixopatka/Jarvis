@@ -245,6 +245,7 @@ static func _skills(game) -> Control:
 		for c in p.class_info()["next"]:
 			names.append("%s (%s)" % [Classes.CLASSES[c]["name"], {"sich": "Січ", "kapyshche": "Карпати"}.get(Classes.CLASSES[c].get("where", ""), "")])
 		v.add_child(UI.label("Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника.", 19, UI.GOOD, false))
+	_stones_row(game, v)
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 20)
@@ -284,6 +285,31 @@ static func _skills(game) -> Control:
 	if not earlier.is_empty():
 		v.add_child(UI.label("Набуте раніше: " + ", ".join(earlier), 17, UI.MUTED, false))
 	return v
+
+
+## Камені долі: скинути очки або змінити дорогу (друге натискання — підтвердження).
+static func _stones_row(game, v: VBoxContainer) -> void:
+	var p = game.player
+	var SS = game.StoneService
+	var z: int = SS.count(p, "zabuttia")
+	var a: int = SS.count(p, "alatyr")
+	if z == 0 and a == 0:
+		return
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 10)
+	row.add_theme_constant_override("v_separation", 8)
+	if z > 0:
+		var t := ("Камінь забуття ×%d: скинути очки" % z) if game.confirm_action != "stone_reset" else "Точно скинути? Ще раз"
+		row.add_child(UI.button(t, _do(game, "stone_reset"), Vector2(300, 52), 15))
+	if a > 0:
+		for cls in SS.siblings(p):
+			var key: String = "stone_path:" + cls
+			var nm: String = p.Classes.CLASSES[cls]["name"]
+			var t: String = ("Алатир ×%d: стати «%s»" % [a, nm]) if game.confirm_action != key else "Точно «%s»? Ще раз" % nm
+			row.add_child(UI.button(t, _do(game, "stone_path", cls), Vector2(290, 52), 15))
+	v.add_child(row)
+	if game.confirm_action != "":
+		v.add_child(UI.label("Забуття повертає очки характеристик, Загартування й вмінь нинішнього класу. Алатир змінює дорогу: вміння старої забуваються з поверненням очок.", 15, UI.MUTED, false))
 
 
 # ---------------- Загартування ----------------

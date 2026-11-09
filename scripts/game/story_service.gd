@@ -249,9 +249,11 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 	if r.has("skills"):
 		for id in r["skills"]:
 			player.skills[id] = maxi(player.sk(id), int(r["skills"][id]))
+			player.skill_gifts[id] = maxi(int(player.skill_gifts.get(id, 0)), int(r["skills"][id]))
 	if r.has("stats"):
 		for id in r["stats"]:
 			player.stats[id] = int(player.stats.get(id, 0)) + int(r["stats"][id])
+			player.stat_gifts[id] = int(player.stat_gifts.get(id, 0)) + int(r["stats"][id])
 		player.recalc()
 	if r.has("gold"):
 		player.gold += int(r["gold"])

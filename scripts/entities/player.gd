@@ -21,6 +21,9 @@ var perks := {}  # id -> ранг
 var stat_points := 0
 var skill_points := 0  # з рівнів майстерності
 var perk_points := 0  # очки Загартування (за рівні героя)
+var stat_gifts := {}  # характеристики, подаровані сюжетом (не скидаються Каменем забуття)
+var skill_gifts := {}  # вміння, подаровані посвятою
+var stones := {}  # камені долі: zabuttia, alatyr (див. StoneService)
 # --- Клас і майстерність (job level) ---
 var job := "cossack"  # peasant / cossack / volkhv (нова гра починається селянином)
 var job_level := 1
@@ -279,7 +282,8 @@ func to_dict() -> Dictionary:
 	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions,
-		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp}
+		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -802,11 +806,12 @@ func attack() -> void:
 
 ## Ковтнути зілля здоров'я. Повертає true, якщо вдалося.
 func use_potion() -> bool:
-	if not alive or potions <= 0 or potion_timer > 0.0 or hp >= max_hp:
+	if not alive or potions <= 0 or potion_timer > 0.0 or (hp >= max_hp and mana >= max_mana * 0.6):
 		return false
 	potions -= 1
 	potion_timer = Data.POTION_CD
 	heal(max_hp * Data.POTION_HEAL)
+	mana = minf(max_mana, mana + max_mana * Data.POTION_HEAL)  # зілля відновлює й наснагу
 	return true
 
 

@@ -49,6 +49,7 @@ func _run() -> void:
 	_suite_craft()
 	_suite_classes()
 	_suite_specs()
+	_suite_stones()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
@@ -1367,6 +1368,68 @@ func _suite_volkhv_specs() -> void:
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
+
+
+func _suite_stones() -> void:
+	suite("Камені долі")
+	var ST = load("res://scripts/game/stone_service.gd")
+	var p = _new_player()
+	p.job = "cossack"
+	p.skills = {}
+	p.skill_gifts = {"whirl": 1}
+	p.skills["whirl"] = 1
+	p.stat_gifts = {"str": 3}
+	p.stats["str"] += 3
+	p.stat_points = 6
+	p.add_stat("str")
+	p.add_stat("vit")
+	p.skill_points = 5
+	p.learn_skill("whirl")
+	p.learn_skill("sharp")
+	p.learn_skill("battle_cry")
+	p.perk_points = 2
+	p.learn_perk("boots")
+	check(not ST.reset_points(p), "без каменя не скинеш")
+	ST.grant(p, "zabuttia")
+	var str_gift: int = Data.STAT_BASE + 3
+	check(ST.reset_points(p) and ST.count(p, "zabuttia") == 0, "Камінь забуття витрачено")
+	check(p.stats["str"] == str_gift and p.stats["vit"] == Data.STAT_BASE and p.stat_points == 6, "характеристики повернуто, присяга лишилась")
+	check(p.sk("whirl") == 1 and p.sk("sharp") == 0 and p.skill_points == 5, "вміння класу повернуто, подарований Вихор лишився")
+	check(p.perks.is_empty() and p.perk_points == 2, "Загартування повернуто")
+	# Алатир: Козак → Волхв
+	p.learn_skill("whirl")
+	p.learn_skill("battle_cry")
+	check(ST.siblings(p) == ["volkhv"], "сусідня дорога Козака — Волхв")
+	check(not ST.change_path(p, "volkhv"), "без Алатиря дорогу не зміниш")
+	ST.grant(p, "alatyr")
+	p.job_level = 25
+	var pts: int = p.skill_points
+	check(ST.change_path(p, "volkhv") and p.job == "volkhv" and p.job_level == 25, "Алатир: тепер волхв, майстерність лишилась")
+	check(p.sk("whirl") == 0 and p.sk("battle_cry") == 0 and p.skill_points == pts + 3, "козацькі вміння забуто з поверненням очок")
+	check(p.learn_skill("fireball"), "одразу вчить волхвівське")
+	var sp = _new_player()
+	sp.change_class("plastun")
+	check(ST.siblings(sp).size() == 3 and not "plastun" in ST.siblings(sp), "пластун може стати іншим козацьким майстром")
+	# Боси
+	var msgs: Array = ST.on_boss(sp, "koshchii", true)
+	check(ST.count(sp, "alatyr") == 1 and not msgs.is_empty(), "перший Кощій — гарантований Алатир")
+	var n0: int = ST.count(sp, "alatyr") + ST.count(sp, "zabuttia")
+	seed(5)
+	for i in 200:
+		ST.on_boss(sp, "upyr", false)
+	var got: int = ST.count(sp, "alatyr") + ST.count(sp, "zabuttia") - n0
+	check(got > 15 and got < 70, "з босів камені падають рідко (%d за 200)" % got)
+	var w = sp.to_dict()
+	check(w["stones"]["alatyr"] >= 1 and w.has("stat_gifts"), "камені зберігаються")
+	# Зілля відновлює й наснагу
+	var m = _new_player()
+	m.mana = 0.0
+	m.potions = 1
+	m.potion_timer = 0.0
+	check(m.use_potion() and m.mana > 0.0, "зілля повертає наснагу навіть при повному здоров'ї")
+	p.free()
+	sp.free()
+	m.free()
 
 
 func _suite_camp() -> void:

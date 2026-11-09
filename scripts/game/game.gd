@@ -18,6 +18,7 @@ const DefenseService := preload("res://scripts/game/defense_service.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const CraftService := preload("res://scripts/game/craft_service.gd")
 const SpecService := preload("res://scripts/game/spec_service.gd")
+const StoneService := preload("res://scripts/game/stone_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -53,6 +54,7 @@ var smith_msg := ""
 var smith_msg_color := Color.WHITE
 var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
+var confirm_action := ""  # дія з каменем, що чекає підтвердження (друге натискання)
 var camp_sel_uid := -1
 
 
@@ -385,6 +387,10 @@ func _on_enemy_killed(e: Node2D) -> void:
 	if e.is_boss:
 		_record("boss")
 		_record("boss:" + e.kind)
+		var stone_msgs := StoneService.on_boss(player, e.kind, int(world.stats.get("boss:" + e.kind, 0)) == 1)
+		if not stone_msgs.is_empty():
+			combat.float_text(player.global_position + Vector2(0, -150), "\n".join(stone_msgs), Color(0.85, 0.7, 1.0))
+			hint("stones", "Камінь долі! Його можна використати у вікні героя, вкладка «Вміння»: Камінь забуття скидає очки, Алатир-камінь змінює дорогу.")
 	for up in Party.gain_xp(world, player.level, roundi(e.xp_value * CampService.companion_xp_mult(world) * AdRewards.xp_mult(world))):
 		combat.companion_level_up(up[0], up[1])
 
@@ -785,6 +791,7 @@ func open_character() -> void:
 	if not (state == State.PLAYING or state == State.MAP or state == State.CITY or state == State.CAMP):
 		return
 	char_return = state
+	confirm_action = ""
 	state = State.CHARACTER
 	get_tree().paused = true
 	hud.show_map(false)
@@ -798,6 +805,8 @@ func _build_character() -> void:
 
 
 func char_do(action: String, arg) -> void:
+	if not action.begins_with("stone_"):
+		confirm_action = ""
 	match action:
 		"stat":
 			player.add_stat(arg)
@@ -814,6 +823,21 @@ func char_do(action: String, arg) -> void:
 		"drop":
 			player.remove_from_bag(arg)
 			char_sel_uid = -1
+		"stone_reset":
+			if confirm_action != "stone_reset":
+				confirm_action = "stone_reset"
+			elif StoneService.reset_points(player):
+				confirm_action = ""
+				hud.show_banner("Камінь забуття: очки повернуто — розподіли їх заново", Color(0.85, 0.7, 1.0))
+				save_game()
+		"stone_path":
+			if confirm_action != "stone_path:" + arg:
+				confirm_action = "stone_path:" + arg
+			elif StoneService.change_path(player, arg):
+				confirm_action = ""
+				_after_class_change()
+				hud.show_banner("Алатир-камінь: тепер ти — %s!" % player.class_name_ua().to_lower(), Color(0.85, 0.7, 1.0))
+				save_game()
 		"claim":
 			var text := ChallengeService.claim(world, player, arg[0], arg[1])
 			if text != "":
