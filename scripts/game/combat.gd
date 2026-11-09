@@ -87,6 +87,7 @@ func _ready() -> void:
 	entities = Node2D.new()
 	entities.y_sort_enabled = true
 	add_child(entities)
+	ground.props_parent = entities
 	effects = Node2D.new()
 	effects.z_index = 10
 	add_child(effects)
@@ -103,6 +104,7 @@ func _ready() -> void:
 	add_child(canvas_mod)
 	light_tex = _make_light_texture()
 	camera = Camera2D.new()
+	camera.zoom = Vector2(1.5, 1.5)  # піксельна графіка: тайл 16 px → 48 px на екрані
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 8.0
 	add_child(camera)

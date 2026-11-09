@@ -8,6 +8,7 @@ signal leveled_up(level: int)
 const Data := preload("res://scripts/data/data.gd")
 const Status := preload("res://scripts/game/status.gd")
 const Classes := preload("res://scripts/data/classes.gd")
+const Gfx := preload("res://scripts/world/gfx.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
 const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
 const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
@@ -1676,149 +1677,152 @@ func _draw() -> void:
 	if not alive:
 		draw_set_transform(Vector2(0, 8), PI / 2.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
-	var bob := sin(walk_phase) * 3.0 if moving else 0.0
-
-	var peasant := is_peasant()
-	var volkhv := Classes.is_volkhv_line(job)
-	# Ноги: козак — широкі сині шаровари й червоні чоботи; селянин — полотняні штани й постоли
-	var leg_l := Vector2(-7, 10 + bob)
-	var leg_r := Vector2(7, 10 - bob)
-	var pants := Color(0.72, 0.68, 0.58) if peasant else (Color(0.9, 0.88, 0.8) if volkhv else Color(0.18, 0.3, 0.7))
-	var boots := Color(0.45, 0.32, 0.2) if peasant or volkhv else Color(0.6, 0.1, 0.1)
-	draw_rect(Rect2(leg_l - Vector2(6, 2), Vector2(11, 10)), pants * tint)
-	draw_rect(Rect2(leg_r - Vector2(5, 2), Vector2(11, 10)), pants * tint)
-	draw_rect(Rect2(leg_l + Vector2(-5, 7), Vector2(10, 6)), boots * tint)
-	draw_rect(Rect2(leg_r + Vector2(-4, 7), Vector2(10, 6)), boots * tint)
-
-	if volkhv:
-		# Волхв: довга біла сорочка до колін, червоний пояс, бурий плащ за плечима
-		draw_colored_polygon(PackedVector2Array([Vector2(-14, -16), Vector2(14, -16), Vector2(18, 16), Vector2(-18, 16)]), Color(0.45, 0.32, 0.2) * tint)
-		draw_colored_polygon(PackedVector2Array([Vector2(-11, -16), Vector2(11, -16), Vector2(14, 14), Vector2(-14, 14)]), Color(0.96, 0.95, 0.9) * tint)
-		draw_line(Vector2(0, -15), Vector2(0, 12), Color(0.8, 0.12, 0.12) * tint, 2.0)
-		draw_rect(Rect2(-13, 2, 26, 3), Color(0.8, 0.15, 0.12) * tint)
-		match job:
-			"znakhar":
-				draw_line(Vector2(-11, -15), Vector2(-14, 14), Color(0.3, 0.6, 0.25) * tint, 2.5)  # зелене шиття
-				draw_line(Vector2(11, -15), Vector2(14, 14), Color(0.3, 0.6, 0.25) * tint, 2.5)
-				draw_circle(Vector2(-side * 12, 8), 5.0, Color(0.55, 0.4, 0.2) * tint)  # торбинка з травами
-				draw_circle(Vector2(-side * 12, 4), 2.5, Color(0.35, 0.7, 0.3) * tint)
-			"perun_zhrets":
-				draw_rect(Rect2(-13, 2, 26, 3), Color(0.25, 0.4, 0.85) * tint)  # синій пояс
-				draw_polyline(PackedVector2Array([Vector2(-3, -12), Vector2(3, -6), Vector2(-2, -3), Vector2(4, 3)]), Color(1.0, 0.85, 0.2) * tint, 2.0)
-			"molfar":
-				# Гуцульський кептар поверх сорочки
-				draw_colored_polygon(PackedVector2Array([Vector2(-12, -15), Vector2(-3, -15), Vector2(-5, 10), Vector2(-14, 10)]), Color(0.65, 0.35, 0.15) * tint)
-				draw_colored_polygon(PackedVector2Array([Vector2(12, -15), Vector2(3, -15), Vector2(5, 10), Vector2(14, 10)]), Color(0.65, 0.35, 0.15) * tint)
-	elif peasant:
-		# Тулуб: біла сорочка з вишивкою і мотузяний пояс
-		draw_circle(Vector2(0, -2), 15.0, Color(0.95, 0.94, 0.9) * tint)
-		draw_line(Vector2(-6, -14), Vector2(-6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
-		draw_line(Vector2(6, -14), Vector2(6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
-		draw_rect(Rect2(-14, 4, 28, 3), Color(0.55, 0.4, 0.25) * tint)
+	if Gfx.has(sprite_id()):
+		_draw_sprite(tint)
 	else:
-		# Тулуб: жупан кольору спеціалізації і пояс
-		var coat: Color = {"zaporozhets": Color(0.55, 0.08, 0.1), "plastun": Color(0.35, 0.4, 0.22),
-			"samopalnyk": Color(0.2, 0.25, 0.45), "kharakternyk": Color(0.15, 0.12, 0.14)}.get(job, Color(0.78, 0.14, 0.14))
-		draw_circle(Vector2(0, -2), 16.0, coat * tint)
-		draw_rect(Rect2(-15, 3, 30, 5), Color(0.95, 0.75, 0.15) * tint)
-		if job == "zaporozhets":
-			draw_arc(Vector2(0, -2), 16.0, PI * 1.1, PI * 1.9, 12, Color(0.95, 0.75, 0.2) * tint, 3.0)  # золоте шиття
-		elif job == "kharakternyk":
-			draw_arc(Vector2(0, -6), 15.0, PI * 1.05, PI * 1.95, 12, Color(0.55, 0.55, 0.55) * tint, 6.0)  # вовча шкура на плечах
-		elif job == "samopalnyk":
-			draw_line(Vector2(-10, -12), Vector2(8, 4), Color(0.6, 0.45, 0.25) * tint, 3.0)  # ремінь порохівниці
-			draw_circle(Vector2(9, 5), 4.0, Color(0.75, 0.6, 0.3) * tint)
+		var bob := sin(walk_phase) * 3.0 if moving else 0.0
 
-	var head := Vector2(0, -26)
-	draw_circle(head, 11.0, Color(0.96, 0.8, 0.65) * tint)
-	if volkhv:
-		# Довге русяве волосся й вінок із дубового листя
-		draw_colored_polygon(PackedVector2Array([head + Vector2(-12, 8), head + Vector2(-11, -6), head + Vector2(0, -13), head + Vector2(11, -6), head + Vector2(12, 8), head + Vector2(7, -4), head + Vector2(-7, -4)]), Color(0.7, 0.55, 0.3) * tint)
-		if job == "molfar":
-			# Чорний гуцульський капелюх замість вінка
-			draw_rect(Rect2(head + Vector2(-15, -12), Vector2(30, 4)), Color(0.1, 0.08, 0.08) * tint)
-			draw_rect(Rect2(head + Vector2(-8, -20), Vector2(16, 9)), Color(0.1, 0.08, 0.08) * tint)
-			draw_line(head + Vector2(-8, -13), head + Vector2(8, -13), Color(0.8, 0.2, 0.15) * tint, 2.0)
+		var peasant := is_peasant()
+		var volkhv := Classes.is_volkhv_line(job)
+		# Ноги: козак — широкі сині шаровари й червоні чоботи; селянин — полотняні штани й постоли
+		var leg_l := Vector2(-7, 10 + bob)
+		var leg_r := Vector2(7, 10 - bob)
+		var pants := Color(0.72, 0.68, 0.58) if peasant else (Color(0.9, 0.88, 0.8) if volkhv else Color(0.18, 0.3, 0.7))
+		var boots := Color(0.45, 0.32, 0.2) if peasant or volkhv else Color(0.6, 0.1, 0.1)
+		draw_rect(Rect2(leg_l - Vector2(6, 2), Vector2(11, 10)), pants * tint)
+		draw_rect(Rect2(leg_r - Vector2(5, 2), Vector2(11, 10)), pants * tint)
+		draw_rect(Rect2(leg_l + Vector2(-5, 7), Vector2(10, 6)), boots * tint)
+		draw_rect(Rect2(leg_r + Vector2(-4, 7), Vector2(10, 6)), boots * tint)
+
+		if volkhv:
+			# Волхв: довга біла сорочка до колін, червоний пояс, бурий плащ за плечима
+			draw_colored_polygon(PackedVector2Array([Vector2(-14, -16), Vector2(14, -16), Vector2(18, 16), Vector2(-18, 16)]), Color(0.45, 0.32, 0.2) * tint)
+			draw_colored_polygon(PackedVector2Array([Vector2(-11, -16), Vector2(11, -16), Vector2(14, 14), Vector2(-14, 14)]), Color(0.96, 0.95, 0.9) * tint)
+			draw_line(Vector2(0, -15), Vector2(0, 12), Color(0.8, 0.12, 0.12) * tint, 2.0)
+			draw_rect(Rect2(-13, 2, 26, 3), Color(0.8, 0.15, 0.12) * tint)
+			match job:
+				"znakhar":
+					draw_line(Vector2(-11, -15), Vector2(-14, 14), Color(0.3, 0.6, 0.25) * tint, 2.5)  # зелене шиття
+					draw_line(Vector2(11, -15), Vector2(14, 14), Color(0.3, 0.6, 0.25) * tint, 2.5)
+					draw_circle(Vector2(-side * 12, 8), 5.0, Color(0.55, 0.4, 0.2) * tint)  # торбинка з травами
+					draw_circle(Vector2(-side * 12, 4), 2.5, Color(0.35, 0.7, 0.3) * tint)
+				"perun_zhrets":
+					draw_rect(Rect2(-13, 2, 26, 3), Color(0.25, 0.4, 0.85) * tint)  # синій пояс
+					draw_polyline(PackedVector2Array([Vector2(-3, -12), Vector2(3, -6), Vector2(-2, -3), Vector2(4, 3)]), Color(1.0, 0.85, 0.2) * tint, 2.0)
+				"molfar":
+					# Гуцульський кептар поверх сорочки
+					draw_colored_polygon(PackedVector2Array([Vector2(-12, -15), Vector2(-3, -15), Vector2(-5, 10), Vector2(-14, 10)]), Color(0.65, 0.35, 0.15) * tint)
+					draw_colored_polygon(PackedVector2Array([Vector2(12, -15), Vector2(3, -15), Vector2(5, 10), Vector2(14, 10)]), Color(0.65, 0.35, 0.15) * tint)
+		elif peasant:
+			# Тулуб: біла сорочка з вишивкою і мотузяний пояс
+			draw_circle(Vector2(0, -2), 15.0, Color(0.95, 0.94, 0.9) * tint)
+			draw_line(Vector2(-6, -14), Vector2(-6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
+			draw_line(Vector2(6, -14), Vector2(6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
+			draw_rect(Rect2(-14, 4, 28, 3), Color(0.55, 0.4, 0.25) * tint)
 		else:
-			var leaf := Color(0.35, 0.65, 0.25) if job != "perun_zhrets" else Color(0.8, 0.82, 0.9)
-			draw_arc(head + Vector2(0, -4), 11.0, PI * 1.05, PI * 1.95, 10, leaf.darkened(0.2) * tint, 4.0)
-			for i in 4:
-				draw_circle(head + Vector2(-8 + i * 5.3, -12 + absf(i - 1.5) * 1.5), 2.2, leaf * tint)
-		draw_circle(head + Vector2(side * 4, -1), 1.8, Color(0.1, 0.1, 0.1) * tint)
-	elif peasant:
-		# Звичайна чуприна, без вусів — ще зовсім молодий
-		draw_colored_polygon(PackedVector2Array([head + Vector2(-11, -2), head + Vector2(-9, -11), head + Vector2(0, -14), head + Vector2(9, -11), head + Vector2(11, -2), head + Vector2(side * 3, -8)]), Color(0.45, 0.3, 0.15) * tint)
-		draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
-	else:
-		# Оселедець і вуса
-		var chub := PackedVector2Array([
-			head + Vector2(0, -11), head + Vector2(-side * 6, -17),
-			head + Vector2(-side * 13, -14), head + Vector2(-side * 15, -6),
-		])
-		draw_polyline(chub, Color(0.25, 0.15, 0.08) * tint, 4.0, true)
-		draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
-		draw_line(head + Vector2(side * 2, 4), head + Vector2(side * 10, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
-		draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
-	# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю (волхв — без шапки, у вінку)
-	if equipment.has("head") and not volkhv:
-		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
-		draw_colored_polygon(PackedVector2Array([
-			head + Vector2(side * 6, -10), head + Vector2(-side * 4, -24), head + Vector2(-side * 14, -18), head + Vector2(-side * 8, -9)
-		]), hc.darkened(0.25) * tint)
-		draw_rect(Rect2(head + Vector2(-12, -14), Vector2(24, 8)), Color(0.25, 0.18, 0.12) * tint)
-	if wolf_timer > 0.0:
-		# Вовча подоба: вуха й сяйво очей
-		draw_colored_polygon(PackedVector2Array([head + Vector2(-9, -8), head + Vector2(-12, -22), head + Vector2(-3, -11)]), Color(0.5, 0.5, 0.52) * tint)
-		draw_colored_polygon(PackedVector2Array([head + Vector2(9, -8), head + Vector2(12, -22), head + Vector2(3, -11)]), Color(0.5, 0.5, 0.52) * tint)
-		draw_circle(head + Vector2(side * 4, -2), 2.6, Color(1.0, 0.85, 0.2))
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			# Тулуб: жупан кольору спеціалізації і пояс
+			var coat: Color = {"zaporozhets": Color(0.55, 0.08, 0.1), "plastun": Color(0.35, 0.4, 0.22),
+				"samopalnyk": Color(0.2, 0.25, 0.45), "kharakternyk": Color(0.15, 0.12, 0.14)}.get(job, Color(0.78, 0.14, 0.14))
+			draw_circle(Vector2(0, -2), 16.0, coat * tint)
+			draw_rect(Rect2(-15, 3, 30, 5), Color(0.95, 0.75, 0.15) * tint)
+			if job == "zaporozhets":
+				draw_arc(Vector2(0, -2), 16.0, PI * 1.1, PI * 1.9, 12, Color(0.95, 0.75, 0.2) * tint, 3.0)  # золоте шиття
+			elif job == "kharakternyk":
+				draw_arc(Vector2(0, -6), 15.0, PI * 1.05, PI * 1.95, 12, Color(0.55, 0.55, 0.55) * tint, 6.0)  # вовча шкура на плечах
+			elif job == "samopalnyk":
+				draw_line(Vector2(-10, -12), Vector2(8, 4), Color(0.6, 0.45, 0.25) * tint, 3.0)  # ремінь порохівниці
+				draw_circle(Vector2(9, 5), 4.0, Color(0.75, 0.6, 0.3) * tint)
 
-	if not alive:
-		return
-
-	# Зброя
-	var blade_angle := facing.angle()
-	if swing_time > 0.0:
-		var t := 1.0 - swing_time / swing_duration
-		if swing_full:
-			blade_angle += t * TAU * 1.5
+		var head := Vector2(0, -26)
+		draw_circle(head, 11.0, Color(0.96, 0.8, 0.65) * tint)
+		if volkhv:
+			# Довге русяве волосся й вінок із дубового листя
+			draw_colored_polygon(PackedVector2Array([head + Vector2(-12, 8), head + Vector2(-11, -6), head + Vector2(0, -13), head + Vector2(11, -6), head + Vector2(12, 8), head + Vector2(7, -4), head + Vector2(-7, -4)]), Color(0.7, 0.55, 0.3) * tint)
+			if job == "molfar":
+				# Чорний гуцульський капелюх замість вінка
+				draw_rect(Rect2(head + Vector2(-15, -12), Vector2(30, 4)), Color(0.1, 0.08, 0.08) * tint)
+				draw_rect(Rect2(head + Vector2(-8, -20), Vector2(16, 9)), Color(0.1, 0.08, 0.08) * tint)
+				draw_line(head + Vector2(-8, -13), head + Vector2(8, -13), Color(0.8, 0.2, 0.15) * tint, 2.0)
+			else:
+				var leaf := Color(0.35, 0.65, 0.25) if job != "perun_zhrets" else Color(0.8, 0.82, 0.9)
+				draw_arc(head + Vector2(0, -4), 11.0, PI * 1.05, PI * 1.95, 10, leaf.darkened(0.2) * tint, 4.0)
+				for i in 4:
+					draw_circle(head + Vector2(-8 + i * 5.3, -12 + absf(i - 1.5) * 1.5), 2.2, leaf * tint)
+			draw_circle(head + Vector2(side * 4, -1), 1.8, Color(0.1, 0.1, 0.1) * tint)
+		elif peasant:
+			# Звичайна чуприна, без вусів — ще зовсім молодий
+			draw_colored_polygon(PackedVector2Array([head + Vector2(-11, -2), head + Vector2(-9, -11), head + Vector2(0, -14), head + Vector2(9, -11), head + Vector2(11, -2), head + Vector2(side * 3, -8)]), Color(0.45, 0.3, 0.15) * tint)
+			draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
 		else:
-			blade_angle += lerpf(-attack_arc * 0.5, attack_arc * 0.5, t)
-	var hand := Vector2(side * 12, -4)
-	var dir := Vector2.from_angle(blade_angle)
-	var rarity: int = equipment["weapon"]["rarity"] if equipment.has("weapon") else 0
-	var metal: Color = [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45)][rarity]
-	match weapon_type:
-		"pishchal":
-			# Пищаль: довгий ствол на ложі
-			draw_line(hand - dir * 14.0, hand + dir * 18.0, Color(0.45, 0.28, 0.12), 6.0)
-			draw_line(hand + dir * 4.0, hand + dir * 52.0, metal.darkened(0.35), 3.5)
-			draw_circle(hand + dir * 52.0, 2.5, Color(0.2, 0.2, 0.22))
-		"staff":
-			# Посох: довга палиця з живим вогником на верхівці
-			var top := hand + Vector2(0, -38)
-			draw_line(hand + Vector2(0, 22), top, Color(0.45, 0.3, 0.15), 4.0)
-			draw_circle(top, 6.0, metal.lerp(Color(1.0, 0.6, 0.2), 0.5))
-			draw_circle(top, 10.0 + sin(walk_phase * 0.7 + mana) * 1.5, Color(1.0, 0.7, 0.3, 0.25 + 0.25 * (mana / maxf(max_mana, 1.0))))
-		"mace":
-			var head_pos := hand + dir * 36.0
-			draw_line(hand - dir * 6.0, head_pos, Color(0.45, 0.28, 0.1), 5.0)
-			for k in 6:
-				var a := blade_angle + k * TAU / 6.0
-				draw_line(head_pos, head_pos + Vector2.from_angle(a) * 11.0, metal.darkened(0.2), 4.0)
-			draw_circle(head_pos, 8.0, metal)
-		"pike":
-			var tip := hand + dir * 70.0
-			draw_line(hand - dir * 22.0, tip - dir * 12.0, Color(0.5, 0.33, 0.15), 4.0)
-			draw_colored_polygon(PackedVector2Array([tip, tip - dir * 16.0 + dir.orthogonal() * 6.0, tip - dir * 16.0 - dir.orthogonal() * 6.0]), metal)
-		_:
-			var tip := hand + dir * 44.0
-			var curve := hand + dir * 26.0 + dir.orthogonal() * 5.0
-			draw_polyline(PackedVector2Array([hand, curve, tip]), metal, 4.0, true)
-			draw_line(hand - dir * 8.0, hand, Color(0.45, 0.28, 0.1), 5.0)
-			draw_line(hand + dir.orthogonal() * 6.0, hand - dir.orthogonal() * 6.0, Color(0.85, 0.7, 0.2), 3.0)
-	if rarity == 3:
-		draw_circle(hand + dir * 30.0, 14.0, Color(1.0, 0.7, 0.2, 0.18))
+			# Оселедець і вуса
+			var chub := PackedVector2Array([
+				head + Vector2(0, -11), head + Vector2(-side * 6, -17),
+				head + Vector2(-side * 13, -14), head + Vector2(-side * 15, -6),
+			])
+			draw_polyline(chub, Color(0.25, 0.15, 0.08) * tint, 4.0, true)
+			draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
+			draw_line(head + Vector2(side * 2, 4), head + Vector2(side * 10, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
+			draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
+		# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю (волхв — без шапки, у вінку)
+		if equipment.has("head") and not volkhv:
+			var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
+			draw_colored_polygon(PackedVector2Array([
+				head + Vector2(side * 6, -10), head + Vector2(-side * 4, -24), head + Vector2(-side * 14, -18), head + Vector2(-side * 8, -9)
+			]), hc.darkened(0.25) * tint)
+			draw_rect(Rect2(head + Vector2(-12, -14), Vector2(24, 8)), Color(0.25, 0.18, 0.12) * tint)
+		if wolf_timer > 0.0:
+			# Вовча подоба: вуха й сяйво очей
+			draw_colored_polygon(PackedVector2Array([head + Vector2(-9, -8), head + Vector2(-12, -22), head + Vector2(-3, -11)]), Color(0.5, 0.5, 0.52) * tint)
+			draw_colored_polygon(PackedVector2Array([head + Vector2(9, -8), head + Vector2(12, -22), head + Vector2(3, -11)]), Color(0.5, 0.5, 0.52) * tint)
+			draw_circle(head + Vector2(side * 4, -2), 2.6, Color(1.0, 0.85, 0.2))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+		if not alive:
+			return
+
+		# Зброя
+		var blade_angle := facing.angle()
+		if swing_time > 0.0:
+			var t := 1.0 - swing_time / swing_duration
+			if swing_full:
+				blade_angle += t * TAU * 1.5
+			else:
+				blade_angle += lerpf(-attack_arc * 0.5, attack_arc * 0.5, t)
+		var hand := Vector2(side * 12, -4)
+		var dir := Vector2.from_angle(blade_angle)
+		var rarity: int = equipment["weapon"]["rarity"] if equipment.has("weapon") else 0
+		var metal: Color = [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45)][rarity]
+		match weapon_type:
+			"pishchal":
+				# Пищаль: довгий ствол на ложі
+				draw_line(hand - dir * 14.0, hand + dir * 18.0, Color(0.45, 0.28, 0.12), 6.0)
+				draw_line(hand + dir * 4.0, hand + dir * 52.0, metal.darkened(0.35), 3.5)
+				draw_circle(hand + dir * 52.0, 2.5, Color(0.2, 0.2, 0.22))
+			"staff":
+				# Посох: довга палиця з живим вогником на верхівці
+				var top := hand + Vector2(0, -38)
+				draw_line(hand + Vector2(0, 22), top, Color(0.45, 0.3, 0.15), 4.0)
+				draw_circle(top, 6.0, metal.lerp(Color(1.0, 0.6, 0.2), 0.5))
+				draw_circle(top, 10.0 + sin(walk_phase * 0.7 + mana) * 1.5, Color(1.0, 0.7, 0.3, 0.25 + 0.25 * (mana / maxf(max_mana, 1.0))))
+			"mace":
+				var head_pos := hand + dir * 36.0
+				draw_line(hand - dir * 6.0, head_pos, Color(0.45, 0.28, 0.1), 5.0)
+				for k in 6:
+					var a := blade_angle + k * TAU / 6.0
+					draw_line(head_pos, head_pos + Vector2.from_angle(a) * 11.0, metal.darkened(0.2), 4.0)
+				draw_circle(head_pos, 8.0, metal)
+			"pike":
+				var tip := hand + dir * 70.0
+				draw_line(hand - dir * 22.0, tip - dir * 12.0, Color(0.5, 0.33, 0.15), 4.0)
+				draw_colored_polygon(PackedVector2Array([tip, tip - dir * 16.0 + dir.orthogonal() * 6.0, tip - dir * 16.0 - dir.orthogonal() * 6.0]), metal)
+			_:
+				var tip := hand + dir * 44.0
+				var curve := hand + dir * 26.0 + dir.orthogonal() * 5.0
+				draw_polyline(PackedVector2Array([hand, curve, tip]), metal, 4.0, true)
+				draw_line(hand - dir * 8.0, hand, Color(0.45, 0.28, 0.1), 5.0)
+				draw_line(hand + dir.orthogonal() * 6.0, hand - dir.orthogonal() * 6.0, Color(0.85, 0.7, 0.2), 3.0)
+		if rarity == 3:
+			draw_circle(hand + dir * 30.0, 14.0, Color(1.0, 0.7, 0.2, 0.18))
 
 	# Слід удару
 	if swing_time > 0.0:
@@ -1865,3 +1869,21 @@ func _draw() -> void:
 	# Індикатор готовності Вихору
 	if skill_timers["whirl"] <= 0.0:
 		draw_arc(Vector2(0, 20), 26.0, 0.0, TAU, 32, Color(0.6, 0.85, 1.0, 0.5), 2.0)
+
+
+# ---------------- Спрайт (нова графіка) ----------------
+
+## Який лист спрайтів у героя: селянин, козацька чи волхівська дорога.
+func sprite_id() -> String:
+	if is_peasant():
+		return "peasant"
+	return "volkhv" if Classes.is_volkhv_line(job) else "cossack"
+
+
+func _draw_sprite(tint: Color) -> void:
+	var frame := Gfx.IDLE
+	if swing_time > 0.0 and swing_duration > 0.0:
+		frame = Gfx.attack_frame(1.0 - swing_time / swing_duration)
+	elif moving:
+		frame = Gfx.walk_frame(walk_phase)
+	Gfx.draw(self, sprite_id(), facing, frame, Vector2(-24, -30), tint)

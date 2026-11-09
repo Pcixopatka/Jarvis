@@ -6,6 +6,7 @@ const Data := preload("res://scripts/data/data.gd")
 const TelegraphScript := preload("res://scripts/world/telegraph.gd")
 const Status := preload("res://scripts/game/status.gd")
 const Elites := preload("res://scripts/data/elites.gd")
+const Gfx := preload("res://scripts/world/gfx.gd")
 ## Який стан може накласти удар цього ворога (шанс HIT_STATUS_CHANCE)
 const HIT_STATUS := {"zarazhenyi": "plague", "pishchalnyk": "plague", "bolotianyk": "plague", "chaklun": "plague", "putinoid": "plague",
 	"vovkulaka": "bleed", "upyr": "bleed", "chort": "burn", "zmii": "burn", "mavka": "chill", "koshchii": "chill"}
@@ -51,6 +52,7 @@ var base_scale := 1.0
 var rams_gate := false  # в обороні: іде просто на браму, поки козак не стане поперек дороги
 var blink_timer := 2.5  # чорт: телепорт до цілі
 var phase2 := false  # боси Кощій і Путіноїд лютішають на половині здоров'я
+var anim_moving := false  # для спрайтів: чи рухався цього кадру
 
 
 func setup(k: String, lvl: int, boss: bool = false) -> void:
@@ -228,6 +230,7 @@ func _process(delta: float) -> void:
 	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0) * (0.15 if windup > 0.0 else 1.0) * Status.speed_mult(self)
 	var vel := desired * spd + sep * speed * 1.5 + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
+	anim_moving = vel.length() > 25.0
 	position += vel * delta
 	var pad := Vector2(radius, radius)
 	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
@@ -654,6 +657,30 @@ func _draw() -> void:
 	if windup > 0.0:
 		var w := 1.0 - windup / windup_max
 		draw_circle(Vector2(0, -r_draw * 0.4), r_draw * (1.3 + 0.4 * w), Color(1.0, 0.15, 0.1, 0.18 + 0.3 * w))
+	if Gfx.has(kind):
+		_draw_sprite()
+	else:
+		_draw_vector(side)
+	_draw_overlays(side)
+
+
+func _draw_sprite() -> void:
+	var frame := Gfx.IDLE
+	if windup > 0.0:
+		frame = Gfx.attack_frame(1.0 - windup / windup_max)
+	elif contact_cd > 0.85:
+		frame = Gfx.ATK0 + 2
+	elif anim_moving:
+		frame = Gfx.walk_frame(phase * 0.5)
+	var tint := Color.WHITE
+	if flash > 0.0:
+		tint = Color(1.8, 1.8, 1.8)
+	elif not statuses.is_empty():
+		tint = Color.WHITE.lerp(Status.tint(self), 0.35)
+	Gfx.draw(self, kind, facing, frame, Vector2(-24, -30), tint)
+
+
+func _draw_vector(side: float) -> void:
 	match kind:
 		"mavka":
 			_draw_mavka(side)
@@ -685,6 +712,9 @@ func _draw() -> void:
 			_draw_lykho(side)
 		"oprychnyk":
 			_draw_oprychnyk(side)
+
+
+func _draw_overlays(side: float) -> void:
 	if slow_timer > 0.0:
 		draw_arc(Vector2(0, -r_draw * 0.5), r_draw * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
 	if elite:

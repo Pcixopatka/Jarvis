@@ -1,10 +1,17 @@
 extends Node2D
 ## Земля локації: степ, річка, ліс, болото, гори або печера. Малюється процедурно.
 
+const Tiles := preload("res://scripts/world/tiles.gd")
+const PropScript := preload("res://scripts/world/prop.gd")
+
 var arena := Rect2()
 var biome := "steppe"
 var seed_value := 1648
 var crystals := []  # [позиція, колір] — у печері біля них ставиться світло
+var props_parent: Node2D = null  # шар сутностей: сюди ставляться дерева й камені (сортування за y)
+var props := []
+## Біоми, що малюються тайлами (решта — поки що процедурно)
+const TILED := ["forest", "steppe", "village", "cave", "plague"]
 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
@@ -27,10 +34,93 @@ func setup(rect: Rect2, b: String, s: int) -> void:
 			if biome == "plague":
 				col = Color(0.45, 0.95, 0.2)
 			crystals.append([p, col])
+	_spawn_props()
 	queue_redraw()
 
 
+func tiled() -> bool:
+	return biome in TILED and props_parent != null
+
+
+func _prop(k: String, pos: Vector2) -> void:
+	var pr = PropScript.new()
+	pr.setup(k, pos)
+	props_parent.add_child(pr)
+	props.append(pr)
+
+
+## Дерева, камені, хати — окремими вузлами в шарі сутностей (щоб герой ходив і перед ними, і за ними).
+func _spawn_props() -> void:
+	for pr in props:
+		if is_instance_valid(pr):
+			pr.queue_free()
+	props.clear()
+	if not tiled():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value + 7
+	var area := arena.get_area() / 7840000.0
+	match biome:
+		"forest":
+			_scatter(rng, "tree", int(110 * area) + 8, 230.0, 70.0)
+			_scatter(rng, "pine", int(50 * area), 230.0, 60.0)
+			_scatter(rng, "bush", int(40 * area), 180.0, 40.0)
+			_scatter(rng, "stump", int(14 * area), 180.0, 40.0)
+			_scatter(rng, "log", int(8 * area), 200.0, 60.0)
+			_scatter(rng, "rock", int(10 * area), 200.0, 50.0)
+		"steppe":
+			_scatter(rng, "tree", int(18 * area), 260.0, 90.0)
+			_scatter(rng, "bush", int(30 * area), 180.0, 40.0)
+			_scatter(rng, "rock", int(25 * area), 200.0, 50.0)
+		"village":
+			_scatter(rng, "house", int(10 * area) + 3, 320.0, 170.0)
+			_scatter(rng, "hut", int(8 * area) + 2, 280.0, 90.0)
+			_scatter(rng, "tree", int(16 * area), 240.0, 80.0)
+			_scatter(rng, "post", int(20 * area), 200.0, 40.0)
+		"cave", "plague":
+			_scatter(rng, "boulder_big", int(18 * area) + 2, 230.0, 70.0)
+			_scatter(rng, "boulder", int(40 * area), 160.0, 40.0)
+			_scatter(rng, "boulder2", int(30 * area), 160.0, 40.0)
+			_scatter(rng, "pebbles", int(40 * area), 120.0, 40.0)
+			if biome == "plague":
+				_scatter(rng, "idol", int(6 * area) + 1, 260.0, 60.0)
+	# Узлісся: щільний ряд дерев по краю арени (замість паркану)
+	if biome in ["forest", "steppe", "village"]:
+		var step := 58.0
+		var x := arena.position.x
+		while x < arena.end.x:
+			_prop("tree", Vector2(x + rng.randf_range(-10, 10), arena.position.y + rng.randf_range(10, 40)))
+			_prop("tree", Vector2(x + rng.randf_range(-10, 10), arena.end.y + rng.randf_range(20, 50)))
+			x += step
+		var y := arena.position.y
+		while y < arena.end.y:
+			_prop("tree", Vector2(arena.position.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
+			_prop("tree", Vector2(arena.end.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
+			y += step
+
+
+func _scatter(rng: RandomNumberGenerator, k: String, n: int, clear_center: float, min_gap: float) -> void:
+	var placed := []
+	for i in n * 3:
+		if placed.size() >= n:
+			break
+		var p := Vector2(rng.randf_range(arena.position.x + 70, arena.end.x - 70), rng.randf_range(arena.position.y + 70, arena.end.y - 70))
+		if p.length() < clear_center:
+			continue
+		var ok := true
+		for q in placed:
+			if q.distance_to(p) < min_gap:
+				ok = false
+				break
+		if ok:
+			placed.append(p)
+			_prop(k, p)
+
+
 func _draw() -> void:
+	if tiled():
+		_draw_tiles()
+		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var base: Color = BASE.get(biome, BASE["steppe"])
@@ -287,3 +377,59 @@ func _rock_wall() -> void:
 		var r := rng.randf_range(28, 48)
 		draw_circle(p, r, col.darkened(0.2))
 		draw_circle(p + Vector2(-r * 0.2, -r * 0.25), r * 0.7, col)
+
+
+# ======================= Тайли (нова графіка) =======================
+
+func _draw_tiles() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var cave := biome in ["cave", "plague"]
+	var tex: Texture2D = Tiles.CAVE if cave else Tiles.OV
+	var ts := float(Tiles.TILE)
+	var outer := arena.grow(640)
+	var c0 := floori(outer.position.x / ts)
+	var r0 := floori(outer.position.y / ts)
+	var c1 := ceili(outer.end.x / ts)
+	var r1 := ceili(outer.end.y / ts)
+	# Доріжка через поле
+	var path_off := rng.randf_range(-300, 300)
+	var dark := Color(0.45, 0.5, 0.45) if not cave else Color(1, 1, 1)
+	for r in range(r0, r1):
+		for c in range(c0, c1):
+			var pos := Vector2(c * ts, r * ts)
+			var inside := arena.has_point(pos + Vector2(ts / 2, ts / 2))
+			var roll := rng.randf()
+			if cave:
+				if not inside:
+					draw_rect(Rect2(pos, Vector2(ts, ts)), Color(0.06, 0.05, 0.05))
+					continue
+				var fl: Array = Tiles.CAVE_FLOOR_LIGHT if roll < 0.04 else Tiles.CAVE_FLOOR
+				Tiles.rg_tile(self, fl[rng.randi() % fl.size()], pos, Color(0.85, 0.8, 0.78) if biome == "cave" else Color(0.7, 0.8, 0.6))
+				continue
+			var tint := Color.WHITE if inside else dark
+			var cell: Array = Tiles.GRASS[0]
+			if roll < 0.08:
+				cell = Tiles.GRASS[1 + rng.randi() % (Tiles.GRASS.size() - 1)]
+			Tiles.tile(self, tex, cell, pos, tint)
+			if not inside:
+				continue
+			var cy := pos.y + ts / 2
+			var on_path: bool = biome != "forest" and absf(cy - (path_off + sin((pos.x - arena.position.x) / arena.size.x * 7.0) * 220.0)) < 40.0
+			if on_path:
+				Tiles.tile(self, tex, Tiles.DIRT[rng.randi() % Tiles.DIRT.size()], pos)
+			elif roll > 0.955:
+				Tiles.tile(self, tex, Tiles.FLOWERS[rng.randi() % Tiles.FLOWERS.size()], pos)
+			elif roll > 0.9 and biome != "village":
+				Tiles.tile(self, tex, Tiles.GRASS_TALL[rng.randi() % Tiles.GRASS_TALL.size()], pos)
+			elif roll > 0.885 and biome != "village":
+				Tiles.tile(self, tex, Tiles.ROCKS_SMALL[rng.randi() % Tiles.ROCKS_SMALL.size()], pos)
+	if cave:
+		# Стіна печери понад верхнім краєм арени
+		var c := floori(arena.position.x / ts) - 1
+		while c * ts < arena.end.x + ts:
+			var pos := Vector2(c * ts, arena.position.y - ts)
+			Tiles.tile(self, tex, Tiles.CAVE_WALL[rng.randi() % 3], pos)
+			Tiles.tile(self, tex, Tiles.CAVE_WALL_TOP[rng.randi() % 3], pos - Vector2(0, ts))
+			c += 1
+		_crystals()
