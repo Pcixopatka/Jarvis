@@ -47,9 +47,11 @@ func _run() -> void:
 	_suite_defense_logic()
 	_suite_challenges()
 	_suite_craft()
+	_suite_classes()
 	await _suite_gameplay()
 	await _suite_moves()
 	await _suite_defense_battle()
+	await _suite_mage_battle()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -89,15 +91,24 @@ func _suite_data() -> void:
 			check(Data.ENEMY_NAMES.has(e) and Data.QUEST_ITEMS.has(e), "%s: невідомий ворог %s" % [id, e])
 		if L["type"] == "dungeon":
 			check(Data.BOSS_NAMES.has(L["boss"]) and int(L["rooms"]) >= 2, "%s: бос або кімнати" % id)
-	var skill_ids = {}
-	for b in Data.SKILL_BRANCHES:
-		for n in b["nodes"]:
-			check(not skill_ids.has(n["id"]), "дубль вміння " + n["id"])
-			skill_ids[n["id"]] = true
-	for b in Data.SKILL_BRANCHES:
-		for n in b["nodes"]:
-			for r in n["req"]:
-				check(skill_ids.has(r), "вміння %s вимагає невідоме %s" % [n["id"], r])
+	var Classes = load("res://scripts/data/classes.gd")
+	for cls in Classes.TREES:
+		var skill_ids = {}
+		for b in Classes.TREES[cls]:
+			for n in b["nodes"]:
+				check(not skill_ids.has(n["id"]), "%s: дубль вміння %s" % [cls, n["id"]])
+				skill_ids[n["id"]] = true
+				if n.get("active", false):
+					check(Data.ACTIVE_SKILLS.has(n["id"]) and Classes.COOLDOWNS.has(n["id"]) and int(n.get("cost", 0)) > 0, "%s: активне %s має кнопку, перезарядку й ціну" % [cls, n["id"]])
+		for b in Classes.TREES[cls]:
+			for n in b["nodes"]:
+				for r in n["req"]:
+					check(skill_ids.has(r), "%s: вміння %s вимагає невідоме %s" % [cls, n["id"], r])
+		var info: Dictionary = Classes.CLASSES[cls]
+		for wt in info["weapons"]:
+			check(Data.WEAPON_TYPES.has(wt), "%s: зброя %s існує" % [cls, wt])
+		for nx in info["next"]:
+			check(Classes.CLASSES.has(nx), "%s → %s" % [cls, nx])
 	var perk_ids = {}
 	for b in Data.PERK_BRANCHES:
 		for t in b["tiers"]:
@@ -149,23 +160,26 @@ func _suite_player() -> void:
 	check(p.level > lv_before, "рівень росте від досвіду")
 	var gained = p.level - 1
 	check(p.stat_points == gained * Data.STAT_POINTS_PER_LEVEL, "очки характеристик")
-	check(p.skill_points == gained and p.perk_points == gained, "очки вмінь і перків")
+	check(p.perk_points == p.level / 2, "Загартування: очко за кожні 2 рівні")
+	check(p.job_level > 1 and p.skill_points == p.job_level - 1, "очки вмінь — з майстерності (%d)" % p.job_level)
 	var dmg = p.damage
 	check(p.add_stat("str") and p.damage > dmg, "сила збільшує шкоду")
 	# Усі вміння й перки до максимуму
 	p.skill_points = 99
 	p.perk_points = 99
+	var Classes = load("res://scripts/data/classes.gd")
 	for i in 6:
-		for b in Data.SKILL_BRANCHES:
+		for b in Classes.TREES["cossack"]:
 			for n in b["nodes"]:
 				p.learn_skill(n["id"])
 		for b in Data.PERK_BRANCHES:
 			for t in b["tiers"]:
 				for pk in t:
 					p.learn_perk(pk["id"])
-	for b in Data.SKILL_BRANCHES:
+	for b in Classes.TREES["cossack"]:
 		for n in b["nodes"]:
 			check(p.sk(n["id"]) == n["max"], "вміння %s на максимумі" % n["id"])
+	check(not p.learn_skill("fireball"), "козак не вчить вміння волхва")
 	for b in Data.PERK_BRANCHES:
 		for t in b["tiers"]:
 			for pk in t:
@@ -292,16 +306,17 @@ func _suite_city() -> void:
 
 func _suite_story() -> void:
 	suite("Сюжет")
+	var Classes = load("res://scripts/data/classes.gd")
 	var p = _new_player()
 	var w = WorldState.new()
 	var gold0 = p.gold
-	p.rank = "peasant"
+	p.job = "peasant"
 	p.skills = {}
 	check(StoryService.state(w)["stage"] == "active" and StoryService.current(w)["id"] == "village", "пролог: одразу бій за рідне село")
 	check(not StoryService.intro(w).is_empty(), "пролог: кобзар розповідає вступ")
 	check(StoryService.city_dialogue(w, "kyiv").is_empty(), "у чужому місті розмови немає")
 	check(StoryService.target(w) == "ridne_selo" and StoryService.objective_line(w) != "", "зірка й рядок мети")
-	check(p.is_peasant() and not p.can_learn_skill(Data.SKILL_BRANCHES[0]["nodes"][0]), "селянин не вчить козацьких умінь")
+	check(p.is_peasant() and not p.can_learn_skill(Classes.find_node("whirl")), "селянин не вчить козацьких умінь")
 	var steps_done = 0
 	var guard = 0
 	while StoryService.state(w)["stage"] != "done" and guard < 300:
@@ -315,7 +330,11 @@ func _suite_story() -> void:
 		elif stage == "active":
 			var obj = st["objective"]
 			check(StoryService.target(w) == obj["loc"], "%s: зірка веде до мети" % st["id"])
-			if obj["type"] in ["clear", "dungeon", "visit"]:
+			if obj["type"] == "job":
+				StoryService.on_event(w, p, "job", str(int(obj["count"]) - 1))
+				check(StoryService.state(w)["stage"] == "active", "%s: замало майстерності" % st["id"])
+				StoryService.on_event(w, p, "job", str(obj["count"]))
+			elif obj["type"] in ["clear", "dungeon", "visit"]:
 				StoryService.on_event(w, p, "kill", "nobody")
 				check(StoryService.state(w)["stage"] == "active", "%s: чужа подія не зараховується" % st["id"])
 				StoryService.on_event(w, p, obj["type"], obj["loc"])
@@ -340,12 +359,14 @@ func _suite_story() -> void:
 	check(w.plague["pressure"] == 0.0 and load("res://scripts/game/plague_service.gd").infected_count(w) == 0, "після Кремля зарази немає")
 	var total_steps = 0
 	for ch in load("res://scripts/data/story.gd").CHAPTERS:
-		total_steps += ch["steps"].size()
+		for stp in ch["steps"]:
+			if not stp.has("if") or StoryService.chose(w, stp["if"]):
+				total_steps += 1
 	check(steps_done == total_steps, "усі %d кроків (пройдено %d)" % [total_steps, steps_done])
 	var names = []
 	for it in p.inventory:
 		names.append(it["name"])
-	check("Козацька шабля" in names, "шабля за посвяту")
+	check(p.equipment["weapon"]["name"] == "Козацька шабля" or "Козацька шабля" in names, "шабля за посвяту")
 	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди розділу I")
 	check("Булава полковника" in names and "Каптур літописця" in names, "сюжетні нагороди розділу II")
 	check(w.story.get("choices", {}).get("crypt", -1) == 0 and w.loyalty_points("kyiv") >= 270, "вибір у розділі II враховано")
@@ -356,7 +377,7 @@ func _suite_story() -> void:
 	check("Печатка Києва" in names, "стіни Києва: печатка в нагороду")
 	check(is_equal_approx(StoryService.effect(w, "plague_resist"), 0.3) and StoryService.effect(w, "potion_max") == 2.0, "вибори дають опір заразі й зілля")
 	check(w.discount("chyhyryn") >= 0.25 and w.discount("chyhyryn") > w.discount("lviv"), "вдячний Чигирин продає дешевше")
-	check(StoryService.chronicle(w).size() == 7, "у літописі 7 виборів (%d)" % StoryService.chronicle(w).size())
+	check(StoryService.chronicle(w).size() == 8, "у літописі 8 виборів (%d)" % StoryService.chronicle(w).size())
 	var CampService = load("res://scripts/game/camp_service.gd")
 	CampService.apply_effects(w, p)
 	check(p.plague_resist > 0.0 and p.potion_max() == Data.POTION_MAX + 2, "наслідки застосовано до козака")
@@ -532,14 +553,14 @@ func _suite_travel() -> void:
 	var TS = load("res://scripts/game/travel_service.gd")
 	var p = _new_player()
 	var w = WorldState.new()
-	p.rank = "peasant"
+	p.job = "peasant"
 	w.travel = {"cooldown": 0, "seen": {}}
 	var none := true
 	for i in 30:
 		if not TS.roll(w, p).is_empty():
 			none = false
 	check(none, "селянин до посвяти пригод не має")
-	p.rank = "cossack"
+	p.job = "cossack"
 	p.level = 6
 	p.gold = 5000
 	p.potions = 1
@@ -564,7 +585,7 @@ func _suite_travel() -> void:
 			check(c.has("text") and c.has("reply") and c.has("outcome"), "%s: варіант «%s» повний" % [id, c["text"]])
 	# Бідний козак без зілля й ресурсів отримує лише доступні варіанти
 	var poor = _new_player()
-	poor.rank = "cossack"
+	poor.job = "cossack"
 	poor.gold = 0
 	poor.potions = 0
 	poor.resources = {}
@@ -666,7 +687,7 @@ func _suite_defense_battle() -> void:
 	game.new_game()
 	game.hud.close_dialogue()
 	var p = game.player
-	p.rank = "cossack"
+	p.job = "cossack"
 	p.stats["str"] = 60
 	p.stats["vit"] = 60
 	p.skills = {"whirl": 3, "lightning": 3}
@@ -803,6 +824,228 @@ func _suite_craft() -> void:
 	p.free()
 
 
+func _suite_classes() -> void:
+	suite("Класи: Селянин, Козак, Волхв")
+	var Classes = load("res://scripts/data/classes.gd")
+	var p = _new_player()
+	p.job = "peasant"
+	p.job_level = 1
+	p.skills = {}
+	p.skill_points = 0
+	p.recalc()
+	check(not p.can_change_class(), "селянин 1 рівня ще не обирає дорогу")
+	var total := 0
+	for jl in range(1, 10):
+		total += Classes.job_xp_for(0, jl)
+	p.add_xp(total)
+	check(p.job_level == 10 and p.skill_points == 9 and p.can_change_class(), "майстерність 10 за %d досвіду — 9 очок, можна обирати" % total)
+	p.add_xp(5000)
+	check(p.job_level == 10 and p.job_xp == 0, "на вершині класу майстерність стоїть")
+	check(p.learn_skill("hardy") and p.learn_skill("vyly"), "селянин вчить свою науку")
+	var hp_before: float = p.max_hp
+	p.learn_skill("hardy")
+	check(p.max_hp > hp_before, "Селянська витривалість додає здоров'я")
+	check(not p.learn_skill("fireball") and not p.learn_skill("whirl"), "чужих умінь не вчить")
+	# Волхв
+	var pts_before: int = p.skill_points
+	check(p.change_class("volkhv") and p.job == "volkhv" and p.job_level == 1 and p.skill_points == pts_before, "зміна класу: майстерність з 1, очки лишились")
+	check(p.sk("vyly") == 1 and p.sk("hardy") == 2, "селянська наука лишається з волхвом")
+	check(p.max_mana > 60.0 and p.mana_regen > 3.0, "волхв має великий запас наснаги (%d)" % p.max_mana)
+	check(p.learn_skill("fireball") and not p.learn_skill("vyly"), "волхв вчить вогонь, а селянське — вже ні")
+	check("fireball" in p.active_skills() and p.active_skills()[0] == "fireball", "кнопки: спершу вміння нинішнього класу")
+	var sabre = Data.gen_item(3, 1, "weapon", "sabre")
+	var staff = Data.gen_item(3, 1, "weapon", "staff")
+	p.add_item(sabre)
+	p.add_item(staff)
+	check(not p.can_use(sabre) and not p.equip(sabre["uid"]), "волхв не бере шаблю")
+	check(p.equip(staff["uid"]) and p.is_mage() and p.attack_range > 300.0, "волхв із посохом б'є здалеку")
+	var dmg_spi: float = p.damage
+	p.stats["spi"] += 10
+	p.recalc()
+	check(p.damage > dmg_spi * 1.4, "сила волхва — від Характерництва")
+	# Наснага
+	p.mana = 0.0
+	p.skill_timers["fireball"] = 0.0
+	check(p.skill_cost("fireball") > 0.0, "закляття коштує наснагу")
+	# Козак
+	var c = _new_player()
+	check(c.job == "cossack" and not c.can_use(staff) and c.can_use(sabre), "козак — шабля так, посох ні")
+	check(c.max_mana < p.max_mana, "у козака наснаги менше")
+	c.learn_skill("whirl")
+	c.skill_points = 5
+	check(c.learn_skill("battle_cry") and c.learn_skill("tough"), "козак вчить клич і Міцну шкуру")
+	check(c.pk("tough") == 1, "вузли класу діють як колишні перки")
+	# Загартування й стеля рівня
+	c.perk_points = 2
+	check(c.learn_perk("boots") and c.learn_perk("purse"), "Загартування — для всіх")
+	c.level = 98
+	c.xp_next = Data.xp_for_level(98)
+	c.add_xp(c.xp_next * 5)
+	check(c.level == 99, "стеля рівня героя — 99")
+	# Пул зброї в здобичі
+	Data.weapon_pool = ["staff"]
+	var all_staff := true
+	for i in 20:
+		if Data.gen_item(5, 1, "weapon")["type"] != "staff":
+			all_staff = false
+	check(all_staff, "волхвові падає зброя волхва")
+	Data.weapon_pool = []
+	# Сюжет: дорога волхва
+	var w = WorldState.new()
+	var v = _new_player()
+	v.job = "peasant"
+	v.skills = {}
+	StoryService.hero_class = "peasant"
+	var path := []
+	var guard := 0
+	while StoryService.state(w)["chapter"] == 0 and guard < 100:
+		guard += 1
+		var st = StoryService.current(w)
+		path.append(st["id"])
+		match StoryService.state(w)["stage"]:
+			"offer":
+				StoryService.on_dialogue_done(w, v, "start")
+			"active":
+				var obj = st["objective"]
+				if obj["type"] == "job":
+					StoryService.on_event(w, v, "job", "10")
+				elif obj["type"] == "kill":
+					for i in obj["count"]:
+						StoryService.on_event(w, v, "kill", obj["enemy"])
+				else:
+					StoryService.on_event(w, v, obj["type"], obj["loc"])
+			"turnin":
+				StoryService.on_dialogue_done(w, v, "end", 1 if st["id"] == "trial" else 0)
+	check(not "oath" in path and "to_carpathians" in path and "volkhv_trial" in path and "back_to_sich" in path, "дорога волхва: Капище, випробування, повернення")
+	check(v.job == "volkhv" and v.equipment["weapon"]["type"] == "staff" and v.sk("fireball") == 1, "посвячено у волхви — посох у руці")
+	check(StoryService.chose(w, "trial=1") and w.story["chapter"] == 1, "далі — Розділ I разом із козаками")
+	var ln: Array = StoryService.lines(w, [["otaman", "Ну що, козаче?"], ["hero", "Я готовий."]])
+	check(ln[0][1] == "Ну що, волхве?" and ln[1][0] == "hero_volkhv", "до волхва звертаються «волхве»")
+	StoryService.hero_class = "cossack"
+	# Міграція старого збереження
+	var old = {"version": 7, "player": {"level": 12, "rank": "cossack", "skills": {"whirl": 5, "lightning": 3}, "perks": {"sharp": 3}}, "world": {"story": {"chapter": 0, "step": 2, "stage": "active", "progress": 0, "choices": {}}}}
+	var m = SaveSystem.migrate(old)
+	var mp: Dictionary = m["player"]
+	check(mp["job"] == "cossack" and mp["job_level"] == 12 and mp["skill_points"] == 20 and mp["perks"].is_empty() and mp["perk_points"] == 6, "міграція: колишній козак — клас «Козак», очки повернуто")
+	check(m["world"]["story"]["step"] == 3 and m["world"]["story"]["choices"]["trial"] == 0, "міграція: посвята — тепер козацька присяга")
+	var oldp = SaveSystem.migrate({"version": 7, "player": {"level": 2, "rank": "peasant"}, "world": {}})
+	check(oldp["player"]["job"] == "peasant", "міграція: селянин лишається селянином")
+	p.free()
+	c.free()
+	v.free()
+
+
+func _suite_mage_battle() -> void:
+	suite("Бій волхва й нові вміння")
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "block": true, "elite": true, "boss": true, "item": true, "map": true}
+	var p = game.player
+	p.change_class("volkhv")
+	p.skills = {"fireball": 3, "shield": 2, "herb": 2, "iskra": 2}
+	var st = Data.gen_item(5, 1, "weapon", "staff")
+	p.add_item(st)
+	p.equip(st["uid"])
+	p.recalc()
+	p.mana = p.max_mana
+	game.enter_location("wild_field")
+	await _frames(2)
+	var e = _moves_dummy(game, "upyr")
+	e.global_position = p.global_position + Vector2(250, 0)
+	var hp0: float = e.hp
+	p.attack_timer = 0.0
+	p.attack()
+	for i in 30:
+		await process_frame
+	check(e.hp < hp0, "іскра волхва влучає здалеку")
+	var m0: float = p.mana
+	p.skill_timers["fireball"] = 0.0
+	var hp1: float = e.hp
+	p.use_skill("fireball")
+	check(p.mana < m0, "вогняна куля коштує наснагу")
+	for i in 40:
+		await process_frame
+	check(e.hp < hp1 and e.statuses.has("burn"), "вогняна куля вибухає й підпалює")
+	p.mana = 0.0
+	p.skill_timers["fireball"] = 0.0
+	var hp2: float = e.hp
+	p.use_skill("fireball")
+	for i in 5:
+		await process_frame
+	check(p.skill_timers["fireball"] <= 0.0, "без наснаги закляття не вийде")
+	p.mana = p.max_mana
+	p.use_skill("shield")
+	check(p.ward_hp > 0.0, "щит-оберіг")
+	p.invuln = 0.0
+	var hp3: float = p.hp
+	p.take_damage(5.0, null)
+	check(p.hp == hp3, "оберіг поглинає удар")
+	p.ward_hp = 0.0
+	p.hp = p.max_hp * 0.3
+	p.invuln = 5.0  # упир поруч не повинен заважати перевірці лікування
+	var hp4: float = p.hp
+	p.use_skill("herb")
+	for i in 60:
+		await process_frame
+	check(p.hp > hp4 + p.max_hp * 0.03 and p.herb_timer > 0.0, "цілюща трава лікує в часі")
+	# Заряджене закляття
+	var e2 = _moves_dummy(game, "mavka")
+	e2.global_position = p.global_position + Vector2(200, 0)
+	var hp5: float = e2.hp
+	p.block_held = true
+	p._update_block(0.0)
+	p._update_block(p.CHARGE_FULL)
+	p.block_held = false
+	p._update_block(0.0)
+	for i in 40:
+		await process_frame
+	check(e2.hp < hp5 and e2.stun > 0.0, "заряджене закляття — «Гнів Роду» з приголомшенням")
+	# Козацькі й селянські вміння
+	p.change_class("cossack")
+	var sb = Data.gen_item(5, 1, "weapon", "sabre")
+	p.add_item(sb)
+	p.equip(sb["uid"])
+	p.skills["battle_cry"] = 2
+	p.skills["vyly"] = 2
+	p.skills["first_aid"] = 1
+	p.recalc()
+	p.mana = p.max_mana
+	var e3 = _moves_dummy(game, "upyr")
+	p.crit_chance = 0.0
+	p.attack_timer = 0.0
+	p.combo_timer = 0.0
+	var a0: float = e3.hp
+	p.attack()
+	var plain: float = a0 - e3.hp
+	p.use_skill("battle_cry")
+	check(p.cry_timer > 0.0, "бойовий клич")
+	p.attack_timer = 0.0
+	p.combo_timer = 0.0
+	var a1: float = e3.hp
+	p.attack()
+	check(a1 - e3.hp > plain * 1.1, "клич посилює удар")
+	var mana_hit: float = p.mana
+	p.attack_timer = 0.0
+	p.attack()
+	check(p.mana > mana_hit, "влучний удар козака поповнює наснагу")
+	var a2: float = e3.hp
+	p.use_skill("vyly")
+	check(e3.hp < a2, "удар вилами")
+	p.hp = p.max_hp * 0.5
+	p.mana = p.max_mana
+	var h0: float = p.hp
+	p.use_skill("first_aid")
+	check(p.hp > h0, "перша допомога")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+
+
 func _suite_camp() -> void:
 	suite("Хутір і реклама")
 	var CampService = load("res://scripts/game/camp_service.gd")
@@ -925,7 +1168,7 @@ func _suite_moves() -> void:
 	game.enter_location("wild_field")
 	await _frames(2)
 	var p = game.player
-	p.rank = "cossack"
+	p.job = "cossack"
 	p.crit_chance = 0.0
 	p.lifesteal = 0.0
 	p.armor = 0.0
@@ -1116,7 +1359,24 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root != null, "кошовий зустрічає втікача")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["step"] == 2 and game.hud.dialogue_root != null, "кошовий пропонує посвяту")
+	check(game.world.story["step"] == 2 and game.hud.dialogue_root != null, "кошовий посилає набиратися сили")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.world.story["stage"] == "active" and StoryService.current(game.world)["objective"]["type"] == "job", "мета — 10 рівень майстерності")
+	while p.job_level < 10:
+		p.add_xp(p.job_next())
+	await _frames(2)
+	check(p.job_level == 10 and game.world.story["stage"] == "turnin" and p.can_change_class(), "майстерність 10 — час обирати дорогу")
+	check(p.skill_points == 9, "селянин заробив 9 очок вмінь")
+	p.learn_skill("vyly")
+	check(p.sk("vyly") == 1 and "vyly" in p.active_skills(), "селянин вчить «Удар вилами»")
+	game.enter_city("sich")
+	await _frames(2)
+	check(game.hud.dialogue_root != null and not game.hud.dialogue_root.choices.is_empty(), "кошовий питає: Січ чи Карпати")
+	game.hud.dialogue_root._pick(0)
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.world.story["step"] == 3 and game.hud.dialogue_root != null, "козацька дорога: посвята")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
 	for i in 8:
@@ -1126,7 +1386,8 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root != null, "посвята: урочиста розмова")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(not p.is_peasant() and p.sk("whirl") == 1 and game.world.story["chapter"] == 1, "посвячено в козаки — розділ I")
+	check(p.job == "cossack" and p.job_level == 1 and p.sk("whirl") == 1 and p.sk("vyly") == 1 and game.world.story["chapter"] == 1, "посвячено в козаки — розділ I, селянське вміння лишилось")
+	check(p.equipment["weapon"]["type"] == "sabre", "козацька шабля одразу в руці")
 	check(game.hud.dialogue_root != null, "розділ I: кошовий одразу кличе")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
@@ -1134,7 +1395,7 @@ func _suite_gameplay() -> void:
 	# Сильний козак, щоб тест ішов швидко й стабільно
 	p.stats["str"] = 40
 	p.stats["vit"] = 40
-	p.skills = {"whirl": 3, "lightning": 3, "musket": 2}
+	p.skills = {"whirl": 3, "battle_cry": 3, "musket": 2}
 	p.recalc()
 	p.hp = p.max_hp
 	for q in game.world.board("sich").duplicate():

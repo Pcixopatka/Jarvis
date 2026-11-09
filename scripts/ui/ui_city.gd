@@ -26,7 +26,7 @@ static func build(game, city: String) -> Control:
 		["Корчма", _tavern(game, city)],
 	]
 	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int): game.city_tab = i,
-		[["Козак" + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
+		[[game.player.class_name_ua() + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
 
 
 static func _reward_text(q: Dictionary) -> String:

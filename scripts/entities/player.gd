@@ -7,6 +7,7 @@ signal leveled_up(level: int)
 
 const Data := preload("res://scripts/data/data.gd")
 const Status := preload("res://scripts/game/status.gd")
+const Classes := preload("res://scripts/data/classes.gd")
 
 var combat: Combat
 
@@ -18,12 +19,20 @@ var stats := {"str": Data.STAT_BASE, "agi": Data.STAT_BASE, "vit": Data.STAT_BAS
 var skills := {"whirl": 1}  # id -> ранг
 var perks := {}  # id -> ранг
 var stat_points := 0
-var skill_points := 0
-var perk_points := 0
+var skill_points := 0  # з рівнів майстерності
+var perk_points := 0  # очки Загартування (за рівні героя)
+# --- Клас і майстерність (job level) ---
+var job := "cossack"  # peasant / cossack / volkhv (нова гра починається селянином)
+var job_level := 1
+var job_xp := 0
+# --- Наснага (мана) ---
+var mana := 50.0
+var max_mana := 50.0
+var mana_regen := 2.0
 
 # --- Спорядження ---
 var gold := 0
-var rank := "cossack"  # "peasant" — до посвяти (нова гра), "cossack" — після
+var rank := ""  # почесне звання (hetman — після фіналу); клас — у job
 var potions := Data.POTION_START
 var potion_timer := 0.0
 var resources := {"wood": 0, "iron": 0, "herbs": 0}  # для будівництва хутора
@@ -97,12 +106,19 @@ var walk_phase := 0.0
 var moving := false
 var alive := true
 var unbreak_ready := true
+# --- Дії вмінь у часі ---
+var cry_timer := 0.0  # Бойовий клич
+var cry_bonus := 0.0
+var ward_hp := 0.0  # Щит-оберіг: скільки шкоди ще поглине
+var ward_timer := 0.0
+var herb_timer := 0.0  # Цілюща трава: лікування в часі
+var herb_rate := 0.0
 
 
 func _ready() -> void:
 	if equipment.is_empty() and inventory.is_empty():
-		var starter := Data.gen_item(1, 0, "weapon", "sabre")
-		starter["name"] = "Стара шабля"
+		var starter := Data.gen_item(1, 0, "weapon", "staff" if job == "volkhv" else "sabre")
+		starter["name"] = "Старий посох" if job == "volkhv" else "Стара шабля"
 		equip_new(starter)
 	recalc()
 	hp = max_hp
@@ -160,10 +176,19 @@ func add_item(item: Dictionary) -> bool:
 	return true
 
 
+## Чи може цей клас користуватися річчю (зброя обмежена класом).
+func can_use(item: Dictionary) -> bool:
+	if item.get("slot", "") != "weapon":
+		return true
+	return item.get("type", "") in Classes.CLASSES[job]["weapons"]
+
+
 func equip(uid: int) -> bool:
 	for i in inventory.size():
 		var it: Dictionary = inventory[i]
 		if it["uid"] == uid:
+			if not can_use(it):
+				return false
 			inventory.remove_at(i)
 			var slot: String = it["slot"]
 			if equipment.has(slot):
@@ -243,7 +268,7 @@ func to_dict() -> Dictionary:
 	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions,
-		"resources": resources, "trip_buffs": trip_buffs, "rank": rank}
+		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -251,10 +276,15 @@ func from_dict(d: Dictionary) -> void:
 		set(k, d[k])
 	recalc()
 	hp = max_hp
+	mana = max_mana
 
 
 func revive() -> void:
 	statuses.clear()
+	mana = max_mana
+	cry_timer = 0.0
+	ward_hp = 0.0
+	herb_timer = 0.0
 	alive = true
 	hp = max_hp
 	invuln = 1.0
@@ -274,8 +304,48 @@ func sk(id: String) -> int:
 	return skills.get(id, 0)
 
 
+## Пасивний бонус: з Загартування або з дерева класу (вузли з тими ж id).
 func pk(id: String) -> int:
-	return perks.get(id, 0)
+	return perks.get(id, 0) + skills.get(id, 0)
+
+
+func class_info() -> Dictionary:
+	return Classes.CLASSES[job]
+
+
+func class_name_ua() -> String:
+	return class_info()["name"]
+
+
+func job_max() -> int:
+	return int(class_info()["job_max"])
+
+
+func job_next() -> int:
+	return Classes.job_xp_for(int(class_info()["tier"]), job_level)
+
+
+func is_mage() -> bool:
+	return weapon_type == "staff"
+
+
+## Чи можна вже змінити клас (досить майстерності й є куди рости).
+func can_change_class() -> bool:
+	var tier := int(class_info()["tier"])
+	return not class_info()["next"].is_empty() and job_level >= int(Classes.JOB_CHANGE_AT.get(tier, 999))
+
+
+## Зміна класу: майстерність з 1, вивчене лишається, невитрачені очки — теж.
+func change_class(cls: String) -> bool:
+	if not Classes.CLASSES.has(cls) or cls == job:
+		return false
+	job = cls
+	job_level = 1
+	job_xp = 0
+	Data.weapon_pool = Classes.CLASSES[job]["weapons"]
+	recalc()
+	mana = max_mana
+	return true
 
 
 ## Значення характеристики з урахуванням перків і спорядження.
@@ -295,20 +365,25 @@ func recalc() -> void:
 	var s_vit := _bonus("vit")
 	var s_spi := _bonus("spi")
 
-	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_str + 0.08 * pk("sharp") + eq("dmg_pct") / 100.0)
+	# Волхв із посохом черпає силу з Характерництва, усі інші — із Сили
+	var s_main := s_spi if weapon_type == "staff" else s_str
+	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + eq("dmg_pct") / 100.0)
 	if trip_buffs.has("strength"):
 		damage *= 1.3
 	if trip_buffs.has("inspired"):
 		damage *= 1.15  # дума кобзаря біля вогнища
 	plague_immune = trip_buffs.has("antiplague")
 	attack_range = 95.0 * weapon["range"] * (1.0 + 0.08 * pk("reach"))
+	if weapon_type == "staff":
+		attack_range = 430.0  # іскри летять далеко
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + eq("aspd") / 100.0)
 	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + eq("crit") / 100.0)
 	crit_mult = 3.0 if pk("deadly") > 0 else 2.0
 	lifesteal = 0.02 * pk("thirst") + eq("lifesteal") / 100.0
 
-	max_hp = 100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")
+	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy")) * float(class_info().get("hp_mult", 1.0))
+	damage *= float(class_info().get("dmg_mult", 1.0))
 	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + eq("armor") / 100.0, 0.0, 0.75)
 	regen = 0.6 * pk("regen") + eq("regen")
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll"))
@@ -321,6 +396,13 @@ func recalc() -> void:
 	gold_mult = 1.0 + eq("gold") / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
 	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + eq("skill_power") / 100.0
+	var ci := class_info()
+	var old_mana := max_mana
+	max_mana = (40.0 + 5.0 * s_spi) * float(ci["mana_mult"]) * (1.0 + 0.2 * pk("deep_well") + 0.1 * pk("steel_will"))
+	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow"))
+	if max_mana > old_mana:
+		mana += max_mana - old_mana
+	mana = minf(mana, max_mana)
 
 	if max_hp > old_max:
 		hp += max_hp - old_max
@@ -348,17 +430,24 @@ func skill_req_met(node: Dictionary) -> bool:
 
 
 func is_peasant() -> bool:
-	return rank == "peasant"
+	return job == "peasant"
+
+
+## Вчити можна лише вміння свого нинішнього класу.
+func in_class_tree(id: String) -> bool:
+	for b in Classes.TREES[job]:
+		for n in b["nodes"]:
+			if n["id"] == id:
+				return true
+	return false
 
 
 func can_learn_skill(node: Dictionary) -> bool:
-	if is_peasant():
-		return false  # бойові вміння — після посвяти в козаки
-	return skill_points > 0 and sk(node["id"]) < node["max"] and skill_req_met(node)
+	return skill_points > 0 and in_class_tree(node["id"]) and sk(node["id"]) < node["max"] and skill_req_met(node)
 
 
 func learn_skill(id: String) -> bool:
-	var node := Data.find_skill(id)
+	var node := Classes.find_node(id, job)
 	if node.is_empty() or not can_learn_skill(node):
 		return false
 	skills[id] = sk(id) + 1
@@ -396,20 +485,42 @@ func learn_perk(id: String) -> bool:
 
 
 func add_xp(value: int) -> void:
-	xp += maxi(value, roundi(value * xp_mult * xp_boost))
-	while xp >= xp_next:
+	var gained := maxi(value, roundi(value * xp_mult * xp_boost))
+	_add_job_xp(gained)
+	if level >= Classes.BASE_LEVEL_MAX:
+		return
+	xp += gained
+	while xp >= xp_next and level < Classes.BASE_LEVEL_MAX:
 		xp -= xp_next
 		level += 1
 		xp_next = Data.xp_for_level(level)
 		stat_points += Data.STAT_POINTS_PER_LEVEL
-		skill_points += Data.SKILL_POINTS_PER_LEVEL
-		perk_points += Data.PERK_POINTS_PER_LEVEL
+		if level % Classes.HARDEN_EVERY == 0:
+			perk_points += Data.PERK_POINTS_PER_LEVEL
 		heal(max_hp * 0.25)
 		if _in_combat():
 			Audio.play("levelup", 0.0)
 			combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 32, 420, 6, 0.6)
 		leveled_up.emit(level)
 		Events.level_up.emit(level)
+
+
+## Досвід майстерності: та сама здобич, окрема смужка. На вершині класу — стоїть.
+func _add_job_xp(gained: int) -> void:
+	if job_level >= job_max():
+		job_xp = 0
+		return
+	job_xp += gained
+	while job_level < job_max() and job_xp >= job_next():
+		job_xp -= job_next()
+		job_level += 1
+		skill_points += Data.SKILL_POINTS_PER_LEVEL
+		if _in_combat():
+			Audio.play("levelup", 0.05, -4.0)
+			combat.float_text(global_position + Vector2(0, -110), "Майстерність %d!" % job_level, Color(0.6, 0.85, 1.0))
+		Events.job_level_up.emit(job_level)
+	if job_level >= job_max():
+		job_xp = 0
 
 
 # ================= Цикл =================
@@ -419,6 +530,8 @@ func _process(delta: float) -> void:
 		return
 	attack_timer = maxf(0.0, attack_timer - delta)
 	combo_timer = maxf(0.0, combo_timer - delta)
+	mana = minf(max_mana, mana + mana_regen * delta)
+	_tick_effects(delta)
 	var dot := Status.tick(self, delta)
 	if dot > 0.0:
 		_take_dot(dot)
@@ -449,7 +562,7 @@ func _process(delta: float) -> void:
 		if pk("dash_strike") > 0:
 			_dash_strike()
 	else:
-		position += input_vec * speed * (0.45 if blocking else 1.0) * Status.speed_mult(self) * delta
+		position += input_vec * speed * (0.45 if blocking else 1.0) * Status.speed_mult(self) * (1.2 if cry_timer > 0.0 else 1.0) * delta
 		if input_vec.length() > 0.1:
 			moving = true
 			if swing_time <= 0.0:
@@ -488,6 +601,9 @@ func charge_ratio() -> float:
 ## Заряджений удар: сила 0..1. Повний заряд б'є довкола і приголомшує нечисть.
 func charged_strike(power: float) -> void:
 	if not alive:
+		return
+	if weapon_type == "staff":
+		_charged_spell(power)
 		return
 	var mult := 1.6 + 1.6 * power
 	var reach := attack_range * (1.2 + 0.6 * power)
@@ -544,9 +660,20 @@ func _parry(source) -> void:
 
 # ================= Бій =================
 
+func _tick_effects(delta: float) -> void:
+	cry_timer = maxf(0.0, cry_timer - delta)
+	if ward_timer > 0.0:
+		ward_timer -= delta
+		if ward_timer <= 0.0:
+			ward_hp = 0.0
+	if herb_timer > 0.0:
+		herb_timer -= delta
+		hp = minf(max_hp, hp + herb_rate * Status.heal_mult(self) * delta)
+
+
 func _roll(mult: float) -> Array:
 	var crit := randf() < crit_chance
-	var dmg := damage * mult * (crit_mult if crit else 1.0) * randf_range(0.9, 1.1)
+	var dmg := damage * mult * (crit_mult if crit else 1.0) * randf_range(0.9, 1.1) * (1.0 + (cry_bonus if cry_timer > 0.0 else 0.0))
 	return [dmg, crit]
 
 
@@ -580,6 +707,9 @@ func attack() -> void:
 	var arc := attack_arc * (1.5 if finisher else 1.0)
 	if finisher:
 		attack_timer = attack_cooldown * 1.3  # після завершального — коротка пауза, як у справжньому ритмі
+	if weapon_type == "staff":
+		_cast_sparks(step, finisher)
+		return
 	# Автонаведення — на телефоні цілитися пальцем незручно.
 	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.8)
 	if target:
@@ -604,6 +734,7 @@ func attack() -> void:
 			hits += 1
 			crit_any = crit_any or r[1]
 	if hits > 0:
+		mana = minf(max_mana, mana + 2.5)  # влучний удар трохи поповнює наснагу
 		combo_step = (step + 1) % COMBO_MULT.size()
 		combo_timer = COMBO_WINDOW
 		if finisher:
@@ -664,24 +795,29 @@ func _dash_strike() -> void:
 # ================= Активні вміння =================
 
 func skill_cooldown(id: String) -> float:
+	var base: float = Classes.COOLDOWNS.get(id, 6.0)
 	match id:
 		"whirl":
-			return 8.0 * (1.0 - 0.1 * sk("whirl_cd")) * skill_cd_mult
-		"lightning":
-			return 6.0 * skill_cd_mult
+			base *= 1.0 - 0.1 * sk("whirl_cd")
 		"musket":
-			return 4.0 * (1.0 - 0.12 * sk("reload")) * skill_cd_mult
-	return 1.0
+			base *= 1.0 - 0.12 * sk("reload")
+	return base * skill_cd_mult
 
 
 func skill_ready_ratio(id: String) -> float:
 	return skill_timers.get(id, 0.0) / skill_cooldown(id)
 
 
+func skill_cost(id: String) -> float:
+	return float(Classes.find_node(id).get("cost", 0))
+
+
 func use_skill(id: String) -> void:
-	if is_peasant():
-		return
 	if not alive or sk(id) <= 0 or skill_timers.get(id, 0.0) > 0.0:
+		return
+	if mana < skill_cost(id):
+		if _in_combat():
+			combat.float_text(global_position + Vector2(0, -80), "Бракує наснаги", Color(0.5, 0.65, 1.0))
 		return
 	var used := false
 	match id:
@@ -691,8 +827,154 @@ func use_skill(id: String) -> void:
 			used = _lightning()
 		"musket":
 			used = _musket()
+		"vyly":
+			used = _vyly()
+		"first_aid":
+			used = _first_aid()
+		"battle_cry":
+			used = _battle_cry()
+		"fireball":
+			used = _fireball()
+		"shield":
+			used = _shield()
+		"herb":
+			used = _herb()
 	if used:
+		mana -= skill_cost(id)
 		skill_timers[id] = skill_cooldown(id)
+
+
+## Активні вміння для кнопок бою: спершу свого класу, далі набуті раніше (до 4).
+func active_skills() -> Array:
+	var out := []
+	var lin: Array = Classes.lineage(job)
+	lin.reverse()
+	for c in lin:
+		for b in Classes.TREES[c]:
+			for n in b["nodes"]:
+				if n.get("active", false) and sk(n["id"]) > 0 and not (n["id"] in out):
+					out.append(n["id"])
+	return out.slice(0, 4)
+
+
+# ---------- Селянин ----------
+
+func _vyly() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 300.0)
+	if target:
+		facing = (target.global_position - global_position).normalized()
+	var length := maxf(attack_range * 1.6, 200.0)
+	var m := 2.0 * (1.0 + 0.15 * (sk("vyly") - 1)) * skill_power
+	for e in _alive_enemies():
+		var l: Vector2 = e.global_position - global_position
+		var along := l.dot(facing)
+		if along >= -10.0 and along <= length + e.radius and absf(l.dot(facing.orthogonal())) <= 45.0 + e.radius:
+			var r := _roll(m)
+			hit(e, r[0], facing * 520.0, r[1])
+	swing_time = 0.22
+	swing_duration = 0.22
+	swing_full = false
+	dodge_dir = facing
+	dodge_time_left = 0.1  # короткий випад уперед
+	Audio.play("swing", 0.1, 0.0)
+	combat.fx.burst(global_position + facing * length * 0.6, Color(0.9, 0.85, 0.7), 10, 220, 4, 0.3, 0, facing.angle(), 0.5)
+	combat.shake(4.0)
+	return true
+
+
+func _first_aid() -> bool:
+	if hp >= max_hp:
+		return false
+	heal(max_hp * (0.15 + 0.05 * sk("first_aid")))
+	statuses.erase("bleed")
+	return true
+
+
+# ---------- Козак ----------
+
+func _battle_cry() -> bool:
+	cry_timer = 8.0
+	cry_bonus = 0.15 + 0.05 * (sk("battle_cry") - 1)
+	Audio.play("roar", 0.05, -2.0)
+	combat.float_text(global_position + Vector2(0, -70), "Гей, козаки!", Color(1.0, 0.7, 0.3))
+	combat.fx.ring(global_position, Color(1.0, 0.6, 0.25), 24, 260, 5, 0.4)
+	return true
+
+
+# ---------- Волхв ----------
+
+## Звичайна атака волхва: іскри з посоха летять у найближчого ворога.
+func _cast_sparks(step: int, finisher: bool) -> void:
+	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.3)
+	if target == null:
+		combo_step = 0
+		return
+	var dir: Vector2 = (target.global_position - global_position).normalized()
+	facing = dir
+	swing_time = 0.15
+	swing_duration = 0.15
+	swing_full = false
+	var angles := [0.0]
+	if finisher:
+		angles = [-0.22, 0.0, 0.22]
+	elif sk("twin_spark") > 0:
+		angles = [-0.08, 0.08]
+	var mult: float = COMBO_MULT[step] * (1.0 + 0.1 * sk("iskra")) * (0.75 if angles.size() > 1 else 1.0)
+	for a in angles:
+		var r := _roll(mult)
+		combat.spawn_spark(global_position + Vector2(0, -24) + dir * 26.0, dir.rotated(a), r[0], r[1])
+	Audio.play("lightning", 0.2, -14.0)
+	combo_step = (step + 1) % COMBO_MULT.size()
+	combo_timer = COMBO_WINDOW
+
+
+func _fireball() -> bool:
+	var target: Node2D = combat.nearest_enemy(global_position, 650.0)
+	if target == null:
+		return false
+	var dir: Vector2 = (target.global_position - global_position).normalized()
+	facing = dir
+	var r := _roll(2.4 * (1.0 + 0.2 * (sk("fireball") - 1)) * skill_power)
+	combat.spawn_fireball(global_position + Vector2(0, -24) + dir * 30.0, dir, r[0], r[1], 95.0 * (1.0 + 0.2 * sk("pyre")), r[0] * (0.12 + 0.04 * sk("pyre")))
+	Audio.play("musket", 0.1, -6.0)
+	return true
+
+
+func _shield() -> bool:
+	ward_hp = max_hp * (0.25 + 0.08 * (sk("shield") - 1)) * skill_power
+	ward_timer = 8.0
+	Audio.play("heal", 0.0, -2.0)
+	combat.float_text(global_position + Vector2(0, -70), "Щит-оберіг!", Color(0.6, 0.85, 1.0))
+	combat.fx.ring(global_position, Color(0.5, 0.75, 1.0), 20, 90, 4, 0.4)
+	return true
+
+
+func _herb() -> bool:
+	herb_timer = 6.0
+	herb_rate = max_hp * (0.2 + 0.06 * (sk("herb") - 1)) * skill_power / 6.0
+	for c in combat.companion_nodes:
+		if is_instance_valid(c) and c.alive:
+			c.heal(c.max_hp * 0.3)
+	statuses.erase("plague")
+	Audio.play("heal", 0.0)
+	combat.fx.burst(global_position, Color(0.5, 1.0, 0.5), 16, 120, 5, 0.8, -60)
+	return true
+
+
+## Заряджене закляття: велика вогняна куля у найближчого ворога.
+func _charged_spell(power: float) -> void:
+	var target: Node2D = combat.nearest_enemy(global_position, 700.0)
+	var dir: Vector2 = facing if target == null else (target.global_position - global_position).normalized()
+	facing = dir
+	var r := _roll((1.6 + 1.6 * power) * skill_power)
+	combat.spawn_fireball(global_position + Vector2(0, -24) + dir * 30.0, dir, r[0], r[1], 120.0 * (1.0 + power), r[0] * 0.1, power >= 0.99)
+	combo_step = 0
+	attack_timer = attack_cooldown
+	combat.shake(4.0 + 4.0 * power)
+	Audio.play("lightning", 0.05, -3.0)
+	Events.charged_hit.emit()
+	if power >= 0.99:
+		combat.float_text(global_position + Vector2(0, -70), "Гнів Роду!", Color(1.0, 0.7, 0.3))
 
 
 func whirl_reach() -> float:
@@ -789,6 +1071,14 @@ func take_damage(amount: float, source = null) -> bool:
 			return false
 		amount *= BLOCK_MULT
 		combat.float_text(global_position + Vector2(0, -70), "Блок", Color(0.75, 0.85, 1.0))
+	if ward_hp > 0.0:
+		var absorbed := minf(ward_hp, amount)
+		ward_hp -= absorbed
+		amount -= absorbed
+		combat.fx.ring(global_position, Color(0.5, 0.75, 1.0), 12, 70, 3, 0.2)
+		if amount <= 0.0:
+			combat.float_text(global_position + Vector2(0, -70), "Оберіг", Color(0.6, 0.85, 1.0))
+			return false
 	if source != null and thorns > 0.0 and not source.dead:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
@@ -877,17 +1167,24 @@ func _draw() -> void:
 	var bob := sin(walk_phase) * 3.0 if moving else 0.0
 
 	var peasant := is_peasant()
+	var volkhv := job == "volkhv"
 	# Ноги: козак — широкі сині шаровари й червоні чоботи; селянин — полотняні штани й постоли
 	var leg_l := Vector2(-7, 10 + bob)
 	var leg_r := Vector2(7, 10 - bob)
-	var pants := Color(0.72, 0.68, 0.58) if peasant else Color(0.18, 0.3, 0.7)
-	var boots := Color(0.45, 0.32, 0.2) if peasant else Color(0.6, 0.1, 0.1)
+	var pants := Color(0.72, 0.68, 0.58) if peasant else (Color(0.9, 0.88, 0.8) if volkhv else Color(0.18, 0.3, 0.7))
+	var boots := Color(0.45, 0.32, 0.2) if peasant or volkhv else Color(0.6, 0.1, 0.1)
 	draw_rect(Rect2(leg_l - Vector2(6, 2), Vector2(11, 10)), pants * tint)
 	draw_rect(Rect2(leg_r - Vector2(5, 2), Vector2(11, 10)), pants * tint)
 	draw_rect(Rect2(leg_l + Vector2(-5, 7), Vector2(10, 6)), boots * tint)
 	draw_rect(Rect2(leg_r + Vector2(-4, 7), Vector2(10, 6)), boots * tint)
 
-	if peasant:
+	if volkhv:
+		# Волхв: довга біла сорочка до колін, червоний пояс, бурий плащ за плечима
+		draw_colored_polygon(PackedVector2Array([Vector2(-14, -16), Vector2(14, -16), Vector2(18, 16), Vector2(-18, 16)]), Color(0.45, 0.32, 0.2) * tint)
+		draw_colored_polygon(PackedVector2Array([Vector2(-11, -16), Vector2(11, -16), Vector2(14, 14), Vector2(-14, 14)]), Color(0.96, 0.95, 0.9) * tint)
+		draw_line(Vector2(0, -15), Vector2(0, 12), Color(0.8, 0.12, 0.12) * tint, 2.0)
+		draw_rect(Rect2(-13, 2, 26, 3), Color(0.8, 0.15, 0.12) * tint)
+	elif peasant:
 		# Тулуб: біла сорочка з вишивкою і мотузяний пояс
 		draw_circle(Vector2(0, -2), 15.0, Color(0.95, 0.94, 0.9) * tint)
 		draw_line(Vector2(-6, -14), Vector2(-6, 6), Color(0.8, 0.12, 0.12) * tint, 2.0)
@@ -900,7 +1197,14 @@ func _draw() -> void:
 
 	var head := Vector2(0, -26)
 	draw_circle(head, 11.0, Color(0.96, 0.8, 0.65) * tint)
-	if peasant:
+	if volkhv:
+		# Довге русяве волосся й вінок із дубового листя
+		draw_colored_polygon(PackedVector2Array([head + Vector2(-12, 8), head + Vector2(-11, -6), head + Vector2(0, -13), head + Vector2(11, -6), head + Vector2(12, 8), head + Vector2(7, -4), head + Vector2(-7, -4)]), Color(0.7, 0.55, 0.3) * tint)
+		draw_arc(head + Vector2(0, -4), 11.0, PI * 1.05, PI * 1.95, 10, Color(0.3, 0.55, 0.2) * tint, 4.0)
+		for i in 4:
+			draw_circle(head + Vector2(-8 + i * 5.3, -12 + absf(i - 1.5) * 1.5), 2.2, Color(0.35, 0.65, 0.25) * tint)
+		draw_circle(head + Vector2(side * 4, -1), 1.8, Color(0.1, 0.1, 0.1) * tint)
+	elif peasant:
 		# Звичайна чуприна, без вусів — ще зовсім молодий
 		draw_colored_polygon(PackedVector2Array([head + Vector2(-11, -2), head + Vector2(-9, -11), head + Vector2(0, -14), head + Vector2(9, -11), head + Vector2(11, -2), head + Vector2(side * 3, -8)]), Color(0.45, 0.3, 0.15) * tint)
 		draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
@@ -914,8 +1218,8 @@ func _draw() -> void:
 		draw_circle(head + Vector2(side * 4, -2), 1.8, Color(0.1, 0.1, 0.1) * tint)
 		draw_line(head + Vector2(side * 2, 4), head + Vector2(side * 10, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
 		draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
-	# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю
-	if equipment.has("head"):
+	# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю (волхв — без шапки, у вінку)
+	if equipment.has("head") and not volkhv:
 		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
 		draw_colored_polygon(PackedVector2Array([
 			head + Vector2(side * 6, -10), head + Vector2(-side * 4, -24), head + Vector2(-side * 14, -18), head + Vector2(-side * 8, -9)
@@ -939,6 +1243,12 @@ func _draw() -> void:
 	var rarity: int = equipment["weapon"]["rarity"] if equipment.has("weapon") else 0
 	var metal: Color = [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45)][rarity]
 	match weapon_type:
+		"staff":
+			# Посох: довга палиця з живим вогником на верхівці
+			var top := hand + Vector2(0, -38)
+			draw_line(hand + Vector2(0, 22), top, Color(0.45, 0.3, 0.15), 4.0)
+			draw_circle(top, 6.0, metal.lerp(Color(1.0, 0.6, 0.2), 0.5))
+			draw_circle(top, 10.0 + sin(walk_phase * 0.7 + mana) * 1.5, Color(1.0, 0.7, 0.3, 0.25 + 0.25 * (mana / maxf(max_mana, 1.0))))
 		"mace":
 			var head_pos := hand + dir * 36.0
 			draw_line(hand - dir * 6.0, head_pos, Color(0.45, 0.28, 0.1), 5.0)
@@ -972,6 +1282,16 @@ func _draw() -> void:
 
 	if not statuses.is_empty():
 		Status.draw_icons(self, -76.0)
+	# Щит-оберіг і бойовий клич
+	if ward_hp > 0.0:
+		draw_circle(Vector2(0, -8), 36.0, Color(0.5, 0.75, 1.0, 0.12))
+		draw_arc(Vector2(0, -8), 36.0, 0.0, TAU, 40, Color(0.6, 0.85, 1.0, 0.6), 2.5)
+	if cry_timer > 0.0:
+		draw_arc(Vector2(0, 16), 28.0, 0.0, TAU, 32, Color(1.0, 0.6, 0.25, 0.5), 3.0)
+	if herb_timer > 0.0:
+		for i in 3:
+			var a := walk_phase * 0.3 + herb_timer * 2.0 + i * TAU / 3.0
+			draw_circle(Vector2(cos(a) * 22.0, -10 + sin(a) * 8.0), 2.5, Color(0.5, 1.0, 0.5, 0.8))
 
 	# Блок: схрещена шабля перед козаком; заряд — золоте кільце, що наповнюється
 	if blocking:

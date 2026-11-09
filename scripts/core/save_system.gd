@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 7
+const SAVE_VERSION := 8
 const Data := preload("res://scripts/data/data.gd")
 const SAVE_PATH := "user://hero.save"
 const SETTINGS_PATH := "user://settings.cfg"
@@ -103,6 +103,44 @@ static func migrate(d: Dictionary) -> Dictionary:
 		if not st.is_empty() and st.get("stage", "") != "done":
 			st["chapter"] = int(st.get("chapter", 0)) + 1
 		v = 7
+	if v == 7:
+		# v8: класи й рівень майстерності. Колишні козаки стають класом «Козак»;
+		# вміння й перки скидаються з поверненням очок (дерева змінились), перки → Загартування.
+		var p: Dictionary = d["player"]
+		var rank: String = p.get("rank", "cossack")
+		var lvl := int(p.get("level", 1))
+		if rank == "peasant":
+			p["job"] = "peasant"
+			p["job_level"] = 1
+			p["skills"] = {}
+			p["skill_points"] = 0
+			p["rank"] = ""
+		else:
+			p["job"] = "cossack"
+			p["job_level"] = clampi(lvl, 1, 40)
+			p["skills"] = {"whirl": 1}
+			p["skill_points"] = int(p["job_level"]) - 1 + 9  # + очки, які дав би Селянин
+			p["rank"] = "hetman" if rank == "hetman" else ""
+		p["job_xp"] = 0
+		p["perks"] = {}
+		p["perk_points"] = lvl / 2
+		# Пролог отримав розвилку: колишня «посвята» — тепер крок «присяга» на козацькій дорозі
+		var st: Dictionary = d["world"].get("story", {})
+		if not st.is_empty() and st.get("stage", "") != "done" and int(st.get("chapter", 0)) == 0 and int(st.get("step", 0)) >= 2:
+			st["step"] = 3
+			var ch: Dictionary = st.get("choices", {})
+			ch["trial"] = 0
+			if ch.has("initiation"):
+				ch["oath"] = ch["initiation"]
+				ch.erase("initiation")
+			st["choices"] = ch
+		elif not st.is_empty() and st.has("choices") and st["choices"].has("initiation"):
+			st["choices"]["trial"] = 0
+			st["choices"]["oath"] = st["choices"]["initiation"]
+			st["choices"].erase("initiation")
+		d["meta"] = d.get("meta", {})
+		d["meta"]["notice"] = "classes"
+		v = 8
 	d["version"] = v
 	return d
 

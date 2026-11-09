@@ -680,6 +680,31 @@ func spawn_projectile(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: C
 	p.source = source
 
 
+## Іскра волхва: самонавідна ціль уже обрана, летить швидко, б'є одного.
+func spawn_spark(pos: Vector2, dir: Vector2, dmg: float, crit: bool) -> void:
+	var p := _new_projectile(pos, dir * 700.0, dmg)
+	p.friendly = true
+	p.spell = true
+	p.crit = crit
+	p.radius = 6.0
+	p.life = 0.9
+	p.color = Color(1.0, 0.8, 0.35) if not crit else Color(1.0, 1.0, 0.6)
+
+
+## Вогняна куля волхва: вибухає серед ворогів.
+func spawn_fireball(pos: Vector2, dir: Vector2, dmg: float, crit: bool, blast: float, burn: float, stun: bool = false) -> void:
+	var p := _new_projectile(pos, dir * 520.0, dmg)
+	p.friendly = true
+	p.spell = true
+	p.crit = crit
+	p.radius = 11.0
+	p.life = 1.3
+	p.color = Color(1.0, 0.45, 0.1)
+	p.explode_radius = blast
+	p.burn_dps = burn
+	p.stun_all = stun
+
+
 ## Вибух без джерела (напр. вибухова еліта після смерті): попередження, потім удар.
 func spawn_blast(pos: Vector2, r: float, dur: float, dmg: float, col: Color) -> void:
 	var t = TelegraphScript.new()
@@ -754,6 +779,12 @@ func shake(amount: float) -> void:
 
 
 ## Коротке «завмирання» гри від сильного удару.
+## Бій зникає (вихід у меню, нова гра) посеред «завмирання» — повертаємо нормальний час.
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0
+	_hitstop_active = false
+
+
 func hitstop(dur: float) -> void:
 	if _hitstop_active or not active:
 		return

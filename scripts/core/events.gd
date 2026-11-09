@@ -11,6 +11,7 @@ signal parried  # козак відбив удар
 signal charged_hit  # заряджений удар влучив
 signal player_died
 signal level_up(level: int)
+signal job_level_up(level: int)  # новий рівень майстерності
 signal companion_down(index: int, name: String)
 signal item_found(item: Dictionary)
 

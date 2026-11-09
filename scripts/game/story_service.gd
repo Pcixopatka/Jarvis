@@ -8,6 +8,9 @@ const Story := preload("res://scripts/data/story.gd")
 const Data := preload("res://scripts/data/data.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 
+## Клас героя — для звертань у розмовах («козаче» / «волхве»). Виставляє гра.
+static var hero_class := "cossack"
+
 
 static func state(world) -> Dictionary:
 	if world.story.is_empty():
@@ -56,13 +59,36 @@ static func chose(world, cond: String) -> bool:
 	return int(world.story.get("choices", {}).get(parts[0], -1)) == int(parts[1])
 
 
-## Репліки, які має почути саме цей гравець (з урахуванням його минулих виборів).
+## Репліки, які має почути саме цей гравець (з урахуванням його минулих виборів і класу).
 static func lines(world, src: Array) -> Array:
 	var out := []
 	for l in src:
 		if l.size() < 3 or chose(world, l[2]):
-			out.append([l[0], l[1]])
+			var npc: String = l[0]
+			var text: String = l[1]
+			if hero_class == "volkhv":
+				text = text.replace("козаче", "волхве").replace("Козаче", "Волхве")
+				if npc == "hero":
+					npc = "hero_volkhv"
+			out.append([npc, text])
 	return out
+
+
+## Крок, що не стосується цього гравця (умова "if" не справдилась), пропускається.
+static func _skip_conditional(world) -> void:
+	var s: Dictionary = world.story
+	var guard := 0
+	while s["stage"] != "done" and guard < 50:
+		guard += 1
+		var st: Dictionary = Story.CHAPTERS[s["chapter"]]["steps"][s["step"]]
+		if not st.has("if") or chose(world, st["if"]):
+			return
+		s["step"] += 1
+		if s["step"] >= Story.CHAPTERS[s["chapter"]]["steps"].size():
+			s["chapter"] += 1
+			s["step"] = 0
+			if s["chapter"] >= Story.CHAPTERS.size():
+				s["stage"] = "done"
 
 
 static func _find_step(id: String) -> Dictionary:
@@ -146,6 +172,10 @@ static func on_event(world, player, type: String, arg: String) -> Array:
 	match type:
 		"clear", "dungeon", "visit":
 			done = obj["type"] == type and obj["loc"] == arg
+		"job":
+			if obj["type"] == "job":
+				s["progress"] = mini(int(arg), _count(st))
+				done = int(arg) >= _count(st)
 		"kill":
 			if obj.get("enemy", "") == arg:
 				if obj["type"] == "kill":
@@ -173,6 +203,8 @@ static func _complete(world, player, choice: int) -> Array:
 	var msgs := []
 	_apply_reward(world, player, st.get("reward", {}), msgs)
 	var choices: Array = st.get("choices", [])
+	if choice < 0 and not choices.is_empty():
+		choice = 0  # розмову пропущено — перший варіант (інакше розгалуження загубиться)
 	if choice >= 0 and choice < choices.size():
 		_apply_reward(world, player, choices[choice].get("reward", {}), msgs)
 		world.story["choices"] = world.story.get("choices", {})
@@ -200,13 +232,20 @@ static func _advance(world, msgs: Array) -> void:
 		if s["chapter"] >= Story.CHAPTERS.size():
 			s["stage"] = "done"
 			return
+	_skip_conditional(world)
+	if s["stage"] == "done":
+		return
 	_skip_empty_start(world)
 
 
 static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
+	if r.has("class"):
+		player.change_class(r["class"])
+		hero_class = r["class"]
+		msgs.append({"text": {"cossack": "Ти — козак Запорозького війська!", "volkhv": "Ти — волхв Карпатського кола!"}.get(r["class"], ""), "big": true})
 	if r.has("rank"):
 		player.rank = r["rank"]
-		msgs.append({"text": {"cossack": "Ти — козак Запорозького війська!", "hetman": "Тебе обрано гетьманом України!"}.get(r["rank"], ""), "big": true})
+		msgs.append({"text": "Тебе обрано гетьманом України!", "big": true})
 	if r.has("skills"):
 		for id in r["skills"]:
 			player.skills[id] = maxi(player.sk(id), int(r["skills"][id]))
@@ -228,6 +267,8 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 		it["up"] = int(d.get("up", 0))
 		if not player.add_item(it):
 			player.inventory.append(it)  # сюжетну нагороду не губимо навіть із повною торбою
+		if r.has("class") and it["slot"] == "weapon":
+			player.equip(it["uid"])  # зброя посвяти — одразу в руки
 		msgs.append({"text": "Отримано: %s" % Data.item_title(it), "big": false})
 
 

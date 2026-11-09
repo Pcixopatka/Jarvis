@@ -90,9 +90,15 @@ func _ready() -> void:
 	Events.exit_requested.connect(_on_exit)
 	Events.defense_won.connect(_on_defense_won)
 	Events.parried.connect(func(): _record("parry"))
+	Events.job_level_up.connect(func(jl: int):
+		_story_event("job", str(jl))
+		if player.can_change_class() and player.is_peasant():
+			hud.show_banner("Майстерність %d!\nЧас обирати дорогу: Січ чи Карпати" % jl, UI.GOLD)
+		elif state != State.PLAYING:
+			hud.show_banner("Майстерність %d!" % jl, UI.GOLD))
 	Events.charged_hit.connect(func(): _record("charged"))
 	Events.defense_lost.connect(_on_defense_lost)
-	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка «Козак» → вкладка «Спорядження»."))
+	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка героя (угорі праворуч) → вкладка «Спорядження»."))
 	Events.boss_spawned.connect(func(_e): hint("boss", "Бос! Червоні зони на землі — місця його удару. Виходь із них, поки вони не заповнились!"))
 	Events.hint.connect(hint)
 	Events.player_hurt.connect(func():
@@ -157,6 +163,24 @@ func _new_hero(data: Dictionary) -> void:
 	combat.set_player(player)
 
 
+## Після посвяти: нова зброя з торби — одразу в руки, якщо стара вже не годиться.
+func _after_class_change() -> void:
+	_sync_class()
+	var w: Dictionary = player.equipment.get("weapon", {})
+	if not w.is_empty() and player.can_use(w):
+		return
+	for it in player.inventory:
+		if it["slot"] == "weapon" and player.can_use(it):
+			player.equip(it["uid"])
+			return
+
+
+## Клас героя впливає на здобич (зброя свого класу) і звертання в розмовах.
+func _sync_class() -> void:
+	Data.weapon_pool = player.Classes.CLASSES[player.job]["weapons"]
+	StoryService.hero_class = player.job
+
+
 func new_game() -> void:
 	world = WorldState.new()
 	meta = {"playtime": 0.0, "created": Time.get_unix_time_from_system()}
@@ -176,10 +200,21 @@ func new_game() -> void:
 	hud.show_dialogue(dlg)
 
 
-## Простий хлопець із хутора: вила, сорочка, жодних козацьких умінь до посвяти.
+## Вміння з кнопки N (як на екрані).
+func _use_slot(i: int) -> void:
+	var a: Array = player.active_skills()
+	if i < a.size():
+		player.use_skill(a[i])
+
+
+## Простий хлопець із хутора: вила, сорочка, лише селянська наука.
 func _make_peasant() -> void:
-	player.rank = "peasant"
+	player.job = "peasant"
+	player.job_level = 1
+	player.job_xp = 0
+	player.rank = ""
 	player.skills = {}
+	_sync_class()
 	player.inventory.clear()
 	player.equipment.clear()
 	var vyla := Data.gen_item(1, 0, "weapon", "pike")
@@ -203,6 +238,7 @@ func load_game() -> bool:
 	world.from_dict(d["world"])
 	meta = d.get("meta", meta)
 	_new_hero(d["player"])
+	_sync_class()
 	Party.normalize(world, player.level)
 	CampService.apply_effects(world, player)
 	return true
@@ -212,6 +248,9 @@ func _continue_game() -> void:
 	if load_game():
 		map_here = world.last_city
 		enter_city(world.last_city)
+		if meta.get("notice", "") == "classes":
+			meta.erase("notice")
+			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка героя)", UI.GOLD)
 	else:
 		new_game()
 
@@ -414,6 +453,8 @@ func _story_dialogue(city: String) -> void:
 		hud.close_dialogue()
 		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice)
 		CampService.apply_effects(world, player)  # вибір міг дати постійний наслідок
+		_after_class_change()
+		_story_event("job", str(player.job_level))  # мета «майстерність» могла вже бути досягнута
 		if player.rank == "hetman" and int(world.stats.get("hetman", 0)) == 0:
 			_record("hetman")
 		var texts := []
@@ -461,8 +502,8 @@ func _record(stat: String, amount: int = 1) -> void:
 
 func _on_level_up(lvl: int) -> void:
 	_record("level", lvl)
-	hud.show_banner("Рівень %d!\nВідкрий «Козак», щоб прокачатися" % lvl, UI.GOLD)
-	hint("levelup", "Новий рівень! Натисни «Козак» угорі: вклади очки в характеристики, вміння й перки.")
+	hud.show_banner("Рівень %d!\nВідкрий «%s», щоб прокачатися" % [lvl, player.class_name_ua()], UI.GOLD)
+	hint("levelup", "Новий рівень! Натисни кнопку героя угорі праворуч: вклади очки в характеристики, вміння й перки.")
 
 
 func _on_player_died() -> void:
@@ -771,7 +812,7 @@ func _show_pause() -> void:
 	_open_menu()
 	hud.add_title("Пауза")
 	hud.add_button("Продовжити", _resume_play)
-	hud.add_button("Козак", func():
+	hud.add_button(player.class_name_ua(), func():
 		hud.close_overlay()
 		state = State.PLAYING
 		open_character())
@@ -814,13 +855,16 @@ func _input(event: InputEvent) -> void:
 				player.dodge()
 		KEY_L, KEY_1:
 			if playing:
-				player.use_skill("whirl")
+				_use_slot(0)
 		KEY_I, KEY_2:
 			if playing:
-				player.use_skill("lightning")
+				_use_slot(1)
 		KEY_O, KEY_3:
 			if playing:
-				player.use_skill("musket")
+				_use_slot(2)
+		KEY_U, KEY_5:
+			if playing:
+				_use_slot(3)
 		KEY_H, KEY_4:
 			if playing:
 				player.use_potion()

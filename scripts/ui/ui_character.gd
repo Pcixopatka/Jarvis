@@ -16,11 +16,11 @@ static func build(game) -> Control:
 		["Характеристики" + _pts(p.stat_points), _stats(game)],
 		["Спорядження", _gear(game)],
 		["Вміння" + _pts(p.skill_points), _skills(game)],
-		["Перки" + _pts(p.perk_points), _perks(game)],
+		["Загартування" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
 		["Виклики" + _pts(game.ChallengeService.ready_count(game.world)), _challenges(game)],
 	]
-	return UI.screen("%s — рівень %d   •   Гривні: %d" % [{"peasant": "Селянин", "hetman": "Гетьман"}.get(p.rank, "Козак"), p.level, p.gold], "Назад", game.close_character,
+	return UI.screen("%s — рівень %d   •   Гривні: %d" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), p.level, p.gold], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i)
 
 
@@ -60,6 +60,7 @@ static func _stats(game) -> Control:
 	var lines := [
 		["Зброя", Data.WEAPON_TYPES[p.weapon_type]["name"]],
 		["Здоров'я", "%d / %d" % [int(p.hp), int(p.max_hp)]],
+		["Наснага", "%d / %d  (+%.1f/с)" % [int(p.mana), int(p.max_mana), p.mana_regen]],
 		["Шкода", "%.1f" % p.damage],
 		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
 		["Шанс криту", "%d%%  (x%.0f)" % [roundi(p.crit_chance * 100), p.crit_mult]],
@@ -206,7 +207,10 @@ static func _gear(game) -> Control:
 	if equipped:
 		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
 	else:
-		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24))
+		var usable: bool = p.can_use(item)
+		if not usable:
+			det.add_child(UI.label("Не для класу «%s»" % p.class_name_ua(), 18, UI.BAD, false))
+		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24, usable))
 		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
 	return h
 
@@ -228,22 +232,32 @@ static func _tree_button(text: String, rank: int, max_rank: int, can: bool, lock
 
 static func _skills(game) -> Control:
 	var p = game.player
+	var Classes = p.Classes
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 14)
-	v.add_child(UI.label("Очки вмінь: %d   (+%d за рівень).  Активні вміння з'являються кнопками в бою." % [p.skill_points, Data.SKILL_POINTS_PER_LEVEL], 21, UI.GOLD if p.skill_points > 0 else UI.MUTED))
-	if p.is_peasant():
-		v.add_child(UI.label("Бойові вміння відкриються після посвяти в козаки на Січі. Очки вмінь збережуться.", 20, UI.BAD))
+	v.add_theme_constant_override("separation", 12)
+	var head := "%s — майстерність %d/%d" % [p.class_name_ua(), p.job_level, p.job_max()]
+	if p.job_level < p.job_max():
+		head += "   (досвід %d/%d)" % [p.job_xp, p.job_next()]
+	v.add_child(UI.label(head, 24, UI.GOLD, false))
+	v.add_child(UI.label("Очки вмінь: %d — по одному за кожен рівень майстерності. Активні вміння стають кнопками в бою (до 4) і коштують наснагу." % p.skill_points, 18, UI.GOLD if p.skill_points > 0 else UI.MUTED, false))
+	if p.can_change_class():
+		var names := []
+		for c in p.class_info()["next"]:
+			names.append("%s (%s)" % [Classes.CLASSES[c]["name"], {"sich": "Січ", "kapyshche": "Карпати"}.get(Classes.CLASSES[c].get("where", ""), "")])
+		v.add_child(UI.label("Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника.", 19, UI.GOOD, false))
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_theme_constant_override("separation", 24)
+	h.add_theme_constant_override("separation", 20)
 	v.add_child(h)
-	for branch in Data.SKILL_BRANCHES:
+	var branches: Array = Classes.TREES[p.job]
+	var w := 320.0 if branches.size() <= 3 else 250.0
+	if branches.size() == 1:
+		w = 420.0
+	for branch in branches:
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 0)
-		col.add_child(UI.label(branch["name"], 28, UI.GOLD))
-		var nodes: Array = branch["nodes"]
-		for i in nodes.size():
-			var n: Dictionary = nodes[i]
+		col.add_child(UI.label(branch["name"], 26, UI.GOLD))
+		for n in branch["nodes"]:
 			col.add_child(UI.connector())
 			var rank: int = p.sk(n["id"])
 			var req_met: bool = p.skill_req_met(n)
@@ -252,22 +266,33 @@ static func _skills(game) -> Control:
 				var reqs := []
 				for r in n["req"]:
 					if p.sk(r) < n["req"][r]:
-						reqs.append("%s %d" % [Data.skill_name(r), n["req"][r]])
+						reqs.append("%s %d" % [Classes.find_node(r, p.job).get("name", r), n["req"][r]])
 				text += "\nПотрібно: " + ", ".join(reqs)
 			elif n.get("active", false):
-				text += "\nАктивне вміння"
-			col.add_child(_tree_button(text, rank, n["max"], p.can_learn_skill(n), not req_met, 17, Vector2(320, 120), _do(game, "skill", n["id"])))
+				text += "\nАктивне • %d наснаги" % int(n.get("cost", 0))
+			col.add_child(_tree_button(text, rank, n["max"], p.can_learn_skill(n), not req_met, 15, Vector2(w, 104), _do(game, "skill", n["id"])))
 		h.add_child(col)
+	# Вміння попередніх класів лишаються з героєм
+	var earlier := []
+	for c in Classes.lineage(p.job):
+		if c == p.job:
+			continue
+		for b in Classes.TREES[c]:
+			for n in b["nodes"]:
+				if p.sk(n["id"]) > 0:
+					earlier.append("%s %d" % [n["name"], p.sk(n["id"])])
+	if not earlier.is_empty():
+		v.add_child(UI.label("Набуте раніше: " + ", ".join(earlier), 17, UI.MUTED, false))
 	return v
 
 
-# ---------------- Перки ----------------
+# ---------------- Загартування ----------------
 
 static func _perks(game) -> Control:
 	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
-	v.add_child(UI.label("Очки перків: %d   (+%d за рівень).  Новий ярус відкривається за кожні %d очки, вкладені в гілку." % [p.perk_points, Data.PERK_POINTS_PER_LEVEL, Data.PERK_TIER_STEP], 21, UI.GOLD if p.perk_points > 0 else UI.MUTED))
+	v.add_child(UI.label("Очки Загартування: %d   (+1 за кожні %d рівні героя). Спільне для всіх класів. Новий ярус — за кожні %d очки в гілці." % [p.perk_points, p.Classes.HARDEN_EVERY, Data.PERK_TIER_STEP], 20, UI.GOLD if p.perk_points > 0 else UI.MUTED))
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 16)

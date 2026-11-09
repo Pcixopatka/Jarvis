@@ -31,6 +31,9 @@ var btn_potion
 var btn_block
 var hp_bar: ProgressBar
 var xp_bar: ProgressBar
+var mana_bar: ProgressBar
+var job_bar: ProgressBar
+var skill_slots: Array = []  # позиції кнопок вмінь (до 4)
 var hp_label: Label
 var level_label: Label
 var quest_label: Label
@@ -86,9 +89,8 @@ func _build() -> void:
 	btn_block = _action_button("Блок", 50.0, Color(0.55, 0.42, 0.2))
 	btn_potion = _action_button("Зілля", 46.0, Color(0.75, 0.12, 0.2))
 	btn_potion.triggered.connect(func(): potion_pressed.emit())
-	var skill_colors := {"whirl": Color(0.55, 0.3, 0.8), "lightning": Color(0.25, 0.55, 0.9), "musket": Color(0.45, 0.4, 0.3)}
 	for id in Data.ACTIVE_SKILLS:
-		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0, skill_colors[id])
+		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0, Data.Classes.ACTIVE_COLORS[id])
 		b.triggered.connect(func(): skill_pressed.emit(id))
 		b.visible = false
 		skill_buttons[id] = b
@@ -183,9 +185,11 @@ func _build_stats() -> void:
 	hp_label = _stat_label(Vector2(30, 18), 20)
 	hp_label.size = Vector2(320, 30)
 	hp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	xp_bar = _bar(Color(0.95, 0.75, 0.15), Vector2(20, 54), Vector2(340, 16))
-	level_label = _stat_label(Vector2(20, 72), 22)
-	quest_label = _stat_label(Vector2(20, 104), 16)
+	mana_bar = _bar(Color(0.25, 0.45, 0.95), Vector2(20, 51), Vector2(340, 10))
+	xp_bar = _bar(Color(0.95, 0.75, 0.15), Vector2(20, 64), Vector2(340, 9))
+	job_bar = _bar(Color(0.55, 0.85, 1.0), Vector2(20, 75), Vector2(340, 5))
+	level_label = _stat_label(Vector2(20, 82), 22)
+	quest_label = _stat_label(Vector2(20, 114), 16)
 	loc_label = Label.new()
 	loc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	loc_label.anchor_right = 1.0
@@ -296,9 +300,7 @@ func layout() -> void:
 	joystick.queue_redraw()
 	btn_attack.position = Vector2(s.x - 140, s.y - 140)
 	btn_dodge.position = Vector2(s.x - 300, s.y - 80)
-	skill_buttons["whirl"].position = Vector2(s.x - 120, s.y - 315)
-	skill_buttons["lightning"].position = Vector2(s.x - 275, s.y - 255)
-	skill_buttons["musket"].position = Vector2(s.x - 425, s.y - 105)
+	skill_slots = [Vector2(s.x - 120, s.y - 315), Vector2(s.x - 275, s.y - 255), Vector2(s.x - 425, s.y - 105), Vector2(s.x - 110, s.y - 470)]
 	btn_potion.position = Vector2(s.x - 430, s.y - 250)
 	btn_block.position = Vector2(s.x - 270, s.y - 420)
 	map_view.map_rect = Rect2(Vector2(8, 96), Vector2(s.x - 410, s.y - 104))
@@ -341,7 +343,11 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	hp_label.text = "Здоров'я %d / %d" % [roundi(player.hp), roundi(player.max_hp)]
 	xp_bar.max_value = player.xp_next
 	xp_bar.value = player.xp
-	level_label.text = "Рівень %d    Гривні: %d" % [player.level, player.gold]
+	mana_bar.max_value = player.max_mana
+	mana_bar.value = player.mana
+	job_bar.max_value = maxi(1, player.job_next())
+	job_bar.value = player.job_next() if player.job_level >= player.job_max() else player.job_xp
+	level_label.text = "Рівень %d  •  %s %d  •  Гривні: %d" % [player.level, player.class_name_ua(), player.job_level, player.gold]
 	if not player.statuses.is_empty() and not combat_info.is_empty():
 		level_label.text += "    " + player.Status.describe(player)
 	var ql := []
@@ -356,7 +362,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	if not combat_info.is_empty():
 		btn_dodge.set_cooldown(player.dodge_timer / player.dodge_cooldown)
 		btn_potion.set_cooldown(1.0 if player.potions <= 0 else player.potion_timer / Data.POTION_CD)
-		var bl := "Заряд!" if player.blocking and player.block_time >= player.CHARGE_MIN else "Блок"
+		var bl := "Заряд!" if player.blocking and player.block_time >= player.CHARGE_MIN else ("Оберіг" if player.is_mage() else "Блок")
 		if btn_block.label != bl:
 			btn_block.label = bl
 			btn_block.queue_redraw()
@@ -364,17 +370,22 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 		if btn_potion.label != pl:
 			btn_potion.label = pl
 			btn_potion.queue_redraw()
+		var actives: Array = player.active_skills()
 		for id in skill_buttons:
 			var b = skill_buttons[id]
-			b.visible = player.sk(id) > 0
-			b.set_cooldown(player.skill_ready_ratio(id))
+			var slot := actives.find(id)
+			b.visible = slot >= 0 and slot < skill_slots.size()
+			if b.visible:
+				b.position = skill_slots[slot]
+				var no_mana: bool = player.mana < player.skill_cost(id)
+				b.set_cooldown(1.0 if no_mana and player.skill_timers.get(id, 0.0) <= 0.0 else player.skill_ready_ratio(id))
 	var pts: int = player.unspent_points() + ChallengeService.ready_count(world)
 	if pts > 0:
 		_pulse += maxf(delta, 0.016) * 5.0
-		char_btn.text = "Козак +%d" % pts
+		char_btn.text = "%s +%d" % [player.class_name_ua(), pts]
 		char_btn.modulate = Color(1, 1, 1).lerp(Color(1.4, 1.25, 0.6), 0.5 + 0.5 * sin(_pulse))
 	else:
-		char_btn.text = "Козак"
+		char_btn.text = player.class_name_ua()
 		char_btn.modulate = Color.WHITE
 
 

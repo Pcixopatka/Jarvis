@@ -37,8 +37,8 @@ static func coin_gold(xp_value: int) -> int:
 	return maxi(1, roundi(xp_value * COIN_GOLD_RATIO))
 
 const STAT_POINTS_PER_LEVEL := 3
-const SKILL_POINTS_PER_LEVEL := 1
-const PERK_POINTS_PER_LEVEL := 1
+const SKILL_POINTS_PER_LEVEL := 1  # очок вмінь за рівень майстерності
+const PERK_POINTS_PER_LEVEL := 1  # очок Загартування за кожні Classes.HARDEN_EVERY рівнів героя
 const PERK_TIER_STEP := 2  # скільки очок треба вкласти в гілку, щоб відкрити наступний ярус
 
 const STATS := [
@@ -48,83 +48,36 @@ const STATS := [
 	{"id": "spi", "name": "Характерництво", "desc": "+5% сили вмінь, -4% перезарядки вмінь"},
 ]
 
-# Дерево вмінь: у кожній гілці — активне вміння, покращення і фінальне вміння.
-# "req" — які вміння і якого рангу потрібні, щоб вивчити вузол.
-const SKILL_BRANCHES := [
-	{"name": "Шабля", "nodes": [
-		{"id": "whirl", "name": "Вихор", "max": 5, "req": {}, "active": true,
-			"desc": "Кругова атака навколо козака.\n+20% шкоди, +8% радіуса за ранг"},
-		{"id": "whirl_cd", "name": "Гострий вітер", "max": 3, "req": {"whirl": 2},
-			"desc": "-10% перезарядки Вихору\nза ранг"},
-		{"id": "storm", "name": "Буревій", "max": 1, "req": {"whirl": 3, "whirl_cd": 1},
-			"desc": "Вихор притягує нечисть\nі б'є вдруге"},
-	]},
-	{"name": "Характерник", "nodes": [
-		{"id": "lightning", "name": "Блискавка Перуна", "max": 5, "req": {}, "active": true,
-			"desc": "Б'є блискавкою 2+ранг\nнайближчих ворогів"},
-		{"id": "chain", "name": "Ланцюг", "max": 2, "req": {"lightning": 2},
-			"desc": "+2 цілі блискавки\nза ранг"},
-		{"id": "wrath", "name": "Гнів Перуна", "max": 1, "req": {"lightning": 3, "chain": 1},
-			"desc": "Блискавка сповільнює\nворогів на 2 с"},
-	]},
-	{"name": "Самопал", "nodes": [
-		{"id": "musket", "name": "Постріл", "max": 5, "req": {}, "active": true,
-			"desc": "Куля пробиває ворогів наскрізь.\n+18% шкоди за ранг"},
-		{"id": "reload", "name": "Швидке набивання", "max": 3, "req": {"musket": 2},
-			"desc": "-12% перезарядки самопала\nза ранг"},
-		{"id": "buckshot", "name": "Картеч", "max": 1, "req": {"musket": 3, "reload": 1},
-			"desc": "Постріл випускає\n5 куль віялом"},
-	]},
-]
-
-# Дерево перків: гілки → яруси → перки. Ярус N відкривається, коли у гілку вкладено N * PERK_TIER_STEP очок.
-const PERK_BRANCHES := [
-	{"name": "Воїн", "tiers": [
-		[{"id": "sharp", "name": "Гостра шабля", "max": 3, "desc": "+8% шкоди"},
-		 {"id": "reach", "name": "Довга шабля", "max": 3, "desc": "+8% дальності\nудару"}],
-		[{"id": "luck", "name": "Козацька вдача", "max": 3, "desc": "+5% шансу\nкриту"},
-		 {"id": "fury", "name": "Лють", "max": 3, "desc": "+6% швидкості\nудару"}],
-		[{"id": "thirst", "name": "Жага бою", "max": 3, "desc": "2% шкоди\nлікує козака"},
-		 {"id": "cleave", "name": "Широкий замах", "max": 2, "desc": "+20° ширина\nудару"}],
-		[{"id": "deadly", "name": "Смертельний удар", "max": 1, "desc": "Крит б'є x3\nзамість x2"}],
-	]},
-	{"name": "Захисник", "tiers": [
-		[{"id": "tough", "name": "Міцна шкіра", "max": 3, "desc": "+15 здоров'я"},
-		 {"id": "ward", "name": "Оберіг", "max": 3, "desc": "-5% отриманої\nшкоди"}],
-		[{"id": "regen", "name": "Загартування", "max": 3, "desc": "+0.6 здоров'я\nза секунду"},
-		 {"id": "roll", "name": "Спритний перекид", "max": 2, "desc": "-12% перезарядки\nперекиду"}],
-		[{"id": "varenyk", "name": "Бабусині вареники", "max": 2, "desc": "Вареники частіше\nі ситніші"},
-		 {"id": "thorns", "name": "Колючий жупан", "max": 2, "desc": "Повертає 25%\nшкоди нападнику"}],
-		[{"id": "unbreak", "name": "Незламний", "max": 1, "desc": "Раз за хвилю\nне гине від удару"}],
-	]},
-	{"name": "Запорожець", "tiers": [
-		[{"id": "boots", "name": "Легкі чоботи", "max": 3, "desc": "+5% швидкості\nбігу"},
-		 {"id": "purse", "name": "Жадібний гаманець", "max": 2, "desc": "+25% радіус\nзбору гривень"}],
-		[{"id": "kobzar", "name": "Кобзарева наука", "max": 3, "desc": "+10% досвіду"},
-		 {"id": "focus", "name": "Зосередженість", "max": 3, "desc": "-6% перезарядки\nвмінь"}],
-		[{"id": "dash_strike", "name": "Удар з перекиду", "max": 1, "desc": "Перекид ранить\nворогів на шляху"},
-		 {"id": "spirit", "name": "Характерний дух", "max": 3, "desc": "+10% сили\nвмінь"}],
-		[{"id": "sich", "name": "Січова закалка", "max": 1, "desc": "+2 до всіх\nхарактеристик"}],
-	]},
-]
-
-const ACTIVE_SKILLS := ["whirl", "lightning", "musket"]
-const ACTIVE_LABELS := {"whirl": "Вихор", "lightning": "Перун", "musket": "Самопал"}
+# Вміння тепер у деревах класів (див. classes.gd).
+const Classes := preload("res://scripts/data/classes.gd")
+const ACTIVE_SKILLS: Array = ["vyly", "first_aid", "whirl", "battle_cry", "musket", "fireball", "shield", "herb"]
+const ACTIVE_LABELS: Dictionary = Classes.ACTIVE_LABELS
 
 
 static func find_skill(id: String) -> Dictionary:
-	for b in SKILL_BRANCHES:
-		for n in b["nodes"]:
-			if n["id"] == id:
-				return n
-	return {}
+	return Classes.find_node(id)
 
 
 static func skill_name(id: String) -> String:
-	return find_skill(id).get("name", id)
+	return Classes.node_name(id)
 
 
-## Повертає [індекс гілки, індекс ярусу] перка або [-1, -1].
+# Загартування — спільне для всіх класів дерево пасивних вмінь (очко за кожні 2 рівні героя).
+# Ярус N відкривається, коли у гілку вкладено N * PERK_TIER_STEP очок.
+const PERK_BRANCHES := [
+	{"name": "Загартування", "tiers": [
+		[{"id": "boots", "name": "Легкі чоботи", "max": 3, "desc": "+5% швидкості\nбігу"},
+		 {"id": "purse", "name": "Жадібний гаманець", "max": 2, "desc": "+25% радіус\nзбору здобичі"}],
+		[{"id": "luck", "name": "Вдача", "max": 3, "desc": "+5% шансу\nкриту"},
+		 {"id": "kobzar", "name": "Кобзарева наука", "max": 3, "desc": "+10% досвіду"}],
+		[{"id": "varenyk", "name": "Бабусині вареники", "max": 2, "desc": "Вареники частіше\nі ситніші"},
+		 {"id": "steel_will", "name": "Сталева воля", "max": 3, "desc": "+10% наснаги"}],
+		[{"id": "sich", "name": "Загартований", "max": 1, "desc": "+2 до всіх\nхарактеристик"}],
+	]},
+]
+
+
+## Повертає [індекс гілки, індекс ярусу, перк] або [-1, -1, {}].
 static func find_perk(id: String) -> Array:
 	for bi in PERK_BRANCHES.size():
 		var tiers: Array = PERK_BRANCHES[bi]["tiers"]
@@ -157,7 +110,11 @@ const WEAPON_TYPES := {
 		"hint": "Повільна, б'є сильно і далеко відкидає"},
 	"pike": {"name": "Спис", "dmg": 1.1, "cd": 1.15, "range": 1.5, "arc": 0.55, "kb": 1.2,
 		"hint": "Довгий, але вузький удар"},
+	"staff": {"name": "Посох", "dmg": 1.0, "cd": 1.1, "range": 1.0, "arc": 1.0, "kb": 0.5,
+		"hint": "Волхвів: б'є іскрами здалеку, сила — від Характерництва"},
 }
+## Яку зброю генерувати в здобичі й крамницях (виставляє гра під клас героя; порожньо — будь-яку).
+static var weapon_pool: Array = []
 
 const ARMOR_TYPES := {
 	"head": ["Смушкова шапка", "Кучма", "Козацька шапка"],
@@ -243,7 +200,8 @@ static func gen_item(ilvl: int, rarity: int, slot: String = "", type: String = "
 	var name := ""
 	if slot == "weapon":
 		if type == "":
-			type = WEAPON_TYPES.keys()[randi() % WEAPON_TYPES.size()]
+			var pool: Array = weapon_pool if not weapon_pool.is_empty() else ["sabre", "mace", "pike"]
+			type = pool[randi() % pool.size()]
 		name = WEAPON_TYPES[type]["name"]
 	else:
 		var names: Array = ARMOR_TYPES[slot]
@@ -308,6 +266,8 @@ const CITIES := {
 		"desc": "Княже місто серед поліських лісів."},
 	"kamianets": {"name": "Кам'янець", "pos": Vector2(26.58, 48.68), "level": 7,
 		"desc": "Неприступна фортеця над Смотричем."},
+	"kapyshche": {"name": "Капище на Говерлі", "pos": Vector2(24.5, 48.16), "level": 3,
+		"desc": "Осідок волхвів Карпатського кола на схилах Говерли. Тут посвячують у волхви."},
 	"lviv": {"name": "Львів", "pos": Vector2(24.03, 49.84), "level": 9,
 		"desc": "Багате торгове місто, ворота на захід."},
 }
@@ -329,7 +289,9 @@ const LOCATIONS := {
 		"desc": "Старі підземелля, де править Упир-володар."},
 	"polissia": {"name": "Поліські болота", "type": "field", "biome": "swamp", "pos": Vector2(27.6, 51.35), "level": 6,
 		"enemies": ["bolotianyk", "upyr", "zarazhenyi"], "desc": "Трясовина, туман і болотяники. Тут пройшли заражені загони."},
-	"chornohora": {"name": "Чорногора", "type": "field", "biome": "mountain", "pos": Vector2(24.6, 48.05), "level": 9,
+	"pidstupy": {"name": "Підступи до Чорногори", "type": "field", "biome": "mountain", "pos": Vector2(25.5, 49.15), "level": 3, "goal": 25,
+		"enemies": ["zarazhenyi", "vovkulaka", "mavka"], "desc": "Гірські стежки до капища волхвів. Заражені шукають тут дорогу на Говерлу."},
+	"chornohora": {"name": "Чорногора", "type": "field", "biome": "mountain", "pos": Vector2(23.4, 47.85), "level": 9,
 		"enemies": ["vovkulaka", "upyr", "bolotianyk"], "desc": "Високі Карпати, сніг і вовчі зграї."},
 	"bilovezha": {"name": "Біловезька пуща", "type": "field", "biome": "forest", "pos": Vector2(23.9, 52.7), "level": 8,
 		"enemies": ["vovkulaka", "mavka", "upyr"], "desc": "Прадавня пуща на межі з Польщею. Тут водяться найлютіші вовкулаки."},
@@ -338,11 +300,11 @@ const LOCATIONS := {
 	"chaklun_lair": {"name": "Лігво чаклуна", "type": "dungeon", "biome": "plague", "pos": Vector2(35.4, 53.7), "level": 12,
 		"rooms": 6, "enemies": ["zarazhenyi", "vovkulaka", "upyr"], "boss": "chaklun",
 		"desc": "Отруєні печери на московських землях. Звідси чаклун Путіноїда розсилає заразу."},
-	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.2, 48.6), "level": 10,
+	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.0, 49.05), "level": 10,
 		"rooms": 6, "enemies": ["vovkulaka", "upyr", "bolotianyk"], "boss": "vovkulaka",
 		"desc": "Скарби опришків стереже Вовкулака-ватажок."},
 	# ---- Розділ III: Карпатська варта ----
-	"kamianets_walls": {"name": "Кам'янецькі мури", "type": "field", "biome": "mountain", "pos": Vector2(27.1, 48.25), "level": 13,
+	"kamianets_walls": {"name": "Кам'янецькі мури", "type": "field", "biome": "mountain", "pos": Vector2(27.6, 48.05), "level": 13,
 		"enemies": ["zarazhenyi", "pishchalnyk", "chort"], "desc": "Під мурами фортеці стала облогою Кощієва рать: пищальники й чорти."},
 	"koshchii_tower": {"name": "Кощієва вежа", "type": "dungeon", "biome": "plague", "pos": Vector2(30.4, 54.4), "level": 16,
 		"rooms": 6, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "koshchii",

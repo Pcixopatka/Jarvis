@@ -8,6 +8,7 @@ extends SceneTree
 ##   SIM_LOCS="wild_field"   лише ці локації
 ##   SIM_SEEDS=2             скільки прогонів на клітинку (усереднення)
 ##   SIM_OUT=user://balance.md   куди записати звіт (Markdown)
+##   SIM_CLASS=volkhv        клас героя (cossack за замовчуванням)
 
 const Data := preload("res://scripts/data/data.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
@@ -75,26 +76,47 @@ func _run() -> void:
 
 # ======================= Герой заданого рівня =======================
 
-const SKILL_ORDER := ["whirl", "lightning", "musket", "whirl", "whirl_cd", "lightning", "chain", "whirl", "storm",
-	"lightning", "wrath", "musket", "reload", "buckshot", "whirl", "lightning", "musket", "whirl_cd", "chain", "reload", "musket", "whirl_cd", "reload"]
-const PERK_ORDER := ["sharp", "tough", "sharp", "ward", "luck", "regen", "sharp", "tough", "fury", "thirst", "ward",
-	"luck", "boots", "kobzar", "varenyk", "thirst", "deadly", "unbreak", "fury", "regen", "cleave", "thorns", "reach", "luck"]
+## Порядок вивчення вмінь: спершу селянські (9 очок), далі — свого класу
+const PEASANT_ORDER := ["vyly", "hardy", "vyly", "first_aid", "hardy", "vyly", "roll", "hardy", "vyly"]
+const SKILL_ORDER := {
+	"cossack": ["whirl", "sharp", "battle_cry", "whirl", "tough", "sharp", "musket", "whirl_cd", "whirl", "sharp", "storm",
+		"fury", "tough", "ward", "battle_cry", "thirst", "deadly", "reach", "cleave", "tough", "unbreak", "fury", "thirst", "ward",
+		"musket", "reload", "battle_cry", "whirl", "whirl_cd", "fury", "thirst", "ward", "thorns", "reach", "musket", "buckshot", "whirl_cd", "battle_cry", "reach"],
+	"volkhv": ["fireball", "iskra", "shield", "fireball", "iskra", "deep_well", "iskra", "twin_spark", "herb", "fireball", "pyre",
+		"regen", "mana_flow", "spirit", "fireball", "pyre", "tough", "iskra", "iskra", "spirit", "focus", "shield", "herb", "tough",
+		"deep_well", "mana_flow", "spirit", "focus", "pyre", "regen", "tough", "ward", "focus", "ward", "shield", "herb", "deep_well", "mana_flow", "regen"],
+}
+const PERK_ORDER := ["boots", "luck", "kobzar", "luck", "boots", "steel_will", "varenyk", "luck", "kobzar", "steel_will",
+	"boots", "purse", "sich", "kobzar", "varenyk", "steel_will", "purse"]
 
 
 func _build_hero(lvl: int) -> void:
 	game.new_game()
 	game.hud.close_dialogue()
 	var p = game.player
-	p.rank = "cossack"
+	var cls := OS.get_environment("SIM_CLASS")
+	if cls == "":
+		cls = "cossack"
+	# Селянська наука (9 очок за майстерність 1→10), потім посвята
+	p.skill_points = 9
+	for id in PEASANT_ORDER:
+		p.learn_skill(id)
+	p.change_class(cls)
+	game._sync_class()
 	while p.level < lvl:
 		p.add_xp(p.xp_next - p.xp)
-	# Характеристики: сила 45%, витривалість 35%, спритність 20%
+	# Майстерність класу приблизно встигає за рівнем героя
+	p.job_level = clampi(lvl, 1, p.job_max())
+	p.skill_points = p.job_level  # (job_level - 1) + 1 вміння в нагороду за посвяту
+	# Характеристики: воїн — сила й витривалість, волхв — Характерництво й витривалість
 	var cycle = ["str", "vit", "str", "agi", "vit", "str", "vit", "agi", "str", "str"]
+	if cls == "volkhv":
+		cycle = ["spi", "vit", "spi", "agi", "vit", "spi", "vit", "spi", "spi", "agi"]
 	var i = 0
 	while p.stat_points > 0:
 		p.add_stat(cycle[i % cycle.size()])
 		i += 1
-	for id in SKILL_ORDER:
+	for id in SKILL_ORDER[cls]:
 		if p.skill_points <= 0:
 			break
 		p.learn_skill(id)
@@ -104,12 +126,13 @@ func _build_hero(lvl: int) -> void:
 		p.learn_perk(id)
 	# Спорядження свого рівня: добротне, з типовою для цього етапу заточкою
 	for slot in Data.SLOTS:
-		var it = Data.gen_item(lvl, 1, slot, "sabre" if slot == "weapon" else "")
+		var it = Data.gen_item(lvl, 1, slot, ("staff" if cls == "volkhv" else "sabre") if slot == "weapon" else "")
 		it["up"] = mini(lvl / 3, 4)
 		p.add_item(it)
 		p.equip(it["uid"])
 	p.recalc()
 	p.hp = p.max_hp
+	p.mana = p.max_mana
 
 
 # ======================= Бот =======================
@@ -134,7 +157,9 @@ func _bot(p, c) -> void:
 	hud.joystick.vector = dir
 	hud.btn_attack.held = en != null
 	if en:
-		for id in Data.ACTIVE_SKILLS:
+		for id in p.active_skills():
+			if id == "first_aid" and p.hp > p.max_hp * 0.6:
+				continue
 			p.use_skill(id)
 	if c.portal != null and is_instance_valid(c.portal) and (c.room_cleared or c.field_cleared):
 		p.global_position = c.portal.global_position
