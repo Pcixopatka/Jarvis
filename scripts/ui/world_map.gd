@@ -7,6 +7,53 @@ signal travel_tapped  # дотик під час подорожі — приск
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
+const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
+const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town"]
+# Кольори чорнила старовинної мапи
+const INK := Color(0.23, 0.16, 0.1)
+const INK_SOFT := Color(0.35, 0.26, 0.17, 0.8)
+const SEA := Color(0.55, 0.66, 0.68)
+const LAND_UA := Color(0.93, 0.86, 0.68)
+const LAND_NEAR := Color(0.86, 0.8, 0.64)
+const LAND_FAR := Color(0.82, 0.77, 0.62)
+
+
+## Значок мапи з центром у pos, розмір size (на екрані).
+func _icon(name: String, pos: Vector2, size: float, tint: Color = Color.WHITE) -> void:
+	var i := ICON_ORDER.find(name)
+	if i < 0:
+		return
+	draw_texture_rect_region(ICONS, Rect2(pos - Vector2(size, size) / 2.0, Vector2(size, size)), Rect2(i * 24, 0, 24, 24), tint)
+
+
+## Який значок у місцевості за типом і біомом.
+func _loc_icon(L: Dictionary) -> String:
+	if L.get("tower", false):
+		return "tower"
+	if L["type"] == "dungeon":
+		return "skull" if L["biome"] == "plague" else "cave"
+	match L["biome"]:
+		"forest": return "tree"
+		"mountain": return "mountain"
+		"swamp": return "swamp"
+		"river": return "wave"
+		"village": return "hut"
+	return "sabres"
+
+
+## Пунктирна лінія (кордони, шлях).
+func _dashed(pts: PackedVector2Array, col: Color, width: float, dash: float, closed: bool = false) -> void:
+	var n := pts.size()
+	for i in (n if closed else n - 1):
+		var a := pts[i]
+		var b := pts[(i + 1) % n]
+		var len := a.distance_to(b)
+		var t := 0.0
+		while t < len:
+			var t2 := minf(len, t + dash)
+			draw_line(a.lerp(b, t / len), a.lerp(b, t2 / len), col, width)
+			t += dash * 2.0
 
 # Спрощений контур України (довгота, широта), за годинниковою стрілкою.
 const BORDER := [
@@ -291,54 +338,77 @@ func _draw() -> void:
 	_layout()
 	var font := ThemeDB.fallback_font
 	var k := _k
-	# Суходіл сусідів і моря
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.47, 0.48, 0.4))
-	draw_colored_polygon(_poly(BLACK_SEA), Color(0.18, 0.36, 0.55))
-	draw_colored_polygon(_poly(AZOV_SEA), Color(0.22, 0.42, 0.6))
-	draw_colored_polygon(_poly(BALTIC), Color(0.18, 0.36, 0.55))
+	# Пергамент на всю мапу (плитка), далі — суходіл і моря
+	draw_texture_rect(PARCHMENT, Rect2(Vector2.ZERO, size), true, LAND_FAR)
 	var poland := _poly(POLAND)
 	var belarus := _poly(BELARUS)
-	draw_colored_polygon(poland, Color(0.55, 0.53, 0.43))
-	draw_colored_polygon(belarus, Color(0.5, 0.55, 0.45))
-	# Україна
 	var land := _poly(BORDER)
-	draw_colored_polygon(land, Color(0.62, 0.67, 0.4))
-	# Степ на півдні й сході
+	draw_colored_polygon(poland, Color(LAND_NEAR, 0.6))
+	draw_colored_polygon(belarus, Color(LAND_NEAR, 0.6))
+	draw_colored_polygon(land, Color(LAND_UA, 0.75))
+	for sea in [BLACK_SEA, AZOV_SEA, BALTIC]:
+		var sp := _poly(sea)
+		draw_colored_polygon(sp, Color(SEA, 0.85))
+		draw_polyline(sp + PackedVector2Array([sp[0]]), INK_SOFT, 1.5, true)
+	# Штрихування моря хвильками
+	var wave_step := maxf(26.0, _scale * 0.5)
+	for sea in [BLACK_SEA, AZOV_SEA, BALTIC]:
+		var sp := _poly(sea)
+		var rr := Rect2(sp[0], Vector2.ZERO)
+		for q in sp:
+			rr = rr.expand(q)
+		var yy := rr.position.y
+		var row := 0
+		while yy < rr.end.y:
+			var xx := rr.position.x + (row % 2) * wave_step * 0.5
+			while xx < rr.end.x:
+				if Geometry2D.is_point_in_polygon(Vector2(xx, yy), sp):
+					draw_arc(Vector2(xx, yy), wave_step * 0.18, PI * 1.1, PI * 1.9, 6, Color(INK, 0.25), 1.0)
+				xx += wave_step
+			yy += wave_step * 0.6
+			row += 1
+	# Степ: рідкі штрихи трави на півдні
 	for p in [Vector2(35.5, 47.6), Vector2(37.5, 48.3), Vector2(33.0, 47.2), Vector2(30.0, 47.2), Vector2(34.0, 46.6), Vector2(38.5, 49.0), Vector2(40.0, 48.0)]:
-		draw_circle(_proj(p), _scale * 1.0, Color(0.78, 0.72, 0.38, 0.3))
-	# Ліси
+		var c := _proj(p)
+		for i in 5:
+			var q := c + Vector2((i - 2) * 0.35, (i % 2) * 0.2 - 0.1) * _scale
+			draw_line(q, q + Vector2(-3, -7) * k, Color(0.45, 0.5, 0.25, 0.7), 1.5)
+			draw_line(q + Vector2(4, 0) * k, q + Vector2(6, -8) * k, Color(0.45, 0.5, 0.25, 0.7), 1.5)
+	# Ліси: купки дерев
+	var ico := clampf(_scale * 0.42, 18.0, 44.0)
 	for p in FORESTS:
 		var c := _proj(p)
-		for i in 4:
-			draw_circle(c + Vector2(i * 7 - 10, (i % 2) * 5) * k, _scale * 0.2, Color(0.22, 0.42, 0.2, 0.85))
-	# Річки
+		for i in 3:
+			_icon("tree" if (i + int(p.x * 10)) % 3 != 0 else "pine", c + Vector2(i * 0.3 - 0.3, (i % 2) * 0.18 - 0.1) * _scale, ico)
+	# Річки: темна жилка зі світлою серединою
 	for r in RIVERS:
-		draw_polyline(_poly(r[1]), Color(0.25, 0.48, 0.75), maxf(2.0, _scale * 0.06), true)
+		var pts := _poly(r[1])
+		draw_polyline(pts, Color(0.33, 0.45, 0.55), maxf(3.0, _scale * 0.08), true)
+		draw_polyline(pts, Color(0.7, 0.82, 0.88), maxf(1.0, _scale * 0.03), true)
 	# Гори
 	for p in MOUNTAINS:
-		var c := _proj(p)
-		var s := _scale * 0.3
-		draw_colored_polygon(PackedVector2Array([c + Vector2(-s, s * 0.5), c + Vector2(s, s * 0.5), c + Vector2(0, -s)]), Color(0.45, 0.4, 0.35))
-		draw_colored_polygon(PackedVector2Array([c + Vector2(-s * 0.3, -s * 0.4), c + Vector2(s * 0.3, -s * 0.4), c + Vector2(0, -s)]), Color(0.95, 0.95, 0.95))
-	# Кордони
-	draw_polyline(poland + PackedVector2Array([poland[0]]), Color(0.3, 0.27, 0.2, 0.8), 1.5, true)
-	draw_polyline(belarus + PackedVector2Array([belarus[0]]), Color(0.3, 0.27, 0.2, 0.8), 1.5, true)
-	draw_polyline(land + PackedVector2Array([land[0]]), Color(0.25, 0.22, 0.12), 2.5, true)
-	# Назви країн і морів — великі, напівпрозорі, ростуть разом із масштабом
+		_icon("mountain", _proj(p), ico * 1.2)
+	# Кордони — пунктир чорнилом
+	_dashed(poland, INK_SOFT, 1.5, 6.0 * k, true)
+	_dashed(belarus, INK_SOFT, 1.5, 6.0 * k, true)
+	draw_polyline(land + PackedVector2Array([land[0]]), INK, 2.5, true)
+	# Назви країн і морів — чорнилом, із розрядкою
 	for cn in COUNTRY_NAMES:
 		var fs := int(clampf(_scale * 0.42, 14, 64))
 		if cn[0] == "УКРАЇНА" or cn[0].length() > 8:
 			fs = int(fs * 0.75)
-		_text(font, _proj(cn[1]), cn[0], fs, Color(1, 1, 1, 0.28), false)
-	_text(font, _proj(Vector2(31.5, 44.1)), "Чорне море", int(clampf(_scale * 0.3, 13, 40)), Color(0.75, 0.88, 1.0))
-	_text(font, _proj(Vector2(37.2, 46.3)), "Азовське море", int(clampf(_scale * 0.22, 11, 30)), Color(0.75, 0.88, 1.0))
+		_text(font, _proj(cn[1]), " ".join(cn[0].split()), fs, Color(INK, 0.3), false)
+	_text(font, _proj(Vector2(31.5, 44.1)), "Чорне море", int(clampf(_scale * 0.3, 13, 40)), Color(0.2, 0.3, 0.38), false)
+	_text(font, _proj(Vector2(37.2, 46.3)), "Азовське море", int(clampf(_scale * 0.22, 11, 30)), Color(0.2, 0.3, 0.38), false)
+	_icon("ship", _proj(Vector2(33.5, 43.3)), ico * 1.3)
+	_icon("ship", _proj(Vector2(29.0, 43.0)), ico * 1.1)
 	# Міста сусідів (орієнтири): ховаються, якщо мапа сильно віддалена
 	var town_fs := int(clampf(_scale * 0.2, 0, 22))
 	for t in TOWNS:
 		var c := _proj(t[1])
-		draw_circle(c, 3.0 * k, Color(0.25, 0.22, 0.18))
+		_icon("town", c, ico * 0.8)
 		if town_fs >= 11:
-			_text(font, c + Vector2(0, 16 * k), t[0], town_fs, Color(0.92, 0.9, 0.84, 0.85))
+			_text(font, c + Vector2(0, 16 * k + ico * 0.3), t[0], town_fs, Color(INK, 0.85), false)
 
 	# Зараза: зелений туман довкола заражених місцевостей
 	var tpl := Time.get_ticks_msec() / 1000.0
@@ -361,46 +431,25 @@ func _draw() -> void:
 		var c := _proj(L["pos"])
 		_markers[id] = c
 		var danger: bool = L["level"] > hero_level + 2
-		var r := 14.0 * k
-		if L.get("tower", false):
-			# Башта: кістяна вежа із зубцями
-			draw_circle(c, r, Color(0.12, 0.08, 0.06))
-			draw_rect(Rect2(c + Vector2(-6, -12) * k, Vector2(12, 22) * k), Color(0.85, 0.82, 0.7))
-			for dx in [-6, -1, 4]:
-				draw_rect(Rect2(c + Vector2(dx, -16) * k, Vector2(3, 5) * k), Color(0.85, 0.82, 0.7))
-			draw_rect(Rect2(c + Vector2(-2, 2) * k, Vector2(4, 5) * k), Color(0.3, 0.9, 0.2))
-		elif L["type"] == "dungeon":
-			draw_circle(c, r, Color(0.12, 0.08, 0.06))
-			draw_arc(c + Vector2(0, 4) * k, r * 0.68, PI, TAU, 12, Color(0.85, 0.6, 0.3), 4.0 * k)
-		else:
-			draw_circle(c, r, Color(0.25, 0.15, 0.1))
-			draw_line(c + Vector2(-8, -8) * k, c + Vector2(8, 8) * k, Color(0.9, 0.9, 0.95), 3.0 * k)
-			draw_line(c + Vector2(8, -8) * k, c + Vector2(-8, 8) * k, Color(0.9, 0.9, 0.95), 3.0 * k)
-		draw_arc(c, r + 1, 0, TAU, 24, Color(1.0, 0.35, 0.3) if danger else Color(0.95, 0.85, 0.5), 2.5)
-		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%d)" % [L["name"], L["level"]], label_fs, Color(1, 0.85, 0.75) if danger else Color.WHITE])
+		var r := 16.0 * k
+		# Кружечок-печатка й піксельний значок місцевості
+		draw_circle(c, r, Color(0.96, 0.92, 0.8, 0.9))
+		draw_arc(c, r, 0, TAU, 24, Color(0.75, 0.2, 0.15) if danger else INK, 2.0)
+		_icon(_loc_icon(L), c, r * 1.5)
+		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%d)" % [L["name"], L["level"]], label_fs, Color(0.6, 0.12, 0.08) if danger else INK])
 	var city_fs := int(clampf(18.0 * k, 13, 32))
 	for id in Data.CITIES:
 		var C: Dictionary = Data.CITIES[id]
 		var c := _proj(C["pos"])
 		_markers[id] = c
-		var red := Color(0.55, 0.15, 0.12)
-		draw_rect(Rect2(c + Vector2(-13, -8) * k, Vector2(26, 16) * k), red)
-		for dx in [-13, -2, 9]:
-			draw_rect(Rect2(c + Vector2(dx, -14) * k, Vector2(5, 7) * k), red)
-		draw_rect(Rect2(c + Vector2(-13, -8) * k, Vector2(26, 16) * k), Color(0.95, 0.8, 0.3), false, 2.0)
-		draw_rect(Rect2(c + Vector2(-3, 0) * k, Vector2(6, 8) * k), Color(0.2, 0.1, 0.05))
-		labels.append([70 if id == "sich" else 50, id, c + Vector2(0, 12 * k + city_fs), C["name"], city_fs, Color(1.0, 0.9, 0.55)])
+		_icon("castle", c, 40.0 * k)
+		labels.append([70 if id == "sich" else 50, id, c + Vector2(0, 14 * k + city_fs), C["name"], city_fs, Color(0.45, 0.1, 0.06)])
 
 	# Хутір козака
 	var hc := _proj(Camp.CAMP["pos"])
 	_markers[Camp.CAMP_ID] = hc
-	draw_colored_polygon(PackedVector2Array([hc + Vector2(-14, 0) * k, hc + Vector2(0, -14) * k, hc + Vector2(14, 0) * k]), Color(0.7, 0.55, 0.25))
-	draw_rect(Rect2(hc + Vector2(-11, 0) * k, Vector2(22, 12) * k), Color(0.95, 0.92, 0.82))
-	draw_rect(Rect2(hc + Vector2(-3, 4) * k, Vector2(6, 8) * k), Color(0.35, 0.22, 0.1))
-	draw_line(hc + Vector2(10, -6) * k, hc + Vector2(10, -24) * k, Color(0.3, 0.2, 0.1), 2.0)
-	draw_colored_polygon(PackedVector2Array([hc + Vector2(10, -24) * k, hc + Vector2(22, -21) * k, hc + Vector2(10, -18) * k]), Color(0.15, 0.35, 0.8))
-	draw_colored_polygon(PackedVector2Array([hc + Vector2(10, -21) * k, hc + Vector2(22, -21) * k, hc + Vector2(10, -18) * k]), Color(1.0, 0.85, 0.1))
-	labels.append([45, Camp.CAMP_ID, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.75, 1.0, 0.7)])
+	_icon("camp", hc, 40.0 * k)
+	labels.append([45, Camp.CAMP_ID, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.2, 0.4, 0.15)])
 	_draw_labels(font, labels)
 
 	# Завдання
@@ -429,9 +478,11 @@ func _draw() -> void:
 	if not travel.is_empty():
 		_draw_traveler(k)
 	elif _markers.has(current):
-		var c: Vector2 = _markers[current] + Vector2(-20, -18) * k
-		draw_line(c, c + Vector2(0, -26) * k, Color(0.3, 0.2, 0.1), 3.0)
-		draw_colored_polygon(PackedVector2Array([c + Vector2(0, -26) * k, c + Vector2(16, -21) * k, c + Vector2(0, -15) * k]), Color(0.9, 0.15, 0.15))
+		_icon("flag", _markers[current] + Vector2(-18, -22) * k, 36.0 * k)
+	# Рамка старовинної мапи
+	var fr := Rect2(Vector2.ZERO, size)
+	draw_rect(fr.grow(-3), INK, false, 6.0)
+	draw_rect(fr.grow(-11), Color(INK, 0.6), false, 2.0)
 	# Вибране місце
 	if _markers.has(selected):
 		draw_arc(_markers[selected], (24 + sin(_pulse) * 3) * k, 0, TAU, 32, Color(1, 1, 1, 0.9), 3.0)
@@ -459,19 +510,11 @@ func _draw_traveler(k: float) -> void:
 	draw_set_transform(p + Vector2(0, 6 * k), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 12.0 * k, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	var y := -bob
-	# Кінь
-	draw_circle(p + Vector2(0, y - 4 * k), 9.0 * k, Color(0.4, 0.26, 0.14))
-	draw_circle(p + Vector2(side * 10 * k, y - 8 * k), 5.0 * k, Color(0.4, 0.26, 0.14))
-	for dx in [-6.0, 5.0]:
-		draw_line(p + Vector2(dx * k, y + 2 * k), p + Vector2((dx + sin(_pulse * 5.0 + dx) * 2.0) * k, y + 10 * k), Color(0.3, 0.2, 0.1), 2.5 * k)
-	# Вершник
-	draw_circle(p + Vector2(0, y - 14 * k), 6.0 * k, Color(0.78, 0.14, 0.14))
-	draw_circle(p + Vector2(0, y - 22 * k), 4.0 * k, Color(0.96, 0.8, 0.65))
-	# Хоругва
-	draw_line(p + Vector2(-side * 6 * k, y - 10 * k), p + Vector2(-side * 6 * k, y - 36 * k), Color(0.3, 0.2, 0.1), 2.0 * k)
-	draw_colored_polygon(PackedVector2Array([p + Vector2(-side * 6 * k, y - 36 * k), p + Vector2(-side * 18 * k, y - 32 * k), p + Vector2(-side * 6 * k, y - 27 * k)]), Color(0.15, 0.35, 0.8))
-	draw_colored_polygon(PackedVector2Array([p + Vector2(-side * 6 * k, y - 32 * k), p + Vector2(-side * 18 * k, y - 32 * k), p + Vector2(-side * 6 * k, y - 27 * k)]), Color(1.0, 0.85, 0.1))
+	# Вершник із хоругвою (значок «rider» дивиться праворуч; ліворуч — віддзеркалюємо)
+	var sz := 48.0 * k
+	var i := ICON_ORDER.find("rider")
+	var dst := Rect2(p + Vector2(-sz / 2.0 * side, -sz * 0.7 - bob), Vector2(sz * side, sz))
+	draw_texture_rect_region(ICONS, dst, Rect2(i * 24, 0, 24, 24))
 
 
 ## Назви місць без накладання: важливіші (вибране, мета, міста) малюються першими,
@@ -504,5 +547,5 @@ func _text(font: Font, pos: Vector2, text: String, fs: int, col: Color, outline:
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var p := pos - Vector2(w / 2.0, 0)
 	if outline:
-		draw_string_outline(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(3, fs / 4), Color(0, 0, 0, 0.8))
+		draw_string_outline(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(3, fs / 4), Color(0.96, 0.92, 0.8, 0.9))
 	draw_string(font, p, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
