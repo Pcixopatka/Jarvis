@@ -42,6 +42,7 @@ func _run() -> void:
 	_suite_party()
 	_suite_camp()
 	_suite_heroes()
+	_suite_plague()
 	await _suite_gameplay()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -479,6 +480,44 @@ func _suite_heroes() -> void:
 	p.free()
 
 
+func _suite_plague() -> void:
+	suite("Живий світ: зараза")
+	var PS = load("res://scripts/game/plague_service.gd")
+	var w = WorldState.new()
+	check(PS.level(w, "bryansk_forest") == 3 and PS.level(w, "kyiv") == 0, "зараза стартує з Московії")
+	check(PS.mods(2)["hp"] > PS.mods(0)["hp"] and PS.mods(2)["reward"] > 1.0 and PS.mods(1)["cloud_every"] == 0.0, "заражене — сильніше й щедріше")
+	seed(7)
+	var total0 := 0
+	for id in Data.LOCATIONS:
+		total0 += PS.level(w, id)
+	var spread_any := false
+	for i in 12:
+		var sp = PS.tick(w)
+		check(sp.size() <= PS.MAX_SPREAD_PER_TRIP, "за похід — не більше %d місць" % PS.MAX_SPREAD_PER_TRIP)
+		if not sp.is_empty():
+			spread_any = true
+	var total1 := 0
+	for id in Data.LOCATIONS:
+		total1 += PS.level(w, id)
+		check(PS.level(w, id) <= PS.MAX_LEVEL, "%s: рівень зарази в межах" % id)
+	check(spread_any and total1 > total0 and w.plague["day"] == 12, "зараза повзе між походами")
+	PS.set_level(w, "wild_field", 2)
+	check(PS.cleanse(w, "wild_field") == 1 and PS.cleanse(w, "wild_field") == 0 and PS.cleanse(w, "wild_field") == 0, "зачистка відкидає заразу")
+	PS.set_level(w, "black_forest", 3)
+	var p0: float = w.plague["pressure"]
+	PS.on_chapter_done(w, 1)
+	check(PS.level(w, "black_forest") == 0 and w.plague["pressure"] < p0, "перемога в розділі очищає край")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(w2.plague["day"] == 12 and PS.level(w2, "black_forest") == 0, "зараза зберігається")
+	var w3 = WorldState.new()
+	w3.plague = {"levels": {}, "day": 0, "pressure": 0.0}
+	PS.set_level(w3, "bryansk_forest", 3)
+	for i in 5:
+		PS.tick(w3)
+	check(PS.infected_count(w3) == 1, "після перемоги над Путіноїдом зараза не повзе")
+
+
 func _suite_camp() -> void:
 	suite("Хутір і реклама")
 	var CampService = load("res://scripts/game/camp_service.gd")
@@ -637,6 +676,7 @@ func _suite_gameplay() -> void:
 	game.leave_city()
 	check(game.state == game.State.MAP, "мапа")
 	game.enter_location("wild_field")
+	check(game.combat.plague == game.PlagueService.level(game.world, "wild_field"), "бій знає рівень зарази місцевості")
 	game.combat.field_goal = 10
 	var frames = 0
 	while not game.combat.field_cleared and frames < 3600:

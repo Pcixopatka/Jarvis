@@ -6,6 +6,7 @@ extends RefCounted
 
 const Story := preload("res://scripts/data/story.gd")
 const Data := preload("res://scripts/data/data.gd")
+const PlagueService := preload("res://scripts/game/plague_service.gd")
 
 
 static func state(world) -> Dictionary:
@@ -191,6 +192,9 @@ static func _advance(world, msgs: Array) -> void:
 	s["stage"] = "offer"
 	if s["step"] >= steps.size():
 		msgs.append({"text": "%s — завершено!" % Story.CHAPTERS[s["chapter"]]["title"], "big": true})
+		if PlagueService.CHAPTER_CLEANSE.has(int(s["chapter"])):
+			PlagueService.on_chapter_done(world, int(s["chapter"]))
+			msgs.append({"text": "Зараза відступає з цілого краю!", "big": true})
 		s["chapter"] += 1
 		s["step"] = 0
 		if s["chapter"] >= Story.CHAPTERS.size():

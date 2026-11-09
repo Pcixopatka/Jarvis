@@ -13,6 +13,7 @@ const PickupScript := preload("res://scripts/entities/pickup.gd")
 const PortalScript := preload("res://scripts/entities/portal.gd")
 const FloatTextScript := preload("res://scripts/world/float_text.gd")
 const BoltScript := preload("res://scripts/world/bolt.gd")
+const PlagueService := preload("res://scripts/game/plague_service.gd")
 const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
 const GroundScript := preload("res://scripts/world/ground.gd")
 const FxScript := preload("res://scripts/world/fx.gd")
@@ -45,6 +46,9 @@ var light_tex: GradientTexture2D
 var companion_nodes: Array = []
 
 var active := false
+var plague := 0  # рівень зарази поточної місцевості
+var plague_mods := {}
+var cloud_timer := 0.0
 var loc_id := ""
 var loc: Dictionary = {}
 var room := 0
@@ -129,8 +133,11 @@ func set_visible_world(v: bool) -> void:
 # ======================= Вхід і вихід =======================
 
 ## companions — список {"type", "downed"} зі стану світу.
-func enter(id: String, companions: Array) -> void:
+func enter(id: String, companions: Array, plague_level: int = 0) -> void:
 	loc_id = id
+	plague = plague_level
+	plague_mods = PlagueService.mods(plague)
+	cloud_timer = 4.0
 	loc = Data.LOCATIONS[id]
 	room = 1 if loc["type"] == "dungeon" else 0
 	field_kills = 0
@@ -209,7 +216,7 @@ func _spawn_companions(companions: Array) -> void:
 
 
 func _setup_atmosphere(biome: String) -> void:
-	canvas_mod.color = BIOME_TINT.get(biome, Color.WHITE)
+	canvas_mod.color = BIOME_TINT.get(biome, Color.WHITE).lerp(Color(0.7, 0.95, 0.55), 0.12 * plague)  # зараза зеленить світ
 	torch.enabled = biome in ["cave", "plague"]
 	for c in lights.get_children():
 		c.queue_free()
@@ -251,7 +258,22 @@ func _process(delta: float) -> void:
 		_update_field(delta)
 
 
+## Заражена місцевість: хмари зарази час від часу здіймаються біля нечисті.
+func _update_plague(delta: float) -> void:
+	var every: float = plague_mods.get("cloud_every", 0.0)
+	if every <= 0.0:
+		return
+	cloud_timer -= delta
+	if cloud_timer > 0.0:
+		return
+	cloud_timer = every * randf_range(0.8, 1.2)
+	var e = nearest_enemy(player.global_position, 700.0)
+	var pos: Vector2 = e.global_position if e else player.global_position + Vector2.from_angle(randf() * TAU) * 260.0
+	spawn_plague(pos, 4.0 + 1.5 * int(loc["level"]))
+
+
 func _update_field(delta: float) -> void:
+	_update_plague(delta)
 	if field_cleared:
 		_check_exit_portal()
 		return
@@ -260,7 +282,10 @@ func _update_field(delta: float) -> void:
 		spawn_timer = maxf(0.6, 1.5 - loc["level"] * 0.05)
 		if alive_enemy_count() < 7 + int(loc["level"]):
 			var en: Array = loc["enemies"]
-			spawn_enemy(en[randi() % en.size()], loc["level"] + (1 if randf() < 0.15 else 0))
+			var kind: String = en[randi() % en.size()]
+			if randf() < plague_mods.get("infected", 0.0):
+				kind = "zarazhenyi"  # зараза жене своїх солдатів
+			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
 
 
 func _spawn_room() -> void:
@@ -504,6 +529,12 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	e.combat = self
 	e.position = pos
 	e.setup(kind, level, boss)
+	if plague > 0:
+		e.max_hp *= plague_mods["hp"]
+		e.hp = e.max_hp
+		e.damage *= plague_mods["dmg"]
+		e.xp_value = int(e.xp_value * plague_mods["reward"])
+		e.infected = plague
 	entities.add_child(e)
 	if e.is_boss:
 		Audio.play("roar", 0.0)

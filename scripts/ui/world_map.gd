@@ -109,6 +109,7 @@ var selected := ""
 var current := ""  # де зараз козак
 var targets := {}  # місцевості з активними завданнями
 var story_target := ""  # куди веде сюжет (зірка)
+var plague := {}  # id місцевості -> рівень зарази (0..3)
 var hero_level := 1
 var map_rect := Rect2()  # область для мапи на екрані
 var zoom := 1.6
@@ -312,6 +313,18 @@ func _draw() -> void:
 		draw_circle(c, 3.0 * k, Color(0.25, 0.22, 0.18))
 		if town_fs >= 11:
 			_text(font, c + Vector2(0, 16 * k), t[0], town_fs, Color(0.92, 0.9, 0.84, 0.85))
+
+	# Зараза: зелений туман довкола заражених місцевостей
+	var tpl := Time.get_ticks_msec() / 1000.0
+	for id in plague:
+		var pl := int(plague[id])
+		if pl <= 0 or not Data.LOCATIONS.has(id):
+			continue
+		var pc := _proj(Data.LOCATIONS[id]["pos"])
+		var pr := (26.0 + 16.0 * pl) * k * (1.0 + 0.05 * sin(tpl * 1.5 + pc.x))
+		draw_circle(pc, pr, Color(0.35, 0.7, 0.1, 0.1 + 0.05 * pl))
+		draw_circle(pc, pr * 0.65, Color(0.25, 0.55, 0.05, 0.1 + 0.05 * pl))
+		draw_arc(pc, pr, 0.0, TAU, 32, Color(0.6, 1.0, 0.2, 0.35), 2.0)
 
 	# Маркери місць
 	_markers.clear()

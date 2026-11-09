@@ -16,6 +16,7 @@ var speed := 150.0
 var damage := 8.0
 var xp_value := 3
 var color := Color.WHITE
+var infected := 0  # рівень зарази місцевості: зелена аура, сильніший
 var ranged := false
 var is_boss := false
 var keep_distance := 0.0
@@ -320,6 +321,9 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, r_draw * 1.1, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
+	if infected > 0:
+		var pulse := 0.5 + 0.5 * sin(phase * 1.3)
+		draw_circle(Vector2(0, -r_draw * 0.4), r_draw * (1.15 + 0.1 * pulse), Color(0.45, 0.85, 0.15, 0.07 + 0.05 * infected))
 	if windup > 0.0:
 		var w := 1.0 - windup / windup_max
 		draw_circle(Vector2(0, -r_draw * 0.4), r_draw * (1.3 + 0.4 * w), Color(1.0, 0.15, 0.1, 0.18 + 0.3 * w))

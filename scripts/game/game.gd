@@ -12,6 +12,7 @@ const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const HeroService := preload("res://scripts/game/hero_service.gd")
+const PlagueService := preload("res://scripts/game/plague_service.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -206,6 +207,7 @@ func _leave_combat() -> void:
 
 
 func enter_map() -> void:
+	var from_trip: bool = combat.active
 	_leave_combat()
 	hud.clear_screen()
 	hud.close_overlay()
@@ -223,6 +225,11 @@ func enter_map() -> void:
 	for loc in HeroService.targets(world):
 		mv.targets[loc] = true
 	mv.story_target = StoryService.target(world)
+	mv.plague = PlagueService.state(world)["levels"]
+	if from_trip:
+		var spread := PlagueService.tick(world)
+		if not spread.is_empty():
+			hud.show_banner("Зараза повзе далі!\n" + ", ".join(spread), Color(0.6, 1.0, 0.35))
 	_build_map_panel()
 	save_game()
 	hint("map", "Торкнись місця на мапі. «!» позначає твоє завдання. Почни з Дикого Поля поруч із Січчю.")
@@ -262,7 +269,7 @@ func enter_location(id: String) -> void:
 	hud.close_dialogue()
 	hud.close_overlay()
 	hud.show_map(false)
-	combat.enter(id, _party_data())
+	combat.enter(id, _party_data(), PlagueService.level(world, id))
 	hud.set_mode(true, true)
 	state = State.PLAYING
 	get_tree().paused = false
@@ -304,6 +311,16 @@ func _story_event(type: String, arg: String) -> void:
 			Audio.play("quest", 0.0)
 		elif combat.active:
 			combat.float_text(player.global_position + Vector2(0, -110), m["text"], UI.GOLD)
+
+
+## Зачистка відкидає заразу з місцевості (з печери — повністю: бос був її серцем).
+func _cleanse(loc_id: String) -> void:
+	var was := PlagueService.level(world, loc_id)
+	if was == 0:
+		return
+	var now := PlagueService.cleanse(world, loc_id, was if Data.LOCATIONS[loc_id]["type"] == "dungeon" else 1)
+	var text := "Зараза відступає!" if now > 0 else "Місцевість очищено від зарази!"
+	combat.float_text(player.global_position + Vector2(0, -150), text, Color(0.6, 1.0, 0.4))
 
 
 ## Загін для бою: записи світу + сила, ім'я й колір побратимів.
@@ -383,12 +400,14 @@ func _on_companion_down(index: int, _name: String) -> void:
 
 func _on_location_cleared(loc_id: String) -> void:
 	world.cleared[loc_id] = world.cleared.get(loc_id, 0) + 1
+	_cleanse(loc_id)
 	_story_event("clear", loc_id)
 	_hero_event("clear", loc_id)
 
 
 func _on_dungeon_cleared(loc_id: String) -> void:
 	world.on_dungeon(loc_id)
+	_cleanse(loc_id)
 	_story_event("dungeon", loc_id)
 	_hero_event("dungeon", loc_id)
 

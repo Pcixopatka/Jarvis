@@ -313,8 +313,8 @@ const CITIES := {
 }
 
 const LOCATIONS := {
-	"ridne_selo": {"name": "Рідне село", "type": "field", "biome": "village", "pos": Vector2(34.0, 48.3), "level": 1, "goal": 15,
-		"enemies": ["zarazhenyi", "mavka"], "desc": "Твоє рідне село над Дніпром, спалене зараженими."},
+	"ridne_selo": {"name": "Рідне село", "type": "field", "biome": "village", "pos": Vector2(36.3, 49.75), "level": 1, "goal": 15,
+		"enemies": ["zarazhenyi", "mavka"], "desc": "Твоє рідне село на Слобожанщині, біля самого московського кордону. Заражені прийшли сюди першими."},
 	"wild_field": {"name": "Дике Поле", "type": "field", "biome": "steppe", "pos": Vector2(37.6, 48.15), "level": 1,
 		"enemies": ["mavka", "upyr", "zarazhenyi"], "desc": "Безкраї степи, куди першими докотилися заражені загони з півночі."},
 	"rapids": {"name": "Дніпрові пороги", "type": "field", "biome": "river", "pos": Vector2(34.5, 48.75), "level": 2,

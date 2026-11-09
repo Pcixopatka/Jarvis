@@ -53,6 +53,10 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	var danger: bool = L["level"] > player.level + 2
 	v.add_child(UI.label("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
 	v.add_child(_wrapped(L["desc"], 18, UI.TEXT))
+	var pl: int = load("res://scripts/game/plague_service.gd").level(world, sel)
+	if pl > 0:
+		v.add_child(_wrapped("Зараза: %s (%d/3). Вороги сильніші, нагорода більша на %d%%. Зачисти — і зараза відступить." % [
+			["", "слабка", "сильна", "чорна"][pl], pl, 25 * pl], 17, Color(0.6, 1.0, 0.35)))
 	var names := []
 	for e in L["enemies"]:
 		names.append(Data.ENEMY_NAMES[e])
