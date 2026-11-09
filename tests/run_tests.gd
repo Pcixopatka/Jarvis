@@ -1022,16 +1022,19 @@ func _suite_mage_battle() -> void:
 	p.crit_chance = 0.0
 	p.attack_timer = 0.0
 	p.combo_timer = 0.0
-	var a0: float = e3.hp
-	p.attack()
-	var plain: float = a0 - e3.hp
+	# Середнє з багатьох кидків: шкода має розкид ±10%, а клич дає +20%
+	var plain := 0.0
+	for i in 40:
+		plain += p._roll(1.0)[0]
 	p.use_skill("battle_cry")
 	check(p.cry_timer > 0.0, "бойовий клич")
+	var loud := 0.0
+	for i in 40:
+		loud += p._roll(1.0)[0]
+	check(loud > plain * 1.12, "клич посилює удар (%.0f → %.0f)" % [plain / 40.0, loud / 40.0])
 	p.attack_timer = 0.0
 	p.combo_timer = 0.0
-	var a1: float = e3.hp
 	p.attack()
-	check(a1 - e3.hp > plain * 1.1, "клич посилює удар")
 	var mana_hit: float = p.mana
 	p.attack_timer = 0.0
 	p.attack()
@@ -1146,10 +1149,15 @@ func _suite_spec_battle() -> void:
 	p.mana = p.max_mana
 	p.use_skill("bulava")
 	check(b.hp < bh, "Булава гніву")
+	p.crit_chance = 0.0
+	var low := 0.0
+	var full := 0.0
 	p.hp = p.max_hp * 0.2
-	var low: float = p._roll(1.0)[0]
+	for i in 40:
+		low += p._roll(1.0)[0]
 	p.hp = p.max_hp
-	var full: float = p._roll(1.0)[0]
+	for i in 40:
+		full += p._roll(1.0)[0]
 	check(low > full * 1.15, "Невгамовний: поранений б'є сильніше")
 	# Пластун
 	p.change_class("plastun")
