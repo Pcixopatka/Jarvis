@@ -26,6 +26,9 @@ const DuelService := preload("res://scripts/game/duel_service.gd")
 const BountyService := preload("res://scripts/game/bounty_service.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
+const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
+const HuntGame := preload("res://scripts/ui/hunt_game.gd")
+const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
@@ -43,7 +46,7 @@ const PlayerScript := preload("res://scripts/entities/player.gd")
 const CombatScript := preload("res://scripts/game/combat.gd")
 const HudScript := preload("res://scripts/ui/hud.gd")
 
-enum State { MENU, MAP, CITY, CAMP, PLAYING, CHARACTER, PAUSED, DEAD }
+enum State { MENU, MAP, CITY, CAMP, PLAYING, CHARACTER, PAUSED, DEAD, ACTIVITY }
 
 var state := State.MENU
 var player: Player = null
@@ -426,6 +429,7 @@ func enter_map() -> void:
 		news.append_array(EventService.tick(world, player))
 		BountyService.tick(world)
 		TradeService.tick(world)
+		OutdoorService.tick(world)
 		mv.events = EventService.map_marks(world)
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
@@ -1032,8 +1036,86 @@ func enter_spot(id: String) -> void:
 	match str(Acts.SPOTS[id]["kind"]):
 		"vigil":
 			start_vigil()
+		"hunt":
+			start_hunt()
+		"fish":
+			start_fishing()
 		_:
 			enter_map()
+
+
+# ======================= Полювання й рибалка =======================
+
+## Чому зараз не можна полювати чи рибалити ("" — можна).
+func _outdoor_block(kind: String) -> String:
+	var S: Dictionary = Acts.SPOTS[kind]
+	if player.level < int(S["level"]):
+		return "%s: відкриється з %d-го рівня" % [S["name"], int(S["level"])]
+	if not OutdoorService.ready(world, kind):
+		return "Звір сполоханий. Повернеться після походу" if kind == "hunt" else "Риба сьогодні вже не клює. Повернеться після походу"
+	return ""
+
+
+## Тихе заняття на весь екран (мініігра): бій не йде, мапа схована.
+func _open_activity(c: Control) -> void:
+	_leave_combat()
+	hud.close_overlay()
+	state = State.ACTIVITY
+	Audio.play_music("calm")
+	get_tree().paused = true
+	hud.show_map(false)
+	hud.set_mode(false, false)
+	hud.set_screen(c)
+
+
+func start_hunt() -> void:
+	var why := _outdoor_block("hunt")
+	if why != "":
+		hud.show_banner(why, UI.BAD)
+		enter_map()
+		return
+	_open_activity(HuntGame.new().setup(OutdoorService.new_hunt(player), player.sprite_id(), finish_hunt))
+	hint("hunt", "Полювання: звірі перебігають галявину. Торкнись звіра, щоб пустити стрілу. Стріл мало, тож бий напевно. Вепра бери в серцевину або двома стрілами.")
+
+
+func finish_hunt(h: Dictionary) -> void:
+	if state != State.ACTIVITY:
+		return
+	if int(h["shots"]) == 0:
+		enter_map()  # передумав і не стріляв: звіра не сполохано
+		return
+	var msgs := OutdoorService.finish_hunt(world, player, h)
+	msgs.append_array(ChallengeService.record(world, player, "hunt", 1))
+	if int(h["meat"]) > 0:
+		msgs.append_array(ChallengeService.record(world, player, "meat", int(h["meat"])))
+	leave_notice = "\n".join(msgs)
+	enter_map()
+
+
+func start_fishing() -> void:
+	var why := _outdoor_block("fish")
+	if why != "":
+		hud.show_banner(why, UI.BAD)
+		enter_map()
+		return
+	_open_activity(FishGame.new().setup(OutdoorService.new_fishing(), player.sprite_id(), finish_fishing))
+	hint("fish", "Рибалка: закинь вудку й чекай. Заклювало — тисни «Підсікти». Далі тримай кнопку, щоб тягти, й відпускай, щоб попустити: натяг має бути в зеленій смузі.")
+
+
+func finish_fishing(f: Dictionary) -> void:
+	if state != State.ACTIVITY:
+		return
+	if int(f["bait"]) >= Acts.FISH_BAIT:
+		enter_map()  # вудку так і не закинув: риба не сполохана
+		return
+	var msgs := OutdoorService.finish_fishing(world, player, f)
+	msgs.append_array(ChallengeService.record(world, player, "fishing", 1))
+	if int(f["ryba"]) > 0:
+		msgs.append_array(ChallengeService.record(world, player, "ryba", int(f["ryba"])))
+	if "som" in f["caught"]:
+		msgs.append_array(ChallengeService.record(world, player, "som", 1))
+	leave_notice = "\n".join(msgs)
+	enter_map()
 
 
 # ======================= Козацька варта =======================
@@ -1682,6 +1764,11 @@ func camp_do(action: String, arg) -> void:
 		"brew":
 			if CampService.brew(world, player, arg):
 				Audio.play("heal", 0.0)
+		"cook":
+			if OutdoorService.cook(player, arg):
+				Audio.play("heal", 0.0)
+				hud.show_banner("%s готовий! %s" % [Acts.RECIPES[arg]["name"], Acts.RECIPES[arg]["desc"]], UI.GOOD)
+				_record("cook")
 		"collect":
 			var g := CampService.collect_pasika(world, player)
 			if g > 0:

@@ -44,7 +44,8 @@ static func draw(ci: CanvasItem, id: String, facing: Vector2, frame: int, origin
 	var tex: Texture2D = sheet(id)
 	var d := dir_of(facing)
 	var src := Rect2(frame * SIZE, ROW[d[0]] * SIZE, SIZE, SIZE)
-	var dst := Rect2(origin + Vector2(SIZE if d[1] else 0, 0), Vector2(-SIZE if d[1] else SIZE, SIZE))
+	# Від'ємна ширина лише віддзеркалює кадр: лівий край прямокутника лишається на місці
+	var dst := Rect2(origin, Vector2(-SIZE if d[1] else SIZE, SIZE))
 	ci.draw_texture_rect_region(tex, dst, src, tint)
 
 

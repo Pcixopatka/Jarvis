@@ -111,3 +111,31 @@ const TRADE_CART_SKLAD := 4
 const TRADE_AMBUSH := 0.1  # шанс нападу на валку дорогою до міста
 const TRADE_AMBUSH_UNIT := 0.02  # і ще стільки за кожну одиницю краму (не більше TRADE_AMBUSH_MAX)
 const TRADE_AMBUSH_MAX := 0.4
+
+# ======================= Полювання, рибалка й казан =======================
+## Провіант (лежить у player.resources): м'ясо з полювання, риба з рибалки, городина з городу.
+const FOOD := {"meat": "М'ясо", "ryba": "Риба", "veg": "Городина"}
+## Звірі: швидкість (пікселів/с), радіус влучання, м'ясо, вага появи; tough — від простого влучання лише поранений.
+const HUNT_ANIMALS := {
+	"hare": {"name": "Заєць", "speed": 330.0, "radius": 44.0, "meat": 1, "weight": 4, "tough": false},
+	"deer": {"name": "Олень", "speed": 210.0, "radius": 58.0, "meat": 3, "weight": 4, "tough": false},
+	"boar": {"name": "Вепр", "speed": 150.0, "radius": 62.0, "meat": 4, "weight": 2, "tough": true},
+}
+const HUNT_ARROWS := 3
+const HUNT_PASSES := 6  # скільки звірів пробіжить галявиною за одне полювання
+const HUNT_BULLSEYE := 0.45  # частка радіуса: влучив ближче — «в яблучко»
+## Риба: улов, вікно на підсікання (с), скільки тягнути (с), сила ривків, вага появи.
+const FISH := {
+	"karas": {"name": "Карась", "ryba": 1, "window": 1.0, "reel": 3.0, "pull": 0.25, "weight": 5},
+	"shchuka": {"name": "Щука", "ryba": 2, "window": 0.8, "reel": 5.0, "pull": 0.45, "weight": 3},
+	"som": {"name": "Сом", "ryba": 4, "window": 0.65, "reel": 8.0, "pull": 0.7, "weight": 1},
+}
+const FISH_BAIT := 5  # закидів за одну рибалку
+const FISH_ZONE := [0.3, 0.75]  # у цій смузі натягу риба йде до берега
+## Страви з казана: що треба й що дає на один похід (одна страва за раз).
+const RECIPES := {
+	"kulish": {"name": "Куліш", "need": {"meat": 2, "herbs": 2}, "desc": "+15% здоров'я на похід"},
+	"yushka": {"name": "Юшка", "need": {"ryba": 2, "herbs": 2}, "desc": "+30% відновлення наснаги й +1 здоров'я/с на похід"},
+	"pechenia": {"name": "Печеня", "need": {"meat": 2, "ryba": 2}, "desc": "+10% шкоди на похід"},
+}
+const RECIPE_ORDER := ["kulish", "yushka", "pechenia"]

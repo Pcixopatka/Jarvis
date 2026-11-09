@@ -7,6 +7,8 @@ const UI := preload("res://scripts/ui/ui_kit.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const AdRewards := preload("res://scripts/game/ad_rewards.gd")
 const CraftService := preload("res://scripts/game/craft_service.gd")
+const Acts := preload("res://scripts/data/activities.gd")
+const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -27,6 +29,7 @@ static func build(game) -> Control:
 		pages.append(["Зілляварня", _brewery(game)])
 	if CampService.level(w, "pasika") >= 1:
 		pages.append(["Пасіка", _pasika(game)])
+	pages.append(["Казан", _kazan(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,
@@ -281,6 +284,45 @@ static func _brewery(game) -> Control:
 		row.add_child(info)
 		var cost := "трави %d" % r["herbs"] + ((", залізо %d" % r["iron"]) if int(r["iron"]) > 0 else "")
 		row.add_child(UI.button("Зварити\n" + cost, _do(game, "brew", id), Vector2(220, 70), 17, CampService.can_brew(w, p, id)))
+		v.add_child(row)
+	return v
+
+
+# ---------- Казан: страви зі здобичі ----------
+
+static func food_text(p) -> String:
+	var parts := []
+	for id in Acts.FOOD:
+		parts.append("%s: %d" % [Acts.FOOD[id], OutdoorService.food(p, id)])
+	parts.append("Трави: %d" % int(p.resources.get("herbs", 0)))
+	return "  •  ".join(parts)
+
+
+static func _need_text(need: Dictionary) -> String:
+	var parts := []
+	for r in need:
+		var nm: String = str(Acts.FOOD[r]).to_lower() if Acts.FOOD.has(r) else str(Camp.RESOURCES.get(r, r)).to_lower()
+		parts.append("%s %d" % [nm, int(need[r])])
+	return ", ".join(parts)
+
+
+static func _kazan(game) -> Control:
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 12)
+	v.add_child(UI.label(food_text(p), 20, UI.TEXT, false))
+	v.add_child(UI.label("М'ясо добувають на полюванні, рибу — на рибальській тоні (обидва місця на мапі біля Січі). Страва діє один похід; нова замінює попередню.", 16, UI.MUTED, false))
+	var now := OutdoorService.eaten(p)
+	for id in Acts.RECIPE_ORDER:
+		var r: Dictionary = Acts.RECIPES[id]
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(UI.label(r["name"] + ("  (діє на наступний похід)" if now == id else ""), 21, UI.GOOD if now == id else UI.TEXT, false))
+		info.add_child(UI.label(r["desc"], 15, UI.MUTED, false))
+		row.add_child(info)
+		row.add_child(UI.button("Зварити\n" + _need_text(r["need"]), _do(game, "cook", id), Vector2(260, 70), 16, OutdoorService.can_cook(p, id)))
 		v.add_child(row)
 	return v
 

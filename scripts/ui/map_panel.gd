@@ -69,6 +69,25 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 					total += int(VS.minute_reward(player.level, m)["gold"])
 				v.add_child(_wrapped("Нагорода сьогодні: до %d грн, слава за кожну хвилину, речі на 3-й і %d-й, 2 трофеї за повну варту." % [total, goal_min], 16, UI.GOLD))
 			v.add_child(UI.button("Стати на варту", on_go.bind(sel), Vector2(350, 70), 26))
+		"hunt", "fish":
+			var OS = load("res://scripts/game/outdoor_service.gd")
+			var hunt: bool = str(S["kind"]) == "hunt"
+			if hunt:
+				v.add_child(_wrapped("Звірі перебігають галявину. Торкнись звіра, щоб пустити стрілу. Стріл: %d, тож бий напевно." % OS.arrows_for(player), 17, UI.TEXT))
+				for id in Acts.HUNT_ANIMALS:
+					var a: Dictionary = Acts.HUNT_ANIMALS[id]
+					v.add_child(_wrapped("• %s: %d м'яса%s" % [a["name"], int(a["meat"]), " (лише в серцевину або з двох стріл)" if a["tough"] else ""], 16, UI.MUTED))
+			else:
+				v.add_child(_wrapped("Закинь вудку, дочекайся клювання й підсічи. Далі тримай натяг у зеленій смузі. Закидів: %d." % Acts.FISH_BAIT, 17, UI.TEXT))
+				for id in Acts.FISH:
+					var fi: Dictionary = Acts.FISH[id]
+					v.add_child(_wrapped("• %s: %d риби" % [fi["name"], int(fi["ryba"])], 16, UI.MUTED))
+			v.add_child(_wrapped("У запасі: м'ясо %d  •  риба %d" % [OS.food(player, "meat"), OS.food(player, "ryba")], 19, UI.GOLD))
+			v.add_child(_wrapped("Зі здобичі на хуторі варять страви в казані: вони додають сили на цілий похід.", 16, UI.MUTED))
+			if OS.ready(world, str(S["kind"])):
+				v.add_child(UI.button("Полювати" if hunt else "Рибалити", on_go.bind(sel), Vector2(350, 70), 26))
+			else:
+				v.add_child(_wrapped("Звір сполоханий: повернеться після походу." if hunt else "Риба вже не клює: повернеться після походу.", 17, UI.BAD))
 		_:
 			v.add_child(UI.button("Вирушити", on_go.bind(sel), Vector2(350, 70), 26))
 	return v

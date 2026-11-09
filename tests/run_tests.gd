@@ -73,6 +73,8 @@ func _run() -> void:
 	await _suite_vigil_battle()
 	_suite_trade()
 	await _suite_trade_game()
+	_suite_outdoor()
+	await _suite_outdoor_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -2036,6 +2038,205 @@ func _suite_trade_game() -> void:
 		await process_frame
 		frames += 1
 	check(game.state == game.State.CITY and game.city_id == "chernihiv", "після розгрому все одно дістався міста")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_outdoor() -> void:
+	suite("Полювання й рибалка: правила")
+	var OS2 = load("res://scripts/game/outdoor_service.gd")
+	var GS = load("res://scripts/game/glory_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var w = WorldState.new()
+	var p = _new_player()
+	check(OS2.ready(w, "hunt") and OS2.ready(w, "fish"), "спершу звір і риба на місці")
+	check(OS2.arrows_for(p) == Acts.HUNT_ARROWS, "у козака три стріли")
+	p.job = "plastun"
+	check(OS2.arrows_for(p) == Acts.HUNT_ARROWS + 1, "пластун бере на стрілу більше")
+	p.job = "cossack"
+	var h: Dictionary = OS2.new_hunt(p, 7)
+	var ok: bool = h["queue"].size() == Acts.HUNT_PASSES
+	for id in h["queue"]:
+		ok = ok and Acts.HUNT_ANIMALS.has(id)
+	check(ok and OS2.new_hunt(p, 7)["queue"] == h["queue"], "черга звірів: шість проходів, однакова для одного зерна")
+	# Постріли по відомій черзі
+	h["queue"] = ["hare", "deer", "boar", "boar", "hare", "hare"]
+	h["arrows"] = 10
+	check(OS2.current(h) == "hare", "перший звір — заєць")
+	check(OS2.shoot(h, 200.0) == "miss" and int(h["arrows"]) == 9 and int(h["index"]) == 0 and int(h["meat"]) == 0, "мимо: стріла пропала, звір той самий")
+	check(OS2.shoot(h, float(Acts.HUNT_ANIMALS["hare"]["radius"]) - 1.0) == "hit" and int(h["meat"]) == 1 and int(h["index"]) == 1, "влучив у зайця: 1 м'яса, наступний звір")
+	check(OS2.shoot(h, 2.0) == "bullseye" and int(h["meat"]) == 1 + 5 and int(h["bull"]) == 1, "олень у яблучко: 3 + 2 м'яса")
+	check(OS2.shoot(h, 40.0) == "wound" and h["wounded"] and int(h["index"]) == 2 and int(h["meat"]) == 6, "вепр від простого влучання лише поранений")
+	check(OS2.shoot(h, 40.0) == "hit" and not h["wounded"] and int(h["meat"]) == 10 and int(h["index"]) == 3, "друга стріла добиває вепра")
+	check(OS2.shoot(h, 5.0) == "bullseye" and int(h["meat"]) == 16, "вепр у яблучко: одразу, 4 + 2 м'яса")
+	OS2.escaped(h)
+	check(int(h["index"]) == 5 and OS2.current(h) == "hare" and not OS2.hunt_over(h), "звір утік — на черзі наступний")
+	h["arrows"] = 0
+	check(OS2.current(h) == "" and OS2.hunt_over(h) and OS2.shoot(h, 0.0) == "none", "стріли скінчились — полюванню кінець")
+	# Поранений вепр без стріл: полювання триває, доки він не втече
+	var h2: Dictionary = OS2.new_hunt(p, 3)
+	h2["queue"] = ["boar", "hare"]
+	h2["arrows"] = 1
+	OS2.shoot(h2, 40.0)
+	check(int(h2["arrows"]) == 0 and h2["wounded"] and OS2.current(h2) == "boar", "поранений вепр іще на галявині, хоч стріл нема")
+	OS2.escaped(h2)
+	check(OS2.current(h2) == "", "утік — і все")
+	# Підсумок
+	var g0: int = GS.glory(w)
+	var msgs: Array = OS2.finish_hunt(w, p, h)
+	check(OS2.food(p, "meat") == 16 and not OS2.ready(w, "hunt") and OS2.ready(w, "fish") and "м'яса" in msgs[0], "здобич у запасі, звір сполоханий до походу")
+	check(GS.glory(w) == g0, "був промах — слави за влучність нема")
+	OS2.tick(w)
+	check(OS2.ready(w, "hunt"), "після походу звір повернувся")
+	var h3: Dictionary = OS2.new_hunt(p, 5)
+	h3["queue"] = ["hare", "hare", "hare", "hare", "hare", "hare"]
+	for i in 3:
+		OS2.shoot(h3, 1.0)
+	OS2.finish_hunt(w, p, h3)
+	check(GS.glory(w) == g0 + 3 and OS2.food(p, "meat") == 16 + 6, "жодної стріли намарно: +3 слави")
+	var h4: Dictionary = OS2.new_hunt(p, 5)
+	check("без здобичі" in OS2.finish_hunt(w, p, h4)[0], "порожнє полювання — так і кажемо")
+	# Рибалка
+	var f: Dictionary = OS2.new_fishing(11)
+	check(int(f["bait"]) == Acts.FISH_BAIT and Acts.FISH.has(OS2.roll_fish(f)), "п'ять закидів, риба з таблиці")
+	var d: float = OS2.bite_delay(f)
+	check(d >= 1.5 and d <= 4.5, "клювання чекати 1.5–4.5 с")
+	check(OS2.step_tension(0.5, true, 0.0, 0.0, 0.5) > 0.5 and OS2.step_tension(0.5, false, 0.0, 0.0, 0.5) < 0.5, "тримаєш — натяг росте, відпустив — падає")
+	check(OS2.step_tension(0.5, false, 0.7, 1.0, 0.5) > 0.5, "сом смикає сильніше, ніж попускаєш")
+	check(OS2.in_zone(0.5) and not OS2.in_zone(0.1) and not OS2.in_zone(0.9), "зелена смуга натягу")
+	OS2.use_bait(f)
+	OS2.catch_fish(f, "karas")
+	OS2.catch_fish(f, "som")
+	check(int(f["bait"]) == Acts.FISH_BAIT - 1 and int(f["ryba"]) == 5 and not OS2.fishing_over(f), "улов: карась 1 + сом 4")
+	g0 = GS.glory(w)
+	msgs = OS2.finish_fishing(w, p, f)
+	check(OS2.food(p, "ryba") == 5 and not OS2.ready(w, "fish") and GS.glory(w) == g0 + 3 and int(OS2.state(w)["som"]) == 1, "риба в запасі, за сома +3 слави")
+	var f2: Dictionary = OS2.new_fishing(1)
+	for i in Acts.FISH_BAIT:
+		OS2.use_bait(f2)
+	check(OS2.fishing_over(f2) and "не клювало" in OS2.finish_fishing(w, p, f2)[0], "закиди скінчились без улову")
+	# Казан
+	p.resources["herbs"] = 0
+	check(not OS2.can_cook(p, "kulish"), "без трав куліш не звариш")
+	p.resources["herbs"] = 4
+	p.recalc()
+	var hp0: float = p.max_hp
+	var dmg0: float = p.damage
+	check(OS2.cook(p, "kulish") and OS2.eaten(p) == "kulish" and OS2.food(p, "meat") == 20 and int(p.resources["herbs"]) == 2, "куліш: мінус 2 м'яса й 2 трави")
+	check(absf(p.max_hp - hp0 * 1.15) < 1.0, "куліш: +15%% здоров'я (%.0f → %.0f)" % [hp0, p.max_hp])
+	check(not OS2.can_cook(p, "kulish") and not OS2.cook(p, "kulish"), "ту саму страву двічі не варять")
+	check(OS2.cook(p, "pechenia") and OS2.eaten(p) == "pechenia" and absf(p.max_hp - hp0) < 1.0 and absf(p.damage - dmg0 * 1.1) < 0.6, "печеня замінює куліш: +10% шкоди")
+	var regen0: float = p.regen
+	check(OS2.cook(p, "yushka") and p.regen >= regen0 + 1.0 - 0.01 and absf(p.damage - dmg0) < 0.6, "юшка: +1 здоров'я за секунду")
+	p.trip_buffs.clear()
+	p.recalc()
+	check(absf(p.max_hp - hp0) < 1.0 and absf(p.damage - dmg0) < 0.6, "після походу страва вивітрилась")
+	# Збереження
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(int(OS2.state(w2)["som"]) == 1 and int(OS2.state(w2)["hunts"]) == 3 and not OS2.ready(w2, "fish"), "стан занять переживає збереження")
+	var p2 = _new_player()
+	p2.from_dict(p.to_dict())
+	check(OS2.food(p2, "meat") == OS2.food(p, "meat") and OS2.food(p2, "ryba") == OS2.food(p, "ryba"), "запас їжі зберігається разом з героєм")
+
+
+func _suite_outdoor_game() -> void:
+	suite("Полювання й рибалка: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var OS2 = game.OutdoorService
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.level = 2
+	game.enter_map()
+	game.enter_spot("hunt")
+	await _frames(2)
+	check(game.state == game.State.MAP, "до 3-го рівня на полювання не пускають")
+	p.change_class("cossack")
+	p.level = 8
+	p.recalc()
+	p.hp = p.max_hp
+	game.enter_spot("hunt")
+	await _frames(3)
+	var hg = game.hud.screen_root
+	check(game.state == game.State.ACTIVITY and hg != null and "animal" in hg and hg.size.x > 100.0, "полювання: мініігра на весь екран")
+	check(get_root().get_tree().paused and not game.combat.active, "бій не йде")
+	hg._finish()
+	await _frames(2)
+	check(game.state == game.State.MAP and OS2.ready(game.world, "hunt") and int(game.world.stats.get("hunt", 0)) == 0, "пішов, не стрілявши: звіра не сполохано")
+	game.enter_spot("hunt")
+	await _frames(3)
+	hg = game.hud.screen_root
+	# Дочекатись звіра й бити в серцевину, доки є стріли
+	var frames := 0
+	var shots := 0
+	while game.state == game.State.ACTIVITY and frames < 4000:
+		if hg.animal != "" and hg.fall_t <= 0.0 and hg.pos.x > 100.0 and hg.pos.x < hg.size.x - 100.0 and int(hg.h["arrows"]) > 0:
+			var res: String = hg.shoot_at(hg.target_point())
+			if res != "none":
+				shots += 1
+		await process_frame
+		frames += 1
+	check(shots == game.Acts.HUNT_ARROWS and game.state == game.State.MAP, "три стріли — три звірі, далі назад на мапу (кадрів: %d)" % frames)
+	check(OS2.food(p, "meat") >= 3 and not OS2.ready(game.world, "hunt") and int(game.world.stats.get("hunt", 0)) == 1 and int(game.world.stats.get("meat", 0)) == OS2.food(p, "meat"), "м'ясо в запасі: %d; лічильники" % OS2.food(p, "meat"))
+	check(game.account.challenges["ach"].has("hunt_1"), "досягнення «Перша здобич»")
+	game.enter_spot("hunt")
+	await _frames(2)
+	check(game.state == game.State.MAP, "вдруге поспіль не пускають: звір сполоханий")
+	# Рибалка: закинути, підсікти, втримати натяг
+	game.enter_spot("fish")
+	await _frames(3)
+	var fg = game.hud.screen_root
+	check(game.state == game.State.ACTIVITY and fg != null and "phase" in fg and fg.phase == "idle", "рибалка: мініігра")
+	fg.press()
+	fg.release()
+	check(fg.phase == "wait" and fg.fish != "", "закинув — чекаємо клювання")
+	fg.press()
+	fg.release()
+	check(fg.phase == "idle" and int(fg.f["bait"]) == game.Acts.FISH_BAIT - 1, "смикнув зарано — закид пропав")
+	frames = 0
+	var caught := 0
+	while game.state == game.State.ACTIVITY and frames < 6000:
+		match fg.phase:
+			"idle":
+				fg.press()
+				fg.release()
+			"bite":
+				fg.press()
+			"reel":
+				fg.holding = fg.tension < 0.5
+		caught = fg.f["caught"].size()
+		fg.step(0.05)  # проганяємо час швидше за кадри
+		await process_frame
+		frames += 1
+	check(game.state == game.State.MAP and caught >= 1, "рибалку завершено, спіймано: %d (кадрів: %d)" % [caught, frames])
+	check(OS2.food(p, "ryba") >= 1 and not OS2.ready(game.world, "fish") and int(game.world.stats.get("fishing", 0)) == 1, "риба в запасі: %d" % OS2.food(p, "ryba"))
+	# Казан на хуторі
+	p.resources["herbs"] = 6
+	p.resources["meat"] = 4
+	game.enter_camp()
+	await _frames(2)
+	var hp0: float = p.max_hp
+	game.camp_do("cook", "kulish")
+	check(OS2.eaten(p) == "kulish" and p.max_hp > hp0 * 1.1 and int(game.world.stats.get("cook", 0)) == 1, "куліш із казана додає здоров'я")
+	# Похід: страва діє, після нього вивітрюється, а звір і риба повертаються
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(game.state == game.State.PLAYING and OS2.eaten(p) == "kulish", "у поході страва ще діє")
+	game.enter_map()
+	await _frames(2)
+	check(OS2.eaten(p) == "" and absf(p.max_hp - hp0) < 1.0, "після походу страва вивітрилась")
+	check(OS2.ready(game.world, "hunt") and OS2.ready(game.world, "fish"), "після походу знову можна полювати й рибалити")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

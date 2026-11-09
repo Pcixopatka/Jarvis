@@ -396,6 +396,9 @@ func recalc() -> void:
 		damage *= 1.3
 	if trip_buffs.has("inspired"):
 		damage *= 1.15  # дума кобзаря біля вогнища
+	var meal: String = str(trip_buffs.get("food", ""))  # страва з казана (див. OutdoorService)
+	if meal == "pechenia":
+		damage *= 1.1
 	plague_immune = trip_buffs.has("antiplague")
 	attack_range = 95.0 * weapon["range"] * (1.0 + 0.08 * pk("reach"))
 	if weapon_type == "staff":
@@ -412,22 +415,26 @@ func recalc() -> void:
 
 	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist") + 0.04 * pk("h_body")) * float(class_info().get("hp_mult", 1.0))
 	damage *= float(class_info().get("dmg_mult", 1.0))
+	if meal == "kulish":
+		max_hp *= 1.15
+	elif meal == "borshch":
+		max_hp *= 1.1
 	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0, 0.0, 0.75)
-	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen")
+	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0)
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll"))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0)
-	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0)
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0)
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
 	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0
 	var ci := class_info()
 	var old_mana := max_mana
 	max_mana = (40.0 + 5.0 * s_spi) * float(ci["mana_mult"]) * (1.0 + 0.2 * pk("deep_well") + 0.1 * pk("steel_will"))
-	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow") + 0.1 * pk("h_breath"))
+	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow") + 0.1 * pk("h_breath")) * (1.3 if meal == "yushka" else 1.0)
 	if max_mana > old_mana:
 		mana += max_mana - old_mana
 	mana = minf(mana, max_mana)
