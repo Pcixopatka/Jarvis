@@ -14,7 +14,7 @@ const CLASSES := {
 	"cossack": {"name": "Козак", "tier": 1, "job_max": 40, "next": ["zaporozhets", "plastun", "samopalnyk", "kharakternyk"],
 		"weapons": ["sabre", "mace", "pike"], "mana_mult": 1.0, "regen_mult": 1.5, "address": "козаче", "hp_mult": 1.3, "dmg_mult": 1.15,
 		"where": "sich", "desc": "Воїн Січі: шабля, булава чи спис, самопал і бойовий клич. Влучні удари поповнюють наснагу."},
-	"volkhv": {"name": "Волхв", "tier": 1, "job_max": 40, "next": [],
+	"volkhv": {"name": "Волхв", "tier": 1, "job_max": 40, "next": ["znakhar", "perun_zhrets", "molfar"],
 		"weapons": ["staff"], "mana_mult": 2.0, "regen_mult": 2.2, "address": "волхве", "hp_mult": 1.0, "dmg_mult": 1.0,
 		"where": "kapyshche", "desc": "Знавець вогню, трав і оберегів із Карпат. Б'є іскрами здалеку; сила — від Характерництва."},
 	# ---- Спеціалізації Козака (Січ) ----
@@ -30,7 +30,21 @@ const CLASSES := {
 	"kharakternyk": {"name": "Характерник", "tier": 2, "job_max": 50, "next": [], "parent": "cossack",
 		"weapons": ["sabre", "pike"], "mana_mult": 1.5, "regen_mult": 1.9, "address": "козаче", "hp_mult": 1.4, "dmg_mult": 1.2,
 		"where": "sich", "mentor": "yarema", "desc": "Воїн-чаклун: Вовча подоба, «Куля не бере», замовлена шабля, відвід очей."},
+	# ---- Спеціалізації Волхва (Карпати, кожна — у свого наставника) ----
+	"znakhar": {"name": "Знахар", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
+		"weapons": ["staff"], "mana_mult": 2.4, "regen_mult": 2.7, "address": "волхве", "hp_mult": 1.35, "dmg_mult": 1.05,
+		"where": "verkhovyna", "mentor": "paraska", "desc": "Лікар і берегиня загону: Живиця, Очищення, Оберіг загону, Підняти побратима, отруйне зілля."},
+	"perun_zhrets": {"name": "Перунів жрець", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
+		"weapons": ["staff"], "mana_mult": 2.2, "regen_mult": 2.4, "address": "волхве", "hp_mult": 1.05, "dmg_mult": 1.3,
+		"where": "pip_ivan", "mentor": "hromobii", "desc": "Повелитель грози: Блискавка, Ланцюг, Громовий молот, Буря."},
+	"molfar": {"name": "Мольфар", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
+		"weapons": ["staff"], "mana_mult": 2.3, "regen_mult": 2.5, "address": "волхве", "hp_mult": 1.2, "dmg_mult": 1.15,
+		"where": "molfar_hut", "mentor": "yakym", "desc": "Карпатський чарівник: Град, Туман, Прокляття, Виклик духа."},
 }
+
+## Чи належить клас до волхвівської гілки (для звертань «волхве», вигляду тощо).
+static func is_volkhv_line(cls: String) -> bool:
+	return cls == "volkhv" or CLASSES.get(cls, {}).get("parent", "") == "volkhv"
 
 ## З якого рівня майстерності можна змінити клас (за ступенем).
 const JOB_CHANGE_AT := {0: 10, 1: 30}
@@ -154,6 +168,56 @@ const TREES := {
 			{"id": "spirit", "name": "Характерна сила", "max": 3, "req": {}, "desc": "+10% сили вмінь"},
 		]},
 	],
+	"znakhar": [
+		{"name": "Лікування", "nodes": [
+			{"id": "zhyvytsia", "name": "Живиця", "max": 5, "req": {}, "active": true, "cost": 30,
+				"desc": "Лікує тебе й загін: 30% здоров'я\n(+5% за ранг)"},
+			{"id": "pidniaty", "name": "Підняти побратима", "max": 3, "req": {"zhyvytsia": 2}, "active": true, "cost": 40,
+				"desc": "Поранені побратими встають\nіз 40% здоров'я (+15% за ранг)"},
+			{"id": "travnyk", "name": "Травник", "max": 5, "req": {}, "desc": "+12% сили лікування за ранг"},
+		]},
+		{"name": "Берегиня", "nodes": [
+			{"id": "ochyshchennia", "name": "Очищення", "max": 3, "req": {}, "active": true, "cost": 15,
+				"desc": "Знімає всі стани з тебе й загону;\n2 с (+1 за ранг) — без станів"},
+			{"id": "oberih_zahonu", "name": "Оберіг загону", "max": 5, "req": {"ochyshchennia": 1}, "active": true, "cost": 30,
+				"desc": "8 с тобі й загону шкода −25%\n(−5% за ранг)"},
+			{"id": "otruta", "name": "Отруйне зілля", "max": 5, "req": {}, "active": true, "cost": 15,
+				"desc": "Склянка з отрутою: хмара, що\nз'їдає ворогів. +20% за ранг"},
+			{"id": "zhyve_slovo", "name": "Живе слово", "max": 3, "req": {"travnyk": 1}, "desc": "+1 здоров'я за секунду\nза ранг"},
+		]},
+	],
+	"perun_zhrets": [
+		{"name": "Блискавка", "nodes": [
+			{"id": "lightning", "name": "Блискавка Перуна", "max": 5, "req": {}, "active": true, "cost": 18,
+				"desc": "Б'є блискавкою 2+ранг\nнайближчих ворогів"},
+			{"id": "chain", "name": "Ланцюг", "max": 2, "req": {"lightning": 2}, "desc": "+2 цілі блискавки\nза ранг"},
+			{"id": "wrath", "name": "Гнів Перуна", "max": 1, "req": {"lightning": 3, "chain": 1}, "desc": "Блискавка сповільнює\nворогів на 2 с"},
+			{"id": "grim", "name": "Громовиця", "max": 5, "req": {}, "desc": "+10% шкоди блискавок і грому"},
+		]},
+		{"name": "Гроза", "nodes": [
+			{"id": "molot", "name": "Громовий молот", "max": 5, "req": {}, "active": true, "cost": 30,
+				"desc": "Удар грому в ціль: шкода довкола,\nприголомшення. +20% за ранг"},
+			{"id": "burya", "name": "Буря", "max": 5, "req": {"molot": 2}, "active": true, "cost": 45,
+				"desc": "6 с блискавки б'ють ворогів\nдовкола. +1 с за ранг"},
+			{"id": "storm_soul", "name": "Душа грози", "max": 3, "req": {"molot": 1}, "desc": "−10% перезарядки вмінь\nгрози за ранг"},
+		]},
+	],
+	"molfar": [
+		{"name": "Погода", "nodes": [
+			{"id": "grad", "name": "Град", "max": 5, "req": {}, "active": true, "cost": 28,
+				"desc": "3 с град б'є ворогів у колі\nй морозить. +20% за ранг"},
+			{"id": "tuman", "name": "Туман", "max": 5, "req": {"grad": 1}, "active": true, "cost": 25,
+				"desc": "6 с туман довкола: вороги в ньому\nсповільнені й ослаблені"},
+			{"id": "khmara", "name": "Хмарник", "max": 3, "req": {"grad": 2}, "desc": "+20% радіуса й шкоди граду"},
+		]},
+		{"name": "Чари", "nodes": [
+			{"id": "proklin", "name": "Прокляття", "max": 5, "req": {}, "active": true, "cost": 18,
+				"desc": "Ціль і сусіди 8 с отримують +30%\nшкоди й слабшають. +5% за ранг"},
+			{"id": "dukh", "name": "Виклик духа", "max": 5, "req": {"proklin": 1}, "active": true, "cost": 35,
+				"desc": "15 с дух-помічник б'є ворогів\nвогниками. +20% за ранг"},
+			{"id": "spirit", "name": "Сила гір", "max": 3, "req": {}, "desc": "+10% сили вмінь"},
+		]},
+	],
 	"volkhv": [
 		{"name": "Вогонь", "nodes": [
 			{"id": "fireball", "name": "Вогняна куля", "max": 5, "req": {}, "active": true, "cost": 18,
@@ -164,7 +228,7 @@ const TREES := {
 		]},
 		{"name": "Обереги", "nodes": [
 			{"id": "shield", "name": "Щит-оберіг", "max": 5, "req": {}, "active": true, "cost": 25,
-				"desc": "8 с поглинає шкоду:\n25% здоров'я, +8% за ранг"},
+				"desc": "8 с поглинає шкоду:\n20% здоров'я, +5% за ранг"},
 			{"id": "deep_well", "name": "Глибока криниця", "max": 3, "req": {}, "desc": "+20% запасу наснаги"},
 			{"id": "mana_flow", "name": "Потік наснаги", "max": 3, "req": {"deep_well": 1}, "desc": "+25% відновлення наснаги"},
 			{"id": "spirit", "name": "Сила роду", "max": 3, "req": {"shield": 1}, "desc": "+10% сили вмінь"},
@@ -186,21 +250,30 @@ const ACTIVE_LABELS := {"vyly": "Вила", "first_aid": "Рани", "whirl": "�
 	"zemnyi": "Земля", "stina": "Стіна", "bulava": "Гнів",
 	"pastka": "Пастка", "tin": "Тінь", "kydok": "Спис",
 	"kartech": "Картеч", "prytsil": "Приціл", "bochka": "Бочка",
-	"vovk": "Вовк", "kulia": "Куля", "zamova": "Замова", "vidvid": "Відвід"}
+	"vovk": "Вовк", "kulia": "Куля", "zamova": "Замова", "vidvid": "Відвід",
+	"zhyvytsia": "Живиця", "pidniaty": "Підняти", "ochyshchennia": "Чисто", "oberih_zahonu": "Загін", "otruta": "Отрута",
+	"lightning": "Перун", "molot": "Молот", "burya": "Буря",
+	"grad": "Град", "tuman": "Туман", "proklin": "Клятва", "dukh": "Дух"}
 const ACTIVE_COLORS := {"vyly": Color(0.55, 0.42, 0.25), "first_aid": Color(0.3, 0.6, 0.3), "whirl": Color(0.55, 0.3, 0.8),
 	"battle_cry": Color(0.75, 0.35, 0.15), "musket": Color(0.45, 0.4, 0.3), "fireball": Color(0.85, 0.35, 0.1),
 	"shield": Color(0.35, 0.55, 0.85), "herb": Color(0.3, 0.7, 0.35),
 	"zemnyi": Color(0.5, 0.35, 0.2), "stina": Color(0.6, 0.55, 0.45), "bulava": Color(0.7, 0.2, 0.15),
 	"pastka": Color(0.45, 0.4, 0.25), "tin": Color(0.25, 0.25, 0.35), "kydok": Color(0.55, 0.5, 0.35),
 	"kartech": Color(0.5, 0.45, 0.4), "prytsil": Color(0.35, 0.35, 0.5), "bochka": Color(0.6, 0.3, 0.1),
-	"vovk": Color(0.45, 0.45, 0.45), "kulia": Color(0.75, 0.65, 0.25), "zamova": Color(0.35, 0.5, 0.9), "vidvid": Color(0.5, 0.3, 0.6)}
+	"vovk": Color(0.45, 0.45, 0.45), "kulia": Color(0.75, 0.65, 0.25), "zamova": Color(0.35, 0.5, 0.9), "vidvid": Color(0.5, 0.3, 0.6),
+	"zhyvytsia": Color(0.35, 0.75, 0.4), "pidniaty": Color(0.85, 0.75, 0.4), "ochyshchennia": Color(0.75, 0.9, 1.0), "oberih_zahonu": Color(0.4, 0.6, 0.9), "otruta": Color(0.45, 0.7, 0.2),
+	"lightning": Color(0.25, 0.55, 0.9), "molot": Color(0.4, 0.45, 0.8), "burya": Color(0.3, 0.35, 0.6),
+	"grad": Color(0.7, 0.85, 0.95), "tuman": Color(0.6, 0.62, 0.68), "proklin": Color(0.45, 0.2, 0.45), "dukh": Color(0.5, 0.8, 0.9)}
 ## Базова перезарядка (с)
 const COOLDOWNS := {"vyly": 4.0, "first_aid": 14.0, "whirl": 8.0, "battle_cry": 20.0, "musket": 4.0,
-	"fireball": 3.5, "shield": 16.0, "herb": 12.0,
+	"fireball": 3.5, "shield": 18.0, "herb": 12.0,
 	"zemnyi": 7.0, "stina": 16.0, "bulava": 6.0,
 	"pastka": 6.0, "tin": 14.0, "kydok": 4.0,
 	"kartech": 5.0, "prytsil": 7.0, "bochka": 12.0,
-	"vovk": 25.0, "kulia": 20.0, "zamova": 15.0, "vidvid": 12.0}
+	"vovk": 25.0, "kulia": 20.0, "zamova": 15.0, "vidvid": 12.0,
+	"zhyvytsia": 12.0, "pidniaty": 60.0, "ochyshchennia": 8.0, "oberih_zahonu": 20.0, "otruta": 5.0,
+	"lightning": 6.0, "molot": 9.0, "burya": 22.0,
+	"grad": 10.0, "tuman": 16.0, "proklin": 8.0, "dukh": 25.0}
 
 
 ## Вузол дерева вмінь будь-якого класу (перший знайдений) і клас, якому він належить.

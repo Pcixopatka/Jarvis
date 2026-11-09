@@ -9,6 +9,7 @@ const INFO := {
 	"plague": {"name": "Зараза", "color": Color(0.45, 0.9, 0.15)},  # ще й лікування вдвічі слабше
 	"chill": {"name": "Холод", "color": Color(0.55, 0.82, 1.0)},  # повільніший
 	"weak": {"name": "Слабкість", "color": Color(0.7, 0.45, 0.9)},  # б'є слабше
+	"curse": {"name": "Прокляття", "color": Color(0.45, 0.15, 0.4)},  # отримує більше шкоди (чари мольфара)
 }
 const TICK := 0.5
 
@@ -59,7 +60,7 @@ static func damage_mult(target) -> float:
 
 ## Колір головного стану (для підсвітки) або прозорий.
 static func tint(target) -> Color:
-	for id in ["burn", "plague", "bleed", "chill", "weak"]:
+	for id in ["burn", "plague", "bleed", "chill", "weak", "curse"]:
 		if target.statuses.has(id):
 			return INFO[id]["color"]
 	return Color(0, 0, 0, 0)

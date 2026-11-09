@@ -38,6 +38,7 @@ func _draw() -> void:
 		"petro": Color(0.55, 0.25, 0.2), "yaryna": Color(0.95, 0.92, 0.8), "oksana": Color(0.3, 0.38, 0.2),
 		"hanna": Color(0.35, 0.12, 0.3), "opryshok": Color(0.85, 0.82, 0.7), "koshchii": Color(0.08, 0.06, 0.08),
 		"velemyr": Color(0.95, 0.94, 0.88), "hero_volkhv": Color(0.95, 0.94, 0.9),
+		"paraska": Color(0.95, 0.92, 0.85), "hromobii": Color(0.85, 0.88, 0.95), "yakym": Color(0.35, 0.22, 0.12),
 		"myron": Color(0.55, 0.08, 0.1), "sava": Color(0.35, 0.4, 0.22), "okhrim": Color(0.2, 0.25, 0.45), "yarema": Color(0.15, 0.12, 0.14),
 		"chumak": Color(0.92, 0.9, 0.82), "gonets": Color(0.2, 0.35, 0.6), "koval": Color(0.4, 0.26, 0.15), "bizhenka": Color(0.55, 0.4, 0.3)}.get(npc, Color.GRAY)
 	# Плечі
@@ -168,6 +169,35 @@ func _draw() -> void:
 			draw_colored_polygon(_pts(c, s, [Vector2(-34, 4), Vector2(-30, -26), Vector2(0, -38), Vector2(30, -26), Vector2(34, 4), Vector2(26, -14), Vector2(0, -24), Vector2(-26, -14)]), Color(0.3, 0.25, 0.3))
 			draw_colored_polygon(_pts(c, s, [Vector2(-34, 4), Vector2(-26, -14), Vector2(-14, 30), Vector2(-28, 34)]), Color(0.3, 0.25, 0.3))
 			draw_colored_polygon(_pts(c, s, [Vector2(34, 4), Vector2(26, -14), Vector2(14, 30), Vector2(28, 34)]), Color(0.3, 0.25, 0.3))
+		"paraska":
+			# Знахарка: стара гуцулка в квітчастій хустці з травами
+			_eyes(c, s, eye_y, false)
+			draw_line(c + Vector2(-14, 4) * s, c + Vector2(-8, 8) * s, Color(0.7, 0.55, 0.45), 1.5 * s)
+			draw_line(c + Vector2(14, 4) * s, c + Vector2(8, 8) * s, Color(0.7, 0.55, 0.45), 1.5 * s)
+			draw_line(c + Vector2(-8, 14) * s, c + Vector2(8, 14) * s, Color(0.6, 0.3, 0.3), 2.0 * s)
+			draw_colored_polygon(_pts(c, s, [Vector2(-34, 4), Vector2(-30, -26), Vector2(0, -38), Vector2(30, -26), Vector2(34, 4), Vector2(26, -14), Vector2(0, -24), Vector2(-26, -14)]), Color(0.15, 0.15, 0.2))
+			for i in 6:
+				draw_circle(c + Vector2(-22 + i * 9, -26 + absf(i - 2.5) * 2.0) * s, 3.5 * s, [Color(0.9, 0.2, 0.2), Color(1.0, 0.8, 0.2), Color(0.3, 0.6, 0.9)][i % 3])
+			draw_line(c + Vector2(40, 60) * s, c + Vector2(46, 20) * s, Color(0.3, 0.6, 0.25), 3.0 * s)
+			draw_circle(c + Vector2(46, 18) * s, 4.0 * s, Color(1.0, 0.95, 0.5))
+		"hromobii":
+			# Жрець Перуна: біла борода, срібний обруч із блискавкою
+			draw_colored_polygon(_pts(c, s, [Vector2(-22, 8), Vector2(22, 8), Vector2(14, 56), Vector2(0, 62), Vector2(-14, 56)]), Color(0.95, 0.95, 0.95))
+			_brows(c, s, Color(0.9, 0.9, 0.9), 4.0)
+			for x in [-11.0, 11.0]:
+				draw_circle(c + Vector2(x, eye_y) * s, 3.0 * s, Color(0.4, 0.6, 1.0))
+			draw_arc(c + Vector2(0, -6) * s, 30.0 * s, PI * 1.1, PI * 1.9, 14, Color(0.8, 0.82, 0.88), 4.0 * s)
+			draw_polyline(_pts(c, s, [Vector2(-4, -44), Vector2(4, -36), Vector2(-2, -32), Vector2(6, -22)]), Color(1.0, 0.9, 0.3), 3.0 * s)
+		"yakym":
+			# Мольфар: чорний капелюх, довге сиве волосся, кептар
+			draw_colored_polygon(_pts(c, s, [Vector2(-32, 30), Vector2(-30, -10), Vector2(30, -10), Vector2(32, 30), Vector2(22, 0), Vector2(-22, 0)]), Color(0.75, 0.75, 0.72))
+			draw_rect(Rect2(c + Vector2(-44, -24) * s, Vector2(88, 8) * s), Color(0.1, 0.08, 0.08))
+			draw_rect(Rect2(c + Vector2(-24, -44) * s, Vector2(48, 22) * s), Color(0.1, 0.08, 0.08))
+			_brows(c, s, Color(0.6, 0.6, 0.58), 3.5)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.7, 0.7, 0.68), 22.0)
+			draw_colored_polygon(_pts(c, s, [Vector2(-46, 48), Vector2(-20, 46), Vector2(-22, 64), Vector2(-50, 64)]), Color(0.75, 0.3, 0.15))
+			draw_colored_polygon(_pts(c, s, [Vector2(46, 48), Vector2(20, 46), Vector2(22, 64), Vector2(50, 64)]), Color(0.75, 0.3, 0.15))
 		"myron":
 			# Осавул: сивіючий оселедець, довгі вуса, шрам через брову
 			_chub(c, s, Color(0.55, 0.5, 0.45))

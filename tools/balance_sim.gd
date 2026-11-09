@@ -94,10 +94,18 @@ const SPEC_ORDER := {
 		"oko", "kydok", "tin", "trapper", "pastka", "stryvok"],
 	"samopalnyk": ["kartech", "porokh", "prytsil", "kartech", "porokh", "bochka", "shvydke", "prytsil", "vluchnist", "kartech",
 		"porokh", "shvydke", "prytsil", "vluchnist", "deadly", "bochka", "kartech", "porokh", "prytsil", "shvydke"],
+	"znakhar": ["otruta", "zhyvytsia", "travnyk", "otruta", "ochyshchennia", "zhyvytsia", "oberih_zahonu", "otruta", "travnyk",
+		"zhyve_slovo", "otruta", "zhyvytsia", "oberih_zahonu", "travnyk", "zhyve_slovo", "pidniaty", "oberih_zahonu", "travnyk", "zhyve_slovo", "zhyvytsia"],
+	"perun_zhrets": ["lightning", "molot", "grim", "lightning", "chain", "molot", "grim", "lightning", "wrath", "molot", "burya",
+		"grim", "storm_soul", "chain", "burya", "grim", "molot", "storm_soul", "burya", "lightning"],
+	"molfar": ["proklin", "grad", "dukh", "grad", "proklin", "khmara", "dukh", "spirit", "tuman", "grad", "khmara", "dukh",
+		"proklin", "spirit", "grad", "khmara", "dukh", "spirit", "tuman", "proklin"],
 	"kharakternyk": ["vovk", "zamova", "kulia", "vovk", "zamova", "vidvid", "wolf_blood", "spirit", "vovk", "zamova", "wolf_blood",
 		"vidvid", "spirit", "kulia", "vovk", "zamova", "wolf_blood", "spirit", "vidvid", "kulia"],
 }
-const SPEC_WEAPON := {"zaporozhets": "mace", "plastun": "pike", "samopalnyk": "pishchal", "kharakternyk": "sabre"}
+const SPEC_WEAPON := {"zaporozhets": "mace", "plastun": "pike", "samopalnyk": "pishchal", "kharakternyk": "sabre",
+	"znakhar": "staff", "perun_zhrets": "staff", "molfar": "staff"}
+const SPEC_BASE := {"znakhar": "volkhv", "perun_zhrets": "volkhv", "molfar": "volkhv"}
 const PERK_ORDER := ["boots", "luck", "kobzar", "luck", "boots", "steel_will", "varenyk", "luck", "kobzar", "steel_will",
 	"boots", "purse", "sich", "kobzar", "varenyk", "steel_will", "purse"]
 
@@ -117,7 +125,7 @@ func _build_hero(lvl: int) -> void:
 	if SPEC_ORDER.has(cls):
 		# Спеціалізація: спершу Козак до 30-ї майстерності (усі його очки), потім посвята
 		spec = cls
-		cls = "cossack"
+		cls = SPEC_BASE.get(spec, "cossack")
 	p.change_class(cls)
 	game._sync_class()
 	while p.level < lvl:

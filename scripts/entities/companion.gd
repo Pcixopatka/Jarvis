@@ -118,6 +118,8 @@ func heal(amount: float, _show: bool = true) -> void:
 func take_damage(amount: float, _source = null) -> void:
 	if not alive:
 		return
+	if combat.player.zahyst_timer > 0.0:
+		amount *= combat.player.zahyst_mult  # Оберіг загону знахаря
 	hp -= amount
 	flash = 0.15
 	if hp <= 0.0:

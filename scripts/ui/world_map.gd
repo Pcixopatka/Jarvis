@@ -327,8 +327,9 @@ func _draw() -> void:
 		draw_circle(pc, pr * 0.65, Color(0.25, 0.55, 0.05, 0.1 + 0.05 * pl))
 		draw_arc(pc, pr, 0.0, TAU, 32, Color(0.6, 1.0, 0.2, 0.35), 2.0)
 
-	# Маркери місць
+	# Маркери місць (назви — окремо, після всіх маркерів: ті, що налазять, ховаються)
 	_markers.clear()
+	var labels := []  # [пріоритет, id, позиція, текст, розмір, колір]
 	var label_fs := int(clampf(15.0 * k, 12, 28))
 	for id in Data.LOCATIONS:
 		var L: Dictionary = Data.LOCATIONS[id]
@@ -344,7 +345,7 @@ func _draw() -> void:
 			draw_line(c + Vector2(-8, -8) * k, c + Vector2(8, 8) * k, Color(0.9, 0.9, 0.95), 3.0 * k)
 			draw_line(c + Vector2(8, -8) * k, c + Vector2(-8, 8) * k, Color(0.9, 0.9, 0.95), 3.0 * k)
 		draw_arc(c, r + 1, 0, TAU, 24, Color(1.0, 0.35, 0.3) if danger else Color(0.95, 0.85, 0.5), 2.5)
-		_text(font, c + Vector2(0, r + label_fs + 2), "%s (%d)" % [L["name"], L["level"]], label_fs, Color(1, 0.85, 0.75) if danger else Color.WHITE)
+		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%d)" % [L["name"], L["level"]], label_fs, Color(1, 0.85, 0.75) if danger else Color.WHITE])
 	var city_fs := int(clampf(18.0 * k, 13, 32))
 	for id in Data.CITIES:
 		var C: Dictionary = Data.CITIES[id]
@@ -356,7 +357,7 @@ func _draw() -> void:
 			draw_rect(Rect2(c + Vector2(dx, -14) * k, Vector2(5, 7) * k), red)
 		draw_rect(Rect2(c + Vector2(-13, -8) * k, Vector2(26, 16) * k), Color(0.95, 0.8, 0.3), false, 2.0)
 		draw_rect(Rect2(c + Vector2(-3, 0) * k, Vector2(6, 8) * k), Color(0.2, 0.1, 0.05))
-		_text(font, c + Vector2(0, 12 * k + city_fs), C["name"], city_fs, Color(1.0, 0.9, 0.55))
+		labels.append([70 if id == "sich" else 50, id, c + Vector2(0, 12 * k + city_fs), C["name"], city_fs, Color(1.0, 0.9, 0.55)])
 
 	# Хутір козака
 	var hc := _proj(Camp.CAMP["pos"])
@@ -367,7 +368,8 @@ func _draw() -> void:
 	draw_line(hc + Vector2(10, -6) * k, hc + Vector2(10, -24) * k, Color(0.3, 0.2, 0.1), 2.0)
 	draw_colored_polygon(PackedVector2Array([hc + Vector2(10, -24) * k, hc + Vector2(22, -21) * k, hc + Vector2(10, -18) * k]), Color(0.15, 0.35, 0.8))
 	draw_colored_polygon(PackedVector2Array([hc + Vector2(10, -21) * k, hc + Vector2(22, -21) * k, hc + Vector2(10, -18) * k]), Color(1.0, 0.85, 0.1))
-	_text(font, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.75, 1.0, 0.7))
+	labels.append([45, Camp.CAMP_ID, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.75, 1.0, 0.7)])
+	_draw_labels(font, labels)
 
 	# Завдання
 	for id in targets:
@@ -402,6 +404,32 @@ func _draw() -> void:
 
 
 ## Підпис по центру; ширина рахується за реальним розміром тексту.
+## Назви місць без накладання: важливіші (вибране, мета, міста) малюються першими,
+## а ті, що налазять на вже намальовані, ховаються до наближення мапи.
+func _draw_labels(font: Font, labels: Array) -> void:
+	for l in labels:
+		if l[1] == selected:
+			l[0] = 100
+		elif l[1] == story_target or targets.has(l[1]):
+			l[0] += 30
+		elif l[1] == current:
+			l[0] += 20
+	labels.sort_custom(func(a, b): return a[0] > b[0])
+	var placed := []
+	for l in labels:
+		var w := font.get_string_size(l[3], HORIZONTAL_ALIGNMENT_LEFT, -1, l[4]).x
+		var rect := Rect2(l[2] - Vector2(w / 2.0, l[4]), Vector2(w, l[4] * 1.15)).grow(2.0)
+		var hit := false
+		for r in placed:
+			if r.intersects(rect):
+				hit = true
+				break
+		if hit and l[0] < 100:
+			continue
+		placed.append(rect)
+		_text(font, l[2], l[3], l[4], l[5])
+
+
 func _text(font: Font, pos: Vector2, text: String, fs: int, col: Color, outline: bool = true) -> void:
 	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var p := pos - Vector2(w / 2.0, 0)

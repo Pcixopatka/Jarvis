@@ -13,6 +13,7 @@ signal player_died
 signal level_up(level: int)
 signal job_level_up(level: int)  # новий рівень майстерності
 signal companion_down(index: int, name: String)
+signal companion_revived(index: int)
 signal item_found(item: Dictionary)
 
 # Локації

@@ -264,6 +264,8 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	if dead:
 		return
 	amount *= dmg_taken_mult
+	if statuses.has("curse"):
+		amount *= 1.35  # прокляття мольфара
 	if "iron" in affixes:
 		kb *= 0.2
 	hp -= amount

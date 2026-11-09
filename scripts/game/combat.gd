@@ -19,6 +19,7 @@ const PlagueService := preload("res://scripts/game/plague_service.gd")
 const PlagueScript := preload("res://scripts/world/plague_cloud.gd")
 const GateScript := preload("res://scripts/entities/gate.gd")
 const TrapScript := preload("res://scripts/world/trap.gd")
+const ZoneScript := preload("res://scripts/world/zone.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
 const FxScript := preload("res://scripts/world/fx.gd")
@@ -701,6 +702,33 @@ func spawn_trap(pos: Vector2, dmg: float, crit: bool, max_count: int) -> void:
 	t.damage = dmg
 	t.crit = crit
 	effects.add_child(t)
+
+
+## Зона чарів волхва (grad / tuman / otruta) або дух-помічник (spirit).
+func spawn_zone(kind: String, pos: Vector2, r: float, dur: float, dmg: float) -> void:
+	var z = ZoneScript.new()
+	z.combat = self
+	z.kind = kind
+	z.position = pos
+	z.radius = r
+	z.duration = dur
+	z.damage = dmg
+	effects.add_child(z)
+
+
+## Знахар підіймає поранених побратимів просто в бою. Повертає, скількох підняв.
+func revive_companions(pct: float) -> int:
+	var n := 0
+	for c in companion_nodes:
+		if is_instance_valid(c) and not c.alive:
+			c.alive = true
+			c.visible = true
+			c.hp = c.max_hp * pct
+			c.global_position = player.global_position + Vector2.from_angle(randf() * TAU) * 60.0
+			fx.burst(c.global_position, Color(1.0, 0.9, 0.5), 18, 160, 5, 0.6, -60)
+			Events.companion_revived.emit(c.index)
+			n += 1
+	return n
 
 
 ## Бочка пороху: вибухає за мить.

@@ -54,6 +54,7 @@ func _run() -> void:
 	await _suite_defense_battle()
 	await _suite_mage_battle()
 	await _suite_spec_battle()
+	await _suite_volkhv_specs()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -1226,6 +1227,135 @@ func _suite_spec_battle() -> void:
 	p.mana = p.max_mana
 	p.use_skill("vidvid")
 	check(z1.stun > 1.0 and z1.statuses.has("weak"), "Відвід очей: заціпеніння й слабкість")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+
+
+func _suite_volkhv_specs() -> void:
+	suite("Спеціалізації Волхва")
+	var SS = load("res://scripts/game/spec_service.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var UiCity = load("res://scripts/ui/ui_city.gd")
+	check(Classes.CLASSES["volkhv"]["next"].size() == 3, "у Волхва 3 дороги")
+	var places := {}
+	for spec in Classes.CLASSES["volkhv"]["next"]:
+		var info: Dictionary = Classes.CLASSES[spec]
+		check(Data.CITIES.has(info["where"]) and not places.has(info["where"]), "%s: окремий наставник у %s" % [spec, info["where"]])
+		places[info["where"]] = true
+		check(SS.TRIALS.has(spec) and Classes.is_volkhv_line(spec) and info["weapons"] == ["staff"], "%s: випробування, посох" % spec)
+	SaveSystem.delete(TEST_SAVE)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "block": true, "elite": true, "boss": true, "item": true, "map": true, "city": true}
+	var p = game.player
+	p.change_class("volkhv")
+	game._sync_class()
+	p.job_level = 30
+	check(UiCity._city_specs(game, "verkhovyna") == ["znakhar"] and UiCity._city_specs(game, "sich").is_empty(), "у Верховині — наставник знахарів, на Січі для волхва нікого")
+	check(SS.start(game.world, p, "znakhar"), "випробування знахаря")
+	SS.on_event(game.world, "clear", "bryansk_forest")
+	check(SS.city_dialogue(game.world, "kapyshche").is_empty() and not SS.city_dialogue(game.world, "verkhovyna").is_empty(), "посвята — у Верховині")
+	SS.complete(game.world, p)
+	game._after_class_change()
+	check(p.job == "znakhar" and p.equipment["weapon"]["name"] == "Калиновий посох" and StoryService.hero_class == "volkhv", "посвячено в знахарі, звертання «волхве»")
+	var st = Data.gen_item(15, 1, "weapon", "staff")
+	p.add_item(st)
+	p.equip(st["uid"])
+	p.skills = {"zhyvytsia": 2, "ochyshchennia": 1, "oberih_zahonu": 2, "otruta": 2, "pidniaty": 1,
+		"lightning": 3, "molot": 2, "burya": 1, "grad": 2, "tuman": 1, "proklin": 1, "dukh": 1}
+	p.recalc()
+	game.world.companions = [{"type": "dzhura", "downed": false, "level": 5, "xp": 0}]
+	game.enter_location("wild_field")
+	await _frames(2)
+	p.invuln = 99.0
+	# Знахар
+	p.hp = p.max_hp * 0.3
+	var h0: float = p.hp
+	p.mana = p.max_mana
+	p.use_skill("zhyvytsia")
+	check(p.hp > h0 + p.max_hp * 0.2, "Живиця лікує")
+	p.add_status("bleed", 5.0, 3.0)
+	p.mana = p.max_mana
+	p.use_skill("ochyshchennia")
+	p.add_status("burn", 5.0, 3.0)
+	check(p.statuses.is_empty(), "Очищення знімає стани й не дає новим")
+	p.cleanse_timer = 0.0
+	p.mana = p.max_mana
+	p.use_skill("oberih_zahonu")
+	p.invuln = 0.0
+	var h1: float = p.hp
+	p.take_damage(100.0, null)
+	check(h1 - p.hp < 100.0 * (1.0 - p.armor) * 0.8, "Оберіг загону зменшує шкоду")
+	p.invuln = 99.0
+	p.zahyst_timer = 0.0
+	var cn = game.combat.companion_nodes[0]
+	cn.take_damage(cn.max_hp * 5.0)
+	check(not cn.alive and game.world.companions[0]["downed"], "побратим упав")
+	p.mana = p.max_mana
+	p.use_skill("pidniaty")
+	check(cn.alive and not game.world.companions[0]["downed"], "Підняти побратима")
+	var e = _moves_dummy(game, "upyr")
+	e.global_position = p.global_position + Vector2(200, 0)
+	var eh: float = e.hp
+	p.mana = p.max_mana
+	p.use_skill("otruta")
+	for i in 70:
+		await process_frame
+	check(e.hp < eh, "Отруйне зілля з'їдає ворога")
+	# Перунів жрець
+	p.change_class("perun_zhrets")
+	var e2 = _moves_dummy(game, "upyr")
+	e2.global_position = p.global_position + Vector2(250, 0)
+	var e2h: float = e2.hp
+	p.mana = p.max_mana
+	p.use_skill("lightning")
+	check(e2.hp < e2h, "Блискавка Перуна")
+	e2h = e2.hp
+	p.mana = p.max_mana
+	p.use_skill("molot")
+	check(e2.hp < e2h and e2.stun > 0.5, "Громовий молот приголомшує")
+	e2h = e2.hp
+	p.mana = p.max_mana
+	p.use_skill("burya")
+	for i in 70:
+		await process_frame
+	check(e2.hp < e2h and p.burya_timer > 0.0, "Буря б'є блискавками")
+	p.burya_timer = 0.0
+	# Мольфар
+	p.change_class("molfar")
+	var e3 = _moves_dummy(game, "upyr")
+	e3.global_position = p.global_position + Vector2(250, 0)
+	p.mana = p.max_mana
+	p.use_skill("proklin")
+	check(e3.statuses.has("curse") and e3.statuses.has("weak"), "Прокляття")
+	var before: float = e3.hp
+	e3.take_damage(100.0, Vector2.ZERO)
+	check(before - e3.hp > 120.0, "проклятий отримує більше шкоди")
+	var e3h: float = e3.hp
+	p.mana = p.max_mana
+	p.use_skill("grad")
+	for i in 40:
+		await process_frame
+	check(e3.hp < e3h and e3.statuses.has("chill"), "Град б'є й морозить")
+	e3h = e3.hp
+	p.mana = p.max_mana
+	p.use_skill("dukh")
+	for i in 90:
+		await process_frame
+	check(e3.hp < e3h, "дух-помічник стріляє вогниками")
+	p.mana = p.max_mana
+	p.use_skill("tuman")
+	for i in 40:
+		await process_frame
+	var near = _moves_dummy(game, "mavka")
+	for i in 40:
+		await process_frame
+	check(near.statuses.has("chill") and near.statuses.has("weak"), "Туман сповільнює й слабить")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

@@ -86,6 +86,9 @@ func _ready() -> void:
 	Events.level_up.connect(_on_level_up)
 	Events.player_died.connect(_on_player_died)
 	Events.companion_down.connect(_on_companion_down)
+	Events.companion_revived.connect(func(i: int):
+		if i < world.companions.size():
+			world.companions[i]["downed"] = false)
 	Events.field_cleared.connect(_on_location_cleared)
 	Events.dungeon_cleared.connect(_on_dungeon_cleared)
 	Events.exit_requested.connect(_on_exit)
@@ -184,7 +187,7 @@ func _after_class_change() -> void:
 ## Клас героя впливає на здобич (зброя свого класу) і звертання в розмовах.
 func _sync_class() -> void:
 	Data.weapon_pool = player.Classes.CLASSES[player.job]["weapons"]
-	StoryService.hero_class = player.job
+	StoryService.hero_class = "volkhv" if player.Classes.is_volkhv_line(player.job) else player.job
 
 
 func new_game() -> void:

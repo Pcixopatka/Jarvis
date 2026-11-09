@@ -51,7 +51,8 @@ const STATS := [
 # Вміння тепер у деревах класів (див. classes.gd).
 const Classes := preload("res://scripts/data/classes.gd")
 const ACTIVE_SKILLS: Array = ["vyly", "first_aid", "whirl", "battle_cry", "musket", "fireball", "shield", "herb",
-	"zemnyi", "stina", "bulava", "pastka", "tin", "kydok", "kartech", "prytsil", "bochka", "vovk", "kulia", "zamova", "vidvid"]
+	"zemnyi", "stina", "bulava", "pastka", "tin", "kydok", "kartech", "prytsil", "bochka", "vovk", "kulia", "zamova", "vidvid",
+	"zhyvytsia", "pidniaty", "ochyshchennia", "oberih_zahonu", "otruta", "lightning", "molot", "burya", "grad", "tuman", "proklin", "dukh"]
 const ACTIVE_LABELS: Dictionary = Classes.ACTIVE_LABELS
 
 
@@ -271,6 +272,12 @@ const CITIES := {
 		"desc": "Неприступна фортеця над Смотричем."},
 	"kapyshche": {"name": "Капище на Говерлі", "pos": Vector2(24.5, 48.16), "level": 3,
 		"desc": "Осідок волхвів Карпатського кола на схилах Говерли. Тут посвячують у волхви."},
+	"verkhovyna": {"name": "Верховина", "pos": Vector2(25.35, 47.95), "level": 6,
+		"desc": "Гуцульське село серед полонин. Тут живе знахарка Параска — наставниця знахарів."},
+	"pip_ivan": {"name": "Піп Іван", "pos": Vector2(24.75, 47.5), "level": 8,
+		"desc": "Найгрозовіша вершина Чорногори. На ній — капище Перуна й жрець Громобій."},
+	"molfar_hut": {"name": "Хата мольфара", "pos": Vector2(23.75, 47.45), "level": 8,
+		"desc": "Самотня хата на чорногірських схилах. Мольфар Яким кличе дощ і проганяє град."},
 	"lviv": {"name": "Львів", "pos": Vector2(24.03, 49.84), "level": 9,
 		"desc": "Багате торгове місто, ворота на захід."},
 }

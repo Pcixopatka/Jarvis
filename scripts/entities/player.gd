@@ -117,13 +117,19 @@ var stina_timer := 0.0  # Козацька стіна (Запорожець): в
 var tin_timer := 0.0  # Тінь (Пластун): вороги не бачать, наступний удар — крит
 var wolf_timer := 0.0  # Вовча подоба (Характерник)
 var zamova_timer := 0.0  # Замовляння шаблі (Характерник)
+var zahyst_timer := 0.0  # Оберіг загону (Знахар)
+var zahyst_mult := 1.0
+var cleanse_timer := 0.0  # Очищення (Знахар): стани не чіпляються
+var burya_timer := 0.0  # Буря (Перунів жрець)
+var _burya_tick := 0.0
 var _chaining := false
 
 
 func _ready() -> void:
 	if equipment.is_empty() and inventory.is_empty():
-		var starter := Data.gen_item(1, 0, "weapon", "staff" if job == "volkhv" else "sabre")
-		starter["name"] = "Старий посох" if job == "volkhv" else "Стара шабля"
+		var mage := Classes.is_volkhv_line(job)
+		var starter := Data.gen_item(1, 0, "weapon", "staff" if mage else "sabre")
+		starter["name"] = "Старий посох" if mage else "Стара шабля"
 		equip_new(starter)
 	recalc()
 	hp = max_hp
@@ -396,7 +402,7 @@ func recalc() -> void:
 	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist")) * float(class_info().get("hp_mult", 1.0))
 	damage *= float(class_info().get("dmg_mult", 1.0))
 	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + eq("armor") / 100.0, 0.0, 0.75)
-	regen = 0.6 * pk("regen") + eq("regen")
+	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + eq("regen")
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok"))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
@@ -683,6 +689,14 @@ func _tick_effects(delta: float) -> void:
 	tin_timer = maxf(0.0, tin_timer - delta)
 	wolf_timer = maxf(0.0, wolf_timer - delta)
 	zamova_timer = maxf(0.0, zamova_timer - delta)
+	zahyst_timer = maxf(0.0, zahyst_timer - delta)
+	cleanse_timer = maxf(0.0, cleanse_timer - delta)
+	if burya_timer > 0.0:
+		burya_timer -= delta
+		_burya_tick -= delta
+		if _burya_tick <= 0.0:
+			_burya_tick = 0.5
+			_burya_strike()
 	if ward_timer > 0.0:
 		ward_timer -= delta
 		if ward_timer <= 0.0:
@@ -833,6 +847,8 @@ func _dash_strike() -> void:
 
 func skill_cooldown(id: String) -> float:
 	var base: float = Classes.COOLDOWNS.get(id, 6.0)
+	if id in ["lightning", "molot", "burya"]:
+		base *= 1.0 - 0.1 * pk("storm_soul")
 	match id:
 		"whirl":
 			base *= 1.0 - 0.1 * sk("whirl_cd")
@@ -902,6 +918,28 @@ func use_skill(id: String) -> void:
 			used = _zamova()
 		"vidvid":
 			used = _vidvid()
+		"zhyvytsia":
+			used = _zhyvytsia()
+		"pidniaty":
+			used = combat.revive_companions(0.4 + 0.15 * (sk("pidniaty") - 1)) > 0
+		"ochyshchennia":
+			used = _ochyshchennia()
+		"oberih_zahonu":
+			used = _oberih_zahonu()
+		"otruta":
+			used = _otruta()
+		"molot":
+			used = _molot()
+		"burya":
+			used = _burya()
+		"grad":
+			used = _grad()
+		"tuman":
+			used = _tuman()
+		"proklin":
+			used = _proklin()
+		"dukh":
+			used = _dukh()
 	if used:
 		mana -= skill_cost(id)
 		skill_timers[id] = skill_cooldown(id)
@@ -1170,6 +1208,125 @@ func _vidvid() -> bool:
 	return true
 
 
+# ---------- Знахар ----------
+
+func heal_power() -> float:
+	return skill_power * (1.0 + 0.12 * pk("travnyk"))
+
+
+func _zhyvytsia() -> bool:
+	var pct := (0.3 + 0.05 * (sk("zhyvytsia") - 1)) * heal_power()
+	heal(max_hp * pct)
+	for c in combat.companion_nodes:
+		if is_instance_valid(c) and c.alive:
+			c.heal(c.max_hp * pct)
+	combat.fx.ring(global_position, Color(0.5, 1.0, 0.55), 24, 260, 5, 0.5)
+	Audio.play("heal", 0.0)
+	return true
+
+
+func _ochyshchennia() -> bool:
+	statuses.clear()
+	cleanse_timer = 2.0 + 1.0 * (sk("ochyshchennia") - 1)
+	combat.fx.ring(global_position, Color(0.8, 0.95, 1.0), 20, 160, 4, 0.4)
+	combat.float_text(global_position + Vector2(0, -70), "Очищення", Color(0.8, 0.95, 1.0))
+	return true
+
+
+func _oberih_zahonu() -> bool:
+	zahyst_timer = 8.0
+	zahyst_mult = 1.0 - (0.25 + 0.05 * (sk("oberih_zahonu") - 1))
+	combat.fx.ring(global_position, Color(0.5, 0.7, 1.0), 24, 320, 5, 0.5)
+	combat.float_text(global_position + Vector2(0, -70), "Оберіг загону", Color(0.6, 0.8, 1.0))
+	Audio.play("heal", 0.0, -3.0)
+	return true
+
+
+func _otruta() -> bool:
+	var e: Node2D = combat.nearest_enemy(global_position, 450.0)
+	if e == null:
+		return false
+	combat.spawn_zone("otruta", e.global_position, 110.0, 5.0, damage * 0.5 * (1.0 + 0.2 * (sk("otruta") - 1)) * skill_power)
+	Audio.play("swing", 0.1, -6.0)
+	return true
+
+
+# ---------- Перунів жрець ----------
+
+func _molot() -> bool:
+	var e: Node2D = combat.nearest_enemy(global_position, 600.0)
+	if e == null:
+		return false
+	var pos: Vector2 = e.global_position
+	var m := 3.5 * (1.0 + 0.2 * (sk("molot") - 1)) * (1.0 + 0.1 * pk("grim")) * skill_power
+	for t in _alive_enemies():
+		var to: Vector2 = t.global_position - pos
+		if to.length() <= 160.0 + t.radius:
+			var r := _roll(m)
+			hit(t, r[0], to.normalized() * 320.0, r[1])
+			if not t.dead and not t.is_boss:
+				t.stun = maxf(t.stun, 0.8)
+	combat.spawn_bolt(PackedVector2Array([pos + Vector2(10, -460), pos + Vector2(-20, -200), pos]))
+	combat.fx.ring(pos, Color(0.75, 0.85, 1.0), 30, 320, 6, 0.35)
+	combat.shake(10.0)
+	Audio.play("lightning", 0.0, 2.0)
+	return true
+
+
+func _burya() -> bool:
+	burya_timer = 6.0 + 1.0 * (sk("burya") - 1)
+	_burya_tick = 0.0
+	combat.float_text(global_position + Vector2(0, -70), "Буря!", Color(0.7, 0.8, 1.0))
+	return true
+
+
+func _burya_strike() -> void:
+	var near := _alive_enemies().filter(func(e): return global_position.distance_to(e.global_position) <= 450.0)
+	if near.is_empty():
+		return
+	var e = near[randi() % near.size()]
+	var r := _roll(1.3 * (1.0 + 0.15 * (sk("burya") - 1)) * (1.0 + 0.1 * pk("grim")) * skill_power)
+	hit(e, r[0], Vector2.ZERO, r[1])
+	combat.spawn_bolt(PackedVector2Array([e.global_position + Vector2(randf_range(-40, 40), -420), e.global_position]))
+	Audio.play("lightning", 0.2, -8.0)
+
+
+# ---------- Мольфар ----------
+
+func _grad() -> bool:
+	var e: Node2D = combat.nearest_enemy(global_position, 550.0)
+	if e == null:
+		return false
+	var k := 1.0 + 0.2 * pk("khmara")
+	combat.spawn_zone("grad", e.global_position, 140.0 * k, 3.0, damage * 0.45 * (1.0 + 0.2 * (sk("grad") - 1)) * k * skill_power)
+	Audio.play("lightning", 0.2, -10.0)
+	return true
+
+
+func _tuman() -> bool:
+	combat.spawn_zone("tuman", global_position, 230.0, 6.0, 0.0)
+	return true
+
+
+func _proklin() -> bool:
+	var e: Node2D = combat.nearest_enemy(global_position, 500.0)
+	if e == null:
+		return false
+	for t in _alive_enemies():
+		if t.global_position.distance_to(e.global_position) <= 150.0:
+			Status.apply(t, "curse", 8.0)
+			Status.apply(t, "weak", 8.0)
+	combat.fx.ring(e.global_position, Color(0.5, 0.2, 0.5), 20, 300, 5, 0.5)
+	Audio.play("roar", 0.3, -10.0)
+	return true
+
+
+func _dukh() -> bool:
+	combat.spawn_zone("spirit", global_position + Vector2(0, -60), 0.0, 15.0, damage * 0.8 * (1.0 + 0.2 * (sk("dukh") - 1)) * skill_power)
+	combat.float_text(global_position + Vector2(0, -70), "Духу гір, прийди!", Color(0.6, 0.9, 1.0))
+	return true
+
+
 # ---------- Волхв ----------
 
 ## Звичайна атака волхва: іскри з посоха летять у найближчого ворога.
@@ -1210,7 +1367,7 @@ func _fireball() -> bool:
 
 
 func _shield() -> bool:
-	ward_hp = max_hp * (0.25 + 0.08 * (sk("shield") - 1)) * skill_power
+	ward_hp = max_hp * (0.2 + 0.05 * (sk("shield") - 1)) * skill_power
 	ward_timer = 8.0
 	Audio.play("heal", 0.0, -2.0)
 	combat.float_text(global_position + Vector2(0, -70), "Щит-оберіг!", Color(0.6, 0.85, 1.0))
@@ -1293,7 +1450,7 @@ func _lightning() -> bool:
 		return false
 	targets.sort_custom(func(a, b): return global_position.distance_squared_to(a.global_position) < global_position.distance_squared_to(b.global_position))
 	var count := 2 + sk("lightning") + 2 * sk("chain")
-	var m := (1.2 + 0.25 * sk("lightning")) * skill_power
+	var m := (1.2 + 0.25 * sk("lightning")) * skill_power * (1.0 + 0.1 * pk("grim"))
 	var pts := PackedVector2Array([global_position + Vector2(0, -30)])
 	for i in mini(count, targets.size()):
 		var e = targets[i]
@@ -1350,6 +1507,8 @@ func take_damage(amount: float, source = null) -> bool:
 			return false
 	if stina_timer > 0.0:
 		amount *= 1.0 - (0.4 + 0.05 * (sk("stina") - 1))
+	if zahyst_timer > 0.0:
+		amount *= zahyst_mult
 	if source != null and thorns > 0.0 and not source.dead:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
@@ -1393,7 +1552,7 @@ func _check_death() -> void:
 
 ## Накласти стан на козака (від удару ворога).
 func add_status(id: String, dur: float, dps: float = 0.0) -> void:
-	if not alive:
+	if not alive or cleanse_timer > 0.0:
 		return
 	if id == "plague":
 		if plague_immune:
@@ -1442,7 +1601,7 @@ func _draw() -> void:
 	var bob := sin(walk_phase) * 3.0 if moving else 0.0
 
 	var peasant := is_peasant()
-	var volkhv := job == "volkhv"
+	var volkhv := Classes.is_volkhv_line(job)
 	# Ноги: козак — широкі сині шаровари й червоні чоботи; селянин — полотняні штани й постоли
 	var leg_l := Vector2(-7, 10 + bob)
 	var leg_r := Vector2(7, 10 - bob)
@@ -1459,6 +1618,19 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([Vector2(-11, -16), Vector2(11, -16), Vector2(14, 14), Vector2(-14, 14)]), Color(0.96, 0.95, 0.9) * tint)
 		draw_line(Vector2(0, -15), Vector2(0, 12), Color(0.8, 0.12, 0.12) * tint, 2.0)
 		draw_rect(Rect2(-13, 2, 26, 3), Color(0.8, 0.15, 0.12) * tint)
+		match job:
+			"znakhar":
+				draw_line(Vector2(-11, -15), Vector2(-14, 14), Color(0.3, 0.6, 0.25) * tint, 2.5)  # зелене шиття
+				draw_line(Vector2(11, -15), Vector2(14, 14), Color(0.3, 0.6, 0.25) * tint, 2.5)
+				draw_circle(Vector2(-side * 12, 8), 5.0, Color(0.55, 0.4, 0.2) * tint)  # торбинка з травами
+				draw_circle(Vector2(-side * 12, 4), 2.5, Color(0.35, 0.7, 0.3) * tint)
+			"perun_zhrets":
+				draw_rect(Rect2(-13, 2, 26, 3), Color(0.25, 0.4, 0.85) * tint)  # синій пояс
+				draw_polyline(PackedVector2Array([Vector2(-3, -12), Vector2(3, -6), Vector2(-2, -3), Vector2(4, 3)]), Color(1.0, 0.85, 0.2) * tint, 2.0)
+			"molfar":
+				# Гуцульський кептар поверх сорочки
+				draw_colored_polygon(PackedVector2Array([Vector2(-12, -15), Vector2(-3, -15), Vector2(-5, 10), Vector2(-14, 10)]), Color(0.65, 0.35, 0.15) * tint)
+				draw_colored_polygon(PackedVector2Array([Vector2(12, -15), Vector2(3, -15), Vector2(5, 10), Vector2(14, 10)]), Color(0.65, 0.35, 0.15) * tint)
 	elif peasant:
 		# Тулуб: біла сорочка з вишивкою і мотузяний пояс
 		draw_circle(Vector2(0, -2), 15.0, Color(0.95, 0.94, 0.9) * tint)
@@ -1484,9 +1656,16 @@ func _draw() -> void:
 	if volkhv:
 		# Довге русяве волосся й вінок із дубового листя
 		draw_colored_polygon(PackedVector2Array([head + Vector2(-12, 8), head + Vector2(-11, -6), head + Vector2(0, -13), head + Vector2(11, -6), head + Vector2(12, 8), head + Vector2(7, -4), head + Vector2(-7, -4)]), Color(0.7, 0.55, 0.3) * tint)
-		draw_arc(head + Vector2(0, -4), 11.0, PI * 1.05, PI * 1.95, 10, Color(0.3, 0.55, 0.2) * tint, 4.0)
-		for i in 4:
-			draw_circle(head + Vector2(-8 + i * 5.3, -12 + absf(i - 1.5) * 1.5), 2.2, Color(0.35, 0.65, 0.25) * tint)
+		if job == "molfar":
+			# Чорний гуцульський капелюх замість вінка
+			draw_rect(Rect2(head + Vector2(-15, -12), Vector2(30, 4)), Color(0.1, 0.08, 0.08) * tint)
+			draw_rect(Rect2(head + Vector2(-8, -20), Vector2(16, 9)), Color(0.1, 0.08, 0.08) * tint)
+			draw_line(head + Vector2(-8, -13), head + Vector2(8, -13), Color(0.8, 0.2, 0.15) * tint, 2.0)
+		else:
+			var leaf := Color(0.35, 0.65, 0.25) if job != "perun_zhrets" else Color(0.8, 0.82, 0.9)
+			draw_arc(head + Vector2(0, -4), 11.0, PI * 1.05, PI * 1.95, 10, leaf.darkened(0.2) * tint, 4.0)
+			for i in 4:
+				draw_circle(head + Vector2(-8 + i * 5.3, -12 + absf(i - 1.5) * 1.5), 2.2, leaf * tint)
 		draw_circle(head + Vector2(side * 4, -1), 1.8, Color(0.1, 0.1, 0.1) * tint)
 	elif peasant:
 		# Звичайна чуприна, без вусів — ще зовсім молодий

@@ -25,8 +25,8 @@ static func build(game, city: String) -> Control:
 		["Коваль", _smith(game)],
 		["Корчма", _tavern(game, city)],
 	]
-	if city == "sich" and "cossack" in game.player.Classes.lineage(game.player.job):
-		pages.append(["Наставники", _mentors(game)])
+	if not _city_specs(game, city).is_empty():
+		pages.append(["Наставники" if _city_specs(game, city).size() > 1 else "Наставник", _mentors(game, city)])
 	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int): game.city_tab = i,
 		[[game.player.class_name_ua() + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
 
@@ -201,7 +201,20 @@ static func _smith(game) -> Control:
 
 # ---------------- Наставники (спеціалізації Козака) ----------------
 
-static func _mentors(game) -> Control:
+## Спеціалізації, наставники яких живуть у цьому місті (для героя відповідної гілки).
+static func _city_specs(game, city: String) -> Array:
+	var Classes = game.player.Classes
+	var out := []
+	for base in ["cossack", "volkhv"]:
+		if not base in Classes.lineage(game.player.job):
+			continue
+		for spec in Classes.CLASSES[base]["next"]:
+			if Classes.CLASSES[spec]["where"] == city:
+				out.append(spec)
+	return out
+
+
+static func _mentors(game, city: String) -> Control:
 	var p = game.player
 	var Classes = p.Classes
 	var SS = game.SpecService
@@ -209,13 +222,19 @@ static func _mentors(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	var need: int = Classes.JOB_CHANGE_AT[1]
-	if p.job == "cossack":
-		var t := "Спеціалізацію можна обрати з %d-го рівня майстерності Козака (зараз %d)." % [need, p.job_level]
+	var base: String = "cossack" if "cossack" in Classes.lineage(p.job) else "volkhv"
+	if p.job == base:
+		var t := "Спеціалізацію можна обрати з %d-го рівня майстерності (зараз %d)." % [need, p.job_level]
 		v.add_child(UI.label(t, 19, UI.GOOD if p.job_level >= need else UI.MUTED, false))
+		if base == "volkhv":
+			var places := []
+			for sp in Classes.CLASSES["volkhv"]["next"]:
+				places.append("%s — %s" % [Classes.CLASSES[sp]["name"], Data.place_name(Classes.CLASSES[sp]["where"])])
+			v.add_child(UI.label("Наставники волхвів: " + ", ".join(places), 16, UI.MUTED, false))
 	else:
 		v.add_child(UI.label("Ти вже %s. Іншу дорогу відкриє лише Алатир-камінь." % p.class_name_ua().to_lower(), 19, UI.MUTED, false))
 	var trial: Dictionary = w.spec_trial
-	for spec in Classes.CLASSES["cossack"]["next"]:
+	for spec in _city_specs(game, city):
 		var info: Dictionary = Classes.CLASSES[spec]
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
