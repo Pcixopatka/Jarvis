@@ -141,6 +141,7 @@ const MAX_UPGRADE := 10
 const UPGRADE_BONUS := 0.12  # +12% до всіх бонусів речі за кожен рівень заточки
 const SHARPEN_CHANCE := [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
 const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
+const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гривні: у стільки разів дорожча
 
 const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна"]
 const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15)]
@@ -286,6 +287,11 @@ static func item_stats(item: Dictionary) -> Dictionary:
 
 static func sharpen_cost(item: Dictionary) -> int:
 	return int(20 * (item["up"] + 1) * (1.0 + 0.5 * item["rarity"]) * (1.0 + 0.25 * item["ilvl"]))
+
+
+## Ціна заточки без ризику: звичайна (зі знижкою своєї кузні) × SHARPEN_SAFE_MULT.
+static func sharpen_safe_cost(item: Dictionary, cost_mult: float = 1.0) -> int:
+	return int(sharpen_cost(item) * (cost_mult * SHARPEN_SAFE_MULT))
 
 
 static func sharpen_chance(item: Dictionary) -> float:

@@ -38,6 +38,7 @@ const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const EscortService := preload("res://scripts/game/escort_service.gd")
+const KleinodService := preload("res://scripts/game/kleinod_service.gd")
 const SaveTransfer := preload("res://scripts/core/save_transfer.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
@@ -1540,6 +1541,8 @@ func city_do(action: String, arg) -> void:
 			_save_settings()
 		"sharpen":
 			_sharpen(arg)
+		"sharpen_safe":
+			_sharpen(arg, 1.0, 0.0, true)
 		"hire":
 			CityService.hire(world, player, city_id, arg)
 		"buy_potion":
@@ -1611,10 +1614,15 @@ func city_do(action: String, arg) -> void:
 	dice_anim = {}  # анімація кидка стосується лише цього показу
 
 
-func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> void:
+## paid_safe — заточка без ризику за гривні: утричі дорожча, зате невдача не знижує рівень (жетон не витрачається).
+func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0, paid_safe: bool = false) -> void:
 	var before: int = player.find_item(uid).get("up", 0)
+	var risky := before >= Data.SHARPEN_RISK_FROM
+	var paid := paid_safe and risky
+	if paid:
+		cost_mult *= Data.SHARPEN_SAFE_MULT
 	# Жетон безпечної заточки витрачається лише на ризиковану спробу
-	var safe := before >= Data.SHARPEN_RISK_FROM and AdRewards.use_safe(world)
+	var safe := paid or (risky and AdRewards.use_safe(world))
 	match player.sharpen(uid, cost_mult, chance_bonus + HolidayService.bonus("sharpen"), safe):  # на Кузьми й Дем'яна ковалям щастить
 		"ok":
 			Audio.play("sharpen_ok", 0.03)
@@ -1624,7 +1632,9 @@ func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> vo
 		"fail":
 			Audio.play("sharpen_fail")
 			smith_msg = "Не вдалося... Заточка лишилась +%d" % before
-			if safe:
+			if paid:
+				smith_msg += " (заплачено за безпеку)"
+			elif safe:
 				smith_msg += " (безпечна заточка вберегла)"
 			smith_msg_color = UI.MUTED
 		"down":
@@ -2116,8 +2126,9 @@ func leave_camp() -> void:
 	enter_map()
 
 
-func _build_camp() -> void:
-	hud.set_screen(UiCamp.build(self))
+## keep_scroll — екран перебудовано після дії на ньому: список лишається там, де був.
+func _build_camp(keep_scroll: bool = false) -> void:
+	hud.set_screen(UiCamp.build(self), keep_scroll)
 
 
 func camp_do(action: String, arg) -> void:
@@ -2131,6 +2142,18 @@ func camp_do(action: String, arg) -> void:
 			smith_msg = ""
 		"sharpen":
 			_sharpen(arg, CampService.forge_cost_mult(world), CampService.forge_chance_bonus(world))
+		"sharpen_safe":
+			_sharpen(arg, CampService.forge_cost_mult(world), CampService.forge_chance_bonus(world), true)
+		"kleinod":
+			if KleinodService.buy(world, player, arg):
+				var kl := KleinodService.level(world, arg)
+				Audio.play("quest", 0.0)
+				hud.show_banner("%s: ступінь %d!\n%s" % [Camp.KLEINODY[arg]["name"], kl, KleinodService.bonus_text(arg, kl)], UI.GOLD)
+				_record("kleinod")
+		"buy_stone":
+			if KleinodService.buy_stone(player, arg):
+				Audio.play("coin", 0.0)
+				hud.show_banner("Куплено: %s" % StoneService.NAMES[arg], UI.GOLD)
 		"salvage":
 			var v := CampService.salvage(world, player, arg)
 			if v > 0:
@@ -2231,10 +2254,11 @@ func camp_do(action: String, arg) -> void:
 					hud.show_banner("Дякуємо! +1 безпечна заточка", UI.GOOD)
 				save_game()
 				if state == State.CAMP:
-					_build_camp())
+					_build_camp(true))
 			return
 	save_game()
-	_build_camp()
+	# Вибір речі чи ступеня кування показує інше, тож список починається згори; решта дій лишає його на місці
+	_build_camp(action not in ["select", "craft_tier"])
 
 
 ## Реклама за ×2 досвіду; refresh перебудовує поточний екран після перегляду.

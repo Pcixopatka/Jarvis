@@ -10,6 +10,8 @@ const CraftService := preload("res://scripts/game/craft_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const GardenService := preload("res://scripts/game/garden_service.gd")
+const KleinodService := preload("res://scripts/game/kleinod_service.gd")
+const StoneService := preload("res://scripts/game/stone_service.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -17,7 +19,7 @@ static func _do(game, action: String, arg = null) -> Callable:
 
 
 static func resources_text(p) -> String:
-	return "%d грн • Дерево %d • Залізо %d • Трави %d • Трофеї %d" % [p.gold, p.resources.get("wood", 0), p.resources.get("iron", 0), p.resources.get("herbs", 0), p.resources.get("trophy", 0)]
+	return "%s грн • Дерево %d • Залізо %d • Трави %d • Трофеї %d" % [UI.num(p.gold), p.resources.get("wood", 0), p.resources.get("iron", 0), p.resources.get("herbs", 0), p.resources.get("trophy", 0)]
 
 
 static func build(game) -> Control:
@@ -34,6 +36,7 @@ static func build(game) -> Control:
 		var ripe := GardenService.ready_count(w)
 		pages.append(["Город" + ((" (%d)" % ripe) if ripe > 0 else ""), _garden(game)])
 	pages.append(["Казан", _kazan(game)])
+	pages.append(["Клейноди", _kleinody(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,
@@ -89,6 +92,56 @@ static func _ad_row(game, v: VBoxContainer) -> void:
 	row.add_child(l)
 	row.add_child(UI.button("Переглянути рекламу", _do(game, "ad_xp2"), Vector2(260, 56), 17, AdRewards.can_xp2(w)))
 	v.add_child(row)
+
+
+# ---------- Клейноди роду й скарбник ----------
+
+static func _kleinody(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var mx := KleinodService.max_level()
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(UI.label("Клейноди роду: козацькі регалії. Кожен ступінь назавжди додає бонус усім твоїм героям.", 17, UI.MUTED, false))
+	v.add_child(UI.label("Майстри беруть гривні, трофеї й ресурси. Оздоблено ступенів: %d із %d." % [KleinodService.total(w), Camp.KLEINOD_ORDER.size() * mx], 17, UI.GOLD, false))
+	for id in Camp.KLEINOD_ORDER:
+		var K: Dictionary = Camp.KLEINODY[id]
+		var lvl := KleinodService.level(w, id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		row.add_child(UI.icon("kl_" + id, 64))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(UI.label("%s — ступінь %d/%d" % [K["name"], lvl, mx], 22, UI.GOLD if lvl > 0 else UI.TEXT, false))
+		info.add_child(UI.label(K["desc"], 15, UI.MUTED, false))
+		if lvl > 0:
+			info.add_child(UI.label("Зараз: " + KleinodService.bonus_text(id, lvl), 16, UI.GOOD, false))
+		if lvl < mx:
+			info.add_child(UI.label("Наступний ступінь: " + KleinodService.bonus_text(id, lvl + 1), 16, UI.TEXT if lvl > 0 else UI.GOOD, false))
+		row.add_child(info)
+		var cost := KleinodService.cost(w, id)
+		if cost.is_empty():
+			row.add_child(UI.button("Досконалий", func(): pass, Vector2(330, 64), 18, false))
+		else:
+			var txt := ("Здобути" if lvl == 0 else "Оздобити") + "\n" + KleinodService.cost_text(cost)
+			row.add_child(UI.button(txt, _do(game, "kleinod", id), Vector2(330, 84), 15, KleinodService.can_buy(w, p, id)))
+		v.add_child(row)
+	# Скарбник: камені долі за гривні
+	v.add_child(UI.label("Скарбник", 22, UI.GOLD, false))
+	v.add_child(UI.label("Камені долі рідко падають із босів. Скарбник дістане їх за гривні будь-коли.", 15, UI.MUTED, false))
+	for id in Camp.STONE_PRICES:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		row.add_child(UI.icon("stone_" + id, 64))
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_child(UI.label("%s — у тебе %d" % [StoneService.NAMES[id], StoneService.count(p, id)], 22, UI.TEXT, false))
+		info.add_child(UI.label(Camp.STONE_TEXT[id], 15, UI.MUTED, false))
+		row.add_child(info)
+		var price := KleinodService.stone_price(id)
+		row.add_child(UI.button("Купити\n%s грн" % UI.num(price), _do(game, "buy_stone", id), Vector2(330, 72), 16, p.gold >= price))
+		v.add_child(row)
+	return v
 
 
 # ---------- Скриня (спільна на всіх персонажів) ----------
@@ -201,6 +254,9 @@ static func _forge(game) -> Control:
 		if it["up"] >= Data.SHARPEN_RISK_FROM:
 			risk = "  без ризику" if AdRewards.safe_tokens(w) > 0 else "  ризик -1"
 		det.add_child(UI.button("Заточити до +%d\n%d грн • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(370, 80), 19, p.gold >= cost))
+		if it["up"] >= Data.SHARPEN_RISK_FROM and AdRewards.safe_tokens(w) <= 0:
+			var safe_cost := Data.sharpen_safe_cost(it, CampService.forge_cost_mult(w))
+			det.add_child(UI.button("Заточити без ризику\n%s грн • рівень не впаде" % UI.num(safe_cost), _do(game, "sharpen_safe", sel), Vector2(370, 72), 17, p.gold >= safe_cost))
 	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
 		det.add_child(UI.button("Переплавити на залізо (+%d)" % CampService.salvage_value(it), _do(game, "salvage", sel), Vector2(370, 56), 18))
 	_craft_item_actions(game, det, it)

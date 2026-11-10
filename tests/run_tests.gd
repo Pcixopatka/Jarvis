@@ -101,6 +101,8 @@ func _run() -> void:
 	_suite_transfer()
 	await _suite_transfer_game()
 	await _suite_travel_ride()
+	_suite_kleinody()
+	await _suite_kleinody_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -5186,6 +5188,307 @@ func _suite_travel_ride() -> void:
 			await process_frame
 			frames += 1
 		check(game.state == game.State.PLAYING and game.combat.loc_id == "black_forest", "доїхали до Чорного лісу — бій")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+# ======================= Клейноди роду, скарбник, заточка без ризику =======================
+
+func _suite_kleinody() -> void:
+	suite("Клейноди роду")
+	var KS = load("res://scripts/game/kleinod_service.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var CampService = load("res://scripts/game/camp_service.gd")
+	var GloryService = load("res://scripts/game/glory_service.gd")
+	var StoneService = load("res://scripts/game/stone_service.gd")
+	var Gfx = load("res://scripts/world/gfx.gd")
+	var UI = load("res://scripts/ui/ui_kit.gd")
+	var w = WorldState.new()
+	var p = _new_player()
+	# Дані
+	check(Camp.KLEINOD_ORDER.size() == 7 and Camp.KLEINODY.size() == 7 and KS.max_level() == 5, "сім клейнодів по п'ять ступенів")
+	var data_ok := true
+	for id in Camp.KLEINOD_ORDER:
+		var K: Dictionary = Camp.KLEINODY.get(id, {})
+		for key in ["name", "stat", "per", "res", "text", "desc"]:
+			data_ok = data_ok and K.has(key)
+		data_ok = data_ok and Camp.RESOURCES.has(K.get("res", "")) and Gfx.icon_tex("kl_" + id) != null and float(K.get("per", 0.0)) > 0.0
+		data_ok = data_ok and (K.get("stat", "") in KS.HERO_STATS or K.get("stat", "") in ["glory", "loyalty"])
+	check(data_ok, "у кожного клейнода є назва, бонус, ресурс і значок")
+	var rising: bool = Camp.KLEINOD_GOLD.size() == 5 and Camp.KLEINOD_TROPHY.size() == 5 and Camp.KLEINOD_RES.size() == 5
+	for i in range(1, 5):
+		rising = rising and Camp.KLEINOD_GOLD[i] > Camp.KLEINOD_GOLD[i - 1] and Camp.KLEINOD_TROPHY[i] > Camp.KLEINOD_TROPHY[i - 1] and Camp.KLEINOD_RES[i] > Camp.KLEINOD_RES[i - 1]
+	check(rising, "кожен ступінь дорожчий за попередній")
+	check(UI.num(0) == "0" and UI.num(999) == "999" and UI.num(1000) == "1 000" and UI.num(1226262) == "1 226 262" and UI.num(-15000) == "-15 000", "великі суми пишуться з проміжками")
+	# Купівля
+	check(KS.level(w, "lytavry") == 0 and KS.total(w) == 0 and KS.player_mods(w).is_empty(), "спершу клейнодів нема")
+	var c: Dictionary = KS.cost(w, "lytavry")
+	check(c == {"gold": 10000, "trophy": 10, "iron": 50}, "перший ступінь литавр: гривні, трофеї й залізо: %s" % str(c))
+	check(not KS.can_buy(w, p, "lytavry") and not KS.buy(w, p, "lytavry"), "без гривень не купити")
+	p.gold = 10000
+	p.resources = {"iron": 50, "trophy": 9}
+	check(not KS.can_buy(w, p, "lytavry") and not KS.buy(w, p, "lytavry") and p.gold == 10000, "бракує одного трофея — не купити, гривні цілі")
+	p.resources["trophy"] = 10
+	var xp0: float = p.xp_mult
+	check(KS.buy(w, p, "lytavry") and p.gold == 0 and int(p.resources["iron"]) == 0 and int(p.resources["trophy"]) == 0, "купівля забирає гривні, трофеї й ресурс")
+	check(KS.level(w, "lytavry") == 1 and is_equal_approx(KS.bonus(w, "xp"), 0.04) and is_equal_approx(p.xp_mult, xp0 + 0.04), "литаври: +4% досвіду одразу")
+	p.gold = 10000000
+	p.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	for i in 6:
+		KS.buy(w, p, "lytavry")
+	check(KS.level(w, "lytavry") == 5 and KS.cost(w, "lytavry").is_empty() and not KS.can_buy(w, p, "lytavry") and not KS.buy(w, p, "lytavry"), "п'ятий ступінь — межа")
+	check(p.gold == 10000000 - 455000 and int(p.resources["iron"]) == 100000 - 2620 and int(p.resources["trophy"]) == 100000 - 290, "чотири наступні ступені: 455 000 грн, 290 трофеїв, 2 620 заліза")
+	var sum_gold := 0
+	var sum_trophy := 0
+	var sum_res := 0
+	for i in 5:
+		sum_gold += int(Camp.KLEINOD_GOLD[i])
+		sum_trophy += int(Camp.KLEINOD_TROPHY[i])
+		sum_res += int(Camp.KLEINOD_RES[i])
+	check(sum_gold == 465000 and sum_trophy == 300 and sum_res == 2670, "досконалий клейнод: 465 000 грн, 300 трофеїв, 2 670 ресурсу")
+	var by_res := {}
+	for id in Camp.KLEINOD_ORDER:
+		by_res[Camp.KLEINODY[id]["res"]] = int(by_res.get(Camp.KLEINODY[id]["res"], 0)) + 1
+	check(by_res == {"iron": 4, "wood": 2, "herbs": 1}, "заліза, якого найбільше, просять чотири клейноди: %s" % str(by_res))
+	check(is_equal_approx(p.xp_mult, xp0 + 0.2) and KS.total(w) == 5, "досконалі литаври: +20% досвіду")
+	# Бонуси до показників героя
+	var hp0: float = p.max_hp
+	var dmg0: float = p.damage
+	var crit0: float = p.crit_chance
+	var cd0: float = p.skill_cd_mult
+	p.hp = p.max_hp * 0.5
+	KS.buy(w, p, "bunchuk")
+	KS.buy(w, p, "bunchuk")
+	check(absf(p.max_hp / hp0 - 1.06) < 0.001 and absf(p.hp / p.max_hp - 0.5) < 0.001, "бунчук: +6% здоров'я, частка здоров'я та сама")
+	for i in 3:
+		KS.buy(w, p, "bulava")
+	check(absf(p.damage / dmg0 - 1.09) < 0.001, "булава: +9% шкоди за три ступені")
+	KS.buy(w, p, "pernach")
+	KS.buy(w, p, "pernach")
+	check(is_equal_approx(p.crit_chance, crit0 + 0.04), "пернач: +4% до шансу критичного удару")
+	for i in 5:
+		KS.buy(w, p, "surmy")
+	check(absf(p.skill_cd_mult / cd0 - 0.9) < 0.001, "сурми: вміння відновлюються на 10% швидше")
+	check(p.klein == KS.player_mods(w) and p.klein.size() == 5, "герой несе всі п'ять бонусів роду: %s" % str(p.klein))
+	# Слава й лояльність
+	var g0: int = GloryService.glory(w)
+	GloryService.add(w, p, 100)
+	check(GloryService.glory(w) - g0 == 100, "без корогви слава звичайна")
+	KS.buy(w, p, "korohva")
+	KS.buy(w, p, "korohva")
+	g0 = GloryService.glory(w)
+	GloryService.add(w, p, 100)
+	check(GloryService.glory(w) - g0 == 110, "корогва: +10% слави")
+	w.add_loyalty("sich", 10)
+	var l0: int = w.loyalty_points("sich")
+	for i in 3:
+		KS.buy(w, p, "pechatka")
+	w.add_loyalty("sich", 10)
+	check(l0 == 10 and w.loyalty_points("sich") - l0 == 13, "печатка: +30% лояльності міст")
+	w.add_loyalty("sich", -10)
+	check(w.loyalty_points("sich") == l0 + 3, "втрату лояльності печатка не збільшує")
+	# Рід спільний: інший герой отримує ті самі бонуси
+	var p2 = _new_player()
+	var p2_dmg: float = p2.damage
+	CampService.apply_effects(w, p2)
+	check(p2.klein == p.klein and absf(p2.damage / p2_dmg - 1.09) < 0.001, "новий герой роду одразу має бонуси клейнодів")
+	# Збереження
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(KS.level(w2, "lytavry") == 5 and KS.level(w2, "bulava") == 3 and KS.total(w2) == KS.total(w) and KS.total(w) == 22, "клейноди переживають збереження")
+	w2.camp["kleinody"]["bulava"] = 99
+	w2.camp["kleinody"]["surmy"] = -4
+	check(KS.level(w2, "bulava") == 5 and KS.cost(w2, "bulava").is_empty() and KS.level(w2, "surmy") == 0, "зіпсований ступінь у збереженні не ламає гру")
+	# Тексти
+	check(KS.bonus_text("lytavry", 3) == "+12% досвіду" and KS.bonus_text("surmy", 5) == "вміння відновлюються на 10% швидше" and KS.bonus_text("pechatka", 2) == "+20% лояльності міст", "бонуси словами")
+	check(KS.cost_text({"gold": 600000, "trophy": 600, "iron": 7000}) == "600 000 грн, трофеї 600, залізо 7 000", "ціна словами: %s" % KS.cost_text({"gold": 600000, "trophy": 600, "iron": 7000}))
+	# Скарбник продає камені долі
+	var ps = _new_player()
+	check(KS.stone_price("zabuttia") == 40000 and KS.stone_price("alatyr") == 120000 and KS.stone_price("nema") == 0, "ціни каменів долі")
+	ps.gold = 39999
+	check(not KS.buy_stone(ps, "zabuttia") and StoneService.count(ps, "zabuttia") == 0 and ps.gold == 39999, "без гривень камінь не купити")
+	ps.gold = 160000
+	check(KS.buy_stone(ps, "zabuttia") and KS.buy_stone(ps, "alatyr") and ps.gold == 0 and StoneService.count(ps, "zabuttia") == 1 and StoneService.count(ps, "alatyr") == 1, "купив обидва камені")
+	check(not KS.buy_stone(ps, "nema"), "невідомого каменя скарбник не має")
+	check(Gfx.icon_tex("stone_zabuttia") != null and Gfx.icon_tex("stone_alatyr") != null and Camp.STONE_TEXT.has("zabuttia") and Camp.STONE_TEXT.has("alatyr"), "у каменів є значки й описи")
+	# Заточка без ризику: утричі дорожча, зате рівень не падає
+	var it: Dictionary = Data.gen_item(20, 2, "boots")
+	it["up"] = 7
+	ps.add_item(it)
+	var base: int = Data.sharpen_cost(it)
+	check(Data.SHARPEN_SAFE_MULT == 3.0 and Data.sharpen_safe_cost(it) == base * 3, "ціна без ризику — потрійна")
+	ps.gold = 1000000
+	check(ps.sharpen(it["uid"], Data.SHARPEN_SAFE_MULT, -5.0, true) == "fail" and int(it["up"]) == 7 and ps.gold == 1000000 - base * 3, "невдача без ризику: гривні пішли, заточка ціла")
+	check(ps.sharpen(it["uid"], 1.0, -5.0, false) == "down" and int(it["up"]) == 6, "звичайна невдача знижує заточку")
+	var mult: float = 0.8
+	var gold_before: int = ps.gold
+	var want: int = Data.sharpen_safe_cost(it, mult)
+	ps.sharpen(it["uid"], mult * Data.SHARPEN_SAFE_MULT, -5.0, true)
+	check(gold_before - ps.gold == want, "ціна на кнопці збігається зі списаною (зі знижкою кузні)")
+
+
+func _suite_kleinody_game() -> void:
+	suite("Клейноди: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var KS = game.KleinodService
+	var UI = load("res://scripts/ui/ui_kit.gd")
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.level = 30
+	p.gold = 100
+	game.enter_camp()
+	await _frames(2)
+	# Гру посеред перевірки створюємо наново, тож помічники беруть її параметром, а не захоплюють
+	var titles := func(g) -> Array:
+		var out := []
+		var tc = g.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+		for i in tc.get_tab_count():
+			out.append(tc.get_tab_title(i))
+		return out
+	var texts := func(g) -> String:
+		var out := ""
+		for n in g.hud.screen_root.find_children("*", "Label", true, false):
+			out += n.text + "\n"
+		for n in g.hud.screen_root.find_children("*", "Button", true, false):
+			out += n.text + "\n"
+		return out
+	var button := func(g, part: String) -> Button:
+		for n in g.hud.screen_root.find_children("*", "Button", true, false):
+			if part in n.text:
+				return n
+		return null
+	check("Клейноди" in titles.call(game), "на хуторі є вкладка клейнодів: %s" % str(titles.call(game)))
+	var t: String = texts.call(game)
+	check("Булава — ступінь 0/5" in t and "Наступний ступінь: +3% шкоди" in t and "Скарбник" in t and "Алатир-камінь — у тебе 0" in t, "вкладка показує клейноди й камені")
+	var b: Button = button.call(game, "10 000 грн, трофеї 10, залізо 50")
+	check(b != null and b.disabled and b.text.begins_with("Здобути"), "без гривень кнопка неактивна")
+	game.camp_do("kleinod", "bulava")
+	check(KS.level(game.world, "bulava") == 0 and int(game.world.stats.get("kleinod", 0)) == 0, "без гривень клейнод не купується")
+	p.gold = 2000000
+	p.resources = {"wood": 20000, "iron": 20000, "herbs": 20000, "trophy": 5000}
+	var dmg0: float = p.damage
+	game.camp_do("kleinod", "bulava")
+	await _frames(2)
+	check(KS.level(game.world, "bulava") == 1 and absf(p.damage / dmg0 - 1.03) < 0.001, "купив булаву: шкода +3%")
+	check(int(game.world.stats.get("kleinod", 0)) == 1 and game.account.challenges["ach"].has("kleinod_1") and p.gold == 2000000 - 10000 + 1000, "лічильник, досягнення й ціна: лишилось %d грн" % p.gold)
+	check(int(p.resources["iron"]) == 20000 - 50 and int(p.resources["trophy"]) == 5000 - 10, "трофеї й залізо списано")
+	t = texts.call(game)
+	check("Булава — ступінь 1/5" in t and "Зараз: +3% шкоди" in t and "Наступний ступінь: +6% шкоди" in t and "Оздоблено ступенів: 1 із 35" in t, "вкладка оновилась після купівлі")
+	b = button.call(game, "25 000 грн, трофеї 20, залізо 120")
+	check(b != null and not b.disabled and b.text.begins_with("Оздобити"), "наступний ступінь уже можна оздобити")
+	check("Хутір • 1 991 000 грн" in t, "гривні в заголовку хутора з проміжками")
+	for i in 4:
+		game.camp_do("kleinod", "bulava")
+	await _frames(2)
+	check(KS.level(game.world, "bulava") == 5 and button.call(game, "Досконалий") != null and button.call(game, "Досконалий").disabled, "досконалий клейнод більше не продається")
+	# Камені долі. Список після покупки лишається там, де був, а не стрибає на початок
+	var scroller := func(g) -> ScrollContainer:
+		var tc: TabContainer = g.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+		return tc.get_current_tab_control() as ScrollContainer
+	var win_size: Vector2i = root.size
+	root.size = Vector2i(1560, 720)  # без вікна екран безмежний і гортати нема чого, тож даємо йому розмір телефона
+	await _frames(2)
+	var tabs: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	tabs.current_tab = titles.call(game).find("Клейноди")
+	await _frames(2)
+	check(game.camp_tab == titles.call(game).find("Клейноди"), "гра пам'ятає відкриту вкладку клейнодів")
+	scroller.call(game).scroll_vertical = 240
+	await _frames(1)
+	check(scroller.call(game).scroll_vertical == 240, "список клейнодів довгий і гортається")
+	var gold0: int = p.gold
+	game.camp_do("buy_stone", "alatyr")
+	await _frames(2)
+	check(game.StoneService.count(p, "alatyr") == 1 and gold0 - p.gold == 120000 and "Алатир-камінь — у тебе 1" in texts.call(game), "скарбник продав Алатир-камінь")
+	check(scroller.call(game).scroll_vertical == 240, "після покупки список лишився на місці: %d" % scroller.call(game).scroll_vertical)
+	game.camp_do("select", p.equipment["weapon"]["uid"])
+	await _frames(2)
+	check(scroller.call(game).scroll_vertical == 0, "вибір речі показує екран згори")
+	root.size = win_size
+	# Збереження й повернення в гру
+	game.save_game()
+	check(int(game.account.camp.get("kleinody", {}).get("bulava", 0)) == 5, "клейноди лежать у спільному хуторі акаунта")
+	game.queue_free()
+	await _frames(2)
+	game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	check(game.load_game(), "гра завантажилась")
+	p = game.player
+	check(KS.level(game.world, "bulava") == 5 and is_equal_approx(float(p.klein.get("dmg", 0.0)), 0.15), "після завантаження булава діє: %s" % str(p.klein))
+	# Заточка без ризику на хуторі
+	p.gold = 5000000
+	p.resources = {"wood": 20000, "iron": 20000, "herbs": 20000, "trophy": 5000}
+	game.enter_camp()
+	await _frames(2)
+	game.camp_do("build", "kuznia")
+	var it: Dictionary = p.equipment["weapon"]
+	var uid: int = it["uid"]
+	it["up"] = 2
+	p.recalc()
+	game.camp_do("select", uid)
+	await _frames(2)
+	check(not ("Заточити без ризику" in texts.call(game)), "до +6 ризику нема, тож і кнопки нема")
+	gold0 = p.gold
+	var plain: int = int(Data.sharpen_cost(it) * game.CampService.forge_cost_mult(game.world))
+	game.camp_do("sharpen_safe", uid)
+	check(gold0 - p.gold == plain, "до +6 заточка без ризику коштує як звичайна")
+	it["up"] = 6
+	p.recalc()
+	game.camp_do("select", uid)
+	await _frames(2)
+	var safe_cost: int = Data.sharpen_safe_cost(it, game.CampService.forge_cost_mult(game.world))
+	b = button.call(game, "Заточити без ризику")
+	check(b != null and not b.disabled and (UI.num(safe_cost) + " грн") in b.text, "із +6 є кнопка заточки без ризику з ціною")
+	gold0 = p.gold
+	game.camp_do("sharpen_safe", uid)
+	check(gold0 - p.gold == safe_cost and int(it["up"]) >= 6, "списано рівно ціну з кнопки, заточка не впала")
+	var never_down := true
+	var prev: int = int(it["up"])
+	for i in 200:
+		if int(it["up"]) >= Data.MAX_UPGRADE:
+			break
+		game.camp_do("sharpen_safe", uid)
+		never_down = never_down and int(it["up"]) >= prev
+		prev = int(it["up"])
+	check(never_down and int(it["up"]) == Data.MAX_UPGRADE, "без ризику заточка лише росте, аж до +%d" % Data.MAX_UPGRADE)
+	# Жетон безпечної заточки платна спроба не чіпає; з жетоном платна кнопка зайва
+	it["up"] = 7
+	p.recalc()
+	check(game.AdRewards.grant_safe(game.world) and game.AdRewards.safe_tokens(game.world) == 1, "є жетон безпечної заточки")
+	game.camp_do("select", uid)
+	await _frames(2)
+	check(not ("Заточити без ризику" in texts.call(game)), "із жетоном платної кнопки нема")
+	game.camp_do("sharpen_safe", uid)
+	check(game.AdRewards.safe_tokens(game.world) == 1, "платна спроба жетон не витрачає")
+	# Міський коваль
+	it["up"] = 8
+	p.recalc()
+	game.world.boosts["safe_sharpen"] = 0
+	game.leave_camp()
+	await _frames(2)
+	game.enter_city("sich")
+	await _frames(2)
+	game.city_do("select", uid)
+	await _frames(2)
+	safe_cost = Data.sharpen_safe_cost(it)
+	b = button.call(game, "Заточити без ризику")
+	check(b != null and (UI.num(safe_cost) + " грн") in b.text and safe_cost == Data.sharpen_cost(it) * 3, "міський коваль теж точить без ризику, без знижки хутора")
+	gold0 = p.gold
+	game.city_do("sharpen_safe", uid)
+	check(gold0 - p.gold == safe_cost and int(it["up"]) >= 8, "у місті списано потрійну ціну, заточка не впала")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

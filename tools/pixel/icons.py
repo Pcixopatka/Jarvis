@@ -8,7 +8,9 @@ ORDER = ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "mana", "meat",
          # жетони свят, доданих у 0.28: нові значки дописуються в кінець, щоб старі не зсувались
          "tok_malanka", "tok_vodokhreshche", "tok_sobornist", "tok_stritennia", "tok_masnytsia", "tok_shevchenko", "tok_blahovishchennia",
          "tok_verbna", "tok_yurii", "tok_vyshyvanka", "tok_zeleni", "tok_petra", "tok_derzhavnist", "tok_illi", "tok_obzhynky",
-         "tok_zdvyzhennia", "tok_didy", "tok_mykhaila", "tok_kuzma", "tok_kateryny", "tok_mykolai"]
+         "tok_zdvyzhennia", "tok_didy", "tok_mykhaila", "tok_kuzma", "tok_kateryny", "tok_mykolai",
+         # клейноди роду й камені долі (скарбниця на хуторі)
+         "kl_lytavry", "kl_korohva", "kl_pernach", "kl_bunchuk", "kl_bulava", "kl_pechatka", "kl_surmy", "stone_zabuttia", "stone_alatyr"]
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites", "icons.png")
 O = (27, 20, 32, 255)
 
@@ -180,6 +182,60 @@ def draw(kind):
         ice = (255, 250, 240, 255)
         for x, y in ((4, 5), (5, 6), (6, 5), (7, 6), (8, 5), (9, 6), (10, 5), (11, 6)): d.point((x, y), fill=ice)
         d.point((7, 9), fill=(215, 60, 60, 255)); d.point((8, 9), fill=(215, 60, 60, 255)); d.point((7, 11), fill=ice); d.point((8, 11), fill=ice)
+    elif kind == "kl_lytavry":  # литаври: мідний казан зі шкірою й довбишеві палички
+        copper = (190, 110, 55, 255)
+        d.polygon([(2, 8), (13, 8), (11, 14), (4, 14)], fill=copper); d.line([(4, 10), (5, 13)], fill=(235, 160, 95, 255))
+        d.ellipse([2, 5, 13, 10], fill=(238, 224, 190, 255)); d.ellipse([4, 6, 8, 8], fill=(252, 244, 222, 255))
+        d.rectangle([4, 14, 11, 15], fill=(140, 78, 38, 255))
+        d.line([(1, 1), (6, 6)], fill=(150, 105, 60, 255)); d.line([(14, 1), (9, 6)], fill=(150, 105, 60, 255))
+        d.rectangle([0, 0, 1, 1], fill=(225, 205, 160, 255)); d.rectangle([14, 0, 15, 1], fill=(225, 205, 160, 255))
+    elif kind == "kl_korohva":  # корогва: малинове полотнище із золотим хрестом на держаку
+        d.rectangle([2, 1, 3, 15], fill=(140, 95, 50, 255)); d.rectangle([2, 0, 3, 1], fill=(240, 200, 80, 255))
+        d.polygon([(4, 2), (14, 2), (12, 6), (14, 10), (4, 10)], fill=(180, 30, 62, 255))
+        d.line([(4, 2), (13, 2)], fill=(225, 75, 105, 255)); d.line([(4, 10), (13, 10)], fill=(240, 200, 80, 255))
+        d.line([(8, 4), (8, 8)], fill=(245, 210, 95, 255)); d.line([(6, 6), (10, 6)], fill=(245, 210, 95, 255))
+    elif kind == "kl_pernach":  # пернач: голівка із шістьма перами на руків'ї
+        d.line([(2, 14), (8, 8)], fill=(125, 85, 48, 255), width=2); d.rectangle([1, 13, 2, 15], fill=(240, 200, 80, 255))
+        steel = (190, 195, 208, 255)
+        d.ellipse([8, 3, 12, 7], fill=steel)
+        for x, y in ((10, 0), (14, 2), (15, 6), (12, 9), (7, 2), (13, 5)):
+            d.line([(10, 5), (x, y)], fill=steel)
+        d.point((10, 5), fill=(245, 248, 255, 255)); d.point((10, 1), fill=(235, 238, 248, 255)); d.point((14, 3), fill=(235, 238, 248, 255))
+        d.point((8, 8), fill=(240, 200, 80, 255)); d.point((9, 7), fill=(240, 200, 80, 255))
+    elif kind == "kl_bunchuk":  # бунчук: золоте яблуко й кінський хвіст на держаку
+        d.rectangle([7, 2, 8, 15], fill=(140, 95, 50, 255))
+        d.ellipse([5, 0, 10, 4], fill=(240, 200, 80, 255)); d.point((7, 1), fill=(255, 245, 190, 255))
+        hair = (58, 44, 52, 255); lite = (104, 84, 92, 255)
+        for x, y1 in ((3, 10), (4, 12), (5, 14), (6, 12), (9, 13), (10, 14), (11, 11), (12, 9)):
+            d.line([(x, 6 if 4 <= x <= 11 else 8), (x, y1)], fill=lite if x % 2 == 0 else hair)
+        d.rectangle([4, 4, 11, 5], fill=(180, 30, 62, 255)); d.line([(4, 4), (11, 4)], fill=(245, 210, 95, 255))
+    elif kind == "kl_bulava":  # булава: золота куля із самоцвітом на руків'ї
+        d.line([(2, 14), (9, 7)], fill=(125, 85, 48, 255), width=2); d.rectangle([1, 13, 2, 15], fill=(240, 200, 80, 255))
+        d.ellipse([7, 1, 14, 8], fill=(236, 190, 70, 255)); d.ellipse([9, 2, 11, 4], fill=(255, 240, 170, 255))
+        d.arc([7, 1, 14, 8], 20, 150, fill=(190, 140, 40, 255)); d.rectangle([10, 5, 11, 6], fill=(200, 45, 60, 255))
+        d.point((7, 9), fill=(240, 200, 80, 255)); d.point((8, 8), fill=(240, 200, 80, 255))
+    elif kind == "kl_pechatka":  # печатка: червоний сургуч із відтиском і стрічками
+        d.polygon([(4, 9), (7, 9), (5, 15), (2, 15)], fill=(40, 95, 190, 255)); d.polygon([(9, 9), (12, 9), (13, 15), (10, 15)], fill=(235, 195, 60, 255))
+        d.ellipse([2, 1, 13, 12], fill=(178, 34, 40, 255)); d.ellipse([4, 3, 11, 10], outline=(225, 85, 85, 255))
+        ink = (110, 15, 22, 255)
+        d.line([(7, 5), (7, 8)], fill=ink); d.line([(8, 5), (8, 8)], fill=ink); d.point((7, 4), fill=ink); d.point((8, 4), fill=ink)
+        d.line([(9, 5), (10, 3)], fill=ink); d.point((6, 6), fill=ink); d.point((4, 4), fill=(240, 120, 120, 255))
+    elif kind == "kl_surmy":  # сурма: срібна труба з розтрубом і малиновою китицею
+        silver = (205, 210, 222, 255); shade = (140, 146, 162, 255)
+        d.line([(2, 13), (9, 6)], fill=silver, width=2)
+        d.polygon([(10, 0), (15, 5), (10, 7), (8, 5)], fill=silver); d.line([(11, 0), (15, 4)], fill=shade); d.line([(9, 4), (11, 2)], fill=(245, 248, 255, 255))
+        d.rectangle([0, 14, 1, 15], fill=(240, 200, 80, 255)); d.rectangle([4, 10, 5, 11], fill=(240, 200, 80, 255))
+        d.polygon([(6, 11), (9, 11), (8, 15), (6, 14)], fill=(180, 30, 62, 255)); d.line([(6, 11), (6, 14)], fill=(225, 75, 105, 255))
+    elif kind == "stone_zabuttia":  # камінь забуття: сизий голяк із туманним вихором
+        d.polygon([(4, 3), (10, 2), (14, 6), (13, 12), (8, 14), (3, 12), (1, 7)], fill=(112, 124, 156, 255))
+        d.polygon([(4, 3), (10, 2), (9, 5), (4, 6)], fill=(150, 162, 194, 255))
+        mist = (215, 225, 245, 255)
+        d.arc([5, 5, 11, 11], 200, 520, fill=mist); d.point((8, 8), fill=mist); d.point((9, 8), fill=mist); d.point((12, 4), fill=(235, 240, 255, 255))
+    elif kind == "stone_alatyr":  # Алатир-камінь: біл-горюч, світиться зсередини
+        d.polygon([(8, 1), (13, 5), (12, 12), (8, 15), (4, 12), (3, 5)], fill=(248, 214, 120, 255))
+        d.polygon([(8, 1), (13, 5), (8, 8), (3, 5)], fill=(255, 240, 180, 255)); d.polygon([(8, 8), (12, 12), (8, 15)], fill=(226, 172, 70, 255))
+        d.ellipse([6, 5, 9, 9], fill=(255, 255, 240, 255))
+        for x, y in ((1, 2), (14, 2), (15, 9), (0, 10)): d.point((x, y), fill=(255, 235, 150, 255))
     elif kind == "khmil":  # шишка хмелю з листком
         for i, (cx, cy, r) in enumerate(((8, 5, 3), (6, 8, 3), (10, 8, 3), (8, 11, 3), (8, 13, 2))):
             d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(150, 195, 80, 255) if i % 2 == 0 else (120, 170, 65, 255))

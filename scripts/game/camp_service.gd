@@ -96,6 +96,7 @@ static func apply_effects(world, player) -> void:
 	player.bag_bonus = bag_bonus(world)
 	player.potion_bonus = potion_bonus(world) + int(StoryService.effect(world, "potion_max"))
 	player.plague_resist = clampf(StoryService.effect(world, "plague_resist"), 0.0, 0.9)
+	load("res://scripts/game/kleinod_service.gd").apply(world, player)  # клейноди роду діють на кожного героя
 
 
 # ---------- Пасіка ----------

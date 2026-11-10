@@ -56,7 +56,8 @@ const ICON_ORDER := ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "ma
 	"tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory", "khmil",
 	"tok_malanka", "tok_vodokhreshche", "tok_sobornist", "tok_stritennia", "tok_masnytsia", "tok_shevchenko", "tok_blahovishchennia",
 	"tok_verbna", "tok_yurii", "tok_vyshyvanka", "tok_zeleni", "tok_petra", "tok_derzhavnist", "tok_illi", "tok_obzhynky",
-	"tok_zdvyzhennia", "tok_didy", "tok_mykhaila", "tok_kuzma", "tok_kateryny", "tok_mykolai"]
+	"tok_zdvyzhennia", "tok_didy", "tok_mykhaila", "tok_kuzma", "tok_kateryny", "tok_mykolai",
+	"kl_lytavry", "kl_korohva", "kl_pernach", "kl_bunchuk", "kl_bulava", "kl_pechatka", "kl_surmy", "stone_zabuttia", "stone_alatyr"]
 static var _loot_tex := {}
 
 

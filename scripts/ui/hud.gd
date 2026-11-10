@@ -442,7 +442,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	mana_bar.value = player.mana
 	job_bar.max_value = maxi(1, player.job_next())
 	job_bar.value = player.job_next() if player.job_level >= player.job_max() else player.job_xp
-	level_label.text = "Рівень %d  •  %s %d  •  Гривні: %d" % [player.level, player.class_name_ua(), player.job_level, player.gold]
+	level_label.text = "Рівень %d  •  %s %d  •  Гривні: %s" % [player.level, player.class_name_ua(), player.job_level, UI.num(player.gold)]
 	if not player.statuses.is_empty() and not combat_info.is_empty():
 		level_label.text += "    " + player.Status.describe(player)
 	var ql := []
@@ -545,11 +545,41 @@ func show_hint(text: String, on_map: bool) -> void:
 
 # ======================= Повноекранні екрани =======================
 
-func set_screen(c: Control) -> void:
+## Замінити екран. keep_scroll — це той самий екран після дії (купівля, заточка, врожай):
+## прокрутка відкритої вкладки лишається на місці, а не стрибає на початок списку.
+func set_screen(c: Control, keep_scroll: bool = false) -> void:
+	var was := _screen_scroller(screen_root) if keep_scroll else null
+	var at: int = was.scroll_vertical if was else 0
 	clear_screen()
 	screen_root = c
 	ui_root.add_child(c)
 	ui_root.move_child(c, banner.get_index())
+	if at > 0:
+		_restore_scroll(_screen_scroller(c), at)
+
+
+## Прокрутка відкритої вкладки екрана (або перша на екрані без вкладок).
+func _screen_scroller(screen: Control) -> ScrollContainer:
+	if screen == null or not is_instance_valid(screen):
+		return null
+	var tabs := screen.find_children("*", "TabContainer", true, false)
+	if not tabs.is_empty():
+		return tabs[0].get_current_tab_control() as ScrollContainer
+	var all := screen.find_children("*", "ScrollContainer", true, false)
+	return (all[0] as ScrollContainer) if not all.is_empty() else null
+
+
+## Вміст нового екрана ще не розкладено, тож чекаємо, доки смуга прокрутки дізнається свою довжину,
+## і лише тоді ставимо її на місце. Це стається в тому самому кадрі, до малювання.
+func _restore_scroll(sc: ScrollContainer, at: int) -> void:
+	if sc == null:
+		return
+	var bar := sc.get_v_scroll_bar()
+	var st := {"done": false}
+	bar.changed.connect(func():
+		if not st["done"] and bar.max_value > bar.page:
+			st["done"] = true
+			sc.set_deferred("scroll_vertical", at))
 
 
 func clear_screen() -> void:

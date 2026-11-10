@@ -18,7 +18,7 @@ static func build(game, city: String) -> Control:
 	var next := ""
 	if lvl < Data.LOYALTY_THRESHOLDS.size() - 1:
 		next = " (%d/%d)" % [pts, Data.LOYALTY_THRESHOLDS[lvl + 1]]
-	var title := "%s  •  Лояльність: %s%s  •  Гривні: %d" % [C["name"], Data.LOYALTY_NAMES[lvl], next, game.player.gold]
+	var title := "%s  •  Лояльність: %s%s  •  Гривні: %s" % [C["name"], Data.LOYALTY_NAMES[lvl], next, UI.num(game.player.gold)]
 	var pages := [
 		["Завдання", _quests(game, city)],
 		["Крамниця", _shop(game, city)],
@@ -239,6 +239,9 @@ static func _smith(game) -> Control:
 		if it["up"] >= Data.SHARPEN_RISK_FROM:
 			risk = "  без ризику" if safe_n > 0 else "  ризик -1"
 		det.add_child(UI.button("Заточити до +%d\n%d грн • шанс %d%%%s" % [it["up"] + 1, cost, roundi(chance * 100), risk], _do(game, "sharpen", sel), Vector2(340, 80), 20, p.gold >= cost))
+		if it["up"] >= Data.SHARPEN_RISK_FROM and safe_n <= 0:
+			var safe_cost := Data.sharpen_safe_cost(it)
+			det.add_child(UI.button("Заточити без ризику\n%s грн • рівень не впаде" % UI.num(safe_cost), _do(game, "sharpen_safe", sel), Vector2(340, 72), 17, p.gold >= safe_cost))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 22, game.smith_msg_color, false))
 	return h
@@ -709,7 +712,7 @@ static func _trade(game, city: String) -> Control:
 	v.add_child(UI.label("Чумацький крам", 26, UI.GOLD, false))
 	v.add_child(_wrap("Купи дешево тут — продай дорого деінде. Ціни й запаси оновлюються кожні %d походи; що більше продаєш в одному місті, то дешевше беруть." % Acts.TRADE_PERIOD, 16, UI.MUTED))
 	var chance := roundi(TS.ambush_chance(w) * 100.0)
-	var head := "Віз: %d/%d   •   Гривні: %d" % [TS.cargo_count(w), TS.capacity(w), p.gold]
+	var head := "Віз: %d/%d   •   Гривні: %s" % [TS.cargo_count(w), TS.capacity(w), UI.num(p.gold)]
 	if chance > 0:
 		head += "   •   Ризик нападу в дорозі: %d%%" % chance
 	v.add_child(UI.label(head, 19, UI.TEXT, false))

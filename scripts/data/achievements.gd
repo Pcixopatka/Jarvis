@@ -1,7 +1,7 @@
 extends RefCounted
 ## Шаблони щоденних і тижневих викликів та постійні досягнення.
 ## stat — лічильник із world.stats (kill, kill:<вид>, elite, boss, boss:<вид>, field, dungeon, parry,
-## charged, defense, travel, sharpen, bond, level — найвищий рівень, hetman).
+## charged, defense, travel, sharpen, bond, level — найвищий рівень, hetman, kleinod — куплені ступені клейнодів).
 
 const DAILY := [
 	{"stat": "kill", "goal": [30, 60], "text": "Здолай %d ворогів"},
@@ -99,5 +99,8 @@ const ACHIEVEMENTS := [
 	{"id": "tower_5", "name": "Перший супербос", "desc": "Пройди 5-й поверх Башти Кощія", "stat": "tower", "goal": 5, "gold": 1500},
 	{"id": "tower_20", "name": "Вище хмар", "desc": "Пройди 20-й поверх Башти Кощія", "stat": "tower", "goal": 20, "gold": 6000},
 	{"id": "tower_50", "name": "До самого неба", "desc": "Пройди 50-й поверх Башти Кощія", "stat": "tower", "goal": 50, "gold": 25000},
+	{"id": "kleinod_1", "name": "Перший клейнод", "desc": "Здобудь перший клейнод роду на хуторі", "stat": "kleinod", "goal": 1, "gold": 1000},
+	{"id": "kleinod_14", "name": "Військова скарбниця", "desc": "Оздоб клейноди роду на 14 ступенів", "stat": "kleinod", "goal": 14, "gold": 10000},
+	{"id": "kleinod_35", "name": "Клейноди Війська Запорозького", "desc": "Доведи всі сім клейнодів до досконалості", "stat": "kleinod", "goal": 35, "gold": 50000},
 	{"id": "hetman", "name": "Гетьман", "desc": "Пройди всю історію", "stat": "hetman", "goal": 1, "gold": 5000},
 ]

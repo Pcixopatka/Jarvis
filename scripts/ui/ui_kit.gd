@@ -29,6 +29,16 @@ static func label(text: String, size: int = 26, col: Color = TEXT, center: bool 
 	return l
 
 
+## Велике число з проміжками між тисячами: 1226262 → «1 226 262».
+static func num(n: int) -> String:
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = " " + s.substr(s.length() - 3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
+
+
 static func button(text: String, cb: Callable, min_size: Vector2 = Vector2.ZERO, font: int = 0, enabled: bool = true) -> Button:
 	var b := Button.new()
 	b.text = text
