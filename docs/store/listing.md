@@ -32,7 +32,7 @@
 • Шаблі, булави, списи, пищалі й посохи. Кування, заточка й переплавка у власній кузні.
 
 ЖИВИЙ СВІТ
-• Мапа від Карпат до Дикого Поля: міста, печери й дикі місцевості.
+• Мапа від Карпат до Криму: п'ятнадцять міст, сорок місцевостей і печер, далекі краї, що ростуть разом із героєм.
 • Зараза шириться мапою, міста потрапляють в облогу, на села нападають, а мандрівники просять провести їх через небезпечні місця.
 • Сюжет із виборами, що мають наслідки, і побратими зі своїми історіями.
 
@@ -40,7 +40,7 @@
 • Власний хутір: курінь, кузня, зілляварня, пасіка й город.
 • Клейноди роду: булава, бунчук, корогва й інші регалії дають постійні бонуси всім твоїм героям.
 • Полювання, рибалка й козацький казан.
-• Герць на майдані, дошка розшуку, козацька варта, чумацький шлях і кості в шинку.
+• Герць на майдані, гетьманський огляд, Коло Кожум'яки, дошка розшуку, козацька варта, чумацький шлях і кості в шинку.
 • Двадцять вісім свят за справжнім календарем: від Маланки до Різдва.
 
 ГРАЙ ДЕ ЗАВГОДНО
@@ -51,14 +51,14 @@
 Мова гри — українська.
 ```
 
-**Що нового** (для випуску 0.28.0, до 500 знаків)
+**Що нового** (для випуску 0.29.0, до 500 знаків)
 
 ```
-• Двадцять вісім свят за календарем замість семи, у кожного свій бонус і жетон.
-• Клейноди роду: сім козацьких регалій із постійними бонусами для всіх героїв.
-• Страви й зілля сили діють за часом бою, а не один похід.
-• Заточка без ризику за гривні, камені долі в скарбника.
-• Після покупки список на хуторі лишається на місці.
+• Чотири далекі краї: 4 міста, 18 місць, нова нечисть і боси Морський цар, Шубін і Біла Пані. Ці місця ростуть разом із героєм.
+• Коло Кожум'яки, гетьманський огляд і вільний герць.
+• Щоденні й тижневі виклики тепер і про події.
+• Список подій із живим станом.
+• Довідник по грі на 245 статей із пошуком.
 ```
 
 ## Англійською (за бажанням, друга мова сторінки)
@@ -90,7 +90,7 @@ TEN CLASSES
 • Skill trees, class mastery, Tempering perks and stones of fate.
 
 A LIVING WORLD
-• A map from the Carpathians to the Wild Fields: cities, caves and wilderness.
+• A map from the Carpathians to Crimea: fifteen cities, forty wilds and caves, and far lands that grow with your hero.
 • The plague spreads across the map, cities fall under siege, villages are raided and travellers ask for an escort.
 • A story with choices that matter and comrades with their own stories.
 
@@ -98,7 +98,7 @@ HOMESTEAD AND PEACEFUL PURSUITS
 • Your own homestead: barracks, forge, brewery, apiary and garden.
 • Clan regalia: the mace, the horsetail standard, the banner and more grant permanent bonuses to all your heroes.
 • Hunting, fishing and the Cossack cauldron.
-• Duels, a bounty board, the night watch, the salt road trade and dice at the tavern.
+• Duels, the hetman's muster, Kozhumiaka's ring of monsters, a bounty board, the night watch, the salt road trade and dice at the tavern.
 • Twenty-eight holidays that follow the real calendar.
 
 PLAY ANYWHERE
