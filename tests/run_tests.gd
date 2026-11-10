@@ -2188,6 +2188,7 @@ func _suite_outdoor_game() -> void:
 	await _frames(3)
 	var hg = game.hud.screen_root
 	check(game.state == game.State.ACTIVITY and hg != null and "animal" in hg and hg.size.x > 100.0, "полювання: мініігра на весь екран")
+	check(hg.hero_sheet == "hunter_cossack", "мисливець тримає лук: %s" % hg.hero_sheet)
 	check(get_root().get_tree().paused and not game.combat.active, "бій не йде")
 	hg._finish()
 	await _frames(2)
@@ -3438,6 +3439,12 @@ func _suite_mana_potion() -> void:
 	check(Camp.res_name("meat") == "М'ясо" and Camp.res_name("wood") == "Дерево" and Camp.res_name("trophy") == Camp.TROPHY_NAME and Camp.RESOURCE_COLORS.has("ryba"), "провіант має назви й кольори для написів здобичі")
 	for id in ["mana", "meat", "ryba", "veg", "glory", "tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii"]:
 		check(load("res://scripts/world/gfx.gd").ICON_ORDER.has(id), "значок %s є на листі" % id)
+	var GfxS = load("res://scripts/world/gfx.gd")
+	check(GfxS.icon_tex("meat") != null and GfxS.icon_tex("tok_pokrova") != null and GfxS.icon_tex("нема") == null, "значки доступні інтерфейсу як текстури")
+	for job in ["peasant", "cossack", "volkhv", "zaporozhets", "plastun", "samopalnyk", "kharakternyk", "znakhar", "perun_zhrets", "molfar"]:
+		check(GfxS.has("hunter_" + job) and GfxS.has("plain_" + job), "%s: є постаті мисливця з луком і без зброї" % job)
+	var DiceRow = load("res://scripts/ui/dice_row.gd")
+	check(DiceRow.roll_time(0) == 0.0 and DiceRow.roll_time(3) > DiceRow.roll_time(1) and DiceRow.roll_time(1) > 0.2, "кожна нова кість додає часу анімації")
 	var sheet: Texture2D = load("res://assets/gfx/sprites/icons.png")
 	check(sheet.get_width() == 16 * load("res://scripts/world/gfx.gd").ICON_ORDER.size(), "лист значків відповідає переліку")
 

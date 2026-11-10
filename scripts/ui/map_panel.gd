@@ -84,7 +84,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 					v.add_child(_wrapped("• %s: %d риби" % [fi["name"], int(fi["ryba"])], 16, UI.MUTED))
 			if OS.rich(world, str(S["kind"])):
 				v.add_child(_wrapped("Чутка з шинку: сьогодні тут повно великого звіра." if hunt else "Чутка з шинку: сом вийшов на плесо, клює велика риба.", 17, UI.GOOD))
-			v.add_child(_wrapped("У запасі: м'ясо %d  •  риба %d" % [OS.food(player, "meat"), OS.food(player, "ryba")], 19, UI.GOLD))
+			v.add_child(UI.icon_row([["meat", "М'ясо: %d" % OS.food(player, "meat")], ["ryba", "Риба: %d" % OS.food(player, "ryba")]], 19, UI.GOLD))
 			v.add_child(_wrapped("Зі здобичі на хуторі варять страви в казані: вони додають сили на цілий похід.", 16, UI.MUTED))
 			if OS.ready(world, str(S["kind"])):
 				v.add_child(UI.button("Полювати" if hunt else "Рибалити", on_go.bind(sel), Vector2(350, 70), 26))

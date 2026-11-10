@@ -44,6 +44,9 @@ func _process(delta: float) -> void:
 				Audio.play("item", 0.05, -6.0)
 			else:
 				p.add_gold(Data.potion_price(p.level) / 2)
+		elif kind == "token":
+			Events.holiday_token.emit(value, global_position)
+			Audio.play("coin", 0.25, 0.0)
 		elif kind == "mana":
 			if p.add_mana_potion():
 				combat.float_text(global_position + Vector2(0, -30), "+1 зілля наснаги", Color(0.5, 0.75, 1.0))
@@ -126,6 +129,9 @@ func _draw_icon() -> void:
 			Gfx.icon(self, "potion", Vector2(0, -2), 2.0)
 		"mana":
 			Gfx.icon(self, "mana", Vector2(0, -2), 2.0)
+		"token":
+			draw_circle(Vector2.ZERO, 17.0 + sin(phase * 2.5) * 2.5, Color(1.0, 0.85, 0.4, 0.28))
+			Gfx.icon(self, str(item.get("icon", "glory")), Vector2(0, -2), 2.0)
 		"coin":
 			Gfx.icon(self, "coin" if value >= 8 else "coin_small", Vector2.ZERO, 1.5 + minf(value, 20) * 0.03)
 		_:

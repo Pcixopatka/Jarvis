@@ -329,6 +329,27 @@ def weapon(p, d, frame, c, by, atk, side):
         p.line(hx, hy, hx + dx, hy + dy, handle, 2)
         ex, ey = hx + dx, hy + dy
         for i in range(-3, 4): p.line(ex, ey, ex + i * 2 + (dx // 3), ey + 6 + abs(i), hexc("d9b25c"), 1)
+    elif kind == "bow":
+        # Лук для полювання: 0 — опущений, 1 — натягнутий зі стрілою, 2 і 3 — щойно спущений
+        wood = hexc("8a5a2a"); string = hexc("e8e2d0")
+        up = 0 if atk == 0 else 10
+        bx = hx + (-3 if side else 1)
+        top = (bx, hy - 14 - up); bot = (bx, hy + 10 - up)
+        belly = bx + (-5 if side else 5)
+        p.line(top[0], top[1], belly, hy - 8 - up, wood, 2); p.line(belly, hy - 8 - up, belly, hy + 4 - up, wood, 2); p.line(belly, hy + 4 - up, bot[0], bot[1], wood, 2)
+        if atk == 1 and d == "up":
+            # Зі спини: тятива відтягнута до щоки, а стріла дивиться від нас, углиб галявини
+            pull = bx - 5
+            p.line(top[0], top[1], pull, hy - 4 - up, string, 1); p.line(pull, hy - 4 - up, bot[0], bot[1], string, 1)
+            p.line(bx + 2, hy - 3 - up, bx + 2, top[1] - 1, hexc("d8c8a0"), 1)
+            p.px(bx + 2, top[1] - 2, hexc("dfe4ee"))
+        elif atk == 1:
+            pull = bx + (6 if side else -6)
+            p.line(top[0], top[1], pull, hy - 2 - up, string, 1); p.line(pull, hy - 2 - up, bot[0], bot[1], string, 1)
+            p.line(pull, hy - 2 - up, belly + (-7 if side else 7), hy - 2 - up, hexc("d8c8a0"), 1)
+            p.px(belly + (-8 if side else 8), hy - 2 - up, hexc("dfe4ee"))
+        else:
+            p.line(top[0], top[1], bot[0], bot[1], string, 1)
     elif kind == "scythe":
         p.line(hx, hy + 8, hx + (atk and (-6 if side else 6)), hy - 24, handle, 2)
         tip = (hx + (atk and (-6 if side else 6)), hy - 24)
@@ -425,6 +446,12 @@ CHARS["rival_danylo"] = coss(hexc("3f6a3a"), weapon="pike", sash=hexc("c6281e"),
 CHARS["rival_hnat"] = coss(hexc("2f4f8a"), weapon="musket", hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("4a90d8"), sash=hexc("d8d8d8"), vyshyvka=None, mustache=False)
 CHARS["rival_marko"] = coss(hexc("1e1a22"), weapon="sabre", hat="long", hair=hexc("9a9aa2"), sash=hexc("5a2a8a"), pants=hexc("2a2a3a"), eye=hexc("6fd0ff"), vyshyvka=None, weapon_col=hexc("a8d8ff"))
 CHARS["rival_taras"] = coss(hexc("7a4a22"), weapon="mace", beard=hexc("3a2518"), sash=hexc("2a2220"), vyshyvka=None)
+# Мисливці з луком і беззбройні постаті для мирних занять (полювання, рибалка): по одній на клас
+_LOOKS = {"peasant": "peasant", "cossack": "cossack_sabre", "volkhv": "volkhv_staff", "zaporozhets": "zaporozhets_sabre", "plastun": "plastun_sabre",
+          "samopalnyk": "samopalnyk_sabre", "kharakternyk": "kharakternyk_sabre", "znakhar": "znakhar_staff", "perun_zhrets": "perun_zhrets_staff", "molfar": "molfar_staff"}
+for _job, _src in _LOOKS.items():
+    CHARS["hunter_" + _job] = dict(CHARS[_src], weapon="bow")
+    CHARS["plain_" + _job] = dict(CHARS[_src], weapon=None)
 # Накладки на голову
 CHARS["overlay_hat"] = dict(only_hat=True, hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("ffffff"), hair=hexc("2a2220"))
 CHARS["overlay_wolf"] = dict(only_hat=True, hat="wolf_ears", hat_col=hexc("7a7a7e"), hair=hexc("7a7a7e"))

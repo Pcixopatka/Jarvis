@@ -4,7 +4,7 @@
 import os
 from PIL import Image, ImageDraw
 ORDER = ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "mana", "meat", "ryba", "veg",
-         "tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory"]
+         "tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory", "khmil"]
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites", "icons.png")
 O = (27, 20, 32, 255)
 
@@ -82,6 +82,10 @@ def draw(kind):
         d.ellipse([1, 2, 14, 15], fill=(205, 150, 70, 255)); d.ellipse([5, 6, 10, 11], fill=(0, 0, 0, 0)); d.ellipse([3, 4, 6, 6], fill=(240, 200, 120, 255))
         for x, y in ((8, 3), (12, 6), (12, 11), (8, 14), (3, 11)): d.point((x, y), fill=(120, 75, 35, 255))
         d.line([(8, 0), (8, 2)], fill=(200, 40, 50, 255), width=2)
+    elif kind == "khmil":  # шишка хмелю з листком
+        for i, (cx, cy, r) in enumerate(((8, 5, 3), (6, 8, 3), (10, 8, 3), (8, 11, 3), (8, 13, 2))):
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(150, 195, 80, 255) if i % 2 == 0 else (120, 170, 65, 255))
+        d.line([(8, 2), (8, 0)], fill=(90, 120, 50, 255)); d.ellipse([10, 0, 14, 3], fill=(70, 150, 60, 255))
     elif kind == "glory":  # козацька слава: зоря на стрічці
         d.polygon([(5, 0), (11, 0), (9, 6), (7, 6)], fill=(175, 40, 45, 255))
         d.polygon([(8, 5), (10, 9), (14, 9), (11, 12), (12, 16), (8, 13), (4, 16), (5, 12), (2, 9), (6, 9)], fill=(240, 195, 60, 255))

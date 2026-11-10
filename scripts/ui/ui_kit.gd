@@ -106,6 +106,36 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 	return v
 
 
+## Піксельний значок здобичі заданого розміру (без згладжування).
+static func icon(id: String, px: int = 28) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = load("res://scripts/world/gfx.gd").icon_tex(id)
+	t.custom_minimum_size = Vector2(px, px)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return t
+
+
+## Значок і підпис поруч: «[м'ясо] 5».
+static func icon_text(id: String, text: String, size: int = 20, col: Color = TEXT) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 6)
+	h.add_child(icon(id, int(size * 1.5)))
+	h.add_child(label(text, size, col, false))
+	return h
+
+
+## Ряд значків із числами: [[значок, підпис], ...].
+static func icon_row(items: Array, size: int = 20, col: Color = TEXT) -> HBoxContainer:
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 22)
+	for it in items:
+		h.add_child(icon_text(it[0], it[1], size, col))
+	return h
+
+
 static func scroll(content: Control) -> ScrollContainer:
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO

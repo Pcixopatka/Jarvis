@@ -946,6 +946,8 @@ func collect_all() -> void:
 					pick_item(c.item)
 				"res":
 					add_resource(c.item["res"], c.value)
+				"token":
+					Events.holiday_token.emit(c.value, c.global_position)  # жетони свята не лишаються на полі
 			c.queue_free()
 
 
@@ -965,8 +967,8 @@ func _on_enemy_killed(e: Node2D) -> void:
 		vigil_kills += 1
 	if not is_duel() and HolidayService.active() != "":
 		var tk := HolidayService.token_roll(e.is_boss, e.elite, randf())
-		if tk > 0:
-			Events.holiday_token.emit(tk, e.global_position)
+		for i in tk:
+			spawn_pickup(e.global_position, "token", 1, {"icon": "tok_" + HolidayService.active()})
 	if is_field() and not field_cleared:
 		field_kills += 1
 		if field_kills >= field_goal:

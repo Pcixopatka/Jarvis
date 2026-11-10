@@ -411,7 +411,15 @@ static func _shynok(game, city: String) -> Control:
 		var l1 := UI.label("Ти: %d" % mine, 26, UI.BAD if mine > Acts.DICE_LIMIT else UI.GOLD, false)
 		l1.custom_minimum_size = Vector2(230, 0)
 		r1.add_child(l1)
-		r1.add_child(DiceRow.new().setup(g["mine"]))
+		var late := []  # написи, що мають з'явитися, коли кості вже лежать
+		var anim: Dictionary = game.dice_anim
+		var wait := 0.0  # скільки чекати, доки всі нові кості ляжуть
+		var mine_from: int = int(anim.get("mine", 9999))
+		var theirs_from: int = int(anim.get("theirs", 9999))
+		r1.add_child(DiceRow.new().setup(g["mine"], Color(0.95, 0.91, 0.8), mine_from))
+		wait += DiceRow.roll_time(g["mine"].size() - mine_from)
+		if wait > 0.0:
+			late.append(l1)  # сума героя оновлюється, коли його кість лягла
 		v.add_child(r1)
 		var r2 := HBoxContainer.new()
 		r2.add_theme_constant_override("separation", 16)
@@ -419,16 +427,28 @@ static func _shynok(game, city: String) -> Control:
 		var l2 := UI.label(("Суперник: %d" % theirs) if not g["theirs"].is_empty() else "Суперник чекає", 26, UI.BAD if theirs > Acts.DICE_LIMIT else UI.TEXT, false)
 		l2.custom_minimum_size = Vector2(230, 0)
 		r2.add_child(l2)
-		r2.add_child(DiceRow.new().setup(g["theirs"], Color(0.8, 0.62, 0.5)))
+		var rival_row = DiceRow.new().setup(g["theirs"], Color(0.8, 0.62, 0.5), theirs_from)
+		r2.add_child(rival_row)
 		v.add_child(r2)
+		var rival_time: float = DiceRow.roll_time(g["theirs"].size() - theirs_from)
+		if rival_time > 0.0:
+			# суперник кидає після героя: його ряд починає котитись, коли лягли кості героя
+			rival_row._t = -wait
+			late.append(l2)
+		wait += rival_time
 		if g["over"]:
 			var col: Color = UI.GOOD if g["result"] == "win" else (UI.TEXT if g["result"] == "draw" else UI.BAD)
-			v.add_child(UI.label(TS.result_text(g), 26, col, false))
+			var res := UI.label(TS.result_text(g), 26, col, false)
+			v.add_child(res)
+			late.append(res)
 			for m in g.get("msgs", []):
-				v.add_child(UI.label(m, 18, UI.GOLD, false))
+				var ml := UI.label(m, 18, UI.GOLD, false)
+				v.add_child(ml)
+				late.append(ml)
 			var back := UI.button("До столів", _do(game, "dice_clear"), Vector2(260, 64), 20)
 			back.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			v.add_child(back)
+			late.append(back)
 		else:
 			var btns := HBoxContainer.new()
 			btns.add_theme_constant_override("separation", 14)
@@ -436,6 +456,7 @@ static func _shynok(game, city: String) -> Control:
 			btns.add_child(UI.button("Досить", _do(game, "dice_stand"), Vector2(260, 76), 24))
 			v.add_child(btns)
 			v.add_child(_wrap("До перебору лишилось %d. %s" % [Acts.DICE_LIMIT - mine, R2["desc"]], 15, UI.MUTED))
+		_reveal_late(late, wait)
 	# Чутки
 	v.add_child(UI.label("Чутки", 24, UI.GOLD, false))
 	v.add_child(_wrap("Пригости шинок — і язики розв'яжуться: хтось чув про скарб, хтось про нічну нечисть, вигідний торг чи багаті угіддя. Одна чутка за похід.", 16, UI.MUTED))
@@ -459,6 +480,18 @@ static func _shynok(game, city: String) -> Control:
 	if not tip.is_empty():
 		v.add_child(_wrap("Торгова порада ще свіжа: %s у місті %s, походів лишилось %d." % [Acts.TRADE_GOODS[tip["good"]]["name"], Data.place_name(tip["city"]), int(tip["left"])], 16, UI.GOOD))
 	return v
+
+
+## Показати написи з затримкою: підсумок не має випереджати кості, що ще котяться.
+static func _reveal_late(nodes: Array, delay: float) -> void:
+	if delay <= 0.0:
+		return
+	for n in nodes:
+		n.modulate.a = 0.0
+		n.ready.connect(func():
+			var tw: Tween = n.create_tween()
+			tw.tween_interval(delay)
+			tw.tween_property(n, "modulate:a", 1.0, 0.18))
 
 
 # ---------------- Корчма ----------------

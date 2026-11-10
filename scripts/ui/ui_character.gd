@@ -190,7 +190,7 @@ static func _holidays(game) -> Control:
 		v.add_child(d)
 		v.add_child(UI.label("Святковий бонус: %s   •   днів лишилось: %d" % [H["bonus_text"], HS.days_left()], 19, UI.GOOD, false))
 		var have: int = HS.tokens(w)
-		v.add_child(UI.label("%s: %d   (падає з нечисті; жетони спільні для всіх твоїх персонажів)" % [H["token"], have], 19, UI.GOLD, false))
+		v.add_child(UI.icon_text("tok_" + id, "%s: %d   (падає з нечисті; жетони спільні для всіх твоїх персонажів)" % [H["token"], have], 19, UI.GOLD))
 		var tiers: Array = HS.tiers(id)
 		var claimed: Array = HS.progress(w)["claimed"]
 		for i in 3:
@@ -238,7 +238,7 @@ static func _glory(game) -> Control:
 	v.add_theme_constant_override("separation", 8)
 	var gl: int = GS.glory(w)
 	var next: int = GS.to_next(w)
-	v.add_child(UI.label("Слава: %d — %s%s" % [gl, GS.rank_name(w), ("   •   до наступного рангу: %d" % next) if next > 0 else "   •   найвищий ранг"], 26, UI.GOLD, false))
+	v.add_child(UI.icon_text("glory", "Слава: %d — %s%s" % [gl, GS.rank_name(w), ("   •   до наступного рангу: %d" % next) if next > 0 else "   •   найвищий ранг"], 26, UI.GOLD))
 	var cur: int = GS.rank_index(gl)
 	var ranks := UI.grid(2)
 	ranks.add_theme_constant_override("h_separation", 40)

@@ -53,7 +53,24 @@ static func draw(ci: CanvasItem, id: String, facing: Vector2, frame: int, origin
 const OBJECTS := preload("res://assets/gfx/cc0/objects.png")  # Zelda-like objects (CC0): скриня, монети, серце
 ## Порядок значків на листі assets/gfx/sprites/icons.png (його малює tools/pixel/icons.py, там той самий ORDER).
 const ICON_ORDER := ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "mana", "meat", "ryba", "veg",
-	"tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory"]
+	"tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory", "khmil"]
+static var _loot_tex := {}
+
+
+## Текстура значка здобичі (для інтерфейсу: TextureRect поруч із числом); null, якщо такого значка нема.
+static func icon_tex(id: String) -> Texture2D:
+	var i := ICON_ORDER.find(id)
+	if i < 0:
+		return null
+	if not _loot_tex.has(id):
+		var base := sheet("icons")
+		if base == null:
+			return null
+		var at := AtlasTexture.new()
+		at.atlas = base
+		at.region = Rect2(i * 16, 0, 16, 16)
+		_loot_tex[id] = at
+	return _loot_tex[id]
 const OBJ := {"chest": [0, 0], "chest_open": [1, 0], "coin": [0, 4], "coin_small": [3, 4], "heart": [0, 3]}
 
 

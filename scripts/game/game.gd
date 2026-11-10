@@ -33,6 +33,7 @@ const ExpeditionService := preload("res://scripts/game/expedition_service.gd")
 const RecordService := preload("res://scripts/game/record_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const Sounds := preload("res://scripts/data/sounds.gd")
+const Gfx := preload("res://scripts/world/gfx.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -96,6 +97,7 @@ var depth_sel := 1  # обрана глибина на мапі
 var tower_sel := 1  # обраний поверх Башти на мапі
 var theft_notice := ""  # крадіжка на хуторі між заходами (показати після завантаження)
 var leave_notice := ""  # підсумок бою, який треба показати після виходу з нього (варта тощо)
+var dice_anim := {}  # шинок: з якої кості анімувати кидок героя ("mine") і суперника ("theirs"); живе один показ
 var holiday_id := ""  # сезонне свято, що йде зараз ("" — будень); оновлюється на порозі мапи, міста й хутора
 var camp_sel_uid := -1
 
@@ -1127,14 +1129,20 @@ func _expedition_news(healed: bool = false) -> Array:
 func _dice_done() -> void:
 	var dg := TavernService.game(world)
 	_record("dice")
-	match str(dg["result"]):
-		"win":
+	# Звук підсумку — коли кості вже лягли, а не поперед них
+	var DiceRow = load("res://scripts/ui/dice_row.gd")
+	var wait: float = DiceRow.roll_time(dg["theirs"].size() if dice_anim.has("theirs") else 1) + 0.1
+	var result := str(dg["result"])
+	get_tree().create_timer(wait).timeout.connect(func():
+		if result == "win":
 			Audio.play("quest", 0.0)
+		elif result == "lose":
+			Audio.play("sharpen_fail", 0.1, -4.0))
+	match result:
+		"win":
 			_record("dice_win")
 			if dg.get("twelve", false):
 				_record("dice_12")
-		"lose":
-			Audio.play("hurt", 0.1, -6.0)
 
 
 # ======================= Місця занять на мапі =======================
@@ -1176,6 +1184,12 @@ func _open_activity(c: Control) -> void:
 	hud.set_screen(c)
 
 
+## Лист героя для мирних занять: «hunter» — з луком, «plain» — без зброї (вудку домальовує мініігра).
+func _peace_sheet(kind: String) -> String:
+	var id := "%s_%s" % [kind, player.job]
+	return id if Gfx.has(id) else player.sprite_id()
+
+
 ## Кнопка «Назад» на телефоні чи Esc посеред мініігри — те саме, що «Досить».
 func _quit_activity() -> void:
 	if state == State.ACTIVITY and hud.screen_root != null and hud.screen_root.has_method("_finish"):
@@ -1189,7 +1203,7 @@ func start_hunt() -> void:
 		enter_map()
 		return
 	Audio.play_ambient("forest")
-	_open_activity(HuntGame.new().setup(OutdoorService.new_hunt(player, -1, OutdoorService.rich(world, "hunt")), player.sprite_id(), finish_hunt))
+	_open_activity(HuntGame.new().setup(OutdoorService.new_hunt(player, -1, OutdoorService.rich(world, "hunt")), _peace_sheet("hunter"), finish_hunt))
 	hint("hunt", "Полювання: звірі перебігають галявину. Торкнись звіра, щоб пустити стрілу. Стріл мало, тож бий напевно. Вепра бери в серцевину або двома стрілами.")
 
 
@@ -1214,7 +1228,7 @@ func start_fishing() -> void:
 		enter_map()
 		return
 	Audio.play_ambient("river")
-	_open_activity(FishGame.new().setup(OutdoorService.new_fishing(-1, OutdoorService.rich(world, "fish")), player.sprite_id(), finish_fishing))
+	_open_activity(FishGame.new().setup(OutdoorService.new_fishing(-1, OutdoorService.rich(world, "fish")), _peace_sheet("plain"), finish_fishing))
 	hint("fish", "Рибалка: закинь вудку й чекай. Заклювало — тисни «Підсікти». Далі тримай кнопку, щоб тягти, й відпускай, щоб попустити: натяг має бути в зеленій смузі.")
 
 
@@ -1391,16 +1405,16 @@ func city_do(action: String, arg) -> void:
 			smith_msg = ""
 		"dice_start":
 			if TavernService.start(world, player, arg):
-				Audio.play("dice", 0.1)
+				dice_anim = {"mine": 0}
 		"dice_roll":
 			var dr := TavernService.roll(world, player)
 			if dr != "":
-				Audio.play("dice", 0.15)
+				dice_anim = {"mine": TavernService.game(world)["mine"].size() - 1}
 				if dr == "bust":
 					_dice_done()
 		"dice_stand":
 			if TavernService.stand(world, player) != "":
-				Audio.play("dice", 0.15)
+				dice_anim = {"theirs": 0}
 				_dice_done()
 		"dice_clear":
 			TavernService.clear(world)
@@ -1512,6 +1526,7 @@ func city_do(action: String, arg) -> void:
 				_record("bounty")
 	save_game()
 	_build_city()
+	dice_anim = {}  # анімація кидка стосується лише цього показу
 
 
 func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> void:

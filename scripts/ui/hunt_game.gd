@@ -249,7 +249,13 @@ func _draw() -> void:
 	# Мисливець унизу, спиною до нас
 	if Gfx.has(hero_sheet):
 		draw_set_transform(Vector2(size.x * 0.5, size.y - 70.0), 0.0, Vector2(3.0, 3.0))
-		Gfx.draw(self, hero_sheet, Vector2.UP, Gfx.IDLE if arrow.is_empty() else Gfx.ATK0 + 1, Vector2(-24, -30))
+		# Лук опущено, поки галявина порожня; натягнуто, коли є звір і стріла; щойно після пострілу — без стріли
+		var bow := Gfx.IDLE
+		if not arrow.is_empty():
+			bow = Gfx.ATK0 + 1
+		elif animal != "" and fall_t <= 0.0 and int(h["arrows"]) > 0:
+			bow = Gfx.ATK0
+		Gfx.draw(self, hero_sheet, Vector2.UP, bow, Vector2(-24, -30))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# Стріла в польоті
 	if not arrow.is_empty():

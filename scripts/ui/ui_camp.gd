@@ -301,7 +301,7 @@ static func _garden(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	v.add_child(UI.label("Грядки ростуть самі, навіть коли гра закрита. Город спільний для всіх твоїх персонажів.", 16, UI.MUTED, false))
-	v.add_child(UI.label(food_text(p) + "  •  Гривні: %d" % p.gold, 19, UI.TEXT, false))
+	v.add_child(food_row(p))
 	if GardenService.ready_count(w) > 1:
 		var all := UI.button("Зібрати все достигле", _do(game, "harvest_all"), Vector2(360, 60), 20)
 		all.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
@@ -327,7 +327,7 @@ static func _garden(game) -> Control:
 			var c2: Dictionary = Camp.CROPS[b["crop"]]
 			var ripe2 := GardenService.ready(w, i)
 			var gives: String = ("+%d грн" % GardenService.yield_of(b["crop"], p.level)) if c2["gives"] == "gold" else str(c2["desc"])
-			info.add_child(UI.label("Грядка %d: %s%s" % [i + 1, c2["name"], "  — достигло!" if ripe2 else ""], 21, UI.GOOD if ripe2 else UI.TEXT, false))
+			info.add_child(UI.icon_text("khmil" if b["crop"] == "khmil" else str(b["crop"]), "Грядка %d: %s%s" % [i + 1, c2["name"], "  — достигло!" if ripe2 else ""], 21, UI.GOOD if ripe2 else UI.TEXT))
 			var bar := ProgressBar.new()
 			bar.min_value = 0.0
 			bar.max_value = 1.0
@@ -350,6 +350,16 @@ static func _garden(game) -> Control:
 
 # ---------- Казан: страви зі здобичі ----------
 
+## Запас провіанту значками: м'ясо, риба, городина, трави.
+static func food_row(p, extra: Array = []) -> Control:
+	var items := []
+	for id in Acts.FOOD:
+		items.append([id, "%s: %d" % [Acts.FOOD[id], OutdoorService.food(p, id)]])
+	items.append(["herbs", "Трави: %d" % int(p.resources.get("herbs", 0))])
+	items.append_array(extra)
+	return UI.icon_row(items, 19)
+
+
 static func food_text(p) -> String:
 	var parts := []
 	for id in Acts.FOOD:
@@ -370,7 +380,7 @@ static func _kazan(game) -> Control:
 	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	v.add_child(UI.label(food_text(p), 20, UI.TEXT, false))
+	v.add_child(food_row(p))
 	v.add_child(UI.label("М'ясо добувають на полюванні, рибу — на рибальській тоні, городина росте на городі. Страва діє один похід; нова замінює попередню.", 16, UI.MUTED, false))
 	var now := OutdoorService.eaten(p)
 	for id in Acts.RECIPE_ORDER:
