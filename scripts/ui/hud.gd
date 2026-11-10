@@ -63,6 +63,35 @@ var _time := 0.0
 var _low_hp := false
 
 
+# ---------- Безпечна зона екрана ----------
+## На телефонах із вирізом камери гра малюється й під ним (Android 15+ розтягує застосунки на весь екран).
+## Світ гри хай іде до самого краю, а написи й кнопки відсуваємо на ширину вирізу.
+const SAFE_MAX_X := 0.08  # найбільший відступ збоку, частка ширини (захист від хибних даних пристрою)
+const SAFE_MAX_Y := 0.05
+static var insets_override: Array = []  # для перевірок і знімків: [ліворуч, згори, праворуч, знизу]
+var insets: Array = [0.0, 0.0, 0.0, 0.0]  # застосовані відступи в одиницях полотна
+var edge_dim: Array = []  # смуги поза безпечною зоною: темніють разом із меню й розмовами
+var _safe_check := 0.0
+
+
+## Відступи в одиницях полотна з розміру вікна й безпечного прямокутника (обидва — у пікселях екрана).
+static func insets_from(win: Vector2i, safe: Rect2i, view: Vector2) -> Array:
+	if win.x <= 0 or win.y <= 0 or safe.size.x <= 0 or safe.size.y <= 0:
+		return [0.0, 0.0, 0.0, 0.0]
+	var kx := view.x / win.x
+	var ky := view.y / win.y
+	return [clampf(safe.position.x * kx, 0.0, view.x * SAFE_MAX_X), clampf(safe.position.y * ky, 0.0, view.y * SAFE_MAX_Y),
+		clampf((win.x - safe.end.x) * kx, 0.0, view.x * SAFE_MAX_X), clampf((win.y - safe.end.y) * ky, 0.0, view.y * SAFE_MAX_Y)]
+
+
+func safe_insets() -> Array:
+	if not insets_override.is_empty():
+		return insets_override
+	if not OS.has_feature("mobile"):
+		return [0.0, 0.0, 0.0, 0.0]
+	return insets_from(DisplayServer.window_get_size(), DisplayServer.get_display_safe_area(), get_viewport().get_visible_rect().size)
+
+
 func _ready() -> void:
 	layer = 10
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -77,6 +106,16 @@ func _process(delta: float) -> void:
 	_time += delta
 	var low := 0.25 + 0.15 * sin(_time * 6.0) if _low_hp else 0.0
 	vignette.modulate.a = maxf(move_toward(vignette.modulate.a, 0.0, delta * 1.5), low)
+	# Телефон перевернули іншим боком — виріз переїхав на протилежний край, а розмір екрана той самий
+	_safe_check -= delta
+	if _safe_check <= 0.0:
+		_safe_check = 0.5
+		if safe_insets() != insets:
+			layout()
+	var dim := 0.72 if overlay.visible else (0.55 if dialogue_root != null else 0.0)
+	for strip in edge_dim:
+		strip.visible = dim > 0.0 and strip.size.x > 0.5 and strip.size.y > 0.5
+		strip.color.a = dim
 
 
 # ======================= Побудова =======================
@@ -103,6 +142,14 @@ func _build() -> void:
 		b.icon = Gfx.skill_icon_tex(id)
 		b.visible = false
 		skill_buttons[id] = b
+
+	for i in 4:
+		var strip := ColorRect.new()
+		strip.color = Color(0, 0, 0, 0)
+		strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		strip.visible = false
+		add_child(strip)
+		edge_dim.append(strip)
 
 	ui_root = Control.new()
 	ui_root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -305,20 +352,42 @@ func _action_button(text: String, r: float, col: Color):
 
 
 func layout() -> void:
-	var s := get_viewport().get_visible_rect().size
-	joystick.rest_pos = Vector2(190, s.y - 180)
+	var full := get_viewport().get_visible_rect().size
+	insets = safe_insets().duplicate()
+	var il: float = insets[0]
+	var it: float = insets[1]
+	var ir: float = insets[2]
+	var ib: float = insets[3]
+	# Увесь інтерфейс живе в безпечній зоні; світ гри під ним — на весь екран
+	ui_root.offset_left = il
+	ui_root.offset_top = it
+	ui_root.offset_right = -ir
+	ui_root.offset_bottom = -ib
+	# Червоне мерехтіння при малому здоров'ї — до самих країв
+	vignette.offset_left = -il
+	vignette.offset_top = -it
+	vignette.offset_right = ir
+	vignette.offset_bottom = ib
+	var strips := [Rect2(0, 0, il, full.y), Rect2(full.x - ir, 0, ir, full.y), Rect2(il, 0, full.x - il - ir, it), Rect2(il, full.y - ib, full.x - il - ir, ib)]
+	for i in 4:
+		edge_dim[i].position = strips[i].position
+		edge_dim[i].size = strips[i].size
+	# Кнопки бою рахуються від країв безпечної зони (o — її лівий верхній кут, s — розмір)
+	var o := Vector2(il, it)
+	var s := full - Vector2(il + ir, it + ib)
+	joystick.rest_pos = o + Vector2(190, s.y - 180)
 	joystick.queue_redraw()
-	btn_attack.position = Vector2(s.x - 140, s.y - 140)
-	btn_dodge.position = Vector2(s.x - 300, s.y - 80)
+	btn_attack.position = o + Vector2(s.x - 140, s.y - 140)
+	btn_dodge.position = o + Vector2(s.x - 300, s.y - 80)
 	# Атаки — дугою навколо основного удару; бафи — рядком унизу між джойстиком і ударом
-	attack_slots = [Vector2(s.x - 120, s.y - 315), Vector2(s.x - 275, s.y - 255), Vector2(s.x - 425, s.y - 105)]
+	attack_slots = [o + Vector2(s.x - 120, s.y - 315), o + Vector2(s.x - 275, s.y - 255), o + Vector2(s.x - 425, s.y - 105)]
 	var bx := (s.x - 540.0) / 2.0 + 60.0  # центр смуги між джойстиком (≈340) і кнопками праворуч (≈540)
 	buff_slots = []
 	for i in 5:
-		buff_slots.append(Vector2(bx + (i - 2) * 96.0, s.y - 52))
-	btn_potion.position = Vector2(s.x - 430, s.y - 250)
-	btn_mana.position = Vector2(s.x - 540, s.y - 200)
-	btn_block.position = Vector2(s.x - 270, s.y - 420)
+		buff_slots.append(o + Vector2(bx + (i - 2) * 96.0, s.y - 52))
+	btn_potion.position = o + Vector2(s.x - 430, s.y - 250)
+	btn_mana.position = o + Vector2(s.x - 540, s.y - 200)
+	btn_block.position = o + Vector2(s.x - 270, s.y - 420)
 	map_view.map_rect = Rect2(Vector2(8, 96), Vector2(s.x - 410, s.y - 104))
 
 

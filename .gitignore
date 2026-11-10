@@ -4,3 +4,5 @@ export/
 *.apk
 *.aab
 *.keystore
+# Шаблон Gradle-збірки Godot (ставиться командою --install-android-build-template)
+android/

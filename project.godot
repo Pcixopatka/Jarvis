@@ -6,8 +6,12 @@ config_version=5
 config/name="Козацька Звитяга"
 config/description="Екшн-RPG для смартфонів у сетингу козацького фентезі"
 run/main_scene="res://scenes/main.tscn"
-config/features=PackedStringArray("4.3", "GL Compatibility")
-config/icon="res://icon.svg"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://assets/gfx/icon/icon_192.png"
+boot_splash/bg_color=Color(0.086, 0.173, 0.322, 1)
+boot_splash/image="res://assets/gfx/icon/splash_384.png"
+boot_splash/fullsize=false
+boot_splash/use_filter=false
 
 [autoload]
 

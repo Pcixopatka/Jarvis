@@ -2,7 +2,7 @@
 
 Екшн-RPG для смартфонів у сетингу **козацького фентезі**. Козак мандрує мапою України: бере завдання в містах, б'є нечисть у степах, лісах, болотах і горах, спускається в печери до босів, збирає й заточує спорядження та наймає побратимів.
 
-Рушій — **Godot 4.3** (GDScript). Уся графіка малюється кодом, тому файлів зображень у проєкті немає.
+Рушій — **Godot 4.7** (GDScript, рендерер Compatibility). Графіка піксельна: тайли з вільних наборів і власні спрайти, які генерують скрипти з `tools/pixel/`.
 
 ## Ігровий цикл
 
@@ -169,7 +169,7 @@
 
 ## Як запустити
 
-1. Встановіть [Godot 4.3](https://godotengine.org/download) (стандартну версію, не .NET).
+1. Встановіть [Godot 4.7.1](https://godotengine.org/download) (стандартну версію, не .NET).
 2. Godot → **Import** → оберіть `project.godot`.
 3. Натисніть **F5**.
 
@@ -187,12 +187,12 @@
 
 Налаштування експорту вже є в проєкті (`export_presets.cfg`, профіль «Android»): назва пакета `com.kozatska.zvytiaha`, горизонтальна орієнтація, архітектури arm64-v8a та armeabi-v7a. Тести, інструменти й документація в APK не потрапляють. Рендер — Compatibility (OpenGL ES 3), тож гра піде і на старіших телефонах без Vulkan.
 
-1. Встановіть [Godot 4.3](https://godotengine.org/download), **Android Studio** (з неї потрібен лише Android SDK) і JDK 17.
+1. Встановіть [Godot 4.7.1](https://godotengine.org/download), **Android Studio** (з неї потрібен лише Android SDK) і JDK 17 або новіший.
 2. У Godot: **Editor → Manage Export Templates → Download and Install**.
 3. **Editor → Editor Settings → Export → Android**: вкажіть шлях до Android SDK і Java SDK. Ключ для налагоджувальної збірки Godot створить сам.
 4. **Project → Export → Android → Export Project** (зніміть галочку «Export With Debug» для release-збірки). Або підключіть телефон через USB з увімкненим «налагодженням через USB» і натисніть іконку Android угорі редактора, щоб гра встановилася й запустилася одразу.
 
-Для публікації в Google Play потрібен власний release-ключ (`keytool -genkeypair …`) і формат AAB (опція Gradle build). Ключ не можна зберігати в репозиторії: Godot читає його зі змінних середовища `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `_USER` і `_PASSWORD`.
+Збірка цілить в Android 16 (API 36), працює від Android 7.0 і підтримує сторінки пам'яті 16 КБ: цього вимагає Google Play. Для магазину є окремий пресет «Google Play», який збирає AAB через Gradle. Команди, перелік готових матеріалів (значок, банер, знімки, тексти, політика приватності) і те, що лишається зробити власникові облікового запису, описано в [`docs/store/README.md`](docs/store/README.md). Ключ підпису не можна зберігати в репозиторії: Godot читає його зі змінних середовища `GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `_USER` і `_PASSWORD`.
 
 ## Архітектура
 

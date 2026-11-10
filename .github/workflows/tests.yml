@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      GODOT_VERSION: 4.3-stable
+      GODOT_VERSION: 4.7.1-stable
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +28,7 @@ jobs:
           curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o godot.zip \
             "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/${FILE}" \
           || curl -fsSL --retry 3 --retry-delay 10 -o godot.zip \
-            "https://downloads.tuxfamily.org/godotengine/${GODOT_VERSION%-stable}/${FILE}"
+            "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/${FILE}"
           unzip -q godot.zip
           mv "Godot_v${GODOT_VERSION}_linux.x86_64" godot
           chmod +x godot

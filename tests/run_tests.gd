@@ -96,6 +96,7 @@ func _run() -> void:
 	await _suite_new_bosses()
 	_suite_escort()
 	await _suite_escort_game()
+	await _suite_safe_area()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -4512,6 +4513,67 @@ func _suite_escort_game() -> void:
 	game.enter_city(game.world.last_city)
 	await _frames(2)
 	check(game.state == game.State.CITY and game.world.quests.has(q2), "після поразки герой у місті, завдання при ньому")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_safe_area() -> void:
+	suite("Безпечна зона екрана")
+	var HudS = load("res://scripts/ui/hud.gd")
+	var zero := [0.0, 0.0, 0.0, 0.0]
+	var view := Vector2(1600, 720)
+	var win := Vector2i(2400, 1080)
+	check(HudS.insets_from(win, Rect2i(0, 0, 2400, 1080), view) == zero, "без вирізу відступів нема")
+	var a: Array = HudS.insets_from(win, Rect2i(90, 0, 2310, 1080), view)
+	check(is_equal_approx(a[0], 60.0) and a[1] == 0.0 and a[2] == 0.0 and a[3] == 0.0, "виріз ліворуч: 90 пікселів екрана — 60 одиниць полотна")
+	var b: Array = HudS.insets_from(win, Rect2i(0, 0, 2310, 1080), view)
+	check(b[0] == 0.0 and is_equal_approx(b[2], 60.0), "виріз праворуч")
+	var c: Array = HudS.insets_from(win, Rect2i(0, 30, 2400, 1020), view)
+	check(is_equal_approx(c[1], 20.0) and is_equal_approx(c[3], 20.0), "смуги згори й знизу")
+	check(HudS.insets_from(win, Rect2i(0, 0, 0, 0), view) == zero and HudS.insets_from(Vector2i(0, 0), Rect2i(0, 0, 10, 10), view) == zero, "порожні дані пристрою — без відступів")
+	var d: Array = HudS.insets_from(win, Rect2i(1000, 500, 400, 80), view)
+	check(d[0] <= view.x * HudS.SAFE_MAX_X + 0.01 and d[2] <= view.x * HudS.SAFE_MAX_X + 0.01 and d[1] <= view.y * HudS.SAFE_MAX_Y + 0.01 and d[3] <= view.y * HudS.SAFE_MAX_Y + 0.01, "хибні дані не з'їдають екран: %s" % str(d))
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	var hud = game.hud
+	var full: Vector2 = hud.get_viewport().get_visible_rect().size
+	check(hud.insets == zero and hud.ui_root.offset_left == 0.0 and hud.ui_root.offset_right == 0.0, "на комп'ютері відступів нема")
+	# Значок і заставка застосунку на місці (їх шукають і проєкт, і пресети збірки)
+	for path in [str(ProjectSettings.get_setting("application/config/icon")), str(ProjectSettings.get_setting("application/boot_splash/image")),
+			"res://assets/gfx/icon/icon_fg_432.png", "res://assets/gfx/icon/icon_bg_432.png"]:
+		check(path.begins_with("res://assets/gfx/icon/") and ResourceLoader.exists(path), "зображення застосунку є: %s" % path)
+	var joy0: Vector2 = hud.joystick.rest_pos
+	var atk0: Vector2 = hud.btn_attack.position
+	var map0: Rect2 = hud.map_view.map_rect
+	# Виріз ліворуч
+	HudS.insets_override = [64.0, 0.0, 0.0, 0.0]
+	hud.layout()
+	check(hud.ui_root.offset_left == 64.0 and hud.ui_root.offset_right == 0.0 and is_equal_approx(hud.joystick.rest_pos.x, joy0.x + 64.0) and hud.btn_attack.position == atk0, "виріз ліворуч: джойстик і смуги героя відсунуто, кнопки праворуч на місці")
+	check(is_equal_approx(hud.map_view.map_rect.size.x, map0.size.x - 64.0) and hud.vignette.offset_left == -64.0, "мапа вужча на виріз, червоне мерехтіння — до краю")
+	# Виріз праворуч: телефон перевернули, екран той самий — інтерфейс має помітити сам
+	HudS.insets_override = [0.0, 0.0, 64.0, 0.0]
+	await create_timer(0.7).timeout
+	await _frames(2)
+	check(hud.insets == [0.0, 0.0, 64.0, 0.0] and hud.ui_root.offset_left == 0.0 and hud.ui_root.offset_right == -64.0, "перевернутий телефон: відступ переїхав сам")
+	check(is_equal_approx(hud.btn_attack.position.x, atk0.x - 64.0) and is_equal_approx(hud.joystick.rest_pos.x, joy0.x) and is_equal_approx(hud.attack_slots[0].x, full.x - 64.0 - 120.0), "кнопки бою відсунуто від вирізу праворуч")
+	# Меню затемнює й смугу під вирізом
+	hud.open_overlay()
+	await _frames(2)
+	check(hud.edge_dim[1].visible and is_equal_approx(hud.edge_dim[1].size.x, 64.0) and is_equal_approx(hud.edge_dim[1].position.x, full.x - 64.0) and not hud.edge_dim[0].visible, "меню затемнює смугу під вирізом")
+	hud.close_overlay()
+	await _frames(2)
+	check(not hud.edge_dim[1].visible, "закрили меню — смуга знову прозора")
+	HudS.insets_override = []
+	hud.layout()
+	check(hud.insets == zero and hud.btn_attack.position == atk0 and hud.joystick.rest_pos == joy0 and hud.map_view.map_rect == map0, "без вирізу все на своїх місцях")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
