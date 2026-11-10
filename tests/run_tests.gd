@@ -4524,6 +4524,12 @@ func _suite_escort_game() -> void:
 
 func _suite_safe_area() -> void:
 	suite("Безпечна зона екрана")
+	var WM = load("res://scripts/ui/world_map.gd")
+	check(WM.ICONS.get_width() == 24 * WM.ICON_ORDER.size() and WM.ICON_ORDER.has("rider") and WM.ICON_ORDER.has("rider2"), "лист значків мапи відповідає переліку, вершник має два кадри")
+	var frames_seen := {}
+	for i in 40:
+		frames_seen[WM.rider_frame(i * 0.1)] = true
+	check(frames_seen.size() == 2, "у дорозі кадри вершника чергуються")
 	var HudS = load("res://scripts/ui/hud.gd")
 	var zero := [0.0, 0.0, 0.0, 0.0]
 	var view := Vector2(1600, 720)
@@ -4608,6 +4614,16 @@ func _suite_back_button() -> void:
 	game.hud.dialogue_root._finish()
 	await _frames(3)
 	check(game.state == game.State.PLAYING and game.hud.dialogue_root == null, "після прологу — бій за рідне село")
+	var job1: String = game.player.job
+	var pts1: int = game.player.stat_points
+	game.player.job = "perun_zhrets"
+	game.player.stat_points = 123
+	await _frames(4)
+	var br: Rect2 = game.hud.char_btn.get_global_rect()
+	check(br.size.x > 180.0 and game.hud.map_btn.visible and not br.intersects(game.hud.map_btn.get_global_rect()) and not br.intersects(game.hud.pause_btn.get_global_rect()), "у бою три кнопки в куті не налазять одна на одну (ширина %.0f)" % br.size.x)
+	game.player.job = job1
+	game.player.stat_points = pts1
+	await _frames(2)
 	game._notification(BACK)
 	check(game.state == game.State.PAUSED and game.hud.overlay.visible, "у бою «Назад» ставить паузу")
 	game._notification(BACK)
@@ -4637,6 +4653,18 @@ func _suite_back_button() -> void:
 	await _frames(2)
 	check(game.state == game.State.MAP and not game.hud.overlay.visible and not game.map_menu, "ще раз «Назад» — привал закрито")
 	check(game.hud.pause_btn.visible, "на мапі є кнопка меню")
+	# Довга назва класу з очками не налазить на сусідні кнопки (було: «Запорожець +23» закривав кнопку меню)
+	var job0: String = game.player.job
+	var pts0: int = game.player.stat_points
+	game.player.job = "perun_zhrets"
+	game.player.stat_points = 123
+	await _frames(4)
+	var cr: Rect2 = game.hud.char_btn.get_global_rect()
+	var pr: Rect2 = game.hud.pause_btn.get_global_rect()
+	check(game.hud.char_btn.text.ends_with("+123") and cr.size.x > 180.0 and not cr.intersects(pr) and cr.end.x <= pr.position.x and pr.end.x <= game.hud.get_viewport().get_visible_rect().size.x, "кнопка героя росте ліворуч і не закриває кнопку меню (%s, ширина %.0f)" % [game.hud.char_btn.text, cr.size.x])
+	game.player.job = job0
+	game.player.stat_points = pts0
+	await _frames(2)
 	game.hud.pause_pressed.emit()
 	await _frames(2)
 	check(game.hud.overlay.visible and game.map_menu, "кнопка меню на мапі теж відкриває привал")

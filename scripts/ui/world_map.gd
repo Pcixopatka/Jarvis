@@ -10,7 +10,7 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
 const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
-const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice"]
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2"]
 # Кольори чорнила старовинної мапи
 const INK := Color(0.23, 0.16, 0.1)
 const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
@@ -539,11 +539,18 @@ func _draw_traveler(k: float) -> void:
 	draw_set_transform(p + Vector2(0, 6 * k), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 12.0 * k, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	# Вершник із хоругвою (значок «rider» дивиться праворуч; ліворуч — віддзеркалюємо)
+	# Вершник із хоругвою: значок дивиться праворуч, ліворуч віддзеркалюємо довкола точки на шляху.
+	# (Від'ємна ширина прямокутника лише перевертає кадр, а лівий край лишає на місці — фігурка з'їжджала вбік.)
 	var sz := 48.0 * k
-	var i := ICON_ORDER.find("rider")
-	var dst := Rect2(p + Vector2(-sz / 2.0 * side, -sz * 0.7 - bob), Vector2(sz * side, sz))
-	draw_texture_rect_region(ICONS, dst, Rect2(i * 24, 0, 24, 24))
+	var i := ICON_ORDER.find(rider_frame(_pulse))
+	draw_set_transform(p + Vector2(0, -bob), 0.0, Vector2(side, 1.0))
+	draw_texture_rect_region(ICONS, Rect2(Vector2(-sz / 2.0, -sz * 0.7), Vector2(sz, sz)), Rect2(i * 24, 0, 24, 24))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Кадр вершника: у верхній точці підскоку кінь летить із витягнутими ногами, внизу — ноги на землі.
+static func rider_frame(pulse: float) -> String:
+	return "rider2" if absf(sin(pulse * 2.5)) > 0.45 else "rider"
 
 
 ## Назви місць без накладання: важливіші (вибране, мета, міста) малюються першими,

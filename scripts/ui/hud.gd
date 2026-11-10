@@ -45,6 +45,7 @@ var loc_label: Label
 var sub_label: Label
 var banner: Label
 var pause_btn: Button
+var corner_box: HBoxContainer  # рядок кнопок у правому верхньому куті: «Мапа», герой, меню
 var char_btn: Button
 var map_btn: Button
 var map_view
@@ -184,11 +185,25 @@ func _build() -> void:
 
 	_build_stats()
 
-	pause_btn = _corner_button("II", -96, -20, func(): pause_pressed.emit())
-	char_btn = _corner_button("Козак", -290, -110, func(): character_pressed.emit())
-	char_btn.add_theme_font_size_override("font_size", 24)
-	map_btn = _corner_button("Мапа", -420, -305, func(): map_pressed.emit())
+	# Кнопки в правому верхньому куті стоять рядком і ростуть ліворуч:
+	# довгий напис («Запорожець +23») розсуває сусідів, а не налазить на них
+	corner_box = HBoxContainer.new()
+	corner_box.anchor_left = 1.0
+	corner_box.anchor_right = 1.0
+	corner_box.offset_left = -20
+	corner_box.offset_right = -20
+	corner_box.offset_top = 16
+	corner_box.offset_bottom = 88
+	corner_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	corner_box.alignment = BoxContainer.ALIGNMENT_END
+	corner_box.add_theme_constant_override("separation", 14)
+	corner_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(corner_box)
+	map_btn = _corner_button("Мапа", 115, func(): map_pressed.emit())
 	map_btn.add_theme_font_size_override("font_size", 24)
+	char_btn = _corner_button("Козак", 180, func(): character_pressed.emit())
+	char_btn.add_theme_font_size_override("font_size", 24)
+	pause_btn = _corner_button("II", 76, func(): pause_pressed.emit())
 
 	banner = Label.new()
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -327,18 +342,13 @@ func _stat_label(pos: Vector2, font_size: int) -> Label:
 	return l
 
 
-func _corner_button(text: String, left: float, right: float, cb: Callable) -> Button:
+func _corner_button(text: String, min_width: float, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.anchor_left = 1.0
-	b.anchor_right = 1.0
-	b.offset_left = left
-	b.offset_right = right
-	b.offset_top = 16
-	b.offset_bottom = 88
+	b.custom_minimum_size = Vector2(min_width, 72)
 	b.visible = false
 	b.pressed.connect(cb)
-	ui_root.add_child(b)
+	corner_box.add_child(b)
 	return b
 
 

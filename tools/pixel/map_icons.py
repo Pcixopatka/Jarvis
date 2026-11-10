@@ -7,7 +7,7 @@ S = 24
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites")
 def hx(h, a=255): h = h.lstrip('#'); return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
 INK = hx("3a2a1a"); INK2 = hx("5a4030"); PAPER = hx("e8d7b0"); GREEN = hx("5a7a3a"); GREEN2 = hx("7a9a4a"); GREY = hx("8a8278"); RED = hx("a83a2a"); BLUE = hx("4a7aa8"); GOLD = hx("c8a040")
-ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice"]
+ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2"]
 
 def outline(im, col=INK):
     src = im.load(); out = im.copy(); o = out.load(); w, h = im.size
@@ -58,12 +58,29 @@ def icon(kind):
         d.line([(18, 14), (18, 2)], fill=INK2, width=1); d.rectangle([19, 2, 23, 4], fill=BLUE); d.rectangle([19, 5, 23, 7], fill=GOLD)
     elif kind == "ship":
         d.polygon([(2, 15), (22, 15), (18, 21), (6, 21)], fill=hx("7a4a28")); d.line([(12, 15), (12, 2)], fill=INK2, width=1); d.polygon([(13, 3), (21, 12), (13, 12)], fill=hx("f0e6d0")); d.polygon([(11, 4), (4, 12), (11, 12)], fill=hx("f0e6d0"))
-    elif kind == "rider":
-        # кінь праворуч, козак із хоругвою
-        d.ellipse([4, 11, 18, 19], fill=hx("6a4426")); d.ellipse([15, 7, 22, 13], fill=hx("6a4426")); d.polygon([(19, 7), (21, 4), (22, 8)], fill=hx("6a4426"))
-        for x in (6, 10, 14): d.rectangle([x, 18, x + 1, 23], fill=hx("4a2e16"))
-        d.rectangle([9, 5, 13, 12], fill=hx("c8281e")); d.ellipse([9, 1, 13, 5], fill=hx("f1c9a0")); d.rectangle([11, 0, 12, 1], fill=INK)
-        d.line([(6, 12), (6, 0)], fill=INK2, width=1); d.rectangle([1, 0, 5, 2], fill=BLUE); d.rectangle([1, 3, 5, 5], fill=GOLD)
+    elif kind in ("rider", "rider2"):
+        # Козак на коні з хоругвою, кінь дивиться праворуч. rider — ноги на землі, rider2 — у стрибку (кадри чергуються в дорозі)
+        coat = hx("8f5a30"); dark = hx("4a2e16"); hoof = hx("241608"); gallop = kind == "rider2"
+        if gallop: d.polygon([(5, 12), (1, 10), (1, 12), (4, 15)], fill=dark)  # хвіст летить за вітром
+        else: d.polygon([(5, 12), (3, 14), (2, 19), (4, 19), (5, 15)], fill=dark)  # хвіст звисає
+        d.ellipse([4, 11, 17, 18], fill=coat)  # тулуб
+        d.polygon([(13, 13), (17, 15), (20, 9), (17, 6)], fill=coat)  # шия
+        d.polygon([(17, 6), (20, 5), (22, 8), (22, 10), (20, 11), (18, 9)], fill=coat)  # голова з мордою донизу
+        d.rectangle([18, 3, 19, 5], fill=coat)  # вухо
+        d.line([(17, 5), (13, 12)], fill=dark, width=2)  # грива
+        d.point((20, 7), fill=INK); d.point((21, 10), fill=dark)  # око й ніздря
+        if gallop:
+            d.line([(16, 16), (21, 19)], fill=dark, width=2); d.line([(15, 17), (19, 21)], fill=coat, width=2)  # передні викинуто вперед
+            d.line([(6, 16), (2, 19)], fill=dark, width=2); d.line([(7, 17), (4, 21)], fill=coat, width=2)  # задні відкинуто назад
+            for hxy in ((21, 20), (19, 22), (2, 20), (4, 22)): d.point(hxy, fill=hoof)
+        else:
+            for x, c in ((6, dark), (8, coat), (13, dark), (15, coat)):
+                d.rectangle([x, 17, x + 1, 21], fill=c); d.rectangle([x, 22, x + 1, 22], fill=hoof)
+        d.rectangle([8, 11, 14, 12], fill=hx("7a2018"))  # сідло
+        d.rectangle([9, 5, 13, 11], fill=hx("c8281e"))  # жупан
+        d.rectangle([10, 12, 12, 15], fill=hx("2f55c2")); d.rectangle([11, 15, 13, 16], fill=hx("7a2018"))  # шаровари й чобіт
+        d.ellipse([9, 1, 13, 5], fill=hx("f1c9a0")); d.rectangle([9, 0, 13, 1], fill=INK)  # голова й шапка
+        d.line([(7, 12), (7, 0)], fill=INK2, width=1); d.rectangle([1, 0, 6, 2], fill=BLUE); d.rectangle([1, 3, 6, 5], fill=GOLD)  # хоругва
     elif kind == "raid":  # палаюча хата
         d.rectangle([5, 14, 18, 22], fill=hx("6a5a48")); d.polygon([(3, 14), (20, 14), (12, 7)], fill=hx("4a3a28"))
         for x, h in ((7, 6), (12, 3), (16, 7)): d.polygon([(x - 3, 14), (x + 3, 14), (x, h)], fill=hx("ff8a2a")); d.polygon([(x - 1, 14), (x + 1, 14), (x, h + 4)], fill=hx("ffd040"))
