@@ -162,9 +162,8 @@ static func apply(world, player, outcome: Dictionary) -> String:
 		player.hp = clampf(player.hp + player.max_hp * float(outcome["hp_pct"]), 1.0, player.max_hp)
 		parts.append("%d%% здоров'я" % roundi(float(outcome["hp_pct"]) * 100))
 	if outcome.has("trip"):
-		player.trip_buffs[outcome["trip"]] = true
-		player.recalc()
-		parts.append("натхнення на похід: +15% шкоди й досвіду")
+		player.add_buff(outcome["trip"], Data.INSPIRED_TIME)
+		parts.append("натхнення на %d хв бою: +15%% шкоди й досвіду" % int(Data.INSPIRED_TIME / 60.0))
 	if outcome.get("sharpen", false):
 		var w: Dictionary = player.equipment.get("weapon", {})
 		if not w.is_empty():

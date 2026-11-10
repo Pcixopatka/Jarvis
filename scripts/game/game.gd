@@ -190,6 +190,8 @@ func _process(delta: float) -> void:
 	if state == State.PLAYING:
 		meta["playtime"] = float(meta.get("playtime", 0.0)) + delta
 		AdRewards.tick(world, delta)
+		for gone in player.tick_buffs(delta):  # страви й зілля сили діють за часом бою
+			_buff_gone(gone)
 	elif state == State.MAP:
 		_travel_tick(delta)
 	player.xp_boost = AdRewards.xp_mult(world)
@@ -199,11 +201,40 @@ func _process(delta: float) -> void:
 	var sl := SpecService.objective_line(world)
 	if sl != "":
 		top += "\n" + sl
+	var buffs := buffs_line()
+	if buffs != "":
+		top = "%s\n%s" % [buffs, top]
 	if AdRewards.xp2_left(world) > 0.0:
 		top = "×2 досвіду: %s\n%s" % [AdRewards.format_time(AdRewards.xp2_left(world)), top]
 	if holiday_id != "":
 		top = "Свято: %s (%s)\n%s" % [Acts.HOLIDAYS[holiday_id]["name"], Acts.HOLIDAYS[holiday_id]["bonus_text"], top]
 	hud.update(player, world, _combat_info(), delta, top.strip_edges())
+
+
+const BUFF_NAMES := {"strength": "Зілля сили", "antiplague": "Зілля проти зарази", "inspired": "Натхнення"}
+
+
+## Рядок під смугами героя: що з'їдено й випито і скільки бою воно ще діє.
+func buffs_line() -> String:
+	var parts := []
+	var meal := OutdoorService.eaten(player)
+	if meal != "":
+		parts.append("%s %s" % [Acts.RECIPES[meal]["name"], UiCamp.buff_time(player.buff_left("food"))])
+	for key in BUFF_NAMES:
+		if player.trip_buffs.has(key):
+			parts.append("%s %s" % [BUFF_NAMES[key], UiCamp.buff_time(player.buff_left(key))])
+	return "  •  ".join(parts)
+
+
+## Підсилення вичерпалось посеред бою: тихий напис над героєм.
+func _buff_gone(key: String) -> void:
+	var text := ""
+	if key.begins_with("food:"):
+		text = "%s: страва вже не діє" % Acts.RECIPES.get(key.substr(5), {}).get("name", "Страва")
+	elif BUFF_NAMES.has(key):
+		text = "%s: дія скінчилась" % BUFF_NAMES[key]
+	if text != "" and combat.active:
+		combat.float_text(player.global_position + Vector2(0, -110), text, UI.MUTED)
 
 
 func _combat_info() -> Dictionary:
@@ -2160,6 +2191,8 @@ func camp_do(action: String, arg) -> void:
 		"brew":
 			if CampService.brew(world, player, arg):
 				Audio.play("heal", 0.0)
+				if BUFF_NAMES.has(arg):
+					hud.show_banner("%s випито\nДіє ще %s бою" % [BUFF_NAMES[arg], UiCamp.buff_time(player.buff_left(arg))], UI.GOOD)
 		"plant":
 			if GardenService.plant(world, player, arg[0], arg[1]):
 				Audio.play("rustle", 0.1)
@@ -2181,7 +2214,7 @@ func camp_do(action: String, arg) -> void:
 		"cook":
 			if OutdoorService.cook(player, arg):
 				Audio.play("pot", 0.05)
-				hud.show_banner("%s готовий! %s" % [Acts.RECIPES[arg]["name"], Acts.RECIPES[arg]["desc"]], UI.GOOD)
+				hud.show_banner("%s готовий! %s\nДіє ще %s бою" % [Acts.RECIPES[arg]["name"], Acts.RECIPES[arg]["desc"], UiCamp.buff_time(player.buff_left("food"))], UI.GOOD)
 				_record("cook")
 				_record("cook:" + str(arg))
 		"collect":

@@ -132,12 +132,12 @@ const FISH := {
 }
 const FISH_BAIT := 5  # закидів за одну рибалку
 const FISH_ZONE := [0.3, 0.75]  # у цій смузі натягу риба йде до берега
-## Страви з казана: що треба й що дає на один похід (одна страва за раз).
+## Страви з казана: що треба й що дає (одна страва за раз; діє Data.MEAL_TIME секунд бою).
 const RECIPES := {
-	"kulish": {"name": "Куліш", "need": {"meat": 2, "herbs": 2}, "desc": "+15% здоров'я на похід"},
-	"yushka": {"name": "Юшка", "need": {"ryba": 2, "herbs": 2}, "desc": "+30% відновлення наснаги й +1 здоров'я/с на похід"},
-	"pechenia": {"name": "Печеня", "need": {"meat": 2, "ryba": 2}, "desc": "+10% шкоди на похід"},
-	"borshch": {"name": "Борщ", "need": {"meat": 1, "veg": 3}, "desc": "+10% здоров'я й +10% досвіду на похід"},
+	"kulish": {"name": "Куліш", "need": {"meat": 2, "herbs": 2}, "desc": "+15% здоров'я"},
+	"yushka": {"name": "Юшка", "need": {"ryba": 2, "herbs": 2}, "desc": "+30% відновлення наснаги й +1 здоров'я/с"},
+	"pechenia": {"name": "Печеня", "need": {"meat": 2, "ryba": 2}, "desc": "+10% шкоди"},
+	"borshch": {"name": "Борщ", "need": {"meat": 1, "veg": 3}, "desc": "+10% здоров'я й +10% досвіду"},
 }
 const RECIPE_ORDER := ["kulish", "yushka", "pechenia", "borshch"]
 

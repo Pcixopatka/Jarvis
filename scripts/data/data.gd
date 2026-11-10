@@ -26,6 +26,11 @@ const POTION_DROP_CHANCE := 0.02
 const MANA_POTION_MAX := 3  # волхви несуть на одне більше
 const MANA_POTION_RESTORE := 0.7
 const MANA_POTION_CD := 6.0
+## Страви з казана й зілля сили діють певний час бою, а не «один похід». Час іде лише в бою.
+const MEAL_TIME := 1200.0  # страва, секунд бою
+const BREW_TIME := 900.0  # зілля сили й зілля проти зарази
+const INSPIRED_TIME := 600.0  # натхнення від кобзаря в дорозі
+const BUFF_CAP := 3600.0  # більше години наперед не запасти
 const MANA_POTION_DROP_CHANCE := 0.012  # у волхвів удвічі частіше
 
 

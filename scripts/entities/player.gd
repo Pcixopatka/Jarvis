@@ -48,7 +48,7 @@ var petrified := 0.0  # скам'янів від погляду Вія: не р�
 var petrify_guard := 0.0  # щойно скам'янілого вдруге поспіль не скам'янити
 var mana_potion_timer := 0.0
 var resources := {"wood": 0, "iron": 0, "herbs": 0}  # для будівництва хутора
-var trip_buffs := {}  # зілля, випите перед походом: "strength", "antiplague"
+var trip_buffs := {}  # підсилення на час бою: {"strength": секунд, "antiplague": секунд, "inspired": секунд, "food": страва, "food_t": секунд}
 var bag_bonus := 0  # від складу на хуторі (не зберігається — рахується з будівель)
 var potion_bonus := 0  # від зілляварні
 var xp_boost := 1.0  # ×2 за рекламу (виставляє Game, поки діє)
@@ -311,9 +311,75 @@ func to_dict() -> Dictionary:
 func from_dict(d: Dictionary) -> void:
 	for k in d:
 		set(k, d[k])
+	_normalize_buffs()
 	recalc()
 	hp = max_hp
 	mana = max_mana
+
+
+# ---------- Підсилення на час бою: страви з казана, зілля сили, натхнення ----------
+
+## Старі збереження тримали підсилення «на один похід» без часу — даємо їм повний строк.
+func _normalize_buffs() -> void:
+	for key in trip_buffs.keys():
+		if key in ["food", "food_t"]:
+			continue
+		if typeof(trip_buffs[key]) == TYPE_BOOL:
+			trip_buffs[key] = Data.INSPIRED_TIME if key == "inspired" else Data.BREW_TIME
+	if trip_buffs.has("food") and not trip_buffs.has("food_t"):
+		trip_buffs["food_t"] = Data.MEAL_TIME
+	elif trip_buffs.has("food_t") and not trip_buffs.has("food"):
+		trip_buffs.erase("food_t")
+
+
+## Скільки секунд бою ще діє підсилення ("food" — страва).
+func buff_left(key: String) -> float:
+	if not trip_buffs.has(key):
+		return 0.0
+	return float(trip_buffs.get("food_t", 0.0)) if key == "food" else float(trip_buffs[key])
+
+
+## Чи влізе ще одна порція часу під стелю в годину.
+func buff_fits(key: String, secs: float) -> bool:
+	return buff_left(key) + secs <= Data.BUFF_CAP + 0.5
+
+
+## Випити зілля «на час»: нова порція додає час до стелі.
+func add_buff(key: String, secs: float) -> void:
+	trip_buffs[key] = minf(Data.BUFF_CAP, buff_left(key) + secs)
+	recalc()
+
+
+## З'їсти страву: та сама додає час, інша замінює попередню.
+func eat(recipe: String, secs: float) -> void:
+	var left := buff_left("food") if str(trip_buffs.get("food", "")) == recipe else 0.0
+	trip_buffs["food"] = recipe
+	trip_buffs["food_t"] = minf(Data.BUFF_CAP, left + secs)
+	recalc()
+
+
+## Минає час бою. Повертає те, що щойно скінчилось: ключі зілля або "food:<страва>".
+func tick_buffs(delta: float) -> Array:
+	var gone := []
+	for key in trip_buffs.keys():
+		if key == "food":
+			continue
+		trip_buffs[key] = float(trip_buffs[key]) - delta
+		if float(trip_buffs[key]) <= 0.0:
+			gone.append(key)
+	var out := []
+	for key in gone:
+		trip_buffs.erase(key)
+		if key == "food_t":
+			out.append("food:" + str(trip_buffs.get("food", "")))
+			trip_buffs.erase("food")
+		else:
+			out.append(key)
+	if not out.is_empty():
+		var part := hp / maxf(1.0, max_hp)
+		recalc()
+		hp = minf(hp, maxf(1.0, max_hp * part)) if alive else hp
+	return out
 
 
 func revive() -> void:

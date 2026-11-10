@@ -134,7 +134,7 @@ static func can_brew(world, player, recipe: String) -> bool:
 		return player.potions < player.potion_max()
 	if recipe == "mana":
 		return player.mana_potions < player.mana_potion_max()
-	return not player.trip_buffs.has(recipe)
+	return player.buff_fits(recipe, Data.BREW_TIME)  # зілля «на час»: ще одна порція додає час, але не понад годину
 
 
 static func brew(world, player, recipe: String) -> bool:
@@ -148,8 +148,7 @@ static func brew(world, player, recipe: String) -> bool:
 	elif recipe == "mana":
 		player.mana_potions += 1
 	else:
-		player.trip_buffs[recipe] = true
-		player.recalc()
+		player.add_buff(recipe, Data.BREW_TIME)
 	return true
 
 

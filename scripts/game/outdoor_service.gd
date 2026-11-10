@@ -6,6 +6,7 @@ extends RefCounted
 ## Стан — world.outdoors: {"hunt_ready", "fish_ready", "meat", "ryba", "hunts", "trips_fish", "som"}.
 
 const Acts := preload("res://scripts/data/activities.gd")
+const Data := preload("res://scripts/data/data.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 
 
@@ -222,18 +223,18 @@ static func can_cook(player, recipe: String) -> bool:
 	for r in need:
 		if food(player, r) < int(need[r]):
 			return false
-	return player.trip_buffs.get("food", "") != recipe
+	# та сама страва додає час, але не понад годину запасу; інша замінює попередню будь-коли
+	return str(player.trip_buffs.get("food", "")) != recipe or player.buff_fits("food", Data.MEAL_TIME)
 
 
-## Зварити страву: діє один похід, нова страва замінює попередню.
+## Зварити страву: діє MEAL_TIME секунд бою. Та сама страва додає час, інша замінює попередню.
 static func cook(player, recipe: String) -> bool:
 	if not can_cook(player, recipe):
 		return false
 	var need: Dictionary = Acts.RECIPES[recipe]["need"]
 	for r in need:
 		player.resources[r] = food(player, r) - int(need[r])
-	player.trip_buffs["food"] = recipe
-	player.recalc()
+	player.eat(recipe, Data.MEAL_TIME)
 	return true
 
 

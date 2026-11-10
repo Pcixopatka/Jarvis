@@ -275,7 +275,7 @@ static func _brewery(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	v.add_child(UI.label("Трави: %d  •  Залізо: %d  •  Зілля здоров'я: %d/%d  •  Зілля наснаги: %d/%d" % [p.resources.get("herbs", 0), p.resources.get("iron", 0), p.potions, p.potion_max(), p.mana_potions, p.mana_potion_max()], 20, UI.TEXT, false))
-	v.add_child(UI.label("Зілля «на похід» випивається одразу й діє до кінця наступного походу.", 16, UI.MUTED, false))
+	v.add_child(UI.label("Зілля сили й проти зарази випивається одразу й діє %d хвилин бою. Час іде лише в бою. Ще одна порція додає час, запас до години." % int(Data.BREW_TIME / 60.0), 16, UI.MUTED, false))
 	for id in Camp.BREW:
 		var r: Dictionary = Camp.BREW[id]
 		var row := HBoxContainer.new()
@@ -283,9 +283,11 @@ static func _brewery(game) -> Control:
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var locked: bool = CampService.level(w, "zillia") < int(r["level"])
-		var brewed: bool = p.trip_buffs.has(id) and not (id in ["heal", "mana"])
-		info.add_child(UI.label(r["name"] + ("  (діє на наступний похід)" if brewed else ""), 21, UI.GOOD if brewed else UI.TEXT, false))
-		info.add_child(UI.label(r["desc"] + ("  •  потрібна зілляварня %d рівня" % r["level"] if locked else ""), 15, UI.BAD if locked else UI.MUTED, false))
+		var timed: bool = not (id in ["heal", "mana"])
+		var brewed: bool = timed and p.trip_buffs.has(id)
+		info.add_child(UI.label(r["name"] + (("  (діє ще %s)" % buff_time(p.buff_left(id))) if brewed else ""), 21, UI.GOOD if brewed else UI.TEXT, false))
+		var desc: String = r["desc"] + ((" на %d хв бою" % int(Data.BREW_TIME / 60.0)) if timed else "")
+		info.add_child(UI.label(desc + ("  •  потрібна зілляварня %d рівня" % r["level"] if locked else ""), 15, UI.BAD if locked else UI.MUTED, false))
 		row.add_child(info)
 		var cost := "трави %d" % r["herbs"] + ((", залізо %d" % r["iron"]) if int(r["iron"]) > 0 else "")
 		row.add_child(UI.button("Зварити\n" + cost, _do(game, "brew", id), Vector2(220, 70), 17, CampService.can_brew(w, p, id)))
@@ -381,7 +383,9 @@ static func _kazan(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
 	v.add_child(food_row(p))
-	v.add_child(UI.label("М'ясо добувають на полюванні, рибу — на рибальській тоні, городина росте на городі. Страва діє один похід; нова замінює попередню.", 16, UI.MUTED, false))
+	var about := UI.label("М'ясо добувають на полюванні, рибу — на рибальській тоні, городина росте на городі. Страва діє %d хвилин бою: час іде лише в бою. Та сама страва ще раз додає час (запас до години), інша замінює попередню." % int(Data.MEAL_TIME / 60.0), 16, UI.MUTED, false)
+	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(about)
 	var now := OutdoorService.eaten(p)
 	for id in Acts.RECIPE_ORDER:
 		var r: Dictionary = Acts.RECIPES[id]
@@ -389,12 +393,17 @@ static func _kazan(game) -> Control:
 		row.add_theme_constant_override("separation", 14)
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(UI.label(r["name"] + ("  (діє на наступний похід)" if now == id else ""), 21, UI.GOOD if now == id else UI.TEXT, false))
-		info.add_child(UI.label(r["desc"], 15, UI.MUTED, false))
+		info.add_child(UI.label(r["name"] + (("  (діє ще %s)" % buff_time(p.buff_left("food"))) if now == id else ""), 21, UI.GOOD if now == id else UI.TEXT, false))
+		info.add_child(UI.label("%s на %d хв бою" % [r["desc"], int(Data.MEAL_TIME / 60.0)], 15, UI.MUTED, false))
 		row.add_child(info)
 		row.add_child(UI.button("Зварити\n" + _need_text(r["need"]), _do(game, "cook", id), Vector2(260, 70), 16, OutdoorService.can_cook(p, id)))
 		v.add_child(row)
 	return v
+
+
+## Залишок підсилення словами: «12 хв», «40 с».
+static func buff_time(secs: float) -> String:
+	return "%d хв" % ceili(secs / 60.0) if secs >= 60.0 else "%d с" % ceili(secs)
 
 
 # ---------- Пасіка ----------

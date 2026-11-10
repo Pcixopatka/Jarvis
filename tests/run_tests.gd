@@ -715,7 +715,7 @@ func _suite_travel() -> void:
 	check(p.hp >= 1.0, "пригода не вбиває")
 	var dmg0: float = p.damage
 	TS.apply(w, p, {"trip": "inspired"})
-	check(p.damage > dmg0 and p.trip_buffs.has("inspired"), "дума кобзаря надихає на похід")
+	check(p.damage > dmg0 and is_equal_approx(p.buff_left("inspired"), Data.INSPIRED_TIME), "дума кобзаря надихає на десять хвилин бою")
 	p.equip_new(Data.gen_item(5, 1, "weapon", "sabre"))
 	var up0: int = p.equipment["weapon"]["up"]
 	TS.apply(w, p, {"sharpen": true})
@@ -2151,13 +2151,28 @@ func _suite_outdoor() -> void:
 	var dmg0: float = p.damage
 	check(OS2.cook(p, "kulish") and OS2.eaten(p) == "kulish" and OS2.food(p, "meat") == 20 and int(p.resources["herbs"]) == 2, "куліш: мінус 2 м'яса й 2 трави")
 	check(absf(p.max_hp - hp0 * 1.15) < 1.0, "куліш: +15%% здоров'я (%.0f → %.0f)" % [hp0, p.max_hp])
-	check(not OS2.can_cook(p, "kulish") and not OS2.cook(p, "kulish"), "ту саму страву двічі не варять")
-	check(OS2.cook(p, "pechenia") and OS2.eaten(p) == "pechenia" and absf(p.max_hp - hp0) < 1.0 and absf(p.damage - dmg0 * 1.1) < 0.6, "печеня замінює куліш: +10% шкоди")
+	# Страва діє за часом бою: 20 хвилин; та сама ще раз додає час, але запас не більший за годину
+	check(is_equal_approx(p.buff_left("food"), Data.MEAL_TIME) and Data.MEAL_TIME == 1200.0, "куліш діє двадцять хвилин бою")
+	p.resources["herbs"] = 20
+	check(OS2.can_cook(p, "kulish") and OS2.cook(p, "kulish") and is_equal_approx(p.buff_left("food"), 2400.0) and absf(p.max_hp - hp0 * 1.15) < 1.0, "той самий куліш ще раз: час додається, а бонус не подвоюється")
+	check(OS2.cook(p, "kulish") and is_equal_approx(p.buff_left("food"), 3600.0) and not OS2.can_cook(p, "kulish") and not OS2.cook(p, "kulish"), "запас страви — не більше години")
+	check(OS2.cook(p, "pechenia") and OS2.eaten(p) == "pechenia" and absf(p.max_hp - hp0) < 1.0 and absf(p.damage - dmg0 * 1.1) < 0.6 and is_equal_approx(p.buff_left("food"), Data.MEAL_TIME), "печеня замінює куліш: +10% шкоди, час рахується заново")
 	var regen0: float = p.regen
 	check(OS2.cook(p, "yushka") and p.regen >= regen0 + 1.0 - 0.01 and absf(p.damage - dmg0) < 0.6, "юшка: +1 здоров'я за секунду")
-	p.trip_buffs.clear()
-	p.recalc()
-	check(absf(p.max_hp - hp0) < 1.0 and absf(p.damage - dmg0) < 0.6, "після походу страва вивітрилась")
+	check(p.tick_buffs(600.0).is_empty() and OS2.eaten(p) == "yushka" and is_equal_approx(p.buff_left("food"), 600.0), "десять хвилин бою минуло — юшка ще діє")
+	var gone: Array = p.tick_buffs(600.0)
+	check(gone == ["food:yushka"] and OS2.eaten(p) == "" and p.buff_left("food") == 0.0 and not p.trip_buffs.has("food_t"), "ще десять — страва скінчилась")
+	check(absf(p.max_hp - hp0) < 1.0 and absf(p.damage - dmg0) < 0.6 and absf(p.regen - regen0) < 0.01, "без страви показники звичайні")
+	# Старе збереження: страва й зілля «на похід» без часу дістають повний строк
+	var old_p = _new_player()
+	old_p.from_dict({"level": 5, "trip_buffs": {"food": "kulish", "strength": true, "inspired": true}})
+	check(is_equal_approx(old_p.buff_left("food"), Data.MEAL_TIME) and is_equal_approx(old_p.buff_left("strength"), Data.BREW_TIME) and is_equal_approx(old_p.buff_left("inspired"), Data.INSPIRED_TIME), "старе збереження: підсилення дістали час")
+	old_p.tick_buffs(100.0)
+	var again = _new_player()
+	again.from_dict(old_p.to_dict().duplicate(true))
+	check(is_equal_approx(again.buff_left("food"), Data.MEAL_TIME - 100.0) and is_equal_approx(again.buff_left("strength"), Data.BREW_TIME - 100.0) and OS2.eaten(again) == "kulish", "залишок часу зберігається разом із героєм")
+	old_p.free()
+	again.free()
 	# Збереження
 	var w2 = WorldState.new()
 	w2.from_dict(w.to_dict())
@@ -2259,13 +2274,25 @@ func _suite_outdoor_game() -> void:
 	var hp0: float = p.max_hp
 	game.camp_do("cook", "kulish")
 	check(OS2.eaten(p) == "kulish" and p.max_hp > hp0 * 1.1 and int(game.world.stats.get("cook", 0)) == 1, "куліш із казана додає здоров'я")
-	# Похід: страва діє, після нього вивітрюється, а звір і риба повертаються
+	# Страва діє за часом бою: на мапі час стоїть, у поході йде, після походу страва лишається
+	var left0: float = p.buff_left("food")
+	game.enter_map()
+	await _frames(30)
+	check(is_equal_approx(p.buff_left("food"), left0) and "Куліш 20 хв" in game.buffs_line(), "на мапі час страви стоїть: %s" % game.buffs_line())
 	game.enter_location("wild_field")
-	await _frames(3)
-	check(game.state == game.State.PLAYING and OS2.eaten(p) == "kulish", "у поході страва ще діє")
+	await _frames(60)
+	check(game.state == game.State.PLAYING and OS2.eaten(p) == "kulish" and p.buff_left("food") < left0 - 0.5 and p.buff_left("food") > left0 - 3.0, "у поході час страви йде")
 	game.enter_map()
 	await _frames(2)
-	check(OS2.eaten(p) == "" and absf(p.max_hp - hp0) < 1.0, "після походу страва вивітрилась")
+	check(OS2.eaten(p) == "kulish" and p.max_hp > hp0 * 1.1, "після походу страва лишилась")
+	# Час вичерпано посеред бою: показники вертаються, над героєм напис
+	game.enter_location("wild_field")
+	await _frames(3)
+	p.trip_buffs["food_t"] = 0.05
+	await _frames(6)
+	check(OS2.eaten(p) == "" and absf(p.max_hp - hp0) < 1.0 and game.buffs_line() == "", "двадцять хвилин бою минуло — куліш більше не діє")
+	game.enter_map()
+	await _frames(2)
 	check(OS2.ready(game.world, "hunt") and OS2.ready(game.world, "fish"), "після походу знову можна полювати й рибалити")
 	# Кнопка «Назад» посеред мініігри — те саме, що «Досить»
 	game.enter_spot("fish")
@@ -2291,7 +2318,7 @@ func _suite_outdoor_game() -> void:
 	game.enter_city("sich")
 	game.hud.close_dialogue()
 	await _frames(2)
-	check(OS2.eaten(p) == "kulish", "після герцю страва лишилась на справжній похід")
+	check(OS2.eaten(p) == "kulish", "після герцю страва лишилась")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -2873,6 +2900,7 @@ func _suite_expedition_game() -> void:
 	await _frames(2)
 	check(not ES.away(game.world.companions[0]) and p.gold > gold0 and int(game.world.stats.get("expedition", 0)) == 1, "повернувся: здобич у героя (+%d грн)" % (p.gold - gold0))
 	check(game.account.challenges["ach"].has("expedition_1"), "досягнення «Гінці повернулись»")
+	game.world.revive_companions()  # розвідник із шансом 5% вертається пораненим; тут перевіряємо не це
 	game.enter_location("wild_field")
 	await _frames(3)
 	check(game.combat.companion_nodes.size() == 2, "тепер у бою знову обидва")
@@ -5257,8 +5285,15 @@ func _suite_camp() -> void:
 	p.potions = 0
 	check(CampService.brew(w, p, "heal") and p.potions == 1, "варіння зілля здоров'я")
 	var dmg = p.damage
-	check(CampService.brew(w, p, "strength") and p.damage > dmg * 1.25, "зілля сили на похід")
-	check(not CampService.brew(w, p, "strength"), "двічі на один похід не вариться")
+	check(CampService.brew(w, p, "strength") and p.damage > dmg * 1.25 and is_equal_approx(p.buff_left("strength"), Data.BREW_TIME) and Data.BREW_TIME == 900.0, "зілля сили діє п'ятнадцять хвилин бою")
+	var dmg_one: float = p.damage
+	p.resources["herbs"] = 100
+	p.resources["iron"] = 100
+	check(CampService.brew(w, p, "strength") and is_equal_approx(p.buff_left("strength"), 1800.0) and is_equal_approx(p.damage, dmg_one), "ще одна порція додає час, а не силу")
+	CampService.brew(w, p, "strength")
+	CampService.brew(w, p, "strength")
+	check(is_equal_approx(p.buff_left("strength"), 3600.0) and not CampService.can_brew(w, p, "strength") and not CampService.brew(w, p, "strength"), "запас зілля — не більше години")
+	check(p.tick_buffs(3599.0).is_empty() and p.tick_buffs(2.0) == ["strength"] and is_equal_approx(p.damage, dmg), "час минув — сила звичайна")
 	CampService.brew(w, p, "antiplague")
 	check(p.plague_immune, "зілля проти зарази")
 	# Переплавка

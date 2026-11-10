@@ -326,9 +326,7 @@ func _spawn_bounty(b: Dictionary) -> void:
 
 
 func leave() -> void:
-	if active and counts_as_trip() and not player.trip_buffs.is_empty():
-		player.trip_buffs.clear()  # зілля й страва «на похід» діють один похід (герць на майдані походом не є)
-		player.recalc()
+	# Страви й зілля сили діють за часом бою (player.tick_buffs), тож на виході з походу нічого не зникає
 	active = false
 	player.statuses.clear()
 	Engine.time_scale = 1.0
