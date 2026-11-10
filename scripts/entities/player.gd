@@ -1967,7 +1967,8 @@ func _draw() -> void:
 		var hand := Vector2(side * 12, -4)
 		var dir := Vector2.from_angle(blade_angle)
 		var rarity: int = equipment["weapon"]["rarity"] if equipment.has("weapon") else 0
-		var metal: Color = [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45)][rarity]
+		var metals := [Color(0.86, 0.9, 0.95), Color(0.85, 0.95, 0.85), Color(0.75, 0.88, 1.0), Color(1.0, 0.85, 0.45), Color(1.0, 0.92, 0.35)]
+		var metal: Color = metals[clampi(rarity, 0, metals.size() - 1)]
 		match weapon_type:
 			"pishchal":
 				# Пищаль: довгий ствол на ложі

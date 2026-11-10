@@ -1246,7 +1246,8 @@ func _drop_loot(e: Node2D) -> void:
 
 ## Річ із нечисті. На Катерини доля всміхається: частина речей на рідкість краща.
 func _loot(ilvl: int, rarity: int) -> Dictionary:
-	if rarity < Data.RARITY_NAMES.size() - 1 and randf() < float(festive.get("rare", 0.0)):
+	# лише до легендарної: унікальні речі не випадкові, їх дають тільки боси
+	if rarity < 3 and randf() < float(festive.get("rare", 0.0)):
 		rarity += 1
 	return Data.gen_item(ilvl, rarity)
 
