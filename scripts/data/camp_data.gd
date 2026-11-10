@@ -24,7 +24,7 @@ static func res_name(r: String) -> String:
 
 # Який ресурс найчастіше дає ландшафт
 const BIOME_RESOURCE := {"steppe": "wood", "river": "herbs", "forest": "wood", "swamp": "herbs",
-	"mountain": "iron", "cave": "iron", "plague": "iron", "sand": "iron"}
+	"mountain": "iron", "cave": "iron", "plague": "iron", "sand": "iron", "snow": "wood"}
 const RESOURCE_DROP_CHANCE := 0.25
 
 # Будівлі: назва, опис, ціни рівнів (гривні + ресурси) і що дає кожен рівень

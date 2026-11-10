@@ -11,12 +11,13 @@ var crystals := []  # [позиція, колір] — у печері біля 
 var props_parent: Node2D = null  # шар сутностей: сюди ставляться дерева й камені (сортування за y)
 var props := []
 ## Біоми, що малюються тайлами (решта — поки що процедурно)
-const TILED := ["forest", "steppe", "village", "cave", "plague", "river", "swamp", "mountain", "maidan", "sand"]
+const TILED := ["forest", "steppe", "village", "cave", "plague", "river", "swamp", "mountain", "maidan", "sand", "snow"]
 
 const BASE := {
 	"steppe": Color(0.36, 0.55, 0.24), "river": Color(0.38, 0.56, 0.26), "forest": Color(0.2, 0.36, 0.17),
 	"swamp": Color(0.28, 0.35, 0.21), "mountain": Color(0.42, 0.46, 0.38), "cave": Color(0.2, 0.17, 0.15),
 	"plague": Color(0.15, 0.17, 0.11), "village": Color(0.4, 0.5, 0.25), "sand": Color(0.8, 0.7, 0.45),
+	"snow": Color(0.86, 0.9, 0.95),
 }
 
 
@@ -87,6 +88,13 @@ func _spawn_props() -> void:
 			_scatter(rng, "log", int(14 * area), 200.0, 60.0)
 			_scatter(rng, "stump", int(20 * area), 180.0, 40.0)
 			_scatter(rng, "bush", int(25 * area), 180.0, 40.0)
+		"snow":
+			# Зимова тайга Московії: ялини в снігу, валуни, повалені стовбури
+			_scatter(rng, "pine", int(70 * area) + 6, 230.0, 60.0)
+			_scatter(rng, "pine2", int(40 * area), 230.0, 60.0)
+			_scatter(rng, "boulder", int(18 * area), 180.0, 45.0)
+			_scatter(rng, "log", int(8 * area), 200.0, 60.0)
+			_scatter(rng, "stump", int(10 * area), 180.0, 40.0)
 		"sand":
 			# Піски й узбережжя: каміння, сухі кущі, де-не-де корч
 			_scatter(rng, "boulder", int(26 * area), 200.0, 50.0)
@@ -139,6 +147,19 @@ func _spawn_props() -> void:
 		while y < arena.end.y:
 			_prop("tree", Vector2(arena.position.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
 			_prop("tree", Vector2(arena.end.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
+			y += step
+	elif biome == "snow":
+		# узлісся тайги: суцільна стіна ялин
+		var step := 52.0
+		var x := arena.position.x
+		while x < arena.end.x:
+			_prop("pine", Vector2(x + rng.randf_range(-10, 10), arena.position.y + rng.randf_range(10, 40)))
+			_prop("pine2", Vector2(x + rng.randf_range(-10, 10), arena.end.y + rng.randf_range(20, 50)))
+			x += step
+		var y := arena.position.y
+		while y < arena.end.y:
+			_prop("pine", Vector2(arena.position.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
+			_prop("pine2", Vector2(arena.end.x + rng.randf_range(-10, 20), y + rng.randf_range(-10, 10)))
 			y += step
 	elif biome in ["mountain", "sand"]:
 		var step := 70.0
@@ -476,6 +497,15 @@ func _draw_tiles() -> void:
 					Tiles.rg_tile(self, Tiles.RG_DIRT[rng.randi() % Tiles.RG_DIRT.size()], pos)
 				else:
 					Tiles.tile(self, tex, Tiles.GRASS[0], pos, Color(0.82, 0.86, 0.8))
+				continue
+			if biome == "snow":
+				# Сніг: тайли снігу з листа Kenney, подекуди проталини й сліди
+				Tiles.rg_tile(self, Tiles.SNOW[rng.randi() % Tiles.SNOW.size()], pos, tint)
+				if inside and roll > 0.985:
+					# голий камінь, що визирає з-під снігу
+					draw_rect(Rect2(pos + Vector2(ts * 0.3, ts * 0.35), Vector2(ts * 0.4, ts * 0.25)), Color(0.62, 0.66, 0.72) * tint)
+				elif inside and roll < 0.02:
+					draw_rect(Rect2(pos + Vector2(ts * 0.25, ts * 0.4), Vector2(6.0, 4.0)), Color(0.72, 0.78, 0.86) * tint)
 				continue
 			if biome == "sand":
 				# Піски: світлі бархани, подекуди темніші смуги, які намів вітер

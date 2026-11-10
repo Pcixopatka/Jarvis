@@ -28,7 +28,7 @@ const DEATH := {
 ## Фоновий шум за ландшафтом ("" — тиша).
 const AMBIENT := {
 	"steppe": "wind", "mountain": "wind", "forest": "forest", "village": "forest", "river": "river", "swamp": "night",
-	"cave": "cave", "plague": "cave", "maidan": "crowd", "sand": "wind",
+	"cave": "cave", "plague": "cave", "maidan": "crowd", "sand": "wind", "snow": "wind",
 }
 ## Гучність фонових шумів у дБ (щоб вітер не перекрикував бій, а юрба було чути).
 const AMBIENT_VOLUME := {"forest": -2.0, "wind": 0.0, "night": -4.0, "cave": 0.0, "river": -3.0, "fire": -3.0, "crowd": -6.0}
