@@ -2119,6 +2119,9 @@ func enter_camp() -> void:
 	if not back.is_empty():
 		hud.show_banner("\n".join(back), UI.GOLD)
 	save_game()
+	# Гривень уже вистачає на перший клейнод, а рід їх іще не має: один раз підказуємо, куди їх подіти
+	if world.hints.has("camp") and KleinodService.total(world) == 0 and player.gold >= int(Camp.KLEINOD_GOLD[0]):
+		hint("kleinody", "Гривень назбиралось чимало. Зазирни на вкладку «Клейноди»: козацькі регалії назавжди додають бонуси всім твоїм героям.")
 	hint("camp", "Твій хутір! Тут козак і загін відпочивають. Будуй курінь, кузню, зілляварню, склад і пасіку за гривні та ресурси з походів.")
 
 

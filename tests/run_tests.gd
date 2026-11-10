@@ -5374,8 +5374,12 @@ func _suite_kleinody_game() -> void:
 	check(b != null and b.disabled and b.text.begins_with("Здобути"), "без гривень кнопка неактивна")
 	game.camp_do("kleinod", "bulava")
 	check(KS.level(game.world, "bulava") == 0 and int(game.world.stats.get("kleinod", 0)) == 0, "без гривень клейнод не купується")
+	check(not game.world.hints.has("kleinody"), "без гривень про клейноди не підказуємо")
 	p.gold = 2000000
 	p.resources = {"wood": 20000, "iron": 20000, "herbs": 20000, "trophy": 5000}
+	game.enter_camp()
+	await _frames(2)
+	check(game.world.hints.has("kleinody") and game.hud.hint_panel.visible and "Клейноди" in game.hud.hint_label.text, "гривень вистачає на перший клейнод — хутір підказує про вкладку")
 	var dmg0: float = p.damage
 	game.camp_do("kleinod", "bulava")
 	await _frames(2)

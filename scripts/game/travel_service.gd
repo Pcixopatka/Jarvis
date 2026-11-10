@@ -4,7 +4,7 @@ extends RefCounted
 ## одразу каже, чим усе скінчилося, а apply() застосовує вже відомий наслідок.
 ##
 ## Наслідок (outcome): gold, xp, potions, hp_pct (частка здоров'я, може бути від'ємна), heal_full,
-## res {ресурс: к-сть}, loyalty {місто: очки}, trip (бафф на похід), sharpen (+1 заточки зброї).
+## res {ресурс: к-сть}, loyalty {місто: очки}, trip (підсилення на час бою, див. Data.INSPIRED_TIME), sharpen (+1 заточки зброї).
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
