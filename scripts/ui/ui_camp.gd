@@ -274,7 +274,7 @@ static func _brewery(game) -> Control:
 	var p = game.player
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	v.add_child(UI.label("Трави: %d  •  Залізо: %d  •  Зілля здоров'я: %d/%d" % [p.resources.get("herbs", 0), p.resources.get("iron", 0), p.potions, p.potion_max()], 20, UI.TEXT, false))
+	v.add_child(UI.label("Трави: %d  •  Залізо: %d  •  Зілля здоров'я: %d/%d  •  Зілля наснаги: %d/%d" % [p.resources.get("herbs", 0), p.resources.get("iron", 0), p.potions, p.potion_max(), p.mana_potions, p.mana_potion_max()], 20, UI.TEXT, false))
 	v.add_child(UI.label("Зілля «на похід» випивається одразу й діє до кінця наступного походу.", 16, UI.MUTED, false))
 	for id in Camp.BREW:
 		var r: Dictionary = Camp.BREW[id]
@@ -283,7 +283,8 @@ static func _brewery(game) -> Control:
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var locked: bool = CampService.level(w, "zillia") < int(r["level"])
-		info.add_child(UI.label(r["name"] + ("  (діє на наступний похід)" if p.trip_buffs.has(id) else ""), 21, UI.GOOD if p.trip_buffs.has(id) else UI.TEXT, false))
+		var brewed: bool = p.trip_buffs.has(id) and not (id in ["heal", "mana"])
+		info.add_child(UI.label(r["name"] + ("  (діє на наступний похід)" if brewed else ""), 21, UI.GOOD if brewed else UI.TEXT, false))
 		info.add_child(UI.label(r["desc"] + ("  •  потрібна зілляварня %d рівня" % r["level"] if locked else ""), 15, UI.BAD if locked else UI.MUTED, false))
 		row.add_child(info)
 		var cost := "трави %d" % r["herbs"] + ((", залізо %d" % r["iron"]) if int(r["iron"]) > 0 else "")

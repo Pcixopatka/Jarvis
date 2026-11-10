@@ -91,6 +91,8 @@ func _run() -> void:
 	await _suite_holidays_game()
 	_suite_audio()
 	await _suite_audio_game()
+	_suite_mana_potion()
+	await _suite_mana_potion_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -3376,6 +3378,116 @@ func _suite_audio_game() -> void:
 	game.queue_free()
 	await _frames(2)
 	audio.play_ambient("")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_mana_potion() -> void:
+	suite("Зілля наснаги: правила")
+	var CampService = load("res://scripts/game/camp_service.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var w = WorldState.new()
+	var p = _new_player()
+	p.level = 10
+	p.recalc()
+	check(p.mana_potions == 0 and p.mana_potion_max() == Data.MANA_POTION_MAX, "козак починає без зілля наснаги, місця — три")
+	check(not p.use_mana_potion(), "нема зілля — нема чого пити")
+	check(p.add_mana_potion() and p.add_mana_potion() and p.add_mana_potion() and not p.add_mana_potion() and p.mana_potions == 3, "понад запас не візьмеш")
+	p.mana = p.max_mana
+	check(not p.use_mana_potion() and p.mana_potions == 3, "при повній насназі зілля не марнується")
+	p.mana = 0.0
+	var hp0: float = p.hp
+	check(p.use_mana_potion() and p.mana_potions == 2 and absf(p.mana - p.max_mana * Data.MANA_POTION_RESTORE) < 0.5 and p.hp == hp0, "ковток повертає 70% наснаги й не лікує")
+	p.mana = 0.0
+	check(not p.use_mana_potion() and p.mana_potion_timer > 0.0, "між ковтками треба перечекати")
+	p.mana_potion_timer = 0.0
+	p.alive = false
+	check(not p.use_mana_potion(), "полеглий не п'є")
+	p.alive = true
+	# Волхв
+	var m = _new_player()
+	m.level = 10
+	m.change_class("volkhv")
+	check(m.mana_potions == 2 and m.mana_potion_max() == Data.MANA_POTION_MAX + 1, "волхв на посвяті дістає два зілля й несе на одне більше")
+	m.change_class("cossack")
+	m.change_class("volkhv")
+	check(m.mana_potions == 2, "повторна посвята зілля не множить")
+	# Крамниця
+	p.gold = 0
+	p.mana_potions = 0
+	check(not CityService.buy_mana_potion(w, p, "sich"), "без гривень не купиш")
+	p.gold = 10000
+	var price: int = CityService.mana_potion_price(w, p, "sich")
+	check(price > 0 and price < CityService.potion_price(w, p, "sich") and CityService.buy_mana_potion(w, p, "sich") and p.gold == 10000 - price and p.mana_potions == 1, "зілля наснаги дешевше за зілля здоров'я")
+	p.mana_potions = p.mana_potion_max()
+	check(not CityService.buy_mana_potion(w, p, "sich"), "повний запас — крамар не продає")
+	# Зілляварня
+	p.resources = {"wood": 100, "iron": 100, "herbs": 100}
+	p.mana_potions = 0
+	check(not CampService.can_brew(w, p, "mana"), "без зілляварні не звариш")
+	CampService.build(w, p, "zillia")
+	var herbs0: int = int(p.resources["herbs"])
+	check(CampService.brew(w, p, "mana") and p.mana_potions == 1 and int(p.resources["herbs"]) == herbs0 - int(Camp.BREW["mana"]["herbs"]) and not p.trip_buffs.has("mana"), "зварив зілля наснаги з трав")
+	p.mana_potions = p.mana_potion_max()
+	check(not CampService.can_brew(w, p, "mana"), "повний запас — варити нема куди")
+	# Збереження
+	p.mana_potions = 2
+	var p2 = _new_player()
+	p2.from_dict(p.to_dict())
+	check(p2.mana_potions == 2, "запас зілля наснаги зберігається")
+	check(Camp.res_name("meat") == "М'ясо" and Camp.res_name("wood") == "Дерево" and Camp.res_name("trophy") == Camp.TROPHY_NAME and Camp.RESOURCE_COLORS.has("ryba"), "провіант має назви й кольори для написів здобичі")
+	for id in ["mana", "meat", "ryba", "veg", "glory", "tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii"]:
+		check(load("res://scripts/world/gfx.gd").ICON_ORDER.has(id), "значок %s є на листі" % id)
+	var sheet: Texture2D = load("res://assets/gfx/sprites/icons.png")
+	check(sheet.get_width() == 16 * load("res://scripts/world/gfx.gd").ICON_ORDER.size(), "лист значків відповідає переліку")
+
+
+func _suite_mana_potion_game() -> void:
+	suite("Зілля наснаги: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.change_class("cossack")
+	p.level = 10
+	p.recalc()
+	p.hp = p.max_hp
+	p.gold = 5000
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.city_do("buy_mana_potion", null)
+	check(p.mana_potions == 1, "купив зілля наснаги в крамниці")
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(game.hud.btn_mana.visible and "1" in game.hud.btn_mana.label, "у бою є кнопка «Наснага 1»")
+	p.mana = 0.0
+	game.hud.mana_pressed.emit()
+	check(p.mana > p.max_mana * 0.5 and p.mana_potions == 0, "кнопка в бою повертає наснагу")
+	await _frames(2)
+	check(not game.hud.btn_mana.visible, "у козака порожня кнопка ховається")
+	# Здобич: синя пляшечка
+	game.combat.spawn_pickup(p.global_position, "mana", 1)
+	await _frames(30)
+	check(p.mana_potions == 1, "підібрав зілля наснаги зі здобичі")
+	p.mana_potions = p.mana_potion_max()
+	var gold0: int = p.gold
+	game.combat.spawn_pickup(p.global_position, "mana", 1)
+	await _frames(30)
+	check(p.mana_potions == p.mana_potion_max() and p.gold > gold0, "зайве зілля обертається на гривні")
+	# Провіант як здобич: напис і значок не ламаються
+	game.combat.spawn_pickup(p.global_position, "res", 2, {"res": "meat"})
+	await _frames(30)
+	check(int(p.resources.get("meat", 0)) >= 2, "м'ясо підбирається як ресурс")
+	game.queue_free()
+	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
 

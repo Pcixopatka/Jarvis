@@ -1024,6 +1024,8 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "res", 1, {"res": _roll_resource()})
 		if randf() < Data.POTION_DROP_CHANCE:
 			spawn_pickup(pos, "potion", 1)
+		if randf() < Data.MANA_POTION_DROP_CHANCE * (2.0 if player.is_volkhv() else 1.0):
+			spawn_pickup(pos, "mana", 1)
 		if randf() < Data.ITEM_DROP_CHANCE:
 			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl)))
 

@@ -43,6 +43,8 @@ var gold := 0
 var rank := ""  # почесне звання (hetman — після фіналу); клас — у job
 var potions := Data.POTION_START
 var potion_timer := 0.0
+var mana_potions := 0  # зілля наснаги
+var mana_potion_timer := 0.0
 var resources := {"wood": 0, "iron": 0, "herbs": 0}  # для будівництва хутора
 var trip_buffs := {}  # зілля, випите перед походом: "strength", "antiplague"
 var bag_bonus := 0  # від складу на хуторі (не зберігається — рахується з будівель)
@@ -189,6 +191,15 @@ func potion_max() -> int:
 	return Data.POTION_MAX + potion_bonus + pk("h_flask")
 
 
+func mana_potion_max() -> int:
+	return Data.MANA_POTION_MAX + (1 if is_volkhv() else 0)
+
+
+## Волхв чи його спеціалізація (за класом, а не за зброєю в руках).
+func is_volkhv() -> bool:
+	return Classes.is_volkhv_line(job)
+
+
 ## Додає річ у торбу. Повертає false, якщо місця немає.
 func add_item(item: Dictionary) -> bool:
 	if not item.has("uid"):
@@ -290,7 +301,7 @@ func eq(id: String) -> float:
 func to_dict() -> Dictionary:
 	return {"level": level, "xp": xp, "xp_next": xp_next, "stats": stats, "skills": skills, "perks": perks,
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
-		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions,
+		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
 		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel}
 
@@ -363,12 +374,15 @@ func can_change_class() -> bool:
 func change_class(cls: String) -> bool:
 	if not Classes.CLASSES.has(cls) or cls == job:
 		return false
+	var was_volkhv := is_volkhv()
 	job = cls
 	job_level = 1
 	job_xp = 0
 	Data.weapon_pool = Classes.CLASSES[job]["weapons"]
 	recalc()
 	mana = max_mana
+	if is_volkhv() and not was_volkhv:
+		mana_potions = maxi(mana_potions, 2)  # волхви на посвяті дають учневі два зілля наснаги
 	return true
 
 
@@ -580,6 +594,7 @@ func _process(delta: float) -> void:
 	_update_block(delta)
 	dodge_timer = maxf(0.0, dodge_timer - delta)
 	potion_timer = maxf(0.0, potion_timer - delta)
+	mana_potion_timer = maxf(0.0, mana_potion_timer - delta)
 	for id in skill_timers:
 		skill_timers[id] = maxf(0.0, skill_timers[id] - delta)
 	invuln = maxf(0.0, invuln - delta)
@@ -850,6 +865,28 @@ func add_potion() -> bool:
 	if potions >= potion_max():
 		return false
 	potions += 1
+	return true
+
+
+## Ковтнути зілля наснаги: відновлює частку наснаги. Повертає true, якщо вдалося.
+func use_mana_potion() -> bool:
+	if not alive or mana_potions <= 0 or mana_potion_timer > 0.0 or mana >= max_mana * 0.95:
+		return false
+	mana_potions -= 1
+	mana_potion_timer = Data.MANA_POTION_CD * (1.0 - 0.15 * pk("h_sip"))
+	var got := max_mana * Data.MANA_POTION_RESTORE
+	mana = minf(max_mana, mana + got)
+	Audio.play("heal", 0.05, -4.0)
+	if combat:
+		combat.float_text(global_position + Vector2(0, -70), "+%d наснаги" % roundi(got), Color(0.5, 0.75, 1.0))
+		combat.fx.ring(global_position, Color(0.4, 0.65, 1.0), 16, 150, 4, 0.4)
+	return true
+
+
+func add_mana_potion() -> bool:
+	if mana_potions >= mana_potion_max():
+		return false
+	mana_potions += 1
 	return true
 
 

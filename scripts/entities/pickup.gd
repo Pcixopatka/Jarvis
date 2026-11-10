@@ -44,6 +44,13 @@ func _process(delta: float) -> void:
 				Audio.play("item", 0.05, -6.0)
 			else:
 				p.add_gold(Data.potion_price(p.level) / 2)
+		elif kind == "mana":
+			if p.add_mana_potion():
+				combat.float_text(global_position + Vector2(0, -30), "+1 зілля наснаги", Color(0.5, 0.75, 1.0))
+				Audio.play("item", 0.05, -6.0)
+				Events.hint.emit("mana_potion", "Зілля наснаги! Синя кнопка «Наснага» повертає більшу частину наснаги посеред бою.")
+			else:
+				p.add_gold(Data.mana_potion_price(p.level) / 2)
 		else:
 			p.heal(value)
 		queue_free()
@@ -117,6 +124,8 @@ func _draw_icon() -> void:
 			Gfx.icon(self, item["res"], Vector2(0, -2), 2.0)
 		"potion":
 			Gfx.icon(self, "potion", Vector2(0, -2), 2.0)
+		"mana":
+			Gfx.icon(self, "mana", Vector2(0, -2), 2.0)
 		"coin":
 			Gfx.icon(self, "coin" if value >= 8 else "coin_small", Vector2.ZERO, 1.5 + minf(value, 20) * 0.03)
 		_:

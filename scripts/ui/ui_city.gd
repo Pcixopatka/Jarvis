@@ -126,6 +126,10 @@ static func _shop(game, city: String) -> Control:
 	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, p.potion_max()], 20, UI.TEXT, false))
 	left.add_child(UI.label("Лікує %d%% здоров'я в бою" % roundi(Data.POTION_HEAL * 100), 15, UI.MUTED, false))
 	left.add_child(UI.button("Купити зілля • %d грн" % pprice, _do(game, "buy_potion"), Vector2(306, 56), 18, p.gold >= pprice and p.potions < p.potion_max()))
+	var mprice: int = game.CityService.mana_potion_price(game.world, p, city)
+	left.add_child(UI.label("Зілля наснаги: %d/%d" % [p.mana_potions, p.mana_potion_max()], 20, UI.TEXT, false))
+	left.add_child(UI.label("Повертає %d%% наснаги в бою" % roundi(Data.MANA_POTION_RESTORE * 100), 15, UI.MUTED, false))
+	left.add_child(UI.button("Купити зілля наснаги • %d грн" % mprice, _do(game, "buy_mana_potion"), Vector2(306, 56), 17, p.gold >= mprice and p.mana_potions < p.mana_potion_max()))
 
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)

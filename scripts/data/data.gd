@@ -22,10 +22,19 @@ const POTION_HEAL := 0.4  # частка здоров'я, яку відновл�
 const POTION_CD := 6.0  # секунд між ковтками
 const POTION_START := 2
 const POTION_DROP_CHANCE := 0.02
+## Зілля наснаги: окремий запас, відновлює частку наснаги (здоров'я не лікує).
+const MANA_POTION_MAX := 3  # волхви несуть на одне більше
+const MANA_POTION_RESTORE := 0.7
+const MANA_POTION_CD := 6.0
+const MANA_POTION_DROP_CHANCE := 0.012  # у волхвів удвічі частіше
 
 
 static func potion_price(hero_level: int) -> int:
 	return 25 + 10 * hero_level
+
+
+static func mana_potion_price(hero_level: int) -> int:
+	return 20 + 8 * hero_level
 
 
 ## Досвід, потрібний, щоб перейти з рівня l на l+1.

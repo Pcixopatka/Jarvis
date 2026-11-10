@@ -8,6 +8,7 @@ signal attack_pressed
 signal dodge_pressed
 signal skill_pressed(id: String)
 signal potion_pressed
+signal mana_pressed
 signal pause_pressed
 signal character_pressed
 signal map_pressed
@@ -29,6 +30,7 @@ var btn_attack
 var btn_dodge
 var skill_buttons := {}
 var btn_potion
+var btn_mana
 var btn_block
 var hp_bar: ProgressBar
 var xp_bar: ProgressBar
@@ -92,6 +94,8 @@ func _build() -> void:
 	btn_block = _action_button("Блок", 50.0, Color(0.55, 0.42, 0.2))
 	btn_potion = _action_button("Зілля", 46.0, Color(0.75, 0.12, 0.2))
 	btn_potion.triggered.connect(func(): potion_pressed.emit())
+	btn_mana = _action_button("Наснага", 40.0, Color(0.18, 0.4, 0.85))
+	btn_mana.triggered.connect(func(): mana_pressed.emit())
 	var SkillInfo = load("res://scripts/data/skill_info.gd")
 	for id in Data.ACTIVE_SKILLS:
 		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0 if SkillInfo.kind(id) == "attack" else 42.0, Data.Classes.ACTIVE_COLORS[id])
@@ -313,6 +317,7 @@ func layout() -> void:
 	for i in 5:
 		buff_slots.append(Vector2(bx + (i - 2) * 96.0, s.y - 52))
 	btn_potion.position = Vector2(s.x - 430, s.y - 250)
+	btn_mana.position = Vector2(s.x - 540, s.y - 200)
 	btn_block.position = Vector2(s.x - 270, s.y - 420)
 	map_view.map_rect = Rect2(Vector2(8, 96), Vector2(s.x - 410, s.y - 104))
 
@@ -381,6 +386,13 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 		if btn_potion.label != pl:
 			btn_potion.label = pl
 			btn_potion.queue_redraw()
+		# Кнопка наснаги: у волхвів завжди на місці, в інших — лише коли є що пити
+		btn_mana.visible = player.mana_potions > 0 or player.is_volkhv()
+		btn_mana.set_cooldown(1.0 if player.mana_potions <= 0 else player.mana_potion_timer / Data.MANA_POTION_CD)
+		var ml := "Наснага %d" % player.mana_potions
+		if btn_mana.label != ml:
+			btn_mana.label = ml
+			btn_mana.queue_redraw()
 		player.sync_panel()
 		for id in skill_buttons:
 			var b = skill_buttons[id]

@@ -122,6 +122,7 @@ func _ready() -> void:
 	hud.dodge_pressed.connect(func(): if state == State.PLAYING: player.dodge())
 	hud.skill_pressed.connect(func(id): if state == State.PLAYING: player.use_skill(id))
 	hud.potion_pressed.connect(func(): if state == State.PLAYING: player.use_potion())
+	hud.mana_pressed.connect(func(): if state == State.PLAYING: player.use_mana_potion())
 	hud.pause_pressed.connect(func(): if state == State.PLAYING: _show_pause())
 	hud.character_pressed.connect(open_character)
 	hud.map_pressed.connect(func(): if state == State.PLAYING: _try_leave())
@@ -1447,7 +1448,10 @@ func city_do(action: String, arg) -> void:
 			CityService.hire(world, player, city_id, arg)
 		"buy_potion":
 			if CityService.buy_potion(world, player, city_id):
-				Audio.play("coin", 0.0)
+				Audio.play("coins", 0.05)
+		"buy_mana_potion":
+			if CityService.buy_mana_potion(world, player, city_id):
+				Audio.play("coins", 0.05)
 		"ad_safe":
 			Ads.show_rewarded("safe_sharpen", func(ok: bool):
 				if ok and AdRewards.grant_safe(world):
@@ -1792,6 +1796,9 @@ func _input(event: InputEvent) -> void:
 		KEY_H, KEY_4:
 			if playing:
 				player.use_potion()
+		KEY_G:
+			if playing:
+				player.use_mana_potion()
 		KEY_C, KEY_TAB:
 			if state == State.CHARACTER:
 				close_character()

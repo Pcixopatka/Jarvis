@@ -6,14 +6,21 @@ const CAMP := {"name": "Козацький хутір", "pos": Vector2(35.9, 47.
 	"desc": "Твій власний хутір під Січчю. Тут відпочивають і будуються."}
 
 const RESOURCES := {"wood": "Дерево", "iron": "Залізо", "herbs": "Трави"}
-const RESOURCE_COLORS := {"wood": Color(0.6, 0.4, 0.2), "iron": Color(0.65, 0.68, 0.72), "herbs": Color(0.35, 0.75, 0.3), "trophy": Color(0.95, 0.75, 0.25)}
+const RESOURCE_COLORS := {"wood": Color(0.6, 0.4, 0.2), "iron": Color(0.65, 0.68, 0.72), "herbs": Color(0.35, 0.75, 0.3), "trophy": Color(0.95, 0.75, 0.25),
+	"meat": Color(0.85, 0.45, 0.35), "ryba": Color(0.55, 0.7, 0.85), "veg": Color(0.75, 0.3, 0.45)}
 ## Трофеї — рідкісний матеріал для кування (з еліт, босів, облог); не випадає зі звичайної нечисті
 const TROPHY := "trophy"
 const TROPHY_NAME := "Трофеї"
 
 
+## Провіант теж лежить серед ресурсів героя (див. activities.gd: FOOD).
+const FOOD_NAMES := {"meat": "М'ясо", "ryba": "Риба", "veg": "Городина"}
+
+
 static func res_name(r: String) -> String:
-	return TROPHY_NAME if r == TROPHY else RESOURCES[r]
+	if r == TROPHY:
+		return TROPHY_NAME
+	return RESOURCES.get(r, FOOD_NAMES.get(r, r))
 
 # Який ресурс найчастіше дає ландшафт
 const BIOME_RESOURCE := {"steppe": "wood", "river": "herbs", "forest": "wood", "swamp": "herbs",
@@ -75,6 +82,7 @@ const CROP_ORDER := ["herbs", "veg", "khmil"]
 # Варіння (Зілляварня)
 const BREW := {
 	"heal": {"name": "Зілля здоров'я", "herbs": 3, "iron": 0, "level": 1, "desc": "+1 зілля в торбу"},
+	"mana": {"name": "Зілля наснаги", "herbs": 4, "iron": 0, "level": 1, "desc": "+1 зілля наснаги в торбу: повертає 70% наснаги в бою"},
 	"strength": {"name": "Зілля сили", "herbs": 6, "iron": 1, "level": 2, "desc": "+30% шкоди на наступний похід"},
 	"antiplague": {"name": "Зілля проти зарази", "herbs": 8, "iron": 2, "level": 3, "desc": "Хмари зарази не шкодять, -20% шкоди від ворогів на похід"},
 }

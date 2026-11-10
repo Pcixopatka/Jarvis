@@ -132,6 +132,8 @@ static func can_brew(world, player, recipe: String) -> bool:
 		return false
 	if recipe == "heal":
 		return player.potions < player.potion_max()
+	if recipe == "mana":
+		return player.mana_potions < player.mana_potion_max()
 	return not player.trip_buffs.has(recipe)
 
 
@@ -143,6 +145,8 @@ static func brew(world, player, recipe: String) -> bool:
 	player.resources["iron"] -= int(r["iron"])
 	if recipe == "heal":
 		player.potions += 1
+	elif recipe == "mana":
+		player.mana_potions += 1
 	else:
 		player.trip_buffs[recipe] = true
 		player.recalc()

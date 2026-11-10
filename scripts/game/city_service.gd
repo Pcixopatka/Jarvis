@@ -145,6 +145,19 @@ static func buy_potion(world, player: Player, city: String) -> bool:
 	return true
 
 
+static func mana_potion_price(world, player: Player, city: String) -> int:
+	return int(Data.mana_potion_price(player.level) * (1.0 - world.discount(city)))
+
+
+static func buy_mana_potion(world, player: Player, city: String) -> bool:
+	var price := mana_potion_price(world, player, city)
+	if player.gold < price or player.mana_potions >= player.mana_potion_max():
+		return false
+	player.gold -= price
+	player.mana_potions += 1
+	return true
+
+
 static func dismiss(world, index: int) -> void:
 	if index >= 0 and index < world.companions.size():
 		world.companions.remove_at(index)
