@@ -238,7 +238,16 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], Data.BOSS_NAMES[L["boss"]]]) if L["type"] == "dungeon" else "Дика місцевість"
 	v.add_child(UI.label(kind_text, 17, UI.MUTED, false))
 	var danger: bool = L["level"] > player.level + 2
-	v.add_child(UI.label("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
+	if L.get("scale", false):
+		var Far = load("res://scripts/game/far_service.gd")
+		var region: String = str(Data.REGIONS.get(str(L.get("region", "")), {}).get("name", "Далекий край"))
+		v.add_child(UI.label("%s  •  з %d-го рівня%s" % [region, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
+		if Far.matched(L, player):
+			v.add_child(_wrapped("Далекий край: нечисть тут міряється з тобою, а здобич і досвід — за твоїм %d-м рівнем." % player.level, 16, UI.GOOD))
+		else:
+			v.add_child(_wrapped("Далекий край: коли доростеш до %d-го рівня, він ростиме разом із тобою." % int(L["level"]), 16, UI.MUTED))
+	else:
+		v.add_child(UI.label("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
 	v.add_child(_wrapped(L["desc"], 18, UI.TEXT))
 	var pl: int = load("res://scripts/game/plague_service.gd").level(world, sel)
 	if pl > 0:

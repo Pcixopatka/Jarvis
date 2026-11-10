@@ -9,7 +9,11 @@ const Elites := preload("res://scripts/data/elites.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 ## Який стан може накласти удар цього ворога (шанс HIT_STATUS_CHANCE)
 const HIT_STATUS := {"zarazhenyi": "plague", "pishchalnyk": "plague", "bolotianyk": "plague", "chaklun": "plague", "putinoid": "plague",
-	"vovkulaka": "bleed", "upyr": "bleed", "chort": "burn", "zmii": "burn", "mavka": "chill", "koshchii": "chill"}
+	"vovkulaka": "bleed", "upyr": "bleed", "chort": "burn", "zmii": "burn", "mavka": "chill", "koshchii": "chill",
+	"potopelnyk": "chill", "pesyholovets": "bleed", "kamiana_baba": "weak", "mara": "weak",
+	"morskyi_tsar": "chill", "shubin": "burn", "bila_pani": "chill"}
+## Нечисть далеких країв зі своїм прийомом (див. _minion_ability)
+const MINION_ABILITIES := ["pesyholovets", "kamiana_baba", "mara"]
 const HIT_STATUS_CHANCE := 0.3
 
 var combat: Combat
@@ -65,6 +69,7 @@ var _gaze = null  # Вій: попередження погляду, що зар
 var _lid_bearers: Array = []  # чорти, які піднімають Вієві повіки
 var _rock_timer := 2.5  # Вій: церква двигтить, зі стелі падає каміння
 var dmg_cap := 0.0  # суперник тримає удар: за секунду втрачає не більше цієї частки здоров'я (0 — без межі)
+var loot_gold := 0  # злидень: скільки гривень поцупив у героя (повертаються, коли його здолати)
 var _dmg_window := 0.0  # скільки шкоди отримав за останню секунду
 
 
@@ -131,6 +136,36 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 		"oprychnyk":
 			radius = 24.0; max_hp = 200.0; speed = 120.0; damage = 28.0; xp_value = 10
 			color = Color(0.12, 0.1, 0.1)
+		# ---- Нечисть далеких країв ----
+		"potopelnyk":
+			radius = 21.0; max_hp = 95.0; speed = 80.0; damage = 14.0; xp_value = 7
+			color = Color(0.35, 0.6, 0.62)
+		"pesyholovets":
+			radius = 21.0; max_hp = 70.0; speed = 160.0; damage = 15.0; xp_value = 8
+			color = Color(0.6, 0.4, 0.22)
+		"kamiana_baba":
+			radius = 26.0; max_hp = 170.0; speed = 55.0; damage = 20.0; xp_value = 10
+			color = Color(0.6, 0.6, 0.57)
+		"mara":
+			radius = 17.0; max_hp = 38.0; speed = 150.0; damage = 12.0; xp_value = 7
+			color = Color(0.85, 0.88, 0.98)
+		"zlyden":
+			radius = 12.0; max_hp = 22.0; speed = 215.0; damage = 6.0; xp_value = 3
+			color = Color(0.55, 0.5, 0.3)
+			base_scale = 0.75
+			scale = Vector2.ONE * base_scale
+		# ---- Боси далеких країв ----
+		"morskyi_tsar":
+			radius = 25.0; max_hp = 230.0; speed = 90.0; damage = 28.0; xp_value = 11
+			color = Color(0.2, 0.55, 0.65)
+			ranged = true; keep_distance = 280.0; shoot_cd = 2.3
+		"shubin":
+			radius = 29.0; max_hp = 300.0; speed = 85.0; damage = 31.0; xp_value = 11
+			color = Color(0.25, 0.22, 0.2)
+		"bila_pani":
+			radius = 21.0; max_hp = 160.0; speed = 140.0; damage = 21.0; xp_value = 10
+			color = Color(0.92, 0.94, 1.0)
+			ranged = true; keep_distance = 260.0; shoot_cd = 2.0
 		# ---- Боси печер поза сюжетом ----
 		"vidma":
 			radius = 21.0; max_hp = 140.0; speed = 135.0; damage = 21.0; xp_value = 9
@@ -156,7 +191,9 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
 	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zarazhenyi": 0.5, "chaklun": 0.5, "zmii": 0.5,
-		"chort": 0.28, "pishchalnyk": 0.45}.get(k, 0.35)
+		"chort": 0.28, "pishchalnyk": 0.45, "potopelnyk": 0.5, "pesyholovets": 0.3, "kamiana_baba": 0.6, "mara": 0.3, "zlyden": 0.22}.get(k, 0.35)
+	if k in MINION_ABILITIES:
+		ability_timer = randf_range(2.0, 4.5)
 	if is_boss:
 		windup_max = 0.55
 		ability_timer = 3.0
@@ -213,7 +250,7 @@ func _process(delta: float) -> void:
 	exposed = maxf(0.0, exposed - delta)
 	if _gaze != null:
 		_watch_gaze()
-	if kind == "vii" and is_boss and stun <= 0.0 and cast_time <= 0.0:
+	if (kind == "vii" or (kind == "shubin" and phase2)) and is_boss and stun <= 0.0 and cast_time <= 0.0:
 		_rock_timer -= delta
 		if _rock_timer <= 0.0:
 			_rock_timer = 1.6 if phase2 else 2.3
@@ -297,6 +334,10 @@ func _process(delta: float) -> void:
 		ability_timer -= delta
 		if ability_timer <= 0.0:
 			_rival_ability(p)
+	elif kind in MINION_ABILITIES and p != null and not illusion and cast_time <= 0.0:
+		ability_timer -= delta
+		if ability_timer <= 0.0:
+			_minion_ability(p, dist)
 
 	if ranged and p != null:
 		shoot_timer -= delta * (0.5 if slow_timer > 0.0 else 1.0)
@@ -326,6 +367,15 @@ func _process(delta: float) -> void:
 				var n := 10 if phase2 else 8
 				for i in n:
 					_shoot(global_position, Vector2.from_angle(TAU * i / n + phase * 0.1), 200.0, damage * 0.4, Color(0.8, 0.9, 1.0), 9.0)
+			elif kind == "morskyi_tsar":
+				# Бризки з тризуба: віяло водяних куль
+				var nw := 7 if phase2 else 5
+				for i in nw:
+					_shoot(global_position, dir.rotated((i - (nw - 1) / 2.0) * 0.2), 260.0, damage * 0.5, Color(0.35, 0.75, 1.0), 11.0)
+			elif kind == "bila_pani":
+				# Крижані сльози: три швидкі бурульки
+				for a in [-0.16, 0.0, 0.16]:
+					_shoot(global_position, dir.rotated(a), 330.0, damage * 0.55, Color(0.85, 0.93, 1.0), 9.0)
 			elif kind == "rival":
 				_shoot(global_position + dir * 26.0, dir, 520.0, damage * 0.8, Color(1.0, 0.8, 0.4), 6.0)  # куля з пищалі
 				Audio.play("musket", 0.15, -8.0)
@@ -367,7 +417,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
 		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
-	if is_boss and kind in ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii"] and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
+	if is_boss and kind in ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani"] and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
 		_enter_phase2()
 	if hp <= 0.0 and kind == "koshchii" and combat.boss_revives > 0:
 		# Кощієва смерть схована в голці — поки голка ціла, він встає знову
@@ -397,6 +447,12 @@ func _shoot(pos: Vector2, dir: Vector2, spd: float, dmg: float, col: Color, r: f
 func on_hit(target) -> void:
 	if dead or not is_instance_valid(target) or not target.has_method("add_status"):
 		return
+	if kind == "zlyden" and "gold" in target and int(target.gold) > 0:
+		# Злидні тягнуть гроші: що поцупив, те й носить при собі, доки його не здолати
+		var g: int = mini(int(target.gold), 3 * level)
+		target.gold -= g
+		loot_gold += g
+		combat.float_text(target.global_position + Vector2(0, -80), "Злидень поцупив %d грн" % g, Color(1.0, 0.8, 0.3))
 	var st: String = HIT_STATUS.get(kind, "")
 	# Слабка нечисть перших місць станів не накладає — новачкові й так непросто
 	if st != "" and level >= 4 and randf() < (HIT_STATUS_CHANCE * 0.5 if is_boss else HIT_STATUS_CHANCE):
@@ -708,10 +764,135 @@ func _boss_ability(target) -> void:
 				0:
 					Audio.play("roar", 0.15, -4.0)
 					_summon(["upyr", "upyr", "mavka"], 4 if phase2 else 3)
+		"morskyi_tsar":
+			# Морський цар: хвилі, що змивають усе на шляху; вир, який лишає крижану воду; кличе потопельників
+			ability_timer = 3.6 if phase2 else 5.0
+			match ability_step % 3:
+				1:
+					Audio.play("boom", 0.2, -5.0)
+					for a in ([-0.55, 0.0, 0.55] if phase2 else [-0.3, 0.3]):
+						var t = _telegraph("line", global_position, 1.1, damage * 1.3)
+						t.dir = to_t.rotated(a)
+						t.length = 760.0
+						t.width = 130.0
+						t.color = Color(0.3, 0.7, 0.9)
+						t.on_fire = func():
+							if is_instance_valid(target) and "push" in target and target.global_position.distance_to(global_position) < 760.0 and absf((target.global_position - global_position).angle_to(t.dir)) < 0.22:
+								target.push = t.dir * 1300.0
+								if "statuses" in target:
+									Status.apply(target, "chill", 3.0)
+				2:
+					var pos: Vector2 = target.global_position
+					var t = _telegraph("circle", pos, 1.2, damage * 1.1)
+					t.radius = 150.0
+					t.color = Color(0.2, 0.55, 0.85)
+					t.on_fire = func(): combat.spawn_plague(pos, damage * 0.3, "chill", Color(0.25, 0.6, 0.9), 5.0)
+				0:
+					Audio.play("roar", 0.15, -4.0)
+					_summon(["potopelnyk"], 3 if phase2 else 2)
+		"shubin":
+			# Шубін: обвал — каміння сиплеться довкола; гримучий газ — великі кола, що вибухають і палять; ривок із кайлом
+			ability_timer = 3.4 if phase2 else 4.8
+			match ability_step % 3:
+				1:
+					Audio.play("boom", 0.0, -4.0)
+					for i in (8 if phase2 else 6):
+						var pos: Vector2 = target.global_position + (Vector2.ZERO if i == 0 else Vector2.from_angle(randf() * TAU) * randf_range(90.0, 260.0))
+						var t = _telegraph("circle", pos, 0.9 + 0.08 * i, damage * 0.9)
+						t.radius = 78.0
+						t.color = Color(0.6, 0.55, 0.5)
+				2:
+					var spin := randf() * TAU
+					for i in 3:
+						var pos: Vector2 = target.global_position + Vector2.from_angle(spin + TAU * i / 3.0) * 150.0
+						var t = _telegraph("circle", pos, 1.6, damage * 1.2)
+						t.radius = 125.0
+						t.color = Color(1.0, 0.6, 0.15)
+						t.on_fire = func(): combat.spawn_plague(pos, damage * 0.3, "burn", Color(1.0, 0.5, 0.1), 3.5)
+				0:
+					var t = _telegraph("line", global_position, 0.8, damage * 1.5)
+					t.dir = to_t
+					t.length = 480.0
+					t.width = 110.0
+					t.color = Color(0.9, 0.5, 0.15)
+					t.on_fire = func():
+						if not dead:
+							knockback = to_t * 1700.0
+		"bila_pani":
+			# Біла Пані: зникає й постає поруч із криком, що відкидає й знесилює; мари; крижаний хрест через увесь зал
+			ability_timer = 3.4 if phase2 else 4.6
+			match ability_step % 3:
+				1:
+					combat.fx.burst(global_position, Color(0.85, 0.9, 1.0), 24, 240, 7, 0.5)
+					global_position = combat._clamp_in(target.global_position + Vector2.from_angle(randf() * TAU) * 150.0, 80.0)
+					Audio.play("portal", 0.1, -2.0)
+					var t = _telegraph("circle", global_position, 1.0, damage * 1.3)
+					t.radius = 230.0
+					t.color = Color(0.8, 0.88, 1.0)
+					t.on_fire = func():
+						if is_instance_valid(target) and target.global_position.distance_to(global_position) < 280.0:
+							if "push" in target:
+								target.push = (target.global_position - global_position).normalized() * 1300.0
+							if "statuses" in target:
+								Status.apply(target, "weak", 4.0)
+					cast_time = 1.0
+				2:
+					_cast_illusions(target)
+				0:
+					Audio.play("spell", 0.1, 2.0)
+					var spin := randf() * TAU
+					var n_lines := 6 if phase2 else 4
+					for i in n_lines:
+						var d := Vector2.from_angle(spin + PI * i / float(n_lines))
+						var t = _telegraph("line", target.global_position - d * 520.0, 1.2, damage * 1.1)
+						t.dir = d
+						t.length = 1040.0
+						t.width = 64.0
+						t.color = Color(0.6, 0.85, 1.0)
 		_:
 			ability_timer = 6.0
 			var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
 			t.radius = 110.0
+
+
+# --- Нечисть далеких країв ---
+
+## Прийоми звичайної нечисті нових країв: ривок песиголовця, гуп кам'яної баби, мара за спиною.
+func _minion_ability(target, dist: float) -> void:
+	var to_t: Vector2 = (target.global_position - global_position).normalized()
+	match kind:
+		"pesyholovets":
+			ability_timer = randf_range(4.5, 6.5)
+			if dist < 140.0 or dist > 460.0:
+				ability_timer = 1.0
+				return
+			var t = _telegraph("line", global_position, 0.5, damage * 1.2)
+			t.dir = to_t
+			t.length = 330.0
+			t.width = 56.0
+			t.color = Color(0.85, 0.5, 0.2)
+			t.on_fire = func():
+				if not dead:
+					knockback = to_t * 1300.0
+			cast_time = 0.5
+		"kamiana_baba":
+			ability_timer = randf_range(5.0, 7.0)
+			if dist > 240.0:
+				ability_timer = 1.0
+				return
+			var t = _telegraph("circle", global_position, 1.0, damage * 1.3)
+			t.radius = 135.0
+			t.color = Color(0.65, 0.62, 0.55)
+			cast_time = 1.0
+		"mara":
+			ability_timer = randf_range(4.0, 6.0)
+			if dist > 520.0 or dist < 90.0:
+				ability_timer = 1.5
+				return
+			combat.fx.burst(global_position, Color(0.8, 0.85, 1.0), 12, 160, 5, 0.4)
+			global_position = combat._clamp_in(target.global_position + to_t.rotated(randf_range(-0.8, 0.8)) * 115.0, 50.0)
+			combat.fx.burst(global_position, Color(0.8, 0.85, 1.0), 12, 160, 5, 0.4)
+			contact_cd = maxf(contact_cd, 0.6)
 
 
 # --- Відьма: мари ---
@@ -1013,7 +1194,8 @@ func _enter_phase2() -> void:
 	Audio.play("roar", 0.0)
 	var text: String = {"putinoid": "Путіноїд скидає личину!", "koshchii": "Кощій лютує!", "baba_yaha": "Яга розпалює піч!",
 		"solovei": "Соловей свище на повну!", "lykho": "Лихо шаленіє!", "oprychnyk": "Кат спускає псів!",
-		"vidma": "Відьма скликає шабаш!", "vii": "Вій тупоче: церква ходить ходором!"}.get(kind, "Бос лютує!")
+		"vidma": "Відьма скликає шабаш!", "vii": "Вій тупоче: церква ходить ходором!",
+		"morskyi_tsar": "Морський цар здіймає бурю!", "shubin": "Шубін валить копальню!", "bila_pani": "Біла Пані кричить на весь замок!"}.get(kind, "Бос лютує!")
 	Events.banner.emit(text, Color(1.0, 0.4, 0.3))
 	var kinds: Array = ["zarazhenyi", "pishchalnyk", "chort"]
 	match kind:
@@ -1024,6 +1206,9 @@ func _enter_phase2() -> void:
 		"oprychnyk": kinds = ["zarazhenyi", "pishchalnyk", "vovkulaka"]
 		"vidma": kinds = ["chort", "mavka"]
 		"vii": kinds = ["upyr", "chort"]
+		"morskyi_tsar": kinds = ["potopelnyk", "mara"]
+		"shubin": kinds = ["kamiana_baba", "zlyden", "zlyden"]
+		"bila_pani": kinds = ["mara", "upyr"]
 	_summon(kinds, 3)
 
 

@@ -44,7 +44,7 @@ static func hp(level: int) -> float:
 ## Опис бою для Combat.enter_defense.
 static func battle_loc(q: Dictionary) -> Dictionary:
 	var L: Dictionary = Data.LOCATIONS[q["loc"]]
-	var lvl := int(L["level"])
+	var lvl := maxi(int(L["level"]), int(q.get("lvl", 0)) if L.get("scale", false) else 0)  # у далеких краях — за рівнем героя на час завдання
 	var biome: String = L["biome"]
 	if biome in ["cave", "plague"]:
 		biome = "steppe"

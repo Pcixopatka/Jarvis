@@ -27,6 +27,7 @@ const BountyService := preload("res://scripts/game/bounty_service.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
 const RingService := preload("res://scripts/game/ring_service.gd")
 const MusterService := preload("res://scripts/game/muster_service.gd")
+const FarService := preload("res://scripts/game/far_service.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const TavernService := preload("res://scripts/game/tavern_service.gd")
@@ -456,6 +457,7 @@ func _leave_combat() -> void:
 
 
 func enter_map() -> void:
+	world.hero_level = player.level
 	var from_trip: bool = combat.active and combat.counts_as_trip()
 	_leave_combat()
 	hud.clear_screen()
@@ -518,6 +520,7 @@ func enter_map() -> void:
 
 
 func enter_city(id: String) -> void:
+	world.hero_level = player.level  # завдання в далекі краї — за рівнем героя
 	_leave_combat()
 	hud.close_overlay()
 	state = State.CITY
@@ -565,6 +568,8 @@ func enter_location(id: String) -> void:
 	extra.merge(BountyService.mods_for(world, id, player))
 	if ChallengeService.pending(world, "trail"):
 		extra["trail_sure"] = true  # виклик просить стежку слідів — вона буде в цьому ж поході
+	if Data.LOCATIONS.has(id):
+		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї міряються з героєм
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
 	hud.set_mode(true, true)
 	state = State.PLAYING

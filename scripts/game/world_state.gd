@@ -32,6 +32,7 @@ var glory := 0  # слава героя (див. GloryService)
 var duel := {}  # герць на майдані: тижневий турнір (див. DuelService)
 var bounties := {}  # дошка розшуку: оголошення й узяті голови (див. BountyService)
 var vigil := {}  # козацька варта: рекорди й оплачені сьогодні хвилини (див. VigilService)
+var hero_level := 1  # рівень героя, що зараз грає (виставляє Game; для завдань у далекі краї, у збереження не йде)
 var ring := {}  # Коло Кожум'яки: тижневі нагороди, проходження, найкращий час (див. RingService)
 var muster := {}  # гетьманський огляд: тижневі сутички ватаг (див. MusterService)
 var trade := {}  # чумацький крам: віз, торговий день, угоди (див. TradeService)
@@ -136,7 +137,9 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 		locs = Data.LOCATIONS.keys()
 	var loc_id: String = locs[randi() % locs.size()]
 	var L: Dictionary = Data.LOCATIONS[loc_id]
-	var q := {"id": next_quest_id, "city": city, "loc": loc_id, "progress": 0, "lvl": L["level"]}
+	# Далекі краї ростуть із героєм: нагорода за завдання туди — за його рівнем, обсяг — за рівнем краю
+	var eff: int = Data.loc_level(L, hero_level)
+	var q := {"id": next_quest_id, "city": city, "loc": loc_id, "progress": 0, "lvl": eff}
 	next_quest_id += 1
 	var mult := 1.0
 	var r := randf()
@@ -161,8 +164,8 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 			q["type"] = "fetch"
 			q["count"] = 4 + L["level"] / 2
 			q["text"] = "Принеси: %s × %d (%s)" % [Data.QUEST_ITEMS[e], q["count"], L["name"]]
-	q["gold"] = int((40 + 25 * L["level"]) * mult)
-	q["xp"] = int((30 + 20 * L["level"]) * mult)
+	q["gold"] = int((40 + 25 * eff) * mult)
+	q["xp"] = int((30 + 20 * eff) * mult)
 	q["loyalty"] = int((30 + 5 * L["level"]) * mult)
 	return q
 

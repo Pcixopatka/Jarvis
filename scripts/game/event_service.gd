@@ -136,7 +136,8 @@ static func reachable_locs(world, player) -> Array:
 		var L: Dictionary = Data.LOCATIONS[id]
 		if L["type"] != "field" or L.get("endless", false):
 			continue
-		if int(L["level"]) <= player.level + 2 and int(L["level"]) >= player.level - 6:
+		var lvl := Data.loc_level(L, player.level)  # далекі краї ростуть із героєм, тож події є й для бувалих
+		if lvl <= player.level + 2 and lvl >= player.level - 6:
 			out.append(id)
 	return out
 

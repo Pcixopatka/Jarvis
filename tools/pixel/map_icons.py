@@ -7,7 +7,7 @@ S = 24
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites")
 def hx(h, a=255): h = h.lstrip('#'); return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
 INK = hx("3a2a1a"); INK2 = hx("5a4030"); PAPER = hx("e8d7b0"); GREEN = hx("5a7a3a"); GREEN2 = hx("7a9a4a"); GREY = hx("8a8278"); RED = hx("a83a2a"); BLUE = hx("4a7aa8"); GOLD = hx("c8a040")
-ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent"]
+ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent", "dune", "island", "ruin", "mine", "oak", "izba"]
 
 def outline(im, col=INK):
     src = im.load(); out = im.copy(); o = out.load(); w, h = im.size
@@ -115,6 +115,34 @@ def icon(kind):
         d.arc([3, 6, 13, 18], 150, 420, fill=body, width=3); d.arc([10, 3, 20, 15], 330, 600, fill=body, width=3)
         d.ellipse([15, 1, 21, 7], fill=body); d.point((19, 3), fill=hx("ffd040")); d.line([(21, 4), (23, 3)], fill=RED)
         d.point((6, 9), fill=belly); d.point((13, 8), fill=belly); d.point((16, 12), fill=belly)
+    elif kind == "dune":  # піски: два бархани й сонце
+        sand = hx("e0c070"); dark = hx("b89848")
+        d.ellipse([16, 1, 22, 7], fill=hx("f0d050"))
+        d.pieslice([-2, 9, 16, 31], 180, 360, fill=sand); d.pieslice([8, 12, 26, 32], 180, 360, fill=dark)
+        d.arc([1, 12, 13, 28], 200, 330, fill=dark); d.line([(11, 18), (20, 16)], fill=sand)
+    elif kind == "island":  # скелястий острів серед хвиль
+        d.polygon([(5, 16), (9, 7), (13, 10), (16, 5), (20, 16)], fill=hx("9a9488")); d.polygon([(9, 7), (13, 10), (11, 16), (6, 16)], fill=hx("b8b2a4"))
+        d.rectangle([14, 2, 15, 6], fill=INK2); d.polygon([(16, 2), (20, 3), (16, 5)], fill=RED)
+        for y in (17, 20):
+            for x in range(1, 22, 6): d.arc([x, y - 2, x + 6, y + 3], 180, 360, fill=BLUE, width=1)
+    elif kind == "ruin":  # покинутий замок: щербата вежа й стіна
+        wall = hx("b8a888"); dk = hx("8a7a60")
+        d.rectangle([3, 12, 20, 21], fill=wall); d.rectangle([13, 3, 20, 21], fill=wall)
+        d.polygon([(13, 3), (16, 6), (18, 2), (20, 5), (20, 3)], fill=(0, 0, 0, 0))
+        d.rectangle([3, 10, 5, 12], fill=wall); d.rectangle([8, 10, 10, 12], fill=wall)
+        d.rectangle([15, 8, 17, 12], fill=INK); d.rectangle([7, 16, 10, 21], fill=INK); d.line([(4, 15), (6, 18)], fill=dk); d.line([(18, 14), (16, 17)], fill=dk)
+    elif kind == "mine":  # вхід до шахти з кріпленням і кайлом
+        d.pieslice([2, 6, 21, 34], 180, 360, fill=hx("8a8278")); d.pieslice([6, 11, 17, 31], 180, 360, fill=INK)
+        d.rectangle([5, 10, 7, 21], fill=hx("8a5a2a")); d.rectangle([16, 10, 18, 21], fill=hx("8a5a2a")); d.rectangle([4, 8, 19, 10], fill=hx("a87a3a"))
+        d.line([(14, 1), (22, 7)], fill=hx("8a5a2a"), width=1); d.arc([14, 0, 23, 6], 150, 300, fill=hx("c8c8c8"), width=2)
+    elif kind == "oak":  # дуб розбійника: кремезний стовбур і гніздо в кроні
+        d.rectangle([10, 12, 13, 21], fill=hx("6a4a2a")); d.ellipse([2, 1, 21, 15], fill=hx("4a6a2a")); d.ellipse([5, 3, 14, 10], fill=hx("6a8a3a"))
+        d.ellipse([12, 6, 19, 10], fill=hx("8a6a3a")); d.point((15, 7), fill=INK); d.line([(7, 21), (16, 21)], fill=hx("6a4a2a"))
+    elif kind == "izba":  # хатка на курячих ніжках
+        d.rectangle([5, 6, 18, 14], fill=hx("9a6a3a")); d.polygon([(3, 7), (20, 7), (12, 0)], fill=hx("6a4a28"))
+        d.rectangle([10, 9, 13, 14], fill=INK); d.rectangle([15, 9, 16, 10], fill=hx("ffd040"))
+        for x in (8, 15):
+            d.line([(x, 14), (x, 19)], fill=hx("d8a030"), width=1); d.line([(x - 2, 21), (x, 19)], fill=hx("d8a030")); d.line([(x + 2, 21), (x, 19)], fill=hx("d8a030"))
     elif kind == "flag":
         d.line([(8, 22), (8, 2)], fill=INK2, width=2); d.polygon([(9, 2), (20, 6), (9, 10)], fill=RED)
     return outline(im)

@@ -41,10 +41,11 @@ const DUEL_ARENA := Rect2(-480, -360, 960, 720)  # майдан для герц�
 const MUSTER_ARENA := Rect2(-680, -480, 1360, 960)  # майдан для сутички ватаг
 const VIGIL_ARENA := Rect2(-1000, -800, 2000, 1600)  # сторожова могила
 const RING_ARENA := Rect2(-720, -540, 1440, 1080)  # Коло Кожум'яки на Змієвих валах
+const PACE_MAX := 22  # більше за 7 + стільки ворогів на арені дикої місцевості разом не буває
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
-	"plague": Color(0.2, 0.26, 0.17), "village": Color(1.0, 0.82, 0.68),
+	"plague": Color(0.2, 0.26, 0.17), "village": Color(1.0, 0.82, 0.68), "sand": Color(1.0, 0.95, 0.82),
 }
 
 ## Джерела керування (задає Game): вектор руху і чи затиснуто удар.
@@ -1024,14 +1025,21 @@ func _update_field(delta: float) -> void:
 		return
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
-		spawn_timer = maxf(0.6, 1.5 - loc["level"] * 0.05)
-		if alive_enemy_count() < 7 + int(loc["level"]):
+		var pace := _pace_level()
+		spawn_timer = maxf(0.6, 1.5 - pace * 0.05)
+		if alive_enemy_count() < 7 + pace:
 			var en: Array = loc["enemies"]
 			var kind: String = en[randi() % en.size()]
 			if randf() < plague_mods.get("infected", 0.0):
 				kind = "zarazhenyi"  # зараза жене своїх солдатів
 			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
 			_maybe_elite(_last_enemy())
+
+
+## Від якого рівня рахувати, скільки нечисті тримати на арені. Далекі краї ростуть із героєм ("base_level" —
+## рівень самого краю), але юрба не має розростатися з ним: на 90-му рівні сотня ворогів задушила б телефон.
+func _pace_level() -> int:
+	return mini(int(loc.get("base_level", loc["level"])), PACE_MAX)
 
 
 func _spawn_room() -> void:
@@ -1169,6 +1177,10 @@ func _on_enemy_killed(e: Node2D) -> void:
 
 
 func _drop_loot(e: Node2D) -> void:
+	if e.loot_gold > 0:
+		# злидень носив крадене при собі
+		player.gold += e.loot_gold
+		float_text(e.global_position + Vector2(0, -40), "Крадене твоє: +%d грн" % e.loot_gold, Color(1.0, 0.85, 0.3))
 	if is_duel():
 		return  # на майдані здобичі нема — нагороду дає кошовий
 	if is_ring():

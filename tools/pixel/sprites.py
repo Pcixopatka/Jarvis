@@ -532,6 +532,27 @@ CHARS["vidma"] = dict(pants=hexc("2a1830"), boots=hexc("1a1020"), body=hexc("3c2
                       skin=hexc("e2dcc6"), hair=hexc("17101c"), hat="long", eye=hexc("6fe07a"), brows=True, aura=hexc("b868ff"), weapon="broom")
 CHARS["vii"] = dict(pants=hexc("382c20"), boots=hexc("1c1510"), body=hexc("4c3c2a"), sleeve=hexc("4c3c2a"), hump=True, sash=hexc("2a2018"),
                     skin=hexc("747a80"), hair=hexc("3a3020"), hat="moss", lids=True, gloves=hexc("565c62"), eye=hexc("ff4a1a"), weapon=None)
+# Нечисть і боси далеких країв (версія 0.29)
+CHARS["potopelnyk"] = dict(pants=hexc("3a5a6a"), boots=hexc("2a4450"), body=hexc("5a7f8a"), sleeve=hexc("4f7480"), hump=True,
+                           skin=hexc("9fc4c0"), hair=hexc("2f6a5a"), hat="moss", eye=hexc("e8ffff"), brows=False, weapon="claws", weapon_col=hexc("cfe8e8"))
+CHARS["pesyholovets"] = dict(pants=hexc("5a3a22"), boots=hexc("2e1e12"), body=hexc("8a5a30"), sleeve=hexc("8a5a30"), hump=True, sash=hexc("3a2414"),
+                             skin=hexc("b07a48"), hair=hexc("6a4426"), hat="ears", eye=hexc("ff5a20"), muzzle=True, gloves=hexc("5a3a22"),
+                             weapon="axe", weapon_col=hexc("c8ccd6"))
+CHARS["kamiana_baba"] = dict(pants=hexc("7a7a74"), boots=hexc("5a5a56"), body=hexc("8c8c86"), sleeve=hexc("8c8c86"), robe=True, sash=hexc("6a6a64"),
+                             skin=hexc("a4a49c"), hair=hexc("8c8c86"), hat="bald", eye=hexc("ffd040"), brows=False, gloves=hexc("9a9a92"), weapon=None)
+CHARS["mara"] = dict(pants=hexc("c8d0e0"), boots=hexc("a8b0c4"), body=hexc("e4e8f4"), sleeve=hexc("e4e8f4"), robe=True,
+                     skin=hexc("e8ecf6"), hair=hexc("f4f6fc"), hat="long", eye=hexc("60b0ff"), brows=False, aura=hexc("a8c8ff"), weapon=None)
+CHARS["zlyden"] = dict(pants=hexc("3a3428"), boots=hexc("1e1a12"), body=hexc("5a5038"), sleeve=hexc("5a5038"), hump=True,
+                       skin=hexc("9a8a5a"), hair=hexc("2a2418"), hat="horns", hat_col=hexc("2a2418"), eye=hexc("ffe24a"), snout=True,
+                       tail=hexc("3a3428"), weapon="claws", weapon_col=hexc("e8d8c0"))
+CHARS["morskyi_tsar"] = dict(pants=hexc("1e4a5a"), boots=hexc("12303c"), body=hexc("2a6a7a"), sleeve=hexc("2a6a7a"), robe=True, cape=hexc("1a4450"), sash=hexc("d4a63a"),
+                             skin=hexc("8fc8c0"), hair=hexc("e8f4f0"), beard=hexc("e8f4f0"), hat="crown", hat_col=hexc("d4a63a"), eye=hexc("40e0ff"), brows=True,
+                             weapon="pike", weapon_col=hexc("d4a63a"), aura=hexc("60c8e0"))
+CHARS["shubin"] = dict(pants=hexc("2a2420"), boots=hexc("14100e"), body=hexc("3a322c"), sleeve=hexc("3a322c"), hump=True, sash=hexc("1a1614"),
+                       skin=hexc("5a504a"), hair=hexc("1e1a18"), hat="hood", hat_col=hexc("2a2420"), beard=hexc("8a8a86"), eye=hexc("ffb030"), brows=True,
+                       gloves=hexc("2a2420"), weapon="axe", weapon_col=hexc("a8a8a8"), aura=hexc("ff9a30"))
+CHARS["bila_pani"] = dict(pants=hexc("dfe4ee"), boots=hexc("c0c6d4"), body=hexc("f4f6fb"), sleeve=hexc("f4f6fb"), robe=True, cape=hexc("d8deea"), sash=hexc("b8c4e0"),
+                          skin=hexc("f0f2f8"), hair=hexc("1c1c28"), hat="long", eye=hexc("9ad0ff"), brows=True, aura=hexc("cfe0ff"), weapon=None)
 # Мисливці з луком і беззбройні постаті для мирних занять (полювання, рибалка): по одній на клас
 _LOOKS = {"peasant": "peasant", "cossack": "cossack_sabre", "volkhv": "volkhv_staff", "zaporozhets": "zaporozhets_sabre", "plastun": "plastun_sabre",
           "samopalnyk": "samopalnyk_sabre", "kharakternyk": "kharakternyk_sabre", "znakhar": "znakhar_staff", "perun_zhrets": "perun_zhrets_staff", "molfar": "molfar_staff"}

@@ -10,7 +10,7 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
 const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
-const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent"]
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent", "dune", "island", "ruin", "mine", "oak", "izba"]
 # Кольори чорнила старовинної мапи
 const INK := Color(0.23, 0.16, 0.1)
 const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
@@ -31,6 +31,8 @@ func _icon(name: String, pos: Vector2, size: float, tint: Color = Color.WHITE) -
 
 ## Який значок у місцевості за типом і біомом.
 func _loc_icon(L: Dictionary) -> String:
+	if L.has("icon"):
+		return str(L["icon"])  # особливі місця далеких країв: замок, шахта, острів
 	if L.get("tower", false):
 		return "tower"
 	if L["type"] == "dungeon":
@@ -41,6 +43,7 @@ func _loc_icon(L: Dictionary) -> String:
 		"swamp": return "swamp"
 		"river": return "wave"
 		"village": return "hut"
+		"sand": return "dune"
 	return "sabres"
 
 
@@ -440,7 +443,9 @@ func _draw() -> void:
 		draw_circle(c, r, Color(0.96, 0.92, 0.8, 0.9))
 		draw_arc(c, r, 0, TAU, 24, Color(0.75, 0.2, 0.15) if danger else INK, 2.0)
 		_icon(_loc_icon(L), c, r * 1.5)
-		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%d)" % [L["name"], L["level"]], label_fs, Color(0.6, 0.12, 0.08) if danger else INK])
+		# далекі краї ростуть із героєм: позначка «16+» — із якого рівня туди можна
+		var lvl_text := ("%d+" % int(L["level"])) if L.get("scale", false) else str(L["level"])
+		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%s)" % [L["name"], lvl_text], label_fs, Color(0.6, 0.12, 0.08) if danger else INK])
 	var city_fs := int(clampf(18.0 * k, 13, 32))
 	for id in Data.CITIES:
 		var C: Dictionary = Data.CITIES[id]

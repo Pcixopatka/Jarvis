@@ -21,12 +21,14 @@ const DEATH := {
 	"mavka": "die_spirit",
 	"bolotianyk": "die_slime",
 	"pishchalnyk": "die_human", "chaklun": "die_human", "rival": "die_human", "vidma": "die_spirit", "vii": "die_undead",
+	"potopelnyk": "die_undead", "pesyholovets": "die_beast", "kamiana_baba": "die_undead", "mara": "die_spirit", "zlyden": "die_beast",
+	"morskyi_tsar": "die_slime", "shubin": "die_undead", "bila_pani": "die_spirit",
 }
 
 ## Фоновий шум за ландшафтом ("" — тиша).
 const AMBIENT := {
 	"steppe": "wind", "mountain": "wind", "forest": "forest", "village": "forest", "river": "river", "swamp": "night",
-	"cave": "cave", "plague": "cave", "maidan": "crowd",
+	"cave": "cave", "plague": "cave", "maidan": "crowd", "sand": "wind",
 }
 ## Гучність фонових шумів у дБ (щоб вітер не перекрикував бій, а юрба було чути).
 const AMBIENT_VOLUME := {"forest": -2.0, "wind": 0.0, "night": -4.0, "cave": 0.0, "river": -3.0, "fire": -3.0, "crowd": -6.0}

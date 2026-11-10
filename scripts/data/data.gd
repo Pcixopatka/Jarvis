@@ -332,7 +332,26 @@ const CITIES := {
 		"desc": "Самотня хата на чорногірських схилах. Мольфар Яким кличе дощ і проганяє град."},
 	"lviv": {"name": "Львів", "pos": Vector2(24.03, 49.84), "level": 9,
 		"desc": "Багате торгове місто, ворота на захід."},
+	# ---- Далекі краї (версія 0.29) ----
+	"baturyn": {"name": "Батурин", "pos": Vector2(33.1, 51.38), "level": 7, "region": "siver",
+		"desc": "Гетьманська столиця над Сеймом: палати, гарматний двір і найкращі на Лівобережжі майстри."},
+	"ostroh": {"name": "Острог", "pos": Vector2(26.52, 50.33), "level": 9, "region": "volyn",
+		"desc": "Княже місто з академією й друкарнею. Тут шанують книгу не менше за шаблю."},
+	"izium": {"name": "Ізюм", "pos": Vector2(37.26, 49.21), "level": 12, "region": "slobid",
+		"desc": "Фортеця на Кременці над Дінцем. Стереже Ізюмський шлях, яким ходять зі степу."},
+	"khadzhybei": {"name": "Хаджибей", "pos": Vector2(30.73, 46.48), "level": 16, "region": "pivden",
+		"desc": "Портове містечко над лиманами. Чумаки везуть звідси сіль і рибу, а чайки йдуть у море."},
 }
+
+## Далекі краї: чотири сторони світу довкола старої мапи. Їхні місцевості міряються з героєм ("scale"),
+## тож цікаві на будь-якому рівні, вищому за позначений.
+const REGIONS := {
+	"siver": {"name": "Сіверщина", "desc": "Ліси й луки над Десною та Сеймом."},
+	"volyn": {"name": "Волинь і Поділля", "desc": "Замки, озера й дністровські кручі."},
+	"slobid": {"name": "Слобожанщина й Донеччина", "desc": "Крейдяні гори, кургани й соляні копальні."},
+	"pivden": {"name": "Чорномор'я і Крим", "desc": "Піски, солоні болота, гори й відкрите море."},
+}
+const REGION_ORDER := ["siver", "volyn", "slobid", "pivden"]
 
 const LOCATIONS := {
 	"ridne_selo": {"name": "Рідне село", "type": "field", "biome": "village", "pos": Vector2(36.3, 49.75), "level": 1, "goal": 15,
@@ -393,21 +412,80 @@ const LOCATIONS := {
 	"kremlin": {"name": "Кремль", "type": "dungeon", "biome": "plague", "pos": Vector2(37.62, 55.75), "level": 22,
 		"rooms": 7, "enemies": ["zarazhenyi", "pishchalnyk", "chort", "upyr"], "boss": "putinoid",
 		"desc": "Червоні мури, за якими сто років сидить Путіноїд. Серце зарази."},
+	# ======================= Далекі краї (версія 0.29) =======================
+	# Усі мають "scale": рівень місцевості не нижчий за позначений і росте разом із героєм (див. Data.loc_level).
+	# ---- Сіверщина ----
+	"desna_luky": {"name": "Деснянські луки", "type": "field", "biome": "river", "pos": Vector2(33.4, 52.0), "level": 7, "scale": true, "region": "siver",
+		"enemies": ["mavka", "potopelnyk", "bolotianyk"], "desc": "Заплавні луки над Десною. Гарні на око, та в кожній старці хтось сидить."},
+	"putyvl_pushcha": {"name": "Путивльська пуща", "type": "field", "biome": "forest", "pos": Vector2(34.35, 51.45), "level": 9, "scale": true, "region": "siver",
+		"enemies": ["vovkulaka", "zlyden", "upyr"], "desc": "Старий ліс за Сеймом. Злидні тут обдирають подорожніх швидше за розбійників."},
+	"konotop_hreblia": {"name": "Конотопська гребля", "type": "field", "biome": "swamp", "pos": Vector2(33.8, 50.7), "level": 10, "scale": true, "region": "siver",
+		"enemies": ["bolotianyk", "zarazhenyi", "potopelnyk"], "desc": "Багниста переправа, де колись загрузло ціле військо. Дехто з нього досі не вибрався."},
+	"soloviv_hnizdo": {"name": "Солов'їне гніздо", "type": "dungeon", "biome": "forest", "pos": Vector2(35.3, 52.35), "level": 11, "scale": true, "region": "siver",
+		"rooms": 5, "enemies": ["vovkulaka", "zlyden", "upyr"], "boss": "solovei", "icon": "oak",
+		"desc": "Дев'ять дубів над прямоїжджим шляхом. На них тридцять літ сидить Соловей-розбійник і не пускає ні пішого, ні кінного."},
+	# ---- Волинь і Поділля ----
+	"shatski_ozera": {"name": "Шацькі озера", "type": "field", "biome": "river", "pos": Vector2(23.85, 51.5), "level": 9, "scale": true, "region": "volyn",
+		"enemies": ["potopelnyk", "mavka", "bolotianyk"], "desc": "Глибокі лісові озера. Рибалки кажуть, що сіті тут тягне хтось знизу."},
+	"khatka_yahy": {"name": "Хатка на курячих ніжках", "type": "dungeon", "biome": "forest", "pos": Vector2(28.75, 51.75), "level": 12, "scale": true, "region": "volyn",
+		"rooms": 4, "enemies": ["mavka", "vovkulaka", "zlyden"], "boss": "baba_yaha", "icon": "izba",
+		"desc": "Глуха поліська хаща, де хатка сама повертається до лісу задом. У ній хазяйнує Баба Яга."},
+	"berestechko": {"name": "Берестецьке поле", "type": "field", "biome": "swamp", "pos": Vector2(25.45, 50.85), "level": 11, "scale": true, "region": "volyn",
+		"enemies": ["mara", "upyr", "zarazhenyi"], "desc": "Поле давньої битви серед боліт. Мари блукають тут і вдень."},
+	"dnister_kruchi": {"name": "Дністровські кручі", "type": "field", "biome": "river", "pos": Vector2(28.45, 48.3), "level": 13, "scale": true, "region": "volyn",
+		"enemies": ["potopelnyk", "pesyholovets", "chort"], "desc": "Високі скелясті береги над Дністром. У печерах під ними зимують песиголовці."},
+	"pidhirtsi": {"name": "Підгорецький замок", "type": "dungeon", "biome": "cave", "pos": Vector2(25.0, 49.5), "level": 14, "scale": true, "region": "volyn",
+		"rooms": 5, "enemies": ["mara", "upyr", "chort"], "boss": "bila_pani", "icon": "ruin",
+		"desc": "Покинутий замок на пагорбі. Опівночі його залами ходить Біла Пані, і гостей вона не відпускає."},
+	# ---- Слобожанщина й Донеччина ----
+	"sviati_hory": {"name": "Святі гори", "type": "field", "biome": "mountain", "pos": Vector2(38.1, 49.6), "level": 12, "scale": true, "region": "slobid",
+		"enemies": ["mara", "upyr", "kamiana_baba"], "desc": "Крейдяні скелі над Дінцем із печерними келіями. Ченці пішли, а в келіях оселилось інше."},
+	"kamiani_mohyly": {"name": "Кам'яні Могили", "type": "field", "biome": "steppe", "pos": Vector2(38.15, 47.2), "level": 15, "scale": true, "region": "slobid",
+		"enemies": ["kamiana_baba", "pesyholovets", "zlyden"], "desc": "Гранітні останці серед рівного степу. Кам'яні баби тут сходять зі своїх курганів."},
+	"savur_mohyla": {"name": "Савур-могила", "type": "field", "biome": "steppe", "pos": Vector2(39.1, 48.0), "level": 17, "scale": true, "region": "slobid",
+		"enemies": ["pesyholovets", "kamiana_baba", "pishchalnyk"], "desc": "Найвищий курган Донецького кряжа. Хто стоїть на ньому, бачить степ до самого моря."},
+	"bakhmut_kopalni": {"name": "Бахмутські копальні", "type": "dungeon", "biome": "cave", "pos": Vector2(38.3, 48.75), "level": 18, "scale": true, "region": "slobid",
+		"rooms": 6, "enemies": ["kamiana_baba", "upyr", "zlyden"], "boss": "shubin", "icon": "mine",
+		"desc": "Соляні шахти, що йдуть під землю на версту. У найглибшому штреку чекає Шубін, господар копалень."},
+	# ---- Чорномор'я і Крим ----
+	"oleshky": {"name": "Олешківські піски", "type": "field", "biome": "sand", "pos": Vector2(32.95, 46.6), "level": 16, "scale": true, "region": "pivden",
+		"enemies": ["pesyholovets", "zlyden", "kamiana_baba"], "desc": "Справжня пустеля над Дніпром: бархани, спека й міражі. Колись тут стояла Олешківська Січ."},
+	"perekop": {"name": "Перекоп", "type": "field", "biome": "swamp", "pos": Vector2(33.85, 45.95), "level": 19, "scale": true, "region": "pivden",
+		"enemies": ["potopelnyk", "bolotianyk", "mara"], "desc": "Вузький перешийок між двома морями. Обабіч нього солоні болота Сивашу."},
+	"tarkhankut": {"name": "Тарханкут", "type": "field", "biome": "sand", "pos": Vector2(32.75, 45.35), "level": 21, "scale": true, "region": "pivden",
+		"enemies": ["pesyholovets", "potopelnyk", "chort"], "desc": "Дикий мис із білими кручами. У гротах під ними ховається те, що викинуло море."},
+	"marmurova": {"name": "Мармурова печера", "type": "dungeon", "biome": "cave", "pos": Vector2(34.35, 44.85), "level": 22, "scale": true, "region": "pivden",
+		"rooms": 6, "enemies": ["pesyholovets", "mara", "kamiana_baba"], "boss": "lykho",
+		"desc": "Печера під Чатир-Дагом. У найглибшій залі сидить Лихо Однооке й чекає на гостей."},
+	"zmiinyi": {"name": "Острів Зміїний", "type": "dungeon", "biome": "sand", "pos": Vector2(30.25, 45.2), "level": 24, "scale": true, "region": "pivden",
+		"rooms": 5, "enemies": ["potopelnyk", "mara", "pesyholovets"], "boss": "morskyi_tsar", "icon": "island",
+		"desc": "Скелястий острів посеред моря. Кажуть, під ним палац Морського царя, і непроханих гостей він топить."},
 }
+
+
+## Рівень місцевості для героя. Далекі краї ("scale") ростуть разом із ним: рівень не нижчий за позначений.
+static func loc_level(L: Dictionary, hero_level: int) -> int:
+	return maxi(int(L["level"]), hero_level) if L.get("scale", false) else int(L["level"])
 
 const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "Болотяник", "vovkulaka": "Вовкулака", "zarazhenyi": "Заражений московит",
 	"zmii": "Змій", "chaklun": "Чаклун Путіноїда", "chort": "Чорт", "pishchalnyk": "Заражений пищальник", "koshchii": "Кощій", "putinoid": "Путіноїд",
 	"baba_yaha": "Баба Яга", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Опричник-кат",
-	"vidma": "Відьма", "vii": "Вій"}
+	"vidma": "Відьма", "vii": "Вій",
+	"potopelnyk": "Потопельник", "pesyholovets": "Песиголовець", "kamiana_baba": "Кам'яна баба", "mara": "Мара", "zlyden": "Злидень",
+	"morskyi_tsar": "Морський цар", "shubin": "Шубін", "bila_pani": "Біла Пані"}
 const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених",
 	"zmii": "зміїв", "chaklun": "чаклунів", "chort": "чортів", "pishchalnyk": "пищальників", "koshchii": "кощіїв", "putinoid": "путіноїдів",
-	"baba_yaha": "бабів яг", "solovei": "солов'їв", "lykho": "лих", "oprychnyk": "опричників", "vidma": "відьом", "vii": "віїв"}
+	"baba_yaha": "бабів яг", "solovei": "солов'їв", "lykho": "лих", "oprychnyk": "опричників", "vidma": "відьом", "vii": "віїв",
+	"potopelnyk": "потопельників", "pesyholovets": "песиголовців", "kamiana_baba": "кам'яних баб", "mara": "мар", "zlyden": "злиднів",
+	"morskyi_tsar": "морських царів", "shubin": "шубінів", "bila_pani": "білих пань"}
 const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда",
 	"koshchii": "Кощій Безсмертний", "putinoid": "Путіноїд, кремлівський упир-цар",
 	"baba_yaha": "Баба Яга Кістяна Нога", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Малюта, опричник-кат",
-	"vidma": "Відьма з Лисої гори", "vii": "Вій, володар підземного мороку"}
+	"vidma": "Відьма з Лисої гори", "vii": "Вій, володар підземного мороку",
+	"morskyi_tsar": "Морський цар", "shubin": "Шубін, господар копалень", "bila_pani": "Біла Пані Підгорецька"}
 const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази",
-	"chort": "Чортів ріг", "pishchalnyk": "Наказ воєводи"}
+	"chort": "Чортів ріг", "pishchalnyk": "Наказ воєводи",
+	"potopelnyk": "Мокра сорочка", "pesyholovets": "Собачий нашийник", "kamiana_baba": "Уламок ідола", "mara": "Пасмо туману", "zlyden": "Дірява торбина"}
 
 const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
 const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]

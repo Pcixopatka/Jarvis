@@ -105,6 +105,8 @@ func _run() -> void:
 	await _suite_kleinody_game()
 	_suite_ring_muster()
 	await _suite_ring_muster_game()
+	_suite_far_lands()
+	await _suite_far_lands_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -5991,6 +5993,235 @@ func _suite_ring_muster_game() -> void:
 	await _frames(3)
 	check(c.is_duel() and c.companion_nodes.is_empty() and c.arena == c.DUEL_ARENA and c.alive_enemy_count() == 1 and c.ally_hit_frac == 0.0, "звичайний герць, як і раніше, сам на сам")
 	game.ChallengeService.now_override = 0
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+# ======================= Далекі краї =======================
+
+func _suite_far_lands() -> void:
+	suite("Далекі краї: дані й правила")
+	var Far = load("res://scripts/game/far_service.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Elites = load("res://scripts/data/elites.gd")
+	var Sounds = load("res://scripts/data/sounds.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var Ground = load("res://scripts/world/ground.gd")
+	check(Data.REGION_ORDER.size() == 4 and Data.REGIONS.size() == 4, "чотири далекі краї")
+	var all_regions_ok := true
+	for r in Data.REGION_ORDER:
+		var pl: Dictionary = Far.places(r)
+		all_regions_ok = all_regions_ok and pl["cities"].size() >= 1 and pl["fields"].size() >= 3 and pl["dungeons"].size() >= 1 and str(Data.REGIONS[r]["name"]) != ""
+	check(all_regions_ok, "у кожному краї місто, щонайменше три місцевості й печера з босом")
+	check(Data.CITIES.size() >= 15 and Data.LOCATIONS.size() >= 40, "мапа значно більша: міст %d, місць %d" % [Data.CITIES.size(), Data.LOCATIONS.size()])
+	var data_ok := true
+	var far_n := 0
+	for id in Data.LOCATIONS:
+		var L: Dictionary = Data.LOCATIONS[id]
+		if not L.get("scale", false):
+			continue
+		far_n += 1
+		data_ok = data_ok and Data.REGIONS.has(str(L.get("region", ""))) and str(L["desc"]) != ""
+		for e in L["enemies"]:
+			data_ok = data_ok and Data.ENEMY_NAMES.has(e) and Data.ENEMY_PLURAL.has(e) and Data.QUEST_ITEMS.has(e) and GfxS.has(e)
+		if L["type"] == "dungeon":
+			data_ok = data_ok and Data.BOSS_NAMES.has(L["boss"]) and GfxS.has(L["boss"]) and int(L["rooms"]) >= 4
+	check(far_n == 18 and data_ok, "вісімнадцять нових місць: назви, нечисть зі спрайтами, боси (%d)" % far_n)
+	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden", "morskyi_tsar", "shubin", "bila_pani"]:
+		check(Data.ENEMY_NAMES.has(kind) and GfxS.has(kind) and Sounds.DEATH.has(kind), "%s: ім'я, спрайт і голос смерті" % kind)
+	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden"]:
+		check(Acts.BOUNTY_NAMES.has(kind) and Acts.BOUNTY_NAMES[kind].size() >= 3, "%s: імена для дошки розшуку" % kind)
+	check(Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).begins_with("Вогняна") and Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).ends_with("Кам'яна баба") and "mara" in Elites.FEMININE, "еліти жіночого роду мають правильні прикметники")
+	for city in ["baturyn", "ostroh", "izium", "khadzhybei"]:
+		var prices: Dictionary = Acts.TRADE_CITIES.get(city, {})
+		check(Data.REGIONS.has(str(Data.CITIES[city].get("region", ""))) and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
+	check("sand" in Ground.TILED and Camp.BIOME_RESOURCE.has("sand") and Sounds.AMBIENT.has("sand"), "піски: тайли, ресурс і шум вітру")
+	# Ніщо не налазить одне на одне
+	var places := {}
+	for id in Data.CITIES:
+		places[id] = Data.CITIES[id]["pos"]
+	for id in Data.LOCATIONS:
+		places[id] = Data.LOCATIONS[id]["pos"]
+	for id in Acts.SPOTS:
+		places[id] = Acts.SPOTS[id]["pos"]
+	places[Camp.CAMP_ID] = Camp.CAMP["pos"]
+	var ids: Array = places.keys()
+	var tight := []
+	for i in ids.size():
+		for j in range(i + 1, ids.size()):
+			if places[ids[i]].distance_to(places[ids[j]]) < 0.5:
+				tight.append("%s—%s" % [ids[i], ids[j]])
+	check(tight.is_empty(), "жодні два місця на мапі не злипаються: %s" % str(tight))
+	var map_ok := true
+	for id in ids:
+		var pos: Vector2 = places[id]
+		map_ok = map_ok and pos.x > 19.3 and pos.x < 41.7 and pos.y > 44.1 and pos.y < 56.15
+	check(map_ok, "усе вміщається в межах мапи")
+	# Рівні
+	var L16: Dictionary = Data.LOCATIONS["oleshky"]
+	check(Data.loc_level(L16, 10) == 16 and Data.loc_level(L16, 40) == 40 and Data.loc_level(Data.LOCATIONS["rapids"], 40) == 2, "далекий край росте з героєм, старі місця — ні")
+	var weak = _new_player()
+	weak.level = 12
+	weak.recalc()
+	var m_low: Dictionary = Far.mods(L16, weak)
+	check(not m_low.has("std_hp") and not m_low.has("level") and int(m_low["base_level"]) == 16 and int(m_low["goal"]) == 110 and not Far.matched(L16, weak), "слабшому героєві край не піддається: звичайна нечисть 16-го рівня")
+	var hero = _new_player()
+	hero.change_class("cossack")
+	hero.level = 60
+	hero.recalc()
+	var m_hi: Dictionary = Far.mods(L16, hero)
+	check(Far.matched(L16, hero) and int(m_hi["level"]) == 60 and float(m_hi["std_hp"]) > 0.0 and float(m_hi["std_dmg"]) > 0.0 and int(m_hi["base_level"]) == 16, "бувалому — нечисть міряється з ним")
+	check(is_equal_approx(Far.xp_mult(16, 16), 1.0) and is_equal_approx(Far.xp_mult(16, 30), 1.84) and is_equal_approx(Far.xp_mult(16, 99), Far.XP_MAX) and is_equal_approx(float(m_hi["xp_mult"]), Far.xp_mult(16, 60)), "надбавка до досвіду росте з різницею рівнів, але не безмежно")
+	check(Far.mods(Data.LOCATIONS["rapids"], hero).is_empty(), "старі місцевості без змін")
+	check(not Far.mods(Data.LOCATIONS["zmiinyi"], hero).has("goal"), "у печерах мети зачистки нема")
+	check(Far.region_of("oleshky") == "pivden" and Far.region_of("izium") == "slobid" and Far.region_of("kyiv") == "" and Far.open_level("pivden") == 16, "край за місцем і рівень, з якого він відкривається")
+	# Завдання й події для бувалого героя
+	var w = WorldState.new()
+	w.hero_level = 60
+	var far_q := {}
+	for i in 300:
+		var q: Dictionary = w._gen_quest("khadzhybei")
+		if Data.LOCATIONS[q["loc"]].get("scale", false):
+			far_q = q
+			break
+	check(not far_q.is_empty() and int(far_q["lvl"]) == 60 and int(far_q["gold"]) >= 40 + 25 * 60, "завдання в далекий край платять за рівнем героя: %s" % str(far_q.get("gold", "")))
+	var EscS = load("res://scripts/game/escort_service.gd")
+	var eq := {"id": 1, "city": "khadzhybei", "loc": "oleshky", "progress": 0, "lvl": 60}
+	EscS.fill(eq, 0.3)
+	check(int(EscS.battle_loc(eq)["level"]) == 60 and int(EscS.battle_loc({"id": 2, "city": "kyiv", "loc": "rapids", "progress": 0, "lvl": 2, "target": "kobzar"})["level"]) == 2, "супровід у далекому краї — за рівнем героя")
+	var ES = load("res://scripts/game/event_service.gd")
+	var reach: Array = ES.reachable_locs(w, hero)
+	check(not reach.is_empty() and reach.all(func(id): return Data.LOCATIONS[id].get("scale", false)), "і героєві 60-го рівня є де статись подіям: %d місць" % reach.size())
+	weak.free()
+	hero.free()
+
+
+func _suite_far_lands_game() -> void:
+	suite("Далекі краї: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 40
+	p.stats["str"] = 120
+	p.stats["vit"] = 150
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	# Дика місцевість, що росте з героєм
+	game.enter_location("oleshky")
+	await _frames(3)
+	check(c.is_field() and int(c.loc["level"]) == 40 and int(c.loc["base_level"]) == 16 and c.loc.has("std_hp") and c.field_goal == 110 and c.ground.biome == "sand", "Олешківські піски: рівень героя, мета 110, піщана земля")
+	var e0 = null
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.kind == "zlyden" or e.kind == "pesyholovets" or e.kind == "kamiana_baba":
+			e0 = e
+			break
+	check(e0 != null and e0.level >= 40, "нечисть краю на рівні героя")
+	# Злидень краде гривні й повертає, коли його здолати
+	_clear_enemies(game)
+	await _frames(1)
+	p.gold = 1000
+	c.spawn_enemy("zlyden", 40, false, p.global_position + Vector2(60, 0))
+	var z = c._last_enemy()
+	z.on_hit(p)
+	var stolen: int = z.loot_gold
+	check(stolen > 0 and p.gold == 1000 - stolen, "злидень поцупив %d грн" % stolen)
+	var g_before: int = p.gold
+	z.take_damage(z.max_hp * 5.0, Vector2.ZERO)
+	await _frames(3)
+	check(p.gold >= g_before + stolen, "здолав злидня — крадене повернулось")
+	# Юрба не росте безмежно з рівнем героя
+	_clear_enemies(game)
+	p.level = 99
+	p.recalc()
+	p.hp = p.max_hp
+	game.enter_location("savur_mohyla")
+	await _frames(2)
+	check(c._pace_level() == 17 and int(c.loc["level"]) == 99, "на 99-му рівні темп юрби — за рівнем краю")
+	var most := 0
+	for i in 900:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+		most = maxi(most, c.alive_enemy_count())
+	check(most <= 7 + c.PACE_MAX, "на арені щонайбільше %d нечисті (було %d)" % [7 + c.PACE_MAX, most])
+	game.enter_map()
+	await _frames(2)
+	# Нові боси: прийоми, друга фаза, перемога
+	p.level = 40
+	p.recalc()
+	for pair in [["zmiinyi", "morskyi_tsar"], ["bakhmut_kopalni", "shubin"], ["pidhirtsi", "bila_pani"]]:
+		game.enter_location(pair[0])
+		await _frames(3)
+		_clear_enemies(game)
+		await _frames(1)
+		c.room = int(c.loc["rooms"])
+		c._spawn_room()
+		await _frames(2)
+		var boss = null
+		for e in c.get_tree().get_nodes_in_group("enemies"):
+			if e.is_boss:
+				boss = e
+		check(boss != null and boss.kind == pair[1] and int(boss.level) == p.level, "%s: у залі чекає %s (є: %s, рівень %s, кімната %d із %d)" % [pair[0], pair[1], boss.kind if boss else "нікого", str(boss.level) if boss else "-", c.room, int(c.loc.get("rooms", 0))])
+		if boss == null:
+			continue
+		var tele0: int = c.effects.get_child_count()
+		for step in 3:
+			boss.ability_step = step
+			boss._boss_ability(p)
+			await _frames(2)
+		check(c.effects.get_child_count() > tele0, "%s: прийоми бос малює на землі" % pair[1])
+		for i in 90:
+			p.hp = p.max_hp
+			p.invuln = 1.0
+			await process_frame
+		boss.take_damage(boss.max_hp * 0.55, Vector2.ZERO)
+		check(boss.phase2, "%s: друга фаза на половині здоров'я" % pair[1])
+		var hits := 0
+		while is_instance_valid(boss) and not boss.dead and hits < 200:
+			boss.take_damage(boss.max_hp, Vector2.ZERO)
+			p.hp = p.max_hp
+			await process_frame
+			hits += 1
+		_clear_enemies(game)
+		await _frames(4)
+		check(game.world.cleared.get(pair[0], 0) > 0 or c.room_cleared, "%s: печеру пройдено" % pair[0])
+		game.enter_map()
+		await _frames(2)
+	# Мапа: значки, позначки рівня, панель краю
+	var wm = game.hud.map_view
+	check(wm._loc_icon(Data.LOCATIONS["zmiinyi"]) == "island" and wm._loc_icon(Data.LOCATIONS["oleshky"]) == "dune" and wm._loc_icon(Data.LOCATIONS["bakhmut_kopalni"]) == "mine" and wm.ICON_ORDER.has("izba"), "особливі значки нових місць")
+	var built: Control = load("res://scripts/ui/map_panel.gd").build("pidhirtsi", game.world, p, func(_x): pass)
+	var ptext := ""
+	for n in built.find_children("*", "Label", true, false):
+		ptext += n.text + "\n"
+	built.free()
+	check("Волинь і Поділля" in ptext and "з 14-го рівня" in ptext and "міряється з тобою" in ptext, "панель далекого місця: край, рівень відкриття, підказка")
+	var low = load("res://scripts/entities/player.gd").new()
+	low._ready()
+	low.level = 5
+	low.recalc()
+	var built2: Control = load("res://scripts/ui/map_panel.gd").build("zmiinyi", game.world, low, func(_x): pass)
+	var ptext2 := ""
+	for n in built2.find_children("*", "Label", true, false):
+		ptext2 += n.text + "\n"
+	built2.free()
+	low.free()
+	check("небезпечно" in ptext2 and "коли доростеш до 24-го рівня" in ptext2, "новачкові панель каже, що рано")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
