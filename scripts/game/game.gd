@@ -207,6 +207,7 @@ func _process(delta: float) -> void:
 	elif state == State.MAP:
 		_travel_tick(delta)
 	player.xp_boost = AdRewards.xp_mult(world)
+	combat.drop_boost = AdRewards.drop_mult(world)
 	var top := StoryService.objective_line(world)
 	for l in HeroService.objective_lines(world):
 		top += "\n" + l
@@ -218,6 +219,8 @@ func _process(delta: float) -> void:
 		top = "%s\n%s" % [buffs, top]
 	if AdRewards.xp2_left(world) > 0.0:
 		top = "×2 досвіду: %s\n%s" % [AdRewards.format_time(AdRewards.xp2_left(world)), top]
+	if AdRewards.drop2_left(world) > 0.0:
+		top = "×2 здобичі: %s\n%s" % [AdRewards.format_time(AdRewards.drop2_left(world)), top]
 	if holiday_id != "":
 		top = "Свято: %s (%s)\n%s" % [Acts.HOLIDAYS[holiday_id]["name"], Acts.HOLIDAYS[holiday_id]["bonus_text"], top]
 	hud.update(player, world, _combat_info(), delta, top.strip_edges())
@@ -919,24 +922,32 @@ func _build_map_panel() -> void:
 	if map_sel == DepthService.LOC_ID:
 		hud.set_map_panel(MapPanel.build_depths(world, player, depth_sel, func(d: int):
 			depth_sel = d
-			_build_map_panel(), start_depth))
+			_build_map_panel(), start_depth), _sponsor_block())
 		return
 	if map_sel == TowerService.LOC_ID:
 		hud.set_map_panel(MapPanel.build_tower(world, player, tower_sel, func(f: int):
 			tower_sel = f
-			_build_map_panel(), start_tower))
+			_build_map_panel(), start_tower), _sponsor_block())
 		return
 	if Acts.SPOTS.has(map_sel):
-		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to))
+		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block())
 		return
-	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort)
-	if map_sel == "":
-		var left := AdRewards.xp2_left(world)
-		var gift := UI.label(("×2 досвіду ще %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 17, UI.GOLD, false)
-		gift.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # довгий рядок не має розпирати панель за край екрана
-		panel.add_child(gift)
-		panel.add_child(UI.button("Переглянути рекламу", func(): _watch_xp2(_build_map_panel), Vector2(350, 56), 18, AdRewards.can_xp2(world)))
-	hud.set_map_panel(panel)
+	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort), _sponsor_block())
+
+
+## Подарунки спонсора внизу панелі мапи: видно завжди, хоч би яке місце обране.
+func _sponsor_block() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	v.add_child(UI.label("Подарунки спонсора за рекламу", 16, UI.GOLD, false))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	for id in ["xp2", "drop2"]:
+		var b := UI.button(AdRewards.boost_button_text(world, id), _watch_boost.bind(id, _build_map_panel), Vector2(166, 64), 15, AdRewards.can_boost(world, id))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(b)
+	v.add_child(row)
+	return v
 
 
 ## Кнопка «Вирушити» на мапі: спершу поїздка фігуркою, прибуття — у _arrive.
@@ -2077,7 +2088,9 @@ func _show_pause() -> void:
 		hud.close_overlay()
 		state = State.PLAYING
 		open_character())
-	hud.add_button(("×2 досвіду ще %s" % AdRewards.format_time(AdRewards.xp2_left(world))) if not AdRewards.can_xp2(world) else "Реклама: ×2 досвіду на годину", func(): _watch_xp2(_show_pause))
+	for id in ["xp2", "drop2"]:
+		var bname: String = AdRewards.BOOST_NAMES[id]
+		hud.add_button(("%s ще %s" % [bname, AdRewards.format_time(AdRewards.boost_left(world, id))]) if not AdRewards.can_boost(world, id) else "Реклама: %s на годину" % bname, _watch_boost.bind(id, _show_pause))
 	var leave_text := "Покинути печеру (прогрес втратиться)" if combat.is_dungeon() else "Повернутися на мапу"
 	if combat.is_duel() and not combat.duel_over:
 		hud.add_button("Здатися (мінус спроба)", _duel_lost)
@@ -2406,7 +2419,10 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("coin", 0.0)
 				hud.show_banner("Мед продано: +%d грн" % g, UI.GOLD)
 		"ad_xp2":
-			_watch_xp2(_build_camp)
+			_watch_boost("xp2", _build_camp)
+			return
+		"ad_drop2":
+			_watch_boost("drop2", _build_camp)
 			return
 		"ad_safe":
 			Ads.show_rewarded("safe_sharpen", func(ok: bool):
@@ -2421,13 +2437,13 @@ func camp_do(action: String, arg) -> void:
 	_build_camp(action not in ["select", "craft_tier"])
 
 
-## Реклама за ×2 досвіду; refresh перебудовує поточний екран після перегляду.
-func _watch_xp2(refresh: Callable) -> void:
-	if not AdRewards.can_xp2(world):
+## Реклама за годинний подарунок ("xp2" чи "drop2"); refresh перебудовує поточний екран після перегляду.
+func _watch_boost(id: String, refresh: Callable) -> void:
+	if not AdRewards.can_boost(world, id):
 		return
-	Ads.show_rewarded("xp2", func(ok: bool):
+	Ads.show_rewarded(id, func(ok: bool):
 		if ok:
-			AdRewards.grant_xp2(world)
-			hud.show_banner("Дякуємо! ×2 досвіду: %s" % AdRewards.format_time(AdRewards.xp2_left(world)), UI.GOOD)
+			AdRewards.grant_boost(world, id)
+			hud.show_banner("Дякуємо! %s: %s" % [AdRewards.BOOST_NAMES[id], AdRewards.format_time(AdRewards.boost_left(world, id))], UI.GOOD)
 			save_game()
 		refresh.call())

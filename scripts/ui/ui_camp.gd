@@ -84,14 +84,18 @@ static func _buildings(game) -> Control:
 
 static func _ad_row(game, v: VBoxContainer) -> void:
 	var w = game.world
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	var left := AdRewards.xp2_left(w)
-	var l := UI.label(("×2 досвіду діє ще: %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 18, UI.GOLD, false)
-	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(l)
-	row.add_child(UI.button("Переглянути рекламу", _do(game, "ad_xp2"), Vector2(260, 56), 17, AdRewards.can_xp2(w)))
-	v.add_child(row)
+	var texts := {"xp2": "×2 досвіду на годину гри", "drop2": "×2 здобичі на годину гри: удвічі частіше речі й ресурси"}
+	for id in ["xp2", "drop2"]:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		var left := AdRewards.boost_left(w, id)
+		var txt: String = ("%s діє ще: %s" % [AdRewards.BOOST_NAMES[id], AdRewards.format_time(left)]) if left > 0.0 else "Подарунок спонсора: " + texts[id]
+		var l := UI.label(txt, 18, UI.GOLD, false)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
+		row.add_child(UI.button("Переглянути рекламу", _do(game, "ad_" + id), Vector2(260, 56), 17, AdRewards.can_boost(w, id)))
+		v.add_child(row)
 
 
 # ---------- Клейноди роду й скарбник ----------

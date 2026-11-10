@@ -3,6 +3,8 @@ extends RefCounted
 
 const XP2_SECONDS := 3600.0  # ×2 досвіду на годину гри (час іде лише в поході)
 const XP2_MAX := 3.0 * 3600.0  # можна накопичити до 3 годин
+const DROP2_SECONDS := 3600.0  # ×2 здобичі: так само година гри за перегляд
+const DROP2_MAX := 3.0 * 3600.0
 const SAFE_PER_DAY := 3  # безпечних заточок за рекламу на день
 
 
@@ -18,14 +20,33 @@ static func grant_xp2(world) -> void:
 	world.boosts["xp2"] = minf(XP2_MAX, xp2_left(world) + XP2_SECONDS)
 
 
+## ×2 здобичі: удвічі частіше падають речі й ресурси, бос кидає на одну річ більше.
+static func drop2_left(world) -> float:
+	return float(world.boosts.get("drop2", 0.0))
+
+
+static func can_drop2(world) -> bool:
+	return drop2_left(world) + DROP2_SECONDS <= DROP2_MAX
+
+
+static func grant_drop2(world) -> void:
+	world.boosts["drop2"] = minf(DROP2_MAX, drop2_left(world) + DROP2_SECONDS)
+
+
 ## Час іде лише під час гри в поході.
 static func tick(world, delta: float) -> void:
 	if xp2_left(world) > 0.0:
 		world.boosts["xp2"] = maxf(0.0, xp2_left(world) - delta)
+	if drop2_left(world) > 0.0:
+		world.boosts["drop2"] = maxf(0.0, drop2_left(world) - delta)
 
 
 static func xp_mult(world) -> float:
 	return 2.0 if xp2_left(world) > 0.0 else 1.0
+
+
+static func drop_mult(world) -> float:
+	return 2.0 if drop2_left(world) > 0.0 else 1.0
 
 
 static func _today() -> String:
@@ -59,6 +80,31 @@ static func use_safe(world) -> bool:
 		return false
 	world.boosts["safe_sharpen"] = safe_tokens(world) - 1
 	return true
+
+
+## Обидва годинні подарунки за рекламу ("xp2", "drop2") однаково накопичуються до 3 годин.
+const BOOST_NAMES := {"xp2": "×2 досвіду", "drop2": "×2 здобичі"}
+
+
+static func boost_left(world, id: String) -> float:
+	return drop2_left(world) if id == "drop2" else xp2_left(world)
+
+
+static func can_boost(world, id: String) -> bool:
+	return can_drop2(world) if id == "drop2" else can_xp2(world)
+
+
+static func grant_boost(world, id: String) -> void:
+	if id == "drop2":
+		grant_drop2(world)
+	else:
+		grant_xp2(world)
+
+
+## Напис на кнопці: назва й скільки лишилося (або що дасть перегляд).
+static func boost_button_text(world, id: String) -> String:
+	var left := boost_left(world, id)
+	return "%s\n%s" % [BOOST_NAMES[id], ("ще " + format_time(left)) if left > 0.0 else "година гри"]
 
 
 static func format_time(seconds: float) -> String:

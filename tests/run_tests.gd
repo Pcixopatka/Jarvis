@@ -2061,6 +2061,40 @@ func _suite_event_battles() -> void:
 		if c.get_script() == game.combat.PickupScript and c.kind == "item" and int(c.item["rarity"]) >= 2:
 			chest = true
 	check(chest and not ES.has_treasure(game.world, "wild_field"), "сторож убитий — скриня з рідкісною річчю, мітка знята")
+	# ×2 здобичі: бос кидає на одну річ більше, елітний удвічі більше жмень ресурсів
+	var cb = game.combat
+	cb.spawn_enemy("upyr", 5, true, p.global_position + Vector2(300, 0))
+	var tboss = null
+	for e in cb.get_tree().get_nodes_in_group("enemies"):
+		if e.is_boss:
+			tboss = e
+	var count_kind := func(kind: String) -> int:
+		var n := 0
+		for ch in cb.entities.get_children():
+			if ch.get_script() == cb.PickupScript and ch.kind == kind and not ch.is_queued_for_deletion():
+				n += 1
+		return n
+	var it0: int = count_kind.call("item")
+	cb.drop_boost = 1.0
+	cb._drop_loot(tboss)
+	var it1: int = count_kind.call("item")
+	cb.drop_boost = 2.0
+	cb._drop_loot(tboss)
+	var it2: int = count_kind.call("item")
+	check(it1 - it0 == 2 and it2 - it1 == 3, "бос: 2 речі, з ×2 здобичі — 3 (%d, %d)" % [it1 - it0, it2 - it1])
+	tboss.is_boss = false
+	tboss.elite = true
+	tboss.title = "Пробний"
+	tboss.affixes = ["fiery"]
+	var r0: int = count_kind.call("res")
+	cb.drop_boost = 1.0
+	cb._drop_loot(tboss)
+	var r1: int = count_kind.call("res")
+	cb.drop_boost = 2.0
+	cb._drop_loot(tboss)
+	var r2: int = count_kind.call("res")
+	check(r1 - r0 == 3 and r2 - r1 == 5, "елітний: 2 жмені й трофей, з ×2 — 4 жмені й трофей (%d, %d)" % [r1 - r0, r2 - r1])
+	tboss.queue_free()
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -4816,7 +4850,11 @@ func _suite_escort_game() -> void:
 	texts = []
 	for b in game.hud.map_panel.find_children("*", "Button", true, false):
 		texts.append(b.text)
-	check("Вирушити" in texts and texts.size() == 1, "в іншій місцевості кнопки супроводу нема")
+	var place_btns := texts.filter(func(t): return not str(t).begins_with("×2"))
+	check("Вирушити" in texts and place_btns.size() == 1, "в іншій місцевості кнопки супроводу нема")
+	check(texts.any(func(t): return str(t).begins_with("×2 досвіду")) and texts.any(func(t): return str(t).begins_with("×2 здобичі")), "реклама ×2 досвіду і ×2 здобичі видно й з обраним місцем: %s" % str(texts))
+	var ad_sc: ScrollContainer = game.hud.map_panel.find_children("*", "ScrollContainer", true, false)[0]
+	check(ad_sc.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "панель мапи гортається, кнопки реклами під нею")
 	await _ride(game, "wild_field")
 	check(game.state == game.State.PLAYING and not game.combat.is_defense() and ES.is_open(q), "«Вирушити» — звичайний похід")
 	# «Провести»: бій із мандрівником
@@ -6638,6 +6676,19 @@ func _suite_camp() -> void:
 	AdRewards.tick(w, 10000.0)
 	AdRewards.tick(w, 10000.0)
 	check(AdRewards.xp_mult(w) == 1.0, "час минає")
+	# Реклама: ×2 здобичі
+	check(AdRewards.drop_mult(w) == 1.0 and AdRewards.can_boost(w, "drop2"), "без реклами здобич звичайна")
+	AdRewards.grant_boost(w, "drop2")
+	check(AdRewards.drop_mult(w) == 2.0 and AdRewards.drop2_left(w) == AdRewards.DROP2_SECONDS and AdRewards.xp_mult(w) == 1.0, "реклама дає годину ×2 здобичі, досвід не чіпає")
+	check(AdRewards.boost_button_text(w, "drop2").begins_with("×2 здобичі\nще 1 год"), "на кнопці видно залишок: %s" % AdRewards.boost_button_text(w, "drop2"))
+	AdRewards.grant_drop2(w)
+	AdRewards.grant_drop2(w)
+	AdRewards.grant_drop2(w)
+	check(not AdRewards.can_drop2(w) and AdRewards.drop2_left(w) == AdRewards.DROP2_MAX, "здобичі теж не більше 3 годин наперед")
+	AdRewards.tick(w, 3600.0)
+	check(AdRewards.drop2_left(w) == 2.0 * 3600.0 and AdRewards.can_drop2(w), "час ×2 здобичі минає в бою")
+	AdRewards.tick(w, 99999.0)
+	check(AdRewards.drop_mult(w) == 1.0, "×2 здобичі скінчилося")
 	var q = _new_player()
 	q.xp_boost = 2.0
 	var xp_before = q.xp
@@ -7067,6 +7118,14 @@ func _suite_gameplay() -> void:
 	game.camp_do("ad_xp2", null)
 	await _frames(3)
 	check(game.AdRewards.xp_mult(game.world) == 2.0, "реклама в сцені дає ×2 досвіду")
+	game.camp_do("ad_drop2", null)
+	await _frames(3)
+	check(game.AdRewards.drop_mult(game.world) == 2.0, "реклама на хуторі дає ×2 здобичі")
+	var camp_ads := 0
+	for b in game.hud.find_children("*", "Button", true, false):
+		if b.text == "Переглянути рекламу":
+			camp_ads += 1
+	check(camp_ads >= 2, "на хуторі дві кнопки реклами: досвід і здобич")
 	game.open_character()
 	game.close_character()
 	check(game.state == game.State.CAMP, "з екрана козака назад на хутір")

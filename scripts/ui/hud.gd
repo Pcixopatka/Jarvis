@@ -419,10 +419,21 @@ func show_map(v: bool) -> void:
 	map_panel.visible = v
 
 
-func set_map_panel(content: Control) -> void:
+## Вміст панелі мапи гортається, а footer (подарунки спонсора) завжди видно внизу.
+func set_map_panel(content: Control, footer: Control = null) -> void:
 	for c in map_panel.get_children():
 		c.queue_free()
-	map_panel.add_child(content)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var sc := ScrollContainer.new()
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(content)
+	v.add_child(sc)
+	if footer != null:
+		v.add_child(footer)
+	map_panel.add_child(v)
 
 
 func move_vector() -> Vector2:
