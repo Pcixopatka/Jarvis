@@ -24,6 +24,7 @@ const ZoneScript := preload("res://scripts/world/zone.gd")
 const SpectatorScript := preload("res://scripts/world/spectator.gd")
 const CampfireScript := preload("res://scripts/world/campfire.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
+const RingService := preload("res://scripts/game/ring_service.gd")
 const TrailService := preload("res://scripts/game/trail_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const Sounds := preload("res://scripts/data/sounds.gd")
@@ -37,7 +38,9 @@ const AmbientScript := preload("res://scripts/world/ambient.gd")
 const FIELD_ARENA := Rect2(-1400, -1400, 2800, 2800)
 const DUNGEON_ARENA := Rect2(-750, -550, 1500, 1100)
 const DUEL_ARENA := Rect2(-480, -360, 960, 720)  # майдан для герцю
+const MUSTER_ARENA := Rect2(-680, -480, 1360, 960)  # майдан для сутички ватаг
 const VIGIL_ARENA := Rect2(-1000, -800, 2000, 1600)  # сторожова могила
+const RING_ARENA := Rect2(-720, -540, 1440, 1080)  # Коло Кожум'яки на Змієвих валах
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
@@ -81,6 +84,12 @@ var torch_base := 1.15  # сила смолоскипа: у печері яск�
 var spectators: Array = []  # глядачі на майдані
 var trail = null  # стежка слідів у місцевості (TrailScript) або null
 var _duel_hp := 0.0  # здоров'я суперника минулого кадру (щоб глядачі раділи влучанням)
+var ally_hit_frac := 0.0  # сутичка ватаг: яку частку власного здоров'я побратим втрачає від удару (0 — звичайна шкода)
+var ring_stage := 0  # Коло Кожум'яки: скільки чудовиськ уже здолано
+var ring_time := 0.0  # скільки секунд тривали самі бої (без перепочинків)
+var ring_break := 0.0  # перепочинок до наступного чудовиська
+var ring_done := false
+var _ring_boss = null
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
 var wave := 0
@@ -180,9 +189,11 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 		# Особливі бої, описані службами (оборона, події, герць...)
 		match str(defense_loc.get("type", "")):
 			"duel":
-				enter_duel(defense_loc)
+				enter_duel(defense_loc, companions)
 			"vigil":
 				enter_vigil(defense_loc, companions)
+			"ring":
+				enter_ring(defense_loc, companions)
 			_:
 				enter_defense(defense_loc, companions)
 		return
@@ -328,6 +339,7 @@ func _spawn_bounty(b: Dictionary) -> void:
 func leave() -> void:
 	# Страви й зілля сили діють за часом бою (player.tick_buffs), тож на виході з походу нічого не зникає
 	active = false
+	ally_hit_frac = 0.0
 	player.statuses.clear()
 	Engine.time_scale = 1.0
 	_clear()
@@ -356,6 +368,10 @@ func is_field() -> bool:
 
 func is_vigil() -> bool:
 	return loc.get("type", "") == "vigil"
+
+
+func is_ring() -> bool:
+	return loc.get("type", "") == "ring"
 
 
 ## Чи рахується цей бій походом (після нього світ робить крок: зараза, облоги, події).
@@ -433,7 +449,9 @@ func _vigil_minute_up() -> void:
 # ======================= Герць на майдані =======================
 
 ## Сам на сам із суперником на майдані Січі: без побратимів, довкола глядачі.
-func enter_duel(dl: Dictionary) -> void:
+## Герць: сам на сам із суперником. Якщо в описі є "team" — це сутичка ватаг (гетьманський огляд):
+## побратими стають поруч, а суперників кілька.
+func enter_duel(dl: Dictionary, companions: Array = []) -> void:
 	loc = dl
 	plague = 0
 	plague_mods = PlagueService.mods(0)
@@ -442,9 +460,21 @@ func enter_duel(dl: Dictionary) -> void:
 	field_cleared = false
 	player.unbreak_ready = true
 	player.berehynia_ready = true
-	_setup_arena([])
+	_setup_arena(companions if dl.has("team") else [])
 	set_visible_world(true)
 	active = true
+	ally_hit_frac = float(dl.get("ally_hit", 0.0))
+	if dl.has("team"):
+		var team: Array = dl["team"]
+		for i in team.size():
+			var x := (i - (team.size() - 1) / 2.0) * 170.0
+			spawn_enemy("rival", int(dl["level"]), false, Vector2(x, arena.position.y + 170.0 + 50.0 * (i % 2)))
+			var f = _last_enemy()
+			f.make_rival(team[i], float(dl["rival_hp"]) * (float(dl.get("captain_mult", 1.0)) if team[i].get("captain", false) else 1.0), float(dl["rival_dmg"]), float(dl.get("rival_cap", 0.0)))
+		_duel_hp = 0.0
+		_spawn_spectators()
+		Events.banner.emit("%s\nСутичка %d із 3" % [dl["name"], int(dl["round"]) + 1], Color(1.0, 0.85, 0.4))
+		return
 	spawn_enemy("rival", int(dl["level"]), false, Vector2(0, arena.position.y + 190))
 	var e = _last_enemy()
 	e.make_rival(Acts.RIVALS[dl["rival"]], float(dl["rival_hp"]), float(dl["rival_dmg"]), float(dl.get("rival_cap", 0.0)))
@@ -493,9 +523,15 @@ func _update_duel(_delta: float) -> void:
 		return
 	var rival = nearest_enemy(player.global_position, 5000.0)
 	if rival != null:
-		if rival.hp < _duel_hp - 1.0:
+		# глядачі радіють влучанням: у герці стежимо за суперником, у сутичці ватаг — за всією сотнею
+		var hp_now: float = rival.hp
+		if loc.has("team"):
+			hp_now = 0.0
+			for e in get_tree().get_nodes_in_group("enemies"):
+				hp_now += e.hp
+		if hp_now < _duel_hp - 1.0:
 			cheer()
-		_duel_hp = rival.hp
+		_duel_hp = hp_now
 		return
 	duel_over = true
 	field_cleared = true
@@ -503,8 +539,84 @@ func _update_duel(_delta: float) -> void:
 	Audio.play("quest", 0.0)
 	Audio.jingle("victory")
 	Audio.play_music("map")
-	_spawn_portal("До Січі", Vector2(0, 0))
+	_spawn_portal(str(loc.get("back", "До Січі")), Vector2(0, 0))
 	Events.duel_won.emit()
+
+
+# ======================= Коло Кожум'яки =======================
+
+## Три чудовиська поспіль; між ними перепочинок. Сила чудовиськ — від сили героя (RingService.boss_stats).
+func enter_ring(dl: Dictionary, companions: Array) -> void:
+	loc = dl
+	plague = 0
+	plague_mods = PlagueService.mods(0)
+	room = 0
+	ring_stage = 0
+	ring_time = 0.0
+	ring_break = 2.5
+	ring_done = false
+	_ring_boss = null
+	field_cleared = false
+	boss_revives = 0
+	player.unbreak_ready = true
+	player.berehynia_ready = true
+	_setup_arena(companions)
+	set_visible_world(true)
+	active = true
+	Events.banner.emit("Коло Кожум'яки\nТри чудовиська поспіль", Color(1.0, 0.85, 0.4))
+
+
+func _ring_spawn() -> void:
+	var kind: String = loc["bosses"][ring_stage]
+	spawn_enemy(kind, int(loc["level"]), true, _clamp_in(Vector2(0, arena.position.y + 230), 120.0))
+	_ring_boss = _last_enemy()
+	var st: Dictionary = RingService.boss_stats(player, ring_stage)
+	_ring_boss.max_hp = float(st["hp"])
+	_ring_boss.hp = _ring_boss.max_hp
+	_ring_boss.damage = float(st["dmg"])
+	_ring_boss.dmg_cap = float(st["cap"])
+	Events.banner.emit("Коло %d із %d\n%s" % [ring_stage + 1, int(Acts.RING_STAGES), Data.BOSS_NAMES.get(kind, "Чудовисько")], Color(1.0, 0.55, 0.2))
+
+
+func _update_ring(delta: float) -> void:
+	if ring_done:
+		_check_exit_portal()
+		return
+	if _ring_boss == null:
+		ring_break -= delta
+		if ring_break <= 0.0:
+			_ring_spawn()
+		return
+	ring_time += delta
+	if is_instance_valid(_ring_boss) and not _ring_boss.dead and not _ring_boss.is_queued_for_deletion():
+		return
+	# Чудовисько впало: його посіпаки розбігаються
+	_ring_boss = null
+	for e in get_tree().get_nodes_in_group("enemies"):
+		e.remove_from_group("enemies")
+		fx.ring(e.global_position, Color(0.8, 0.8, 0.8), 20, 300, 5, 0.4)
+		e.queue_free()
+	ring_stage += 1
+	cheer(2.0)
+	Audio.play("quest", 0.0)
+	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))
+	if ring_stage >= int(Acts.RING_STAGES):
+		ring_done = true
+		field_cleared = true
+		Audio.jingle("victory")
+		Audio.play_music("map")
+		# портал — подалі від героя, щоб переможець не вийшов з кола, не побачивши нагороди
+		var gate := Vector2(0, arena.position.y + 170.0)
+		if player.global_position.distance_to(gate) < 220.0:
+			gate = Vector2(0, arena.end.y - 170.0)
+		_spawn_portal("На мапу", gate)
+	else:
+		ring_break = float(Acts.RING_BREAK)
+		Audio.play_music("battle")
+		for i in 2:
+			spawn_pickup(player.global_position + Vector2(-40 + 80 * i, -90), "varenyk", heal_value * 2)
+		spawn_pickup(player.global_position + Vector2(0, -130), "mana", 1)
+	Events.ring_stage.emit(ring_stage)
 
 
 # ======================= Башта Кощія =======================
@@ -783,16 +895,18 @@ func _setup_arena(companions: Array) -> void:
 
 func _arena_rect() -> Rect2:
 	if is_duel():
-		return DUEL_ARENA
+		return MUSTER_ARENA if loc.has("team") else DUEL_ARENA
 	if is_vigil():
 		return VIGIL_ARENA
+	if is_ring():
+		return RING_ARENA
 	if is_dungeon() or is_tower():
 		return DUNGEON_ARENA
 	return DEFENSE_ARENA if is_defense() else FIELD_ARENA
 
 
 func _start_pos() -> Vector2:
-	if is_duel():
+	if is_duel() or is_ring():
 		return Vector2(0, arena.end.y - 150)
 	if is_dungeon() or is_tower():
 		return Vector2(0, arena.end.y - 160)
@@ -876,6 +990,8 @@ func _process(delta: float) -> void:
 		_update_duel(delta)
 	elif is_vigil():
 		_update_vigil(delta)
+	elif is_ring():
+		_update_ring(delta)
 	elif is_tower():
 		_update_tower(delta)
 	elif is_dungeon():
@@ -1055,6 +1171,13 @@ func _on_enemy_killed(e: Node2D) -> void:
 func _drop_loot(e: Node2D) -> void:
 	if is_duel():
 		return  # на майдані здобичі нема — нагороду дає кошовий
+	if is_ring():
+		# у колі нагороду дає служба; із чудовиська — лише жменя монет
+		if e.is_boss:
+			shake(14.0)
+			for i in 6:
+				spawn_pickup(e.global_position, "coin", maxi(1, e.xp_value / 12))
+		return
 	var pos: Vector2 = e.global_position
 	var ilvl: int = loc.get("level", 1)
 	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))

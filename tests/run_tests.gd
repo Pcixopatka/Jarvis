@@ -103,6 +103,8 @@ func _run() -> void:
 	await _suite_travel_ride()
 	_suite_kleinody()
 	await _suite_kleinody_game()
+	_suite_ring_muster()
+	await _suite_ring_muster_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -5708,6 +5710,287 @@ func _suite_kleinody_game() -> void:
 	gold0 = p.gold
 	game.city_do("sharpen_safe", uid)
 	check(gold0 - p.gold == safe_cost and int(it["up"]) >= 8, "у місті списано потрійну ціну, заточка не впала")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+# ======================= Коло Кожум'яки й гетьманський огляд =======================
+
+func _suite_ring_muster() -> void:
+	suite("Коло Кожум'яки й огляд: правила")
+	var RS = load("res://scripts/game/ring_service.gd")
+	var MS = load("res://scripts/game/muster_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var RecS = load("res://scripts/game/record_service.gd")
+	var T0 := 1762700000
+	CS.now_override = T0
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 30
+	p.recalc()
+	var w = WorldState.new()
+	# --- Коло ---
+	var line: Array = RS.lineup()
+	var uniq := {}
+	for k in line:
+		uniq[k] = true
+	check(line.size() == 3 and uniq.size() == 3 and line.all(func(k): return k in Acts.RING_POOL and Data.BOSS_NAMES.has(k)), "у колі три різні чудовиська з іменами: %s" % str(line))
+	check(RS.lineup() == line and RS.lineup(CS.week_key(T0)) == line, "склад тижня однаковий для всіх")
+	var variety := {}
+	for i in 12:
+		variety[str(RS.lineup("W%d" % (2900 + i)))] = true
+	check(variety.size() >= 8, "щотижня склад інший (%d різних за 12 тижнів)" % variety.size())
+	var young = _new_player()
+	young.change_class("cossack")
+	young.level = 9
+	var peasant = _new_player()
+	peasant.job = "peasant"
+	peasant.level = 30
+	check(RS.unlocked(p) and not RS.unlocked(young) and not RS.unlocked(peasant) and Acts.SPOTS["kolo"]["kind"] == "ring", "коло відкрите з 10-го рівня тим, хто обрав дорогу")
+	var s1: Dictionary = RS.boss_stats(p, 0)
+	var s3: Dictionary = RS.boss_stats(p, 2)
+	check(is_equal_approx(float(s1["hp"]), Power.dps(p) * Acts.RING_SECONDS[0]) and float(s3["hp"]) > float(s1["hp"]) and float(s3["dmg"]) > float(s1["dmg"]) and float(s1["cap"]) > 0.0, "чудовиська міряються з героєм, кожне коло тяжче")
+	var L: Dictionary = RS.battle_loc(p)
+	check(L["type"] == "ring" and L["bosses"] == line and float(L["std_hp"]) > 0.0 and float(L["xp_mult"]) < 1.0, "опис бою кола")
+	var gold0: int = p.gold
+	var r1: Dictionary = RS.on_stage(w, p, 1)
+	check(r1["weekly"] and int(r1["gold"]) == Acts.RING_GOLD[0] * 30 and int(r1["glory"]) == Acts.RING_GLORY[0] and p.gold == gold0 + int(r1["gold"]) and int(RS.state(w)["paid"]) == 1, "перше коло тижня: гаманець і слава")
+	RS.on_stage(w, p, 2)
+	var first_week: bool = int(RS.state(w)["paid"]) < Acts.RING_STAGES
+	RS.on_stage(w, p, 3)
+	var tr0: int = int(p.resources.get("trophy", 0))
+	var f: Dictionary = RS.finish(w, p, 75.0, first_week)
+	check(first_week and int(f["item"]) == 2 and int(p.resources["trophy"]) == tr0 + 3 and f["record"] and int(RS.state(w)["titles"]) == 1 and is_equal_approx(float(RS.state(w)["best_time"]), 75.0), "усі три кола: річ, трофеї, запис і рекорд часу")
+	var paid_small := 0
+	for i in 5:
+		var rr: Dictionary = RS.on_stage(w, p, 1 + i % 3)
+		if int(rr["gold"]) > 0:
+			paid_small += 1
+			check(not rr["weekly"] and int(rr["gold"]) == Acts.RING_REPEAT_GOLD * 30, "повторне чудовисько: малий гаманець")
+	check(paid_small == Acts.RING_REPEAT_PAID, "малих гаманців — три на день, далі лише за рекорд")
+	var f2: Dictionary = RS.finish(w, p, 90.0, false)
+	check(not f2["record"] and int(f2["item"]) == -1 and is_equal_approx(float(RS.state(w)["best_time"]), 75.0) and int(RS.state(w)["titles"]) == 2, "повільніше проходження рекорду не б'є й речі не дає")
+	check(RS.finish(w, p, 60.0, false)["record"] and is_equal_approx(float(RS.state(w)["best_time"]), 60.0), "швидше проходження — новий рекорд")
+	CS.now_override = T0 + 86400
+	check(int(RS.state(w)["day_paid"]) == 0, "наступного дня малі гаманці знову є")
+	CS.now_override = T0 + 8 * 86400
+	check(int(RS.state(w)["paid"]) == 0 and int(RS.state(w)["titles"]) == 3, "нового тижня тижневі нагороди знову чекають, рекорди лишились")
+	check(RecS.hero_values(w, p)["ring_titles"] == 3 and Acts.RECORDS.has("ring_titles") and Acts.RECORDS.has("muster_titles"), "Коло й огляд є в Літописі")
+	check(CS.available("ring", w, p) and not CS.available("ring", w, young) and CS.available("muster", w, p), "Коло й огляд потрапляють у виклики, коли відкриті")
+	# --- Огляд ---
+	CS.now_override = T0
+	var wm = WorldState.new()
+	var teams: Array = MS.lineup()
+	var tu := {}
+	for t in teams:
+		tu[t] = true
+	check(teams.size() == 3 and tu.size() == 3 and teams.all(func(t): return Acts.MUSTER_TEAMS.has(t)), "на огляді три різні сотні: %s" % str(teams))
+	var team_ok := true
+	for tid in Acts.MUSTER_ORDER:
+		var T: Dictionary = Acts.MUSTER_TEAMS[tid]
+		team_ok = team_ok and T["styles"].size() >= 5 and str(T["name"]) != "" and str(T["bio"]) != ""
+		for st in T["styles"]:
+			team_ok = team_ok and Acts.MUSTER_NICK.has(st)
+	check(team_ok, "у кожної сотні п'ятеро бійців відомих стилів")
+	check(MS.team_size(0, 0) == 1 and MS.team_size(0, 1) == 2 and MS.team_size(0, 2) == 3 and MS.team_size(2, 0) == 3 and MS.team_size(2, 3) == 5, "проти самотнього героя сотня виставляє менше людей")
+	var fs: Array = MS.fighters("serdiuky", 5)
+	var names := {}
+	for fi in fs:
+		names[fi["name"]] = true
+	check(fs.size() == 5 and names.size() == 5 and fs[0]["captain"] and str(fs[0]["name"]).begins_with("Сотник ") and not fs[1]["captain"] and fs.all(func(x): return str(x["sprite"]) != ""), "бійці з іменами й виглядом, перший — сотник")
+	check(MS.unlocked(p) and not MS.unlocked(peasant) and MS.can_fight(wm, p) and MS.allies(wm) == 0, "огляд відкритий, загону ще нема")
+	wm.companions = [{"type": "dzhura", "downed": false, "level": 20, "xp": 0}, {"type": "strilets", "downed": true, "level": 20, "xp": 0}, {"type": "znakhar", "downed": false, "level": 20, "xp": 0, "away": {"until": T0 + 999}}]
+	check(MS.allies(wm) == 1, "поранений і той, хто в поході, на огляд не стають")
+	wm.companions[1]["downed"] = false
+	var ML: Dictionary = MS.battle_loc(wm, p)
+	check(ML["type"] == "duel" and ML["muster"] and ML["team"].size() == MS.team_size(0, 2) and ML["back"] == "До Чигирина" and float(ML["ally_hit"]) > 0.0 and is_equal_approx(float(ML["rival_hp"]), Power.dps(p) * Acts.MUSTER_SECONDS[0]), "опис сутички: гурт на гурт")
+	var g1: int = p.gold
+	var loy0: int = wm.loyalty_points("chyhyryn")
+	var m1: Array = MS.win(wm, p)
+	check(p.gold == g1 + Acts.MUSTER_GOLD[0] * 30 and wm.loyalty_points("chyhyryn") == loy0 + Acts.MUSTER_LOYALTY[0] and int(MS.state(wm)["round"]) == 1 and not m1.is_empty(), "перша сутичка: гривні, лояльність Чигирина, поступ")
+	check("Лишилось спроб: 2" in MS.lose(wm) and int(MS.state(wm)["tries"]) == 2 and int(MS.state(wm)["round"]) == 1, "поразка: мінус спроба, поступ лишається")
+	MS.win(wm, p)
+	var inv0: int = p.inventory.size()
+	var m3: Array = MS.win(wm, p)
+	check(MS.is_winner(wm) and not MS.can_fight(wm, p) and int(MS.state(wm)["titles"]) == 1 and MS.next_team(wm).is_empty(), "три сутички — огляд виграно")
+	check(p.inventory.size() == inv0 + 1 and p.inventory[-1]["name"] == MS.PRIZE_NAME and p.inventory[-1]["slot"] == "amulet" and int(p.inventory[-1]["rarity"]) == 3 and "\n".join(m3).contains(MS.PRIZE_NAME), "за перший огляд — легендарна ладанка")
+	CS.now_override = T0 + 8 * 86400
+	check(MS.can_fight(wm, p) and int(MS.state(wm)["round"]) == 0 and int(MS.state(wm)["tries"]) == MS.TRIES and MS.state(wm)["prize"], "нового тижня огляд починається знову, ладанка лише раз")
+	MS.win(wm, p)
+	MS.win(wm, p)
+	var tr1: int = int(p.resources.get("trophy", 0))
+	MS.win(wm, p)
+	check(int(MS.state(wm)["titles"]) == 2 and int(p.resources["trophy"]) == tr1 + 3 and RecS.hero_values(wm, p)["muster_titles"] == 2, "другий виграний огляд: трофеї замість ладанки, запис у Літопис")
+	var w2 = WorldState.new()
+	w2.ring = w.ring.duplicate(true)
+	w2.muster = wm.muster.duplicate(true)
+	var w3 = WorldState.new()
+	w3.from_dict(w2.to_dict())
+	check(int(w3.ring["titles"]) == 3 and int(w3.muster["titles"]) == 2, "стан Кола й огляду зберігається")
+	CS.now_override = 0
+	p.free()
+	young.free()
+	peasant.free()
+
+
+func _suite_ring_muster_game() -> void:
+	suite("Коло Кожум'яки й огляд: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	var Acts = game.Acts
+	var RS = game.RingService
+	var MS = game.MusterService
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "duel": true, "ring": true, "muster": true, "stones": true, "camp": true}
+	game.ChallengeService.now_override = 1762700000  # фіксований тиждень: склад чудовиськ і сотень не залежить від дня запуску
+	game.enter_spot("kolo")
+	await _frames(2)
+	check(game.state != game.State.PLAYING, "селянина в коло не пускають")
+	p.change_class("cossack")
+	p.level = 30
+	p.stats["str"] = 90
+	p.stats["vit"] = 90
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	game.world.last_city = "kyiv"
+	game.enter_map()
+	await _frames(2)
+	# Панель місця на мапі
+	var panel: Control = game.MapPanel.build_spot("kolo", game.world, p, func(_id): pass)
+	var ptext := ""
+	for n in panel.find_children("*", "Label", true, false):
+		ptext += n.text + "\n"
+	for n in panel.find_children("*", "Button", true, false):
+		ptext += n.text + "\n"
+	check("Змієві вали" in ptext and "Коло 1: " in ptext and "Коло 3: " in ptext and "Стати в коло" in ptext and "найкращий час: —" in ptext, "панель кола показує чудовиськ тижня й кнопку")
+	panel.free()
+	var gold0: int = p.gold
+	var stones0: int = game.StoneService.count(p, "zabuttia") + game.StoneService.count(p, "alatyr")
+	game.enter_spot("kolo")
+	await _frames(3)
+	check(game.state == game.State.PLAYING and c.is_ring() and c.arena == c.RING_ARENA and c._ring_boss == null and c.alive_enemy_count() == 0, "у колі: спершу перепочинок, чудовиська ще нема")
+	var line: Array = RS.lineup()
+	var ok_stage := true
+	var breaks_ok := true
+	for stage in 3:
+		var frames := 0
+		while c._ring_boss == null and frames < 500:
+			await process_frame
+			frames += 1
+		var boss = c._ring_boss
+		ok_stage = ok_stage and boss != null and boss.kind == line[stage] and boss.is_boss and is_equal_approx(boss.max_hp, float(RS.boss_stats(p, stage)["hp"])) and boss.dmg_cap > 0.0
+		if boss == null:
+			break
+		await _frames(30)
+		# деякі чудовиська тримають удар (повіки Вія, мара Відьми), тож б'ємо, доки не впаде
+		var hits := 0
+		while is_instance_valid(boss) and not boss.dead and hits < 400:
+			p.hp = p.max_hp
+			boss.dmg_cap = 0.0
+			boss.take_damage(boss.max_hp, Vector2.ZERO)
+			await process_frame
+			hits += 1
+		await _frames(4)
+		p.hp = p.max_hp
+		breaks_ok = breaks_ok and c.ring_stage == stage + 1 and c.alive_enemy_count() == 0
+		if stage < 2:
+			breaks_ok = breaks_ok and c._ring_boss == null and c.ring_break > 0.0 and not c.ring_done
+	check(ok_stage, "чудовиська виходять за складом тижня, міряні з героєм")
+	check(breaks_ok and c.ring_done and c.portal != null, "після кожного кола перепочинок, після третього — портал")
+	var st: Dictionary = RS.state(game.world)
+	var weekly_gold: int = (Acts.RING_GOLD[0] + Acts.RING_GOLD[1] + Acts.RING_GOLD[2]) * 30
+	check(int(st["paid"]) == 3 and int(st["titles"]) == 1 and float(st["best_time"]) > 0.0 and p.gold >= gold0 + weekly_gold, "тижневі гаманці взято, проходження й час записано")
+	check(int(game.world.stats.get("ring", 0)) == 3 and int(game.world.stats.get("ring_clear", 0)) == 1 and game.account.challenges["ach"].has("ring_1"), "лічильники викликів і досягнення")
+	check(int(game.world.stats.get("boss", 0)) == 0 and game.StoneService.count(p, "zabuttia") + game.StoneService.count(p, "alatyr") == stones0, "чудовиська кола не дають ні каменів долі, ні досягнень за босів")
+	p.global_position = c.portal.global_position
+	await _frames(6)
+	check(game.state == game.State.MAP, "з порталу — на мапу")
+	# Поразка в колі: без втрат
+	game.enter_spot("kolo")
+	await _frames(3)
+	var runs0: int = int(RS.state(game.world)["runs"])
+	p.invuln = 0.0
+	p.take_damage(p.max_hp * 20.0, null)
+	await _frames(3)
+	var frames2 := 0
+	while game.state != game.State.CITY and frames2 < 300:
+		await process_frame
+		frames2 += 1
+	check(game.state == game.State.CITY and game.city_id == "kyiv" and p.alive and int(RS.state(game.world)["runs"]) == runs0 + 1, "не встояв — винесли до міста, живий")
+
+	# --- Гетьманський огляд ---
+	game.world.companions = [{"type": "dzhura", "downed": false, "level": 25, "xp": 0}, {"type": "strilets", "downed": false, "level": 25, "xp": 0}]
+	game.enter_city("chyhyryn")
+	game.hud.close_dialogue()
+	await _frames(2)
+	var titles := []
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		titles.append(tc.get_tab_title(i))
+	var ctext := ""
+	for n in game.hud.screen_root.find_children("*", "Button", true, false):
+		ctext += n.text + "\n"
+	check("Огляд" in titles and not ("Майдан" in titles) and "Вивести ватагу: " in ctext, "у Чигирині є вкладка огляду з кнопкою: %s" % str(titles))
+	var loy0: int = game.world.loyalty_points("chyhyryn")
+	var gold1: int = p.gold
+	game.city_do("muster_start", null)
+	await _frames(3)
+	check(game.state == game.State.PLAYING and c.is_duel() and c.loc.get("muster", false) and c.arena == c.MUSTER_ARENA and c.alive_enemy_count() == MS.team_size(0, 2), "сутичка почалась: сотня виставила %d бійців" % c.alive_enemy_count())
+	check(c.companion_nodes.size() == 2 and c.spectators.size() > 10 and c.ally_hit_frac > 0.0, "побратими поруч, довкола глядачі")
+	var cn = c.companion_nodes[0]
+	var hp_c: float = cn.hp
+	cn.take_damage(999999.0, null)
+	check(cn.alive and is_equal_approx(hp_c - cn.hp, cn.max_hp * c.ally_hit_frac), "удар по побратимові рахується часткою його здоров'я")
+	cn.take_damage(999999.0, null)
+	for i in 20:
+		cn.take_damage(999999.0, null)
+	check(not cn.alive, "побратима теж можуть покласти")
+	var tries := 0
+	while c.alive_enemy_count() > 0 and tries < 400:
+		for e in c.get_tree().get_nodes_in_group("enemies"):
+			e.dmg_cap = 0.0
+			e.take_damage(e.max_hp, Vector2.ZERO)
+		p.hp = p.max_hp
+		await process_frame
+		tries += 1
+	await _frames(6)
+	check(c.duel_over and int(MS.state(game.world)["round"]) == 1 and p.gold >= gold1 + Acts.MUSTER_GOLD[0] * 30 + 400 and game.world.loyalty_points("chyhyryn") > loy0, "сотню покладено: гривні (з досягненням і, може, рангом слави), лояльність, поступ (кінець: %s, коло %d, гривень +%d, ударів %d)" % [str(c.duel_over), int(MS.state(game.world)["round"]), p.gold - gold1, tries])
+	check(int(game.world.stats.get("muster", 0)) == 1 and game.account.challenges["ach"].has("muster_1") and not game.world.companions[0]["downed"], "лічильник і досягнення; покладений побратим не поранений")
+	p.global_position = c.portal.global_position
+	await _frames(6)
+	check(game.state == game.State.CITY and game.city_id == "chyhyryn" and c.ally_hit_frac == 0.0, "з порталу — назад у Чигирин")
+	game.hud.close_dialogue()
+	game.city_do("muster_start", null)
+	await _frames(3)
+	check(c.is_duel() and int(c.loc["round"]) == 1 and c.alive_enemy_count() == MS.team_size(1, 2), "друга сутичка: бійців більше")
+	p.invuln = 0.0
+	p.take_damage(p.max_hp * 20.0, null)
+	await _frames(3)
+	frames2 = 0
+	while game.state != game.State.CITY and frames2 < 300:
+		await process_frame
+		frames2 += 1
+	check(game.state == game.State.CITY and game.city_id == "chyhyryn" and p.alive and int(MS.state(game.world)["tries"]) == MS.TRIES - 1 and int(MS.state(game.world)["round"]) == 1, "поклали ватагу — мінус спроба, назад у Чигирин")
+	# Звичайний герць лишився сам на сам
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.city_do("duel_start", null)
+	await _frames(3)
+	check(c.is_duel() and c.companion_nodes.is_empty() and c.arena == c.DUEL_ARENA and c.alive_enemy_count() == 1 and c.ally_hit_frac == 0.0, "звичайний герць, як і раніше, сам на сам")
+	game.ChallengeService.now_override = 0
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

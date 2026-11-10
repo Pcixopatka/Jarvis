@@ -25,6 +25,8 @@ const EventService := preload("res://scripts/game/event_service.gd")
 const DuelService := preload("res://scripts/game/duel_service.gd")
 const BountyService := preload("res://scripts/game/bounty_service.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
+const RingService := preload("res://scripts/game/ring_service.gd")
+const MusterService := preload("res://scripts/game/muster_service.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const TavernService := preload("res://scripts/game/tavern_service.gd")
@@ -155,6 +157,7 @@ func _ready() -> void:
 	Events.defense_won.connect(_on_defense_won)
 	Events.duel_won.connect(_on_duel_won)
 	Events.vigil_minute.connect(_on_vigil_minute)
+	Events.ring_stage.connect(_on_ring_stage)
 	Events.bounty_killed.connect(func(id: int):
 		var m := BountyService.on_kill(world, id)
 		if m != "":
@@ -247,6 +250,13 @@ func _combat_info() -> Dictionary:
 		sub = "Варта %s / %s  •  Вбито %d" % [VigilService.time_text(combat.vigil_time), VigilService.time_text(float(L["goal"])), combat.vigil_kills]
 		if combat.vigil_done:
 			sub = "Вистояно! %s  •  Вбито %d  •  портал відкрито" % [VigilService.time_text(combat.vigil_time), combat.vigil_kills]
+	elif combat.is_ring():
+		var n_st := int(Acts.RING_STAGES)
+		sub = "Коло %d із %d  •  %s" % [mini(combat.ring_stage + 1, n_st), n_st, RingService.time_text(combat.ring_time)]
+		if combat.ring_done:
+			sub = "Усі три кола пройдено за %s  •  портал відкрито" % RingService.time_text(combat.ring_time)
+	elif combat.is_duel() and L.has("team"):
+		sub = "Сутичка %d із %d  •  Суперників на ногах: %d" % [int(L["round"]) + 1, MusterService.ROUNDS, combat.alive_enemy_count()]
 	elif combat.is_duel():
 		var rv = combat.nearest_enemy(player.global_position, 5000.0)
 		sub = "Коло %d із %d  •  Суперник: %d%%" % [int(L["round"]) + 1, DuelService.ROUNDS, roundi(100.0 * rv.hp / rv.max_hp) if rv != null else 0]
@@ -586,6 +596,10 @@ func _resume_play() -> void:
 # ======================= Події =======================
 
 func _on_enemy_killed(e: Node2D) -> void:
+	if combat.is_ring():
+		# чудовиська Кола — не ті, що в лігвах: ні сюжету, ні каменів долі, ні досягнень за боса
+		_record("kill")
+		return
 	for m in world.on_kill(e.kind):
 		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
 	_story_event("kill", e.kind)
@@ -834,6 +848,10 @@ func _on_player_died() -> void:
 		return
 	if combat.is_vigil():
 		_soft_defeat("Варту знято: нечисть прорвалась.\nПобратими винесли тебе з могили.", world.last_city)
+		return
+	if combat.is_ring():
+		RingService.state(world)["runs"] = int(RingService.state(world)["runs"]) + 1
+		_soft_defeat("Чудовисько взяло гору на колі %d.\nПобратими винесли тебе з валів." % (combat.ring_stage + 1), world.last_city)
 		return
 	if combat.is_defense() and not combat.defense_over:
 		combat.defense_over = true
@@ -1107,11 +1125,21 @@ func start_duel(free: bool = false) -> void:
 
 
 func _on_duel_won() -> void:
+	if combat.loc.get("muster", false):
+		defense_target = str(Acts.MUSTER_CITY)  # з порталу — назад у Чигирин
+		world.revive_companions()  # на огляді б'ються до першої крові: поранених нема
+		hud.show_banner("\n".join(MusterService.win(world, player)), UI.GOLD)
+		_record("muster")
+		if MusterService.is_winner(world):
+			_record("muster_champion")
+		save_game()
+		return
 	defense_target = "sich"  # з порталу — назад на Січ
 	if combat.loc.get("free", false):
 		hud.show_banner("\n".join(DuelService.free_win(world, player)), UI.GOLD)
 		_record("duel")
 		_record("duel_free")
+		_record("duel_streak", int(DuelService.state(world)["streak"]))
 		save_game()
 		return
 	var msgs := DuelService.win(world, player)
@@ -1124,7 +1152,24 @@ func _on_duel_won() -> void:
 
 ## Поразка чи здача в герці: без втрат, лише мінус спроба; повертаємось на Січ.
 func _duel_lost() -> void:
+	if combat.loc.get("muster", false):
+		world.revive_companions()
+		_soft_defeat(MusterService.lose(world), str(Acts.MUSTER_CITY))
+		return
 	_soft_defeat(DuelService.free_lose(world) if combat.loc.get("free", false) else DuelService.lose(world), "sich")
+
+
+# ======================= Гетьманський огляд =======================
+
+## Сутичка ватаг у Чигирині: герой із побратимами проти сотні (див. MusterService).
+func start_muster() -> void:
+	if not MusterService.can_fight(world, player):
+		hud.show_banner("На огляд зараз не вийти", UI.BAD)
+		return
+	combat.defense_loc = MusterService.battle_loc(world, player)
+	enter_location("duel")
+	map_here = str(Acts.MUSTER_CITY)
+	hint("muster", "Огляд: гурт на гурт. Побратими б'ються поруч і відвертають удари на себе. Спершу клади стрільців і тих, хто насідає на знахарку.")
 
 
 ## Поразка без втрат (герць, варта): показати повідомлення й за мить отямитись у місті.
@@ -1229,6 +1274,8 @@ func enter_spot(id: String) -> void:
 	match str(Acts.SPOTS[id]["kind"]):
 		"vigil":
 			start_vigil()
+		"ring":
+			start_ring()
 		"hunt":
 			start_hunt()
 		"fish":
@@ -1335,6 +1382,49 @@ func start_vigil() -> void:
 	enter_location("vigil")
 	map_here = VigilService.SPOT_ID
 	hint("vigil", "Варта: нечисть суне без упину й щохвилини лютішає. Вистій п'ять хвилин — відкриється портал. Можна стояти й далі, на рекорд. Смерті на варті нема.")
+
+
+# ======================= Коло Кожум'яки =======================
+
+func start_ring() -> void:
+	if not RingService.unlocked(player):
+		hud.show_banner("У коло стають із %d-го рівня й лише ті, хто обрав дорогу" % int(Acts.SPOTS[RingService.SPOT_ID]["level"]), UI.BAD)
+		return
+	combat.defense_loc = RingService.battle_loc(player)
+	enter_location("ring")
+	map_here = RingService.SPOT_ID
+	hint("ring", "Коло Кожум'яки: три чудовиська поспіль. Між ними є кілька секунд, щоб підібрати вареники й перевести дух. Смерті тут нема.")
+
+
+## Чудовисько кола stage (1..3) здолано: гаманець, слава, а за всі три — річ, трофеї й запис у Літопис.
+func _on_ring_stage(stage: int) -> void:
+	var first_week: bool = int(RingService.state(world)["paid"]) < int(Acts.RING_STAGES)
+	var r := RingService.on_stage(world, player, stage)
+	var lines := []
+	var head := "Коло %d за тобою!" % stage
+	if int(r["gold"]) > 0:
+		head += " +%s грн" % UI.num(int(r["gold"]))
+		if int(r["glory"]) > 0:
+			head += ", +%d слави" % int(r["glory"])
+	elif not r["weekly"]:
+		head += " (гаманці на сьогодні роздано)"
+	lines.append(head)
+	lines.append_array(r["msgs"])
+	_record("ring")
+	if stage >= int(Acts.RING_STAGES):
+		var t: float = combat.ring_time
+		var f := RingService.finish(world, player, t, first_week)
+		lines[0] = "Коло Кожум'яки пройдено за %s!" % RingService.time_text(t) + lines[0].substr(lines[0].find("!") + 1)
+		if f["record"]:
+			lines.append("Новий рекорд часу")
+		if int(f["item"]) >= 0:
+			combat.spawn_pickup(player.global_position + Vector2(0, -110), "item", 0, Data.gen_item(player.level, int(f["item"])))
+			lines.append("Рідкісна річ і %d трофеї" % int(f["trophy"]))
+		_record("ring_clear")
+		if t < float(Acts.RING_FAST):
+			_record("ring_fast")
+	hud.show_banner("\n".join(lines), UI.GOLD)
+	save_game()
 
 
 func _on_vigil_minute(m: int) -> void:
@@ -1608,6 +1698,9 @@ func city_do(action: String, arg) -> void:
 			return
 		"duel_free":
 			start_duel(true)
+			return
+		"muster_start":
+			start_muster()
 			return
 		"trade_buy":
 			if TradeService.buy(world, player, city_id, arg[0], arg[1]) > 0:

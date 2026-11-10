@@ -7,7 +7,7 @@ S = 24
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites")
 def hx(h, a=255): h = h.lstrip('#'); return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
 INK = hx("3a2a1a"); INK2 = hx("5a4030"); PAPER = hx("e8d7b0"); GREEN = hx("5a7a3a"); GREEN2 = hx("7a9a4a"); GREY = hx("8a8278"); RED = hx("a83a2a"); BLUE = hx("4a7aa8"); GOLD = hx("c8a040")
-ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2"]
+ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent"]
 
 def outline(im, col=INK):
     src = im.load(); out = im.copy(); o = out.load(); w, h = im.size
@@ -109,6 +109,12 @@ def icon(kind):
     elif kind == "dice":
         d.rounded_rectangle([3, 3, 20, 20], radius=3, fill=hx("f0ead8"))
         for (x, y) in ((7, 7), (16, 7), (11, 11), (7, 16), (16, 16)): d.rectangle([x, y, x + 1, y + 1], fill=INK)
+    elif kind == "serpent":  # Змієві вали: змій, що звився на земляному валу
+        d.pieslice([0, 14, 23, 34], 180, 360, fill=hx("9a7a4a")); d.line([(1, 20), (22, 20)], fill=hx("7a5a30"))
+        body = hx("4a8a3a"); belly = hx("8ac060")
+        d.arc([3, 6, 13, 18], 150, 420, fill=body, width=3); d.arc([10, 3, 20, 15], 330, 600, fill=body, width=3)
+        d.ellipse([15, 1, 21, 7], fill=body); d.point((19, 3), fill=hx("ffd040")); d.line([(21, 4), (23, 3)], fill=RED)
+        d.point((6, 9), fill=belly); d.point((13, 8), fill=belly); d.point((16, 12), fill=belly)
     elif kind == "flag":
         d.line([(8, 22), (8, 2)], fill=INK2, width=2); d.polygon([(9, 2), (20, 6), (9, 10)], fill=RED)
     return outline(im)

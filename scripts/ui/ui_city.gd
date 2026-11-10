@@ -32,6 +32,8 @@ static func build(game, city: String) -> Control:
 		pages.append(["Торг", _trade(game, city)])
 	if city == "sich":
 		pages.append(["Майдан", _maidan(game)])
+	if city == game.Acts.MUSTER_CITY and not game.player.is_peasant():
+		pages.append(["Огляд", _muster(game)])
 	if city == "sich" and game.PathService.choosing(game.world):
 		pages.insert(0, ["★ Дорога", _path_tab(game)])
 	if not _city_specs(game, city).is_empty():
@@ -636,7 +638,7 @@ static func _maidan(game) -> Control:
 		col.add_child(UI.label("Коло %d%s  •  %s" % [i + 1, " (фінал)" if i == DS.ROUNDS - 1 else "", status], 15, border, false))
 		col.add_child(UI.label(info["name"], 22, UI.GOLD if i <= done else UI.TEXT, false))
 		col.add_child(_wrap(info["bio"], 15, UI.MUTED))
-		col.add_child(UI.label("+%d грн, +%d слави" % [DS.gold_for(i, p.level), game.Acts.DUEL_GLORY[i]], 15, UI.TEXT, false))
+		col.add_child(UI.label("+%s грн, +%d слави" % [UI.num(DS.gold_for(i, p.level)), game.Acts.DUEL_GLORY[i]], 15, UI.TEXT, false))
 		card.add_child(col)
 		row.add_child(card)
 	v.add_child(row)
@@ -657,6 +659,60 @@ static func _maidan(game) -> Control:
 	var fr: Dictionary = DS.free_rival(w)
 	var purse := ("+%s грн" % UI.num(DS.free_gold(p.level, streak))) if DS.free_paid_left(w) > 0 else "за серію"
 	v.add_child(UI.button("Вільний герць: %s (%s)" % [fr["name"], purse], _do(game, "duel_free"), Vector2(520, 64), 22))
+	return v
+
+
+# ---------------- Гетьманський огляд (Чигирин) ----------------
+
+static func _muster(game) -> Control:
+	var MS = game.MusterService
+	var Acts = game.Acts
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(UI.label("Гетьманський огляд", 26, UI.GOLD, false))
+	v.add_child(_wrap("Щотижня гетьман скликає сотні на огляд: гурт на гурт, до першої крові. Ти виходиш зі своїми побратимами проти цілої сотні. Три сутички, три спроби. Смерті й ран тут нема.", 18, UI.TEXT))
+	if not MS.unlocked(p):
+		v.add_child(_wrap("На огляд кличуть із %d-го рівня." % Acts.MUSTER_MIN_LEVEL, 19, UI.BAD))
+		return v
+	var s: Dictionary = MS.state(w)
+	var done: int = int(s["round"])
+	var allies: int = MS.allies(w)
+	v.add_child(UI.label("Виграно сутичок: %d/%d   •   Спроб: %d   •   Новий огляд за %d дн.   •   Виграних оглядів: %d" % [done, MS.ROUNDS, int(s["tries"]), MS.days_to_reset(), int(s["titles"])], 17, UI.TEXT, false))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	var ids: Array = MS.lineup()
+	for i in ids.size():
+		var info: Dictionary = Acts.MUSTER_TEAMS[ids[i]]
+		var card := PanelContainer.new()
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var border := UI.GOOD if i < done else (UI.GOLD if i == done else UI.MUTED)
+		card.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), border, 10, 10))
+		var col := VBoxContainer.new()
+		col.add_theme_constant_override("separation", 4)
+		var status := "✓ Покладено" if i < done else ("▶ Наступна" if i == done else "Попереду")
+		col.add_child(UI.label("Сутичка %d%s  •  %s" % [i + 1, " (остання)" if i == MS.ROUNDS - 1 else "", status], 15, border, false))
+		col.add_child(UI.label(info["name"], 22, UI.GOLD if i <= done else UI.TEXT, false))
+		col.add_child(_wrap(info["bio"], 15, UI.MUTED))
+		col.add_child(UI.label("Вийде бійців: %d" % MS.team_size(i, allies), 15, UI.TEXT, false))
+		col.add_child(UI.label("+%s грн, +%d слави, +%d лояльності" % [UI.num(MS.gold_for(i, p.level)), Acts.MUSTER_GLORY[i], Acts.MUSTER_LOYALTY[i]], 15, UI.TEXT, false))
+		card.add_child(col)
+		row.add_child(card)
+	v.add_child(row)
+	if allies >= 2:
+		v.add_child(UI.label("З тобою стане побратимів: %d." % allies, 17, UI.GOOD, false))
+	else:
+		v.add_child(_wrap("З тобою стане побратимів: %d. Сотня з поваги виставить менше людей, та з повним загоном битись легше: найми супутників у корчмі." % allies, 17, UI.MUTED))
+	if MS.is_winner(w):
+		v.add_child(UI.label("Цього тижня огляд за твоєю ватагою! Повертайся на наступний.", 22, UI.GOOD, false))
+	elif int(s["tries"]) <= 0:
+		v.add_child(UI.label("Спроб цього тижня більше нема. Новий огляд — за %d дн." % MS.days_to_reset(), 20, UI.BAD, false))
+	else:
+		var team: Dictionary = MS.next_team(w)
+		v.add_child(UI.button("Вивести ватагу: %s" % team["name"], _do(game, "muster_start"), Vector2(520, 70), 24, MS.can_fight(w, p)))
+		if not s["prize"]:
+			v.add_child(UI.label("За перший виграний огляд гетьман дає легендарний оберіг: «%s»." % MS.PRIZE_NAME, 16, UI.GOLD, false))
 	return v
 
 

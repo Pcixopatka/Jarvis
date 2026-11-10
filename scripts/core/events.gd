@@ -28,6 +28,7 @@ signal exit_requested  # гравець зайшов у портал виход�
 signal duel_won  # герць: суперник упав
 signal bounty_killed(id: int)  # ціль із дошки розшуку вбито
 signal vigil_minute(minute: int)  # варта: вистояно ще одну хвилину
+signal ring_stage(stage: int)  # Коло Кожум'яки: чудовисько кола stage (1..3) здолано
 
 # Повідомлення для інтерфейсу
 signal banner(text: String, color: Color)

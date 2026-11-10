@@ -121,6 +121,9 @@ func heal(amount: float, _show: bool = true) -> void:
 func take_damage(amount: float, _source = null) -> void:
 	if not alive:
 		return
+	if combat.ally_hit_frac > 0.0:
+		# сутичка ватаг: суперник міряний за героєм, тож побратимові рахуємо удар часткою його власного здоров'я
+		amount = max_hp * combat.ally_hit_frac
 	if combat.player.zahyst_timer > 0.0:
 		amount *= combat.player.zahyst_mult  # Оберіг загону знахаря
 	hp -= amount

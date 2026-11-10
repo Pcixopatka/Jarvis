@@ -32,6 +32,8 @@ var glory := 0  # слава героя (див. GloryService)
 var duel := {}  # герць на майдані: тижневий турнір (див. DuelService)
 var bounties := {}  # дошка розшуку: оголошення й узяті голови (див. BountyService)
 var vigil := {}  # козацька варта: рекорди й оплачені сьогодні хвилини (див. VigilService)
+var ring := {}  # Коло Кожум'яки: тижневі нагороди, проходження, найкращий час (див. RingService)
+var muster := {}  # гетьманський огляд: тижневі сутички ватаг (див. MusterService)
 var trade := {}  # чумацький крам: віз, торговий день, угоди (див. TradeService)
 var outdoors := {}  # полювання й рибалка: готовність, улов (див. OutdoorService)
 var tavern := {}  # шинок: кості, чутки, торгова порада (див. TavernService)
@@ -251,7 +253,7 @@ func has_companion(type: String) -> bool:
 
 func to_dict() -> Dictionary:
 	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "trade": trade, "outdoors": outdoors, "tavern": tavern}
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "ring": ring, "muster": muster, "trade": trade, "outdoors": outdoors, "tavern": tavern}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -281,6 +283,8 @@ func from_dict(d: Dictionary) -> void:
 	duel = d.get("duel", {})
 	bounties = d.get("bounties", {})
 	vigil = d.get("vigil", {})
+	ring = d.get("ring", {})
+	muster = d.get("muster", {})
 	trade = d.get("trade", {})
 	outdoors = d.get("outdoors", {})
 	tavern = d.get("tavern", {})

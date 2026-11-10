@@ -30,6 +30,7 @@ const DAILY := [
 	{"stat": "trail", "goal": [1, 1], "text": "Пройди стежку слідів до знахідки", "group": "event", "need": "trail", "where": "Сліди будуть у першій же дикій місцевості"},
 	{"stat": "tower_floor", "goal": [2, 4], "text": "Пройди поверхів Башти Кощія: %d", "group": "event", "need": "tower", "where": "Башта Кощія на мапі"},
 	{"stat": "depth_clear", "goal": [1, 2], "text": "Пройди глибин зарази: %d", "group": "event", "need": "depth", "where": "Глибини зарази на мапі"},
+	{"stat": "ring", "goal": [1, 3], "text": "Здолай чудовиськ у Колі Кожум'яки: %d", "group": "event", "need": "ring", "where": "Змієві вали на мапі"},
 ]
 const WEEKLY := [
 	{"stat": "kill", "goal": [300, 500], "text": "Здолай %d ворогів за тиждень"},
@@ -49,6 +50,8 @@ const WEEKLY := [
 	{"stat": "event", "goal": [2, 3], "text": "Прийди на поміч у подіях світу: %d", "group": "event", "need": "event", "where": "Події з'являються на мапі після походів"},
 	{"stat": "tower_floor", "goal": [6, 10], "text": "Пройди поверхів Башти Кощія: %d", "group": "event", "need": "tower", "where": "Башта Кощія на мапі"},
 	{"stat": "depth_clear", "goal": [3, 5], "text": "Пройди глибин зарази: %d", "group": "event", "need": "depth", "where": "Глибини зарази на мапі"},
+	{"stat": "ring", "goal": [5, 8], "text": "Здолай чудовиськ у Колі Кожум'яки: %d", "group": "event", "need": "ring", "where": "Змієві вали на мапі"},
+	{"stat": "muster", "goal": [2, 3], "text": "Виграй сутичок на гетьманському огляді: %d", "group": "event", "need": "muster", "where": "Вкладка «Огляд» у Чигирині"},
 ]
 const DAILY_COUNT := 4
 const DAILY_EVENTS := 2  # скільки з них про події й заняття
@@ -121,6 +124,13 @@ const ACHIEVEMENTS := [
 	{"id": "tower_5", "name": "Перший супербос", "desc": "Пройди 5-й поверх Башти Кощія", "stat": "tower", "goal": 5, "gold": 1500},
 	{"id": "tower_20", "name": "Вище хмар", "desc": "Пройди 20-й поверх Башти Кощія", "stat": "tower", "goal": 20, "gold": 6000},
 	{"id": "tower_50", "name": "До самого неба", "desc": "Пройди 50-й поверх Башти Кощія", "stat": "tower", "goal": 50, "gold": 25000},
+	{"id": "ring_1", "name": "Кожум'яччина наука", "desc": "Пройди всі три кола на Змієвих валах", "stat": "ring_clear", "goal": 1, "gold": 1500},
+	{"id": "ring_10", "name": "Гроза чудовиськ", "desc": "Пройди Коло Кожум'яки 10 разів", "stat": "ring_clear", "goal": 10, "gold": 8000},
+	{"id": "ring_fast", "name": "Швидше за змія", "desc": "Пройди Коло Кожум'яки менш ніж за півтори хвилини бою", "stat": "ring_fast", "goal": 1, "gold": 3000},
+	{"id": "muster_1", "name": "Гурт на гурт", "desc": "Виграй сутичку на гетьманському огляді", "stat": "muster", "goal": 1, "gold": 400},
+	{"id": "muster_champion", "name": "Гетьманова ласка", "desc": "Виграй увесь гетьманський огляд", "stat": "muster_champion", "goal": 1, "gold": 2500},
+	{"id": "muster_champion_5", "name": "Найкраща ватага", "desc": "Виграй гетьманський огляд 5 разів", "stat": "muster_champion", "goal": 5, "gold": 9000},
+	{"id": "duel_streak_5", "name": "Не збити з ніг", "desc": "Виграй 5 вільних герців поспіль", "stat": "duel_streak", "goal": 5, "gold": 2000},
 	{"id": "kleinod_1", "name": "Перший клейнод", "desc": "Здобудь перший клейнод роду на хуторі", "stat": "kleinod", "goal": 1, "gold": 1000},
 	{"id": "kleinod_14", "name": "Військова скарбниця", "desc": "Оздоб клейноди роду на 14 ступенів", "stat": "kleinod", "goal": 14, "gold": 10000},
 	{"id": "kleinod_35", "name": "Клейноди Війська Запорозького", "desc": "Доведи всі сім клейнодів до досконалості", "stat": "kleinod", "goal": 35, "gold": 50000},

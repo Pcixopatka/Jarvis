@@ -10,7 +10,7 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
 const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
-const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2"]
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent"]
 # Кольори чорнила старовинної мапи
 const INK := Color(0.23, 0.16, 0.1)
 const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]

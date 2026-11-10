@@ -56,12 +56,17 @@ static func _keep_started(old: Array, fresh: Array, n: int) -> Array:
 	for ch in old:
 		if (int(ch.get("progress", 0)) > 0 or bool(ch.get("claimed", false))) and out.size() < n:
 			out.append(ch)
-	for ch in fresh:
+	# вільні місця спершу віддаємо викликам про події: заради них склад і міняли
+	var order: Array = fresh.filter(func(x): return x.get("group", "base") == "event")
+	order.append_array(fresh.filter(func(x): return x.get("group", "base") != "event"))
+	for ch in order:
 		if out.size() >= n:
 			break
 		if not out.any(func(o): return o["stat"] == ch["stat"]):
 			out.append(ch)
-	return out
+	var base: Array = out.filter(func(x): return x.get("group", "base") != "event")
+	base.append_array(out.filter(func(x): return x.get("group", "base") == "event"))
+	return base
 
 
 ## Чи відкрите гравцеві те, чого просить виклик. need: "" — завжди; інакше назва заняття.
@@ -78,6 +83,10 @@ static func available(need: String, world, player = null) -> bool:
 			return chosen and lvl >= int(load("res://scripts/game/duel_service.gd").MIN_LEVEL)
 		"bounty":
 			return lvl >= int(load("res://scripts/game/bounty_service.gd").MIN_LEVEL)
+		"ring":
+			return chosen and lvl >= int(Acts.SPOTS["kolo"]["level"])
+		"muster":
+			return chosen and lvl >= int(Acts.MUSTER_MIN_LEVEL)
 		"tower":
 			return lvl >= int(load("res://scripts/game/tower_service.gd").OPEN_LEVEL)
 		"depth":
@@ -141,8 +150,9 @@ static func _generate(templates: Array, n: int, n_event: int, seed_value: int, w
 		out.append({"stat": t["stat"], "text": t["text"] % goal if "%d" in t["text"] else t["text"], "goal": goal, "progress": 0, "claimed": false,
 			"group": t.get("group", "base"), "where": t.get("where", "")})
 	# спершу бій і господарство, потім події
-	out.sort_custom(func(x, y): return x["group"] == "base" and y["group"] != "base")
-	return out
+	var sorted: Array = out.filter(func(x): return x["group"] != "event")
+	sorted.append_array(out.filter(func(x): return x["group"] == "event"))
+	return sorted
 
 
 ## Чи є невиконаний виклик (денний або тижневий) із таким лічильником: служби подій тоді
@@ -161,7 +171,7 @@ static func pending(world, stat: String) -> bool:
 static func record(world, player, stat: String, amount: int = 1) -> Array:
 	var c := state(world, player)
 	var msgs := []
-	if stat in ["level", "depth", "tower", "vigil", "glory"]:  # найвище досягнуте, а не сума
+	if stat in ["level", "depth", "tower", "vigil", "glory", "duel_streak"]:  # найвище досягнуте, а не сума
 		world.stats[stat] = maxi(int(world.stats.get(stat, 0)), amount)
 	else:
 		world.stats[stat] = int(world.stats.get(stat, 0)) + amount

@@ -69,6 +69,28 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 					total += int(VS.minute_reward(player.level, m)["gold"])
 				v.add_child(_wrapped("Нагорода сьогодні: до %d грн, слава за кожну хвилину, речі на 3-й і %d-й, 2 трофеї за повну варту." % [total, goal_min], 16, UI.GOLD))
 			v.add_child(UI.button("Стати на варту", on_go.bind(sel), Vector2(350, 70), 26))
+		"ring":
+			var RS = load("res://scripts/game/ring_service.gd")
+			var Data = load("res://scripts/data/data.gd")
+			if not RS.unlocked(player):
+				v.add_child(_wrapped("У коло стають лише ті, хто вже обрав свою дорогу.", 18, UI.BAD))
+				return v
+			var rs: Dictionary = RS.state(world)
+			var stages := int(Acts.RING_STAGES)
+			v.add_child(_wrapped("Три чудовиська поспіль, між ними кілька секунд перепочинку. Вони міряються силою з тобою, тож легко не буде на жодному рівні. Смерті нема: не встояв — винесуть із кола.", 17, UI.TEXT))
+			var ids: Array = RS.lineup()
+			var paid := int(rs["paid"])
+			for i in ids.size():
+				var mark := "✓ " if i < paid else "• "
+				var prize := "нагороду взято" if i < paid else "+%s грн, +%d слави" % [UI.num(RS.stage_gold(player.level, i)), int(Acts.RING_GLORY[i])]
+				v.add_child(_wrapped("%sКоло %d: %s (%s)" % [mark, i + 1, Data.BOSS_NAMES.get(ids[i], ids[i]), prize], 16, UI.GOOD if i < paid else UI.TEXT))
+			if paid >= stages:
+				v.add_child(_wrapped("Тижневу нагороду взято. Ходи на час і на рекорд: перші %d чудовиська дня ще приносять малий гаманець. Новий склад за %d дн." % [int(Acts.RING_REPEAT_PAID), RS.days_to_reset()], 16, UI.MUTED))
+			else:
+				v.add_child(_wrapped("За всі три кола ще рідкісна річ і 3 трофеї. Новий склад чудовиськ за %d дн." % RS.days_to_reset(), 16, UI.GOLD))
+			var best: float = float(rs["best_time"])
+			v.add_child(UI.label("Пройдено разів: %d  •  найкращий час: %s" % [int(rs["titles"]), RS.time_text(best) if best > 0.0 else "—"], 19, UI.GOLD, false))
+			v.add_child(UI.button("Стати в коло", on_go.bind(sel), Vector2(350, 70), 26))
 		"hunt", "fish":
 			var OS = load("res://scripts/game/outdoor_service.gd")
 			var hunt: bool = str(S["kind"]) == "hunt"

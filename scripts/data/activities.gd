@@ -62,9 +62,61 @@ const BOUNTY_BOARD := 2  # оголошень на дошці міста
 const BOUNTY_ACTIVE := 2  # скільки голів можна шукати водночас
 const BOUNTY_REFRESH := 6  # через стільки походів дошка оновлюється
 
+# ======================= Гетьманський огляд (Чигирин) =======================
+## Тижневі сутички ватаг: герой із побратимами проти сотні. Три сутички, три спроби, смерті нема.
+## styles — хто в сотні (стилі суперників із герцю); перший у списку — сотник, він виходить у кожній сутичці.
+const MUSTER_CITY := "chyhyryn"
+const MUSTER_MIN_LEVEL := 8
+const MUSTER_TEAMS := {
+	"cherkasy": {"name": "Черкаська сотня", "styles": ["rubaka", "rubaka", "spysnyk", "rubaka", "spysnyk"],
+		"bio": "Рубаки з-над Дніпра: лізуть гуртом і не дають продихнути. Не дай себе оточити."},
+	"korsun": {"name": "Корсунська сотня", "styles": ["spysnyk", "strilets", "spysnyk", "strilets", "spysnyk"],
+		"bio": "Списники тримають стрій, а з-за їхніх спин б'ють стрільці. Спершу дістань стрільців."},
+	"uman": {"name": "Уманська сотня", "styles": ["bulavnyk", "rubaka", "bulavnyk", "spysnyk", "rubaka"],
+		"bio": "Булави й важкі руки. Повільні, зате від їхніх ударів двигтить земля."},
+	"kompaniitsi": {"name": "Компанійці", "styles": ["strilets", "rubaka", "strilets", "kharakternyk", "rubaka"],
+		"bio": "Охочекомонний полк: стрільці, що не стоять на місці. Не ганяйся за всіма одразу."},
+	"serdiuky": {"name": "Гетьманські сердюки", "styles": ["kharakternyk", "bulavnyk", "strilets", "rubaka", "spysnyk"],
+		"bio": "Гвардія гетьмана: кожен уміє своє. Їхній сотник — характерник, тож пильнуй спину."},
+}
+const MUSTER_ORDER := ["cherkasy", "korsun", "uman", "kompaniitsi", "serdiuky"]
+const MUSTER_SIZE := [3, 4, 5]  # суперників у сутичці, коли в героя двоє й більше побратимів; без них — на одного-двох менше
+const MUSTER_SECONDS := [7.0, 8.0, 9.0]  # скільки секунд шкоди героя тримає один суперник
+const MUSTER_CAPTAIN := 1.5  # сотник у стільки разів здоровіший
+const MUSTER_HIT := [0.06, 0.075, 0.09]  # частка здоров'я героя за удар
+const MUSTER_ALLY_HIT := [0.09, 0.11, 0.13]  # частка здоров'я побратима за удар по ньому
+const MUSTER_GOLD := [40, 80, 160]  # × рівень героя
+const MUSTER_GLORY := [5, 10, 25]
+const MUSTER_LOYALTY := [20, 30, 50]  # лояльність Чигирина
+const MUSTER_FIRST := ["Іван", "Семен", "Грицько", "Микита", "Панас", "Левко", "Юрко", "Кіндрат", "Сава", "Тиміш", "Хома", "Яким", "Назар", "Прокіп"]
+const MUSTER_NICK := {"rubaka": ["Рубай", "Вихор", "Шабля"], "spysnyk": ["Ратище", "Жердина", "Довгий"], "strilets": ["Порох", "Куля", "Мушкет"],
+	"kharakternyk": ["Химородник", "Сивий", "Ворон"], "bulavnyk": ["Гупало", "Товкач", "Довбня"]}
+
+# ======================= Коло Кожум'яки =======================
+## Три чудовиська поспіль на Змієвих валах (місце "kolo" на мапі); склад міняється щотижня.
+## Чудовиська міряються з героєм: здоров'я — секунди його чистої шкоди, удар — частка його здоров'я
+## вже після захисту (за колами: перше, друге, третє). Посіпаки чудовиськ — у пропорції до «звичайного зараженого».
+const RING_POOL := ["zmii", "upyr", "vovkulaka", "chaklun", "koshchii", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii"]
+const RING_STAGES := 3
+const RING_SECONDS := [20.0, 27.0, 36.0]
+const RING_HIT := [0.10, 0.13, 0.17]
+const RING_CAP := 0.6  # чудовисько не впаде швидше, ніж за цю частку розрахункового часу
+const RING_STD_TTK := 1.1
+const RING_STD_HIT := 0.035
+const RING_XP := 0.3  # досвіду з кола менше: нагорода тут — гаманець і слава
+const RING_BREAK := 5.0  # перепочинок між чудовиськами, с
+const RING_GOLD := [50, 100, 200]  # × рівень героя, раз на тиждень за кожне коло
+const RING_GLORY := [5, 10, 20]
+const RING_REPEAT_GOLD := 10  # × рівень: за чудовисько, коли тижневе вже взято
+const RING_REPEAT_PAID := 3  # скільки таких на день оплачується
+const RING_FAST := 90.0  # швидше за стільки секунд бою — досягнення
+
 # ======================= Місця на мапі (не міста й не місцевості) =======================
-## kind: vigil — Козацька варта; hunt — полювання; fish — рибалка. level — з якого рівня героя відкрито.
+## kind: vigil — Козацька варта; hunt — полювання; fish — рибалка; ring — Коло Кожум'яки.
+## level — з якого рівня героя відкрито.
 const SPOTS := {
+	"kolo": {"name": "Змієві вали", "pos": Vector2(30.15, 49.2), "icon": "serpent", "kind": "ring", "level": 10,
+		"desc": "Прадавні вали, які, кажуть, проорав Кожум'яка, запрігши змія в плуг. Тут сміливці міряються силою з чудовиськами."},
 	"varta": {"name": "Сторожова могила", "pos": Vector2(37.0, 47.45), "icon": "mound", "kind": "vigil", "level": 6,
 		"desc": "Курган із козацькою вежею серед степу. Звідси першими бачать нечисть, що суне на Січ."},
 	"hunt": {"name": "Мисливські угіддя", "pos": Vector2(32.6, 51.75), "icon": "bow", "kind": "hunt", "level": 3,
@@ -215,8 +267,10 @@ const RECORDS := {
 	"trade_profit": {"name": "Зиск із торгівлі", "fmt": "%d грн", "step": 0, "glory": 0},
 	"dice_streak": {"name": "Серія перемог у кості", "fmt": "%d поспіль", "step": 0, "glory": 0},
 	"duel_streak": {"name": "Серія у вільному герці", "fmt": "%d поспіль", "step": 5, "glory": 4},
+	"ring_titles": {"name": "Коло Кожум'яки", "fmt": "пройдено: %d", "step": 5, "glory": 5},
+	"muster_titles": {"name": "Гетьманський огляд", "fmt": "перемог: %d", "step": 1, "glory": 3},
 }
-const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "bounties", "trade_profit", "dice_streak"]
+const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "muster_titles", "ring_titles", "bounties", "trade_profit", "dice_streak"]
 ## Звідки береться слава (підказка у вкладці «Слава»).
 const GLORY_SOURCES := [
 	"Герць на майдані: кожне вигране коло й титул чемпіона",
