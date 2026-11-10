@@ -113,6 +113,7 @@ var statuses := {}  # кровотеча, горіння, зараза, холо
 var storm_timer := -1.0
 var hurt_flash := 0.0
 var walk_phase := 0.0
+var _foot := 0  # лічильник кроків для звуку ходи
 var moving := false
 var alive := true
 var unbreak_ready := true
@@ -609,6 +610,10 @@ func _process(delta: float) -> void:
 			if swing_time <= 0.0:
 				facing = input_vec.normalized()
 			walk_phase += delta * 14.0
+			var foot := int(walk_phase / PI)  # кожен півкрок анімації — один крок
+			if foot != _foot:
+				_foot = foot
+				Audio.play("step", 0.15)
 
 	var pad := Vector2(radius, radius)
 	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
@@ -676,7 +681,7 @@ func charged_strike(power: float) -> void:
 			hits += 1
 	combo_step = 0
 	attack_timer = attack_cooldown
-	Audio.play("crit", 0.05)
+	Audio.play("slash", 0.05)
 	combat.shake(6.0 + 6.0 * power)
 	combat.fx.ring(global_position, Color(1.0, 0.85, 0.35), 30, reach, 6, 0.35)
 	if hits > 0:
@@ -693,7 +698,7 @@ func _parry(source) -> void:
 	block_cd = 0.15
 	combo_step = 2  # наступний удар — завершальний
 	combo_timer = COMBO_WINDOW
-	Audio.play("crit", 0.0)
+	Audio.play("clash", 0.05)
 	combat.hitstop(0.12)
 	combat.fx.ring(global_position, Color(1.0, 0.95, 0.6), 20, 120, 5, 0.3)
 	combat.float_text(global_position + Vector2(0, -70), "Парирування!" if source != null else "Відбито!", Color(1.0, 0.95, 0.5))
@@ -1262,7 +1267,7 @@ func _kulia() -> bool:
 
 func _zamova() -> bool:
 	zamova_timer = 10.0
-	Audio.play("lightning", 0.05, -6.0)
+	Audio.play("spell", 0.05)
 	combat.float_text(global_position + Vector2(0, -70), "Замовляння шаблі", Color(0.6, 0.8, 1.0))
 	combat.spawn_fx("lightning", global_position - Vector2(0, 28), 1.2, 0.0, Color(0.8, 0.9, 1.0))
 	return true
@@ -1294,7 +1299,7 @@ func _vidvid() -> bool:
 			n += 1
 	if n == 0:
 		return false
-	Audio.play("lightning", 0.1, -4.0)
+	Audio.play("spell", 0.1)
 	combat.fx.ring(global_position, Color(0.6, 0.4, 0.8), 28, 600, 5, 0.5)
 	combat.spawn_fx("smoke", global_position - Vector2(0, 10), 2.4, 0.0, Color(0.8, 0.6, 1.0))
 	return true
@@ -1402,7 +1407,7 @@ func _grad() -> bool:
 	combat.spawn_zone("grad", e.global_position, 140.0 * k, 3.0, damage * 0.45 * (1.0 + 0.2 * (sk("grad") - 1)) * k * skill_power)
 	for i in 3:
 		combat.spawn_fx("hail", e.global_position + Vector2(randf_range(-80, 80), randf_range(-60, 40)), 2.0 * k, 0.0, Color.WHITE, 10.0)
-	Audio.play("lightning", 0.2, -10.0)
+	Audio.play("spell", 0.2, -2.0)
 	return true
 
 
@@ -1422,7 +1427,7 @@ func _proklin() -> bool:
 			Status.apply(t, "weak", 8.0)
 	combat.fx.ring(e.global_position, Color(0.5, 0.2, 0.5), 20, 300, 5, 0.5)
 	combat.spawn_fx("curse", e.global_position - Vector2(0, 20), 1.6, 0.0, Color.WHITE, 10.0)
-	Audio.play("roar", 0.3, -10.0)
+	Audio.play("spell", 0.15, -1.0)
 	return true
 
 
@@ -1455,7 +1460,7 @@ func _cast_sparks(step: int, finisher: bool) -> void:
 	for a in angles:
 		var r := _roll(mult)
 		combat.spawn_spark(global_position + Vector2(0, -24) + dir * 26.0, dir.rotated(a), r[0], r[1])
-	Audio.play("lightning", 0.2, -14.0)
+	Audio.play("zap", 0.2)
 	combo_step = (step + 1) % COMBO_MULT.size()
 	combo_timer = COMBO_WINDOW
 
@@ -1468,7 +1473,7 @@ func _fireball() -> bool:
 	facing = dir
 	var r := _roll(2.4 * (1.0 + 0.2 * (sk("fireball") - 1)) * skill_power)
 	combat.spawn_fireball(global_position + Vector2(0, -24) + dir * 30.0, dir, r[0], r[1], 95.0 * (1.0 + 0.2 * sk("pyre")), r[0] * (0.12 + 0.04 * sk("pyre")))
-	Audio.play("musket", 0.1, -6.0)
+	Audio.play("fire", 0.1)
 	return true
 
 

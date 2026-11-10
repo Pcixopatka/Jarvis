@@ -32,6 +32,7 @@ const GardenService := preload("res://scripts/game/garden_service.gd")
 const ExpeditionService := preload("res://scripts/game/expedition_service.gd")
 const RecordService := preload("res://scripts/game/record_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
+const Sounds := preload("res://scripts/data/sounds.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -403,7 +404,8 @@ func enter_map() -> void:
 	hud.clear_screen()
 	hud.close_overlay()
 	state = State.MAP
-	Audio.play_music("calm")
+	Audio.play_music("map")
+	Audio.play_ambient("")
 	get_tree().paused = true
 	hud.set_mode(true, false)
 	hud.show_map(true)
@@ -460,7 +462,10 @@ func enter_city(id: String) -> void:
 	_leave_combat()
 	hud.close_overlay()
 	state = State.CITY
-	Audio.play_music("calm")
+	if city_id != id or Audio.current_music not in ["city", "inn", "festive"]:
+		Audio.play("door", 0.05)
+	Audio.play_music(_home_music("city"))
+	Audio.play_ambient("")
 	get_tree().paused = true
 	city_id = id
 	Data.sell_mult = EventService.sell_mult(world, id)
@@ -503,7 +508,9 @@ func enter_location(id: String) -> void:
 	hud.set_mode(true, true)
 	state = State.PLAYING
 	get_tree().paused = false
-	Audio.play_music("battle")
+	Audio.play_music("boss" if combat.is_duel() else "battle")
+	Audio.play_ambient(Sounds.ambient_for(str(combat.loc.get("biome", "")), combat.is_vigil() or bool(combat.loc.get("night", false))))
+	Audio.play("unsheathe", 0.05)
 	hint("combat", "Ліва частина екрана — рух. Тримай «Удар» — козак сам б'є найближчу нечисть. Коли ворог червоніє — він замахується: тисни «Перекид»!")
 
 
@@ -786,6 +793,7 @@ func _on_player_died() -> void:
 		else:
 			hud.show_banner(DefenseService.lose(world, player, combat.loc["target"]), UI.BAD)
 	state = State.DEAD
+	Audio.jingle("defeat")
 	hud.set_mode(true, false)
 	hud.char_btn.visible = false
 	hud.show_banner("Козак поліг...", Color(1.0, 0.4, 0.35))
@@ -1055,6 +1063,18 @@ func _soft_defeat(text: String, city: String) -> void:
 			leave_notice = ""
 
 
+## Музика мирного місця: у свято — святкова, інакше своя (city / camp).
+func _home_music(usual: String) -> String:
+	return "festive" if HolidayService.active() != "" else usual
+
+
+## Вкладку міста змінено: у корчмі й шинку грає своя мелодія.
+func city_tab_changed(title: String) -> void:
+	if state != State.CITY:
+		return
+	Audio.play_music("inn" if title in ["Корчма", "Шинок"] else _home_music("city"))
+
+
 ## Сезонне свято: надбавки герою й привітання (раз на свято). Повертає текст привітання або "".
 func _apply_holiday() -> String:
 	holiday_id = HolidayService.active()
@@ -1148,7 +1168,7 @@ func _open_activity(c: Control) -> void:
 	_leave_combat()
 	hud.close_overlay()
 	state = State.ACTIVITY
-	Audio.play_music("calm")
+	Audio.play_music("map")
 	get_tree().paused = true
 	hud.show_map(false)
 	hud.set_mode(false, false)
@@ -1167,6 +1187,7 @@ func start_hunt() -> void:
 		hud.show_banner(why, UI.BAD)
 		enter_map()
 		return
+	Audio.play_ambient("forest")
 	_open_activity(HuntGame.new().setup(OutdoorService.new_hunt(player, -1, OutdoorService.rich(world, "hunt")), player.sprite_id(), finish_hunt))
 	hint("hunt", "Полювання: звірі перебігають галявину. Торкнись звіра, щоб пустити стрілу. Стріл мало, тож бий напевно. Вепра бери в серцевину або двома стрілами.")
 
@@ -1191,6 +1212,7 @@ func start_fishing() -> void:
 		hud.show_banner(why, UI.BAD)
 		enter_map()
 		return
+	Audio.play_ambient("river")
 	_open_activity(FishGame.new().setup(OutdoorService.new_fishing(-1, OutdoorService.rich(world, "fish")), player.sprite_id(), finish_fishing))
 	hint("fish", "Рибалка: закинь вудку й чекай. Заклювало — тисни «Підсікти». Далі тримай кнопку, щоб тягти, й відпускай, щоб попустити: натяг має бути в зеленій смузі.")
 
@@ -1368,15 +1390,16 @@ func city_do(action: String, arg) -> void:
 			smith_msg = ""
 		"dice_start":
 			if TavernService.start(world, player, arg):
-				Audio.play("coin", 0.1, -4.0)
+				Audio.play("dice", 0.1)
 		"dice_roll":
 			var dr := TavernService.roll(world, player)
 			if dr != "":
-				Audio.play("hurt" if dr == "bust" else "coin", 0.15, -4.0)
+				Audio.play("dice", 0.15)
 				if dr == "bust":
 					_dice_done()
 		"dice_stand":
 			if TavernService.stand(world, player) != "":
+				Audio.play("dice", 0.15)
 				_dice_done()
 		"dice_clear":
 			TavernService.clear(world)
@@ -1388,7 +1411,7 @@ func city_do(action: String, arg) -> void:
 				_record("rumor")
 		"buy":
 			if CityService.buy(world, player, city_id, arg):
-				Audio.play("coin", 0.0)
+				Audio.play("coins", 0.05)
 		"sell":
 			CityService.sell(player, arg)
 			city_sel_uid = -1
@@ -1397,7 +1420,7 @@ func city_do(action: String, arg) -> void:
 		"sell_upto":
 			var got := CityService.sell_up_to(player, arg)
 			if got > 0:
-				Audio.play("coin", 0.0)
+				Audio.play("coins", 0.05)
 				hud.show_banner("Продано: +%d грн" % got, UI.GOLD)
 			sell_marked.clear()
 		"sell_multi":
@@ -1412,7 +1435,7 @@ func city_do(action: String, arg) -> void:
 		"sell_marked":
 			var got := CityService.sell_many(player, sell_marked.keys())
 			if got > 0:
-				Audio.play("coin", 0.0)
+				Audio.play("coins", 0.05)
 				hud.show_banner("Продано: +%d грн" % got, UI.GOLD)
 			sell_marked.clear()
 		"autosell":
@@ -1529,6 +1552,7 @@ func open_character() -> void:
 	hud.show_map(false)
 	hud.set_mode(false, false)
 	char_sel_uid = -1
+	Audio.play("page", 0.08)
 	RecordService.sync(world, player, slot)  # щоб вкладка «Слава» показувала свіже
 	_build_character()
 
@@ -1621,7 +1645,8 @@ func _open_menu() -> void:
 
 func _show_main_menu() -> void:
 	state = State.MENU
-	Audio.play_music("calm")
+	Audio.play_music("menu")
+	Audio.play_ambient("")
 	hud.set_mode(false, false)
 	if use_slots:
 		SaveSystem.migrate_single_to_slots()  # перший запуск після оновлення: hero.save → слот 1
@@ -1804,7 +1829,8 @@ func enter_camp() -> void:
 	_leave_combat()
 	hud.close_overlay()
 	state = State.CAMP
-	Audio.play_music("calm")
+	Audio.play_music(_home_music("camp"))
+	Audio.play_ambient("fire")
 	get_tree().paused = true
 	map_here = Camp.CAMP_ID
 	player.revive()
@@ -1903,25 +1929,25 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("heal", 0.0)
 		"plant":
 			if GardenService.plant(world, player, arg[0], arg[1]):
-				Audio.play("coin", 0.1, -6.0)
+				Audio.play("rustle", 0.1)
 				_record("plant")
 		"harvest":
 			var hm := GardenService.harvest(world, player, arg)
 			if hm != "":
-				Audio.play("heal", 0.0)
+				Audio.play("rustle", 0.1)
 				hud.show_banner(hm, UI.GOOD)
 				_record("harvest")
 		"harvest_all":
 			var hms := GardenService.harvest_all(world, player)
 			if not hms.is_empty():
-				Audio.play("heal", 0.0)
+				Audio.play("rustle", 0.1)
 				hud.show_banner("\n".join(hms), UI.GOOD)
 				_record("harvest", hms.size())
 		"uproot":
 			GardenService.uproot(world, arg)
 		"cook":
 			if OutdoorService.cook(player, arg):
-				Audio.play("heal", 0.0)
+				Audio.play("pot", 0.05)
 				hud.show_banner("%s готовий! %s" % [Acts.RECIPES[arg]["name"], Acts.RECIPES[arg]["desc"]], UI.GOOD)
 				_record("cook")
 				_record("cook:" + str(arg))

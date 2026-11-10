@@ -89,6 +89,8 @@ func _run() -> void:
 	await _suite_records_game()
 	_suite_holidays()
 	await _suite_holidays_game()
+	_suite_audio()
+	await _suite_audio_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -3201,6 +3203,181 @@ func _suite_holidays_game() -> void:
 	SaveSystem.delete(TEST_ACCOUNT)
 	HS.forced = "none"
 	CS.now_override = 0
+
+
+## Усі назви звуків, які гра просить зіграти (Audio.play("...")), зібрані з коду.
+func _sound_names_in_code(dir_path: String, out: Dictionary) -> void:
+	var d := DirAccess.open(dir_path)
+	if d == null:
+		return
+	for sub in d.get_directories():
+		_sound_names_in_code(dir_path + "/" + sub, out)
+	var re := RegEx.new()
+	re.compile("Audio\\.play\\(([^)]*)\\)")
+	var lit := RegEx.new()
+	lit.compile("(?<!== )(?<!!= )\"([a-z_]+)\"")  # рядки після порівняння — не назви звуків
+	for f in d.get_files():
+		if not f.ends_with(".gd"):
+			continue
+		var text := FileAccess.get_file_as_string(dir_path + "/" + f)
+		for m in re.search_all(text):
+			# у виклику можуть бути дві назви: "crit" if ... else "hit"
+			for n in lit.search_all(m.get_string(1)):
+				out[n.get_string(1)] = f
+
+
+func _suite_audio() -> void:
+	suite("Звук: набір і мапа")
+	var Sounds = load("res://scripts/data/sounds.gd")
+	var Index = load("res://scripts/data/sound_index.gd")
+	var audio = root.get_node("Audio")
+	var missing := []
+	for name in Index.SFX:
+		for i in range(1, int(Index.SFX[name]) + 1):
+			if not ResourceLoader.exists("res://assets/audio/sfx/%s_%d.ogg" % [name, i]):
+				missing.append("%s_%d" % [name, i])
+	check(missing.is_empty() and Index.SFX.size() >= 40, "усі звукові файли з переліку на місці (%d назв)%s" % [Index.SFX.size(), "" if missing.is_empty() else ": нема " + str(missing)])
+	missing = []
+	for m in Index.MUSIC:
+		if not ResourceLoader.exists("res://assets/audio/music/%s.ogg" % m):
+			missing.append(m)
+	for a in Index.AMBIENT:
+		if not ResourceLoader.exists("res://assets/audio/ambient/%s.ogg" % a):
+			missing.append(a)
+	check(missing.is_empty() and Index.MUSIC.size() >= 8 and Index.AMBIENT.size() >= 6, "музика й фонові шуми на місці: %d і %d" % [Index.MUSIC.size(), Index.AMBIENT.size()])
+	var no_volume := []
+	for name in Index.SFX:
+		if not Sounds.VOLUME.has(name):
+			no_volume.append(name)
+	var no_file := []
+	for name in Sounds.VOLUME:
+		if not Index.SFX.has(name):
+			no_file.append(name)
+	check(no_volume.is_empty() and no_file.is_empty(), "кожен звук має гучність, кожна гучність — звук%s%s" % [(" без гучності: " + str(no_volume)) if not no_volume.is_empty() else "", (" без файлів: " + str(no_file)) if not no_file.is_empty() else ""])
+	# Жодної назви-привида в коді: кожен Audio.play("...") має записаний звук
+	var used := {"click": "audio.gd"}  # клацання кнопок рушій грає сам
+	_sound_names_in_code("res://scripts", used)
+	var ghosts := []
+	for name in used:
+		if not Index.SFX.has(name):
+			ghosts.append("%s (%s)" % [name, used[name]])
+	check(ghosts.is_empty() and used.size() >= 25, "усі звуки, які просить код, існують (%d назв)%s" % [used.size(), "" if ghosts.is_empty() else ": нема " + str(ghosts)])
+	var unused := []
+	for name in Index.SFX:
+		if not used.has(name) and not (name in Sounds.DEATH.values()) and name != "enemy_die":
+			unused.append(name)
+	check(unused.is_empty(), "жоден зібраний звук не лежить без діла%s" % ("" if unused.is_empty() else ": " + str(unused)))
+	for kind in Sounds.DEATH:
+		check(Index.SFX.has(Sounds.DEATH[kind]), "голос смерті для %s" % kind)
+	check(Sounds.death("vovkulaka") == "die_beast" and Sounds.death("невідоме") == "enemy_die", "невідома нечисть має загальний голос")
+	var biomes := {}
+	for id in Data.LOCATIONS:
+		biomes[Data.LOCATIONS[id]["biome"]] = true
+	var bad := []
+	for b in biomes:
+		var amb: String = Sounds.ambient_for(b)
+		if amb == "" or not (amb in Index.AMBIENT):
+			bad.append(b)
+	check(bad.is_empty(), "кожен ландшафт має свій фон%s" % ("" if bad.is_empty() else ": без фону " + str(bad)))
+	check(Sounds.ambient_for("steppe", true) == "night" and Sounds.ambient_for("cave", true) == "cave", "уночі цвіркуни, та не в печері")
+	# Рушій
+	check(audio.samples.size() == Index.SFX.size() and audio.has_sample("hit") and audio.samples["hit"].size() == int(Index.SFX["hit"]), "записані звуки завантажено з варіантами")
+	audio.play_music("calm")
+	check(audio.current_music == "map", "стара назва «calm» веде на мелодію мапи")
+	audio.play_music("city")
+	check(audio.current_music == "city" and audio._music_live.stream != null and audio._music_live.stream.loop, "мелодія міста грає по колу")
+	audio.play_music("нема-такої")
+	check(audio.current_music == "map", "невідома мелодія не глушить музику")
+	audio.jingle("victory")
+	check(audio._jingle.stream != null and not audio._jingle.stream.loop, "мотив перемоги грає один раз")
+	audio.play_ambient("forest")
+	check(audio.current_ambient == "forest", "фон лісу")
+	audio.play_ambient("нема-такого")
+	check(audio.current_ambient == "", "невідомий фон — тиша")
+	audio.set_music(false)
+	audio.play_music("battle")
+	check(audio.current_music == "battle" and not audio._music_a.playing and not audio._music_b.playing, "вимкнена музика не грає, але пам'ятає, що мала б")
+	audio.set_music(true)
+	audio.set_sound(false)
+	audio.play_ambient("wind")
+	check(not audio._ambient_live.playing, "вимкнений звук глушить і фон")
+	audio.set_sound(true)
+	audio.play_ambient("")
+
+
+func _suite_audio_game() -> void:
+	suite("Звук: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var HS = load("res://scripts/game/holiday_service.gd")
+	var audio = root.get_node("Audio")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	check(audio.current_music == "menu", "у меню — своя мелодія")
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true, "hunt": true, "fish": true}
+	p.change_class("cossack")
+	p.level = 12
+	p.stats["str"] = 200
+	p.recalc()
+	p.hp = p.max_hp
+	game.enter_map()
+	await _frames(2)
+	check(audio.current_music == "map" and audio.current_ambient == "", "мапа: мелодія мандрів, без фону")
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	check(audio.current_music == "city", "місто: ярмаркова мелодія")
+	game.city_tab_changed("Шинок")
+	check(audio.current_music == "inn", "у шинку — корчемна мелодія")
+	game.city_tab_changed("Крамниця")
+	check(audio.current_music == "city", "вийшов із шинку — знову міська")
+	game.enter_camp()
+	await _frames(2)
+	check(audio.current_music == "camp" and audio.current_ambient == "fire", "хутір: своя мелодія й тріск багаття")
+	HS.forced = "kupala"
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	check(audio.current_music == "festive", "у свято в місті святкова мелодія")
+	HS.forced = "none"
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(audio.current_music == "battle" and audio.current_ambient == "wind", "степ: бойова мелодія й вітер")
+	game.combat.spawn_enemy("zmii", 3, true)
+	await _frames(2)
+	check(audio.current_music == "boss", "з'явився бос — тема боса")
+	var boss = game.combat._last_enemy()
+	boss.take_damage(1.0e9, Vector2.ZERO)
+	await _frames(4)
+	check(audio.current_music == "map", "боса вбито — бойова тема стихає")
+	game.enter_map()
+	await _frames(2)
+	game.enter_location("zmii_cave")
+	await _frames(3)
+	check(audio.current_ambient == "cave", "печера: гул підземелля")
+	game.enter_map()
+	await _frames(2)
+	game.enter_spot("hunt")
+	await _frames(3)
+	check(audio.current_ambient == "forest", "на полюванні — птахи")
+	game._quit_activity()
+	await _frames(2)
+	game.enter_spot("fish")
+	await _frames(3)
+	check(audio.current_ambient == "river", "на рибалці — вода")
+	game._quit_activity()
+	await _frames(2)
+	check(audio.current_ambient == "", "на мапі фон стихає")
+	game.queue_free()
+	await _frames(2)
+	audio.play_ambient("")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 
 func _suite_vigil() -> void:

@@ -36,7 +36,9 @@ static func build(game, city: String) -> Control:
 		pages.insert(0, ["★ Дорога", _path_tab(game)])
 	if not _city_specs(game, city).is_empty():
 		pages.append(["Наставники" if _city_specs(game, city).size() > 1 else "Наставник", _mentors(game, city)])
-	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int): game.city_tab = i,
+	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int):
+		game.city_tab = i
+		game.city_tab_changed(str(pages[i][0])),
 		[[game.player.class_name_ua() + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
 
 

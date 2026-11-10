@@ -26,6 +26,7 @@ const CampfireScript := preload("res://scripts/world/campfire.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
 const TrailService := preload("res://scripts/game/trail_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
+const Sounds := preload("res://scripts/data/sounds.gd")
 const TrailScript := preload("res://scripts/world/trail.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
@@ -424,6 +425,7 @@ func _vigil_minute_up() -> void:
 		spawn_enemy(loc["enemies"][0], int(loc["level"]) + 1, true)
 	if vigil_minute >= goal_min and not vigil_done:
 		vigil_done = true
+		Audio.jingle("victory")
 		field_cleared = true
 		_spawn_portal("З варти", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
 	Events.vigil_minute.emit(vigil_minute)
@@ -497,6 +499,8 @@ func _update_duel(_delta: float) -> void:
 	field_cleared = true
 	cheer(2.5)
 	Audio.play("quest", 0.0)
+	Audio.jingle("victory")
+	Audio.play_music("map")
 	_spawn_portal("До Січі", Vector2(0, 0))
 	Events.duel_won.emit()
 
@@ -510,6 +514,7 @@ func _start_floor() -> void:
 	tower_boss_spawned = false
 	field_cleared = false
 	room_cleared = false
+	Audio.play_music("battle")
 	Events.banner.emit("%s\n%s" % [loc["name"], ("Супербос: %s!" % Data.BOSS_NAMES[loc["boss"]]) if loc["boss"] != "" else "Хвиль: %d, далі — %s" % [loc["waves"], loc["mini_title"].to_lower()]], Color(1.0, 0.7, 0.4))
 
 
@@ -664,6 +669,8 @@ func _defense_complete() -> void:
 	defense_over = true
 	field_cleared = true
 	Audio.play("quest", 0.0)
+	Audio.jingle("victory")
+	Audio.play_music("map")
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 3)
@@ -947,7 +954,7 @@ func collect_all() -> void:
 func _on_enemy_killed(e: Node2D) -> void:
 	if not active:
 		return
-	Audio.play("enemy_die", 0.15, -3.0)
+	Audio.play("roar" if e.is_boss else Sounds.death(e.kind), 0.15, 0.0)
 	fx.burst(e.global_position + Vector2(0, -10), Color(0.25, 0.2, 0.25, 0.8), 40 if e.is_boss else 12, 320 if e.is_boss else 180, 9, 0.6, -60)
 	if e.is_boss:
 		fx.ring(e.global_position, Color(1.0, 0.8, 0.3), 40, 600, 8, 0.7)
@@ -975,6 +982,8 @@ func _drop_loot(e: Node2D) -> void:
 	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))
 	if e.is_boss:
 		shake(14.0)
+		Audio.jingle("victory")
+		Audio.play_music("map")  # бій скінчено: замість бойової теми — спокійна
 		Events.banner.emit("%s переможений!" % Data.BOSS_NAMES.get(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
 		for i in 10:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
@@ -1140,6 +1149,7 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	entities.add_child(e)
 	if e.is_boss:
 		Audio.play("roar", 0.0)
+		Audio.play_music("boss")
 		shake(10.0)
 		Events.boss_spawned.emit(e)
 

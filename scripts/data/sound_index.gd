@@ -1,0 +1,48 @@
+extends RefCounted
+## Перелік звукових файлів (пише tools/audio/build_audio.py; руками не правити).
+## Звук <назва> має варіанти res://assets/audio/sfx/<назва>_<1..n>.ogg.
+
+const SFX := {
+	"boom": 3,
+	"clash": 3,
+	"click": 2,
+	"coin": 3,
+	"coins": 2,
+	"crit": 3,
+	"dice": 2,
+	"die_beast": 4,
+	"die_human": 3,
+	"die_slime": 3,
+	"die_spirit": 3,
+	"die_undead": 4,
+	"dodge": 2,
+	"door": 1,
+	"enemy_die": 5,
+	"fire": 3,
+	"heal": 2,
+	"hit": 4,
+	"hurt": 3,
+	"item": 3,
+	"levelup": 1,
+	"lightning": 1,
+	"musket": 2,
+	"page": 2,
+	"portal": 1,
+	"pot": 1,
+	"quest": 1,
+	"roar": 3,
+	"rustle": 2,
+	"sharpen_fail": 1,
+	"sharpen_ok": 1,
+	"shoot": 2,
+	"slash": 3,
+	"spell": 2,
+	"splash": 3,
+	"step": 4,
+	"swing": 6,
+	"unsheathe": 2,
+	"whirl": 1,
+	"zap": 2,
+}
+const MUSIC := ["menu", "map", "city", "inn", "camp", "battle", "boss", "festive", "victory", "defeat"]
+const AMBIENT := ["forest", "wind", "night", "cave", "river", "fire", "crowd"]

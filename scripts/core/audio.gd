@@ -1,37 +1,97 @@
 extends Node
-## Звук (автозавантаження «Audio»). Жодного файлу: усі ефекти та музика синтезуються кодом під час запуску.
-## Музика — «бандура» (синтез щипкової струни Карплуса-Стронга) у гармонічному мінорі.
+## Звук (автозавантаження «Audio»).
+## Звукові ефекти, музика й фонові шуми — записані файли з assets/audio (вільні набори, CC0; див. LICENSE.md там само).
+## Кожен звук має кілька варіантів, які чергуються, щоб удари не звучали однаково.
+## Якщо якогось файлу нема, грає запасний звук, синтезований кодом (так гра звучала раніше).
+##
+## Три гучності: «Music», «SFX», «Ambient» (шини створюються тут). Музика переходить плавно;
+## короткі мотиви перемоги й поразки (jingle) на час звучання притишують музику.
+
+const Sounds := preload("res://scripts/data/sounds.gd")
+const SoundIndex := preload("res://scripts/data/sound_index.gd")
 
 const RATE := 22050
+const SFX_DIR := "res://assets/audio/sfx/"
+const MUSIC_DIR := "res://assets/audio/music/"
+const AMBIENT_DIR := "res://assets/audio/ambient/"
+const BUS_VOLUME := {"Music": -5.0, "SFX": -6.0, "Ambient": -9.0}
+const JINGLES := ["victory", "defeat"]
+## Старі назви музики, які ще вживає гра.
+const MUSIC_ALIAS := {"calm": "map"}
+const FADE := 0.9  # секунд на плавний перехід музики й фону
+const DUCK_DB := -16.0  # наскільки притишити музику під короткий мотив
 
-var sfx := {}  # назва -> AudioStreamWAV
-var music := {}  # "calm" / "battle" -> AudioStreamWAV
+var sfx := {}  # назва -> синтезований AudioStreamWAV (запасний)
+var samples := {}  # назва -> [AudioStream, ...] записані варіанти
+var music := {}  # назва -> AudioStream (файл або синтезований запасний)
 var sound_on := true
 var music_on := true
+var current_music := ""  # що зараз має грати (для тестів і перемикань)
+var current_ambient := ""
 var _players := []
 var _next := 0
-var _music_player: AudioStreamPlayer
+var _music_a: AudioStreamPlayer
+var _music_b: AudioStreamPlayer
+var _music_live: AudioStreamPlayer  # той із двох, що зараз грає
+var _jingle: AudioStreamPlayer
+var _ambient_a: AudioStreamPlayer
+var _ambient_b: AudioStreamPlayer
+var _ambient_live: AudioStreamPlayer
+var _ambient := {}  # назва -> AudioStream
 var _wanted_music := ""
 var _thread: Thread
 var _last_play := {}  # щоб один звук не «тріщав» десятки разів за кадр
+var _last_variant := {}
+var _music_tween: Tween
+var _ambient_tween: Tween
+var _duck_tween: Tween
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	for i in 12:
+	for bus in BUS_VOLUME:
+		if AudioServer.get_bus_index(bus) < 0:
+			AudioServer.add_bus()
+			var i := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(i, bus)
+			AudioServer.set_bus_send(i, "Master")
+		AudioServer.set_bus_volume_db(AudioServer.get_bus_index(bus), BUS_VOLUME[bus])
+	# Обмежувач на виході: у гущі бою десяток звуків складається, і без нього вихід хрипів би
+	if AudioServer.get_bus_effect_count(0) == 0:
+		var lim := AudioEffectHardLimiter.new()
+		lim.ceiling_db = -1.0
+		lim.pre_gain_db = 0.0
+		AudioServer.add_bus_effect(0, lim)
+	for i in 14:
 		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
 		add_child(p)
 		_players.append(p)
-	_music_player = AudioStreamPlayer.new()
-	_music_player.volume_db = -9.0
-	add_child(_music_player)
+	_music_a = _make_player("Music")
+	_music_b = _make_player("Music")
+	_music_live = _music_a
+	_jingle = _make_player("Music")
+	_jingle.finished.connect(_on_jingle_finished)
+	_ambient_a = _make_player("Ambient")
+	_ambient_b = _make_player("Ambient")
+	_ambient_live = _ambient_a
+	_load_samples()
 	_build_sfx()
 	# Клацання для всіх кнопок інтерфейсу
 	get_tree().node_added.connect(func(n):
 		if n is BaseButton:
-			n.pressed.connect(func(): play("click", 0.05, -6.0)))
-	_thread = Thread.new()
-	_thread.start(_build_music_thread)
+			n.pressed.connect(func(): play("click", 0.05, 0.0)))
+	if not _has_music_files():
+		# Файлів музики нема (обрізана збірка) — складаємо мелодії кодом, як раніше
+		_thread = Thread.new()
+		_thread.start(_build_music_thread)
+
+
+func _make_player(bus: String) -> AudioStreamPlayer:
+	var p := AudioStreamPlayer.new()
+	p.bus = bus
+	add_child(p)
+	return p
 
 
 func _exit_tree() -> void:
@@ -39,38 +99,174 @@ func _exit_tree() -> void:
 		_thread.wait_to_finish()
 
 
-# ================= Відтворення =================
+func _load_samples() -> void:
+	for name in SoundIndex.SFX:
+		var list := []
+		for i in range(1, int(SoundIndex.SFX[name]) + 1):
+			var path := "%s%s_%d.ogg" % [SFX_DIR, name, i]
+			if ResourceLoader.exists(path):
+				list.append(load(path))
+		if not list.is_empty():
+			samples[name] = list
+
+
+func _has_music_files() -> bool:
+	return ResourceLoader.exists(MUSIC_DIR + "map.ogg")
+
+
+## Чи є для звуку записані файли (а не лише синтезований запасний).
+func has_sample(name: String) -> bool:
+	return samples.has(name)
+
+
+# ================= Звукові ефекти =================
 
 func play(name: String, pitch_var: float = 0.08, volume_db: float = 0.0) -> void:
-	if not sound_on or not sfx.has(name):
+	if not sound_on:
+		return
+	var stream: AudioStream = null
+	if samples.has(name):
+		var list: Array = samples[name]
+		var i := randi() % list.size()
+		if list.size() > 1 and i == int(_last_variant.get(name, -1)):
+			i = (i + 1) % list.size()  # не той самий варіант двічі поспіль
+		_last_variant[name] = i
+		stream = list[i]
+	elif sfx.has(name):
+		stream = sfx[name]
+	else:
 		return
 	var now := Time.get_ticks_msec()
-	if now - _last_play.get(name, -1000) < 40:
+	if now - int(_last_play.get(name, -1000)) < 40:
 		return
 	_last_play[name] = now
 	var p: AudioStreamPlayer = _players[_next]
 	_next = (_next + 1) % _players.size()
-	p.stream = sfx[name]
+	p.stream = stream
 	p.pitch_scale = 1.0 + randf_range(-pitch_var, pitch_var)
-	p.volume_db = volume_db
+	p.volume_db = volume_db + float(Sounds.VOLUME.get(name, 0.0))
 	p.play()
 
 
-func play_music(name: String) -> void:
-	_wanted_music = name
-	if not music_on:
-		_music_player.stop()
-		return
-	if not music.has(name):
-		return  # ще генерується — увімкнеться, щойно буде готова
-	if _music_player.stream == music[name] and _music_player.playing:
-		return
-	_music_player.stream = music[name]
-	_music_player.play()
+# ================= Музика =================
 
+func _music_stream(name: String) -> AudioStream:
+	if music.has(name):
+		return music[name]
+	var path := MUSIC_DIR + name + ".ogg"
+	if not ResourceLoader.exists(path):
+		return null
+	var st: AudioStream = load(path)
+	if st is AudioStreamOggVorbis:
+		st.loop = not (name in JINGLES)
+	music[name] = st
+	return st
+
+
+## Увімкнути музику за назвою: menu, map, city, inn, camp, battle, boss, festive (стара назва calm = map).
+func play_music(name: String) -> void:
+	name = MUSIC_ALIAS.get(name, name)
+	if _has_music_files() and not ResourceLoader.exists(MUSIC_DIR + name + ".ogg"):
+		name = "map"
+	_wanted_music = name
+	current_music = name
+	if not music_on:
+		_music_a.stop()
+		_music_b.stop()
+		return
+	var st := _music_stream(name)
+	if st == null:
+		st = music.get("battle" if name in ["battle", "boss"] else "calm")  # синтезовані запасні
+		if st == null:
+			return  # ще генерується — увімкнеться, щойно буде готова
+	if _music_live.stream == st and _music_live.playing:
+		return
+	var old := _music_live
+	_music_live = _music_b if old == _music_a else _music_a
+	_music_live.stream = st
+	_music_live.volume_db = -60.0
+	_music_live.play()
+	if _music_tween and _music_tween.is_valid():
+		_music_tween.kill()
+	# Перехід за силою звуку, а не за децибелами: посередині обидві мелодії чутно, і тиші між ними нема
+	var top := db_to_linear(DUCK_DB) if _jingle.playing else 1.0
+	_music_tween = create_tween().set_parallel(true)
+	_music_tween.tween_method(_set_gain.bind(_music_live), 0.0, top, FADE)
+	_music_tween.tween_method(_set_gain.bind(old), db_to_linear(old.volume_db) if old.playing else 0.0, 0.0, FADE)
+	_music_tween.chain().tween_callback(old.stop)
+
+
+## Гучність гравця за силою звуку 0..1 (для плавних переходів).
+func _set_gain(amp: float, p: AudioStreamPlayer) -> void:
+	p.volume_db = linear_to_db(maxf(amp, 0.001))
+
+
+## Короткий мотив поверх музики (victory / defeat): музика притихає й повертається, коли він догра.
+func jingle(name: String) -> void:
+	if not music_on:
+		return
+	var st := _music_stream(name)
+	if st == null:
+		return
+	_jingle.stream = st
+	_jingle.volume_db = 2.0
+	_jingle.play()
+	_duck(true, 0.25)
+
+
+func _on_jingle_finished() -> void:
+	_duck(false, 1.2)
+
+
+## Притишити музику під мотив або повернути її. Міняємо гучність самого гравця, бо мотив грає на тій самій шині.
+func _duck(on: bool, time: float) -> void:
+	if _duck_tween and _duck_tween.is_valid():
+		_duck_tween.kill()
+	_duck_tween = create_tween()
+	_duck_tween.tween_property(_music_live, "volume_db", DUCK_DB if on else 0.0, time)
+
+
+# ================= Фонові шуми =================
+
+## Фон місцевості: forest, wind, night, cave, river, fire, crowd; "" — тиша.
+func play_ambient(name: String) -> void:
+	if name != "" and not _ambient.has(name):
+		var path := AMBIENT_DIR + name + ".ogg"
+		if ResourceLoader.exists(path):
+			var st: AudioStream = load(path)
+			if st is AudioStreamOggVorbis:
+				st.loop = true
+			_ambient[name] = st
+		else:
+			name = ""
+	if name == current_ambient and (name == "" or _ambient_live.playing):
+		return
+	current_ambient = name
+	var old := _ambient_live
+	_ambient_live = _ambient_b if old == _ambient_a else _ambient_a
+	if _ambient_tween and _ambient_tween.is_valid():
+		_ambient_tween.kill()
+	_ambient_tween = create_tween().set_parallel(true)
+	_ambient_tween.tween_method(_set_gain.bind(old), db_to_linear(old.volume_db) if old.playing else 0.0, 0.0, FADE)
+	if name != "" and sound_on:
+		_ambient_live.stream = _ambient[name]
+		_ambient_live.volume_db = -60.0
+		_ambient_live.play()
+		_ambient_tween.tween_method(_set_gain.bind(_ambient_live), 0.0, db_to_linear(float(Sounds.AMBIENT_VOLUME.get(name, 0.0))), FADE)
+	_ambient_tween.chain().tween_callback(old.stop)
+
+
+# ================= Налаштування =================
 
 func set_sound(on: bool) -> void:
 	sound_on = on
+	if on:
+		var want := current_ambient
+		current_ambient = ""
+		play_ambient(want)
+	else:
+		_ambient_a.stop()
+		_ambient_b.stop()
 
 
 func set_music(on: bool) -> void:
@@ -78,10 +274,12 @@ func set_music(on: bool) -> void:
 	if on:
 		play_music(_wanted_music)
 	else:
-		_music_player.stop()
+		_music_a.stop()
+		_music_b.stop()
+		_jingle.stop()
 
 
-# ================= Синтез =================
+# ================= Синтез (запасні звуки й мелодії) =================
 
 static func _to_wav(s: PackedFloat32Array, loop: bool = false) -> AudioStreamWAV:
 	var bytes := PackedByteArray()
@@ -200,6 +398,8 @@ static func _midi(m: float) -> float:
 
 
 func _build_sfx() -> void:
+	if not samples.is_empty() and samples.size() >= SoundIndex.SFX.size():
+		return  # усі звуки є записані — синтезувати запасні нема потреби (це ще й пришвидшує запуск)
 	sfx["swing"] = _to_wav(_noise(0.14, 0.35, 0.35, "swell"))
 	sfx["hit"] = _to_wav(_seq([[_tone(150, 55, 0.11, 0.7), 0.0], [_noise(0.06, 0.35, 0.6), 0.0]]))
 	sfx["crit"] = _to_wav(_seq([[_tone(170, 50, 0.13, 0.75), 0.0], [_noise(0.07, 0.4, 0.7), 0.0], [_tone(1500, 1100, 0.14, 0.25, "tri"), 0.0]]))
@@ -223,7 +423,7 @@ func _build_sfx() -> void:
 	sfx["portal"] = _to_wav(_seq([[_tone(300, 900, 0.5, 0.2, "tri", 0.05), 0.0], [_tone(450, 1350, 0.5, 0.12), 0.05]]))
 
 
-# ================= Музика =================
+# ================= Синтезована музика (коли нема файлів) =================
 
 func _build_music_thread() -> void:
 	var calm := _compose(76.0, false, 1648)

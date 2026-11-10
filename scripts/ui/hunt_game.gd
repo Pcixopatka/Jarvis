@@ -170,16 +170,18 @@ func shoot_at(p: Vector2) -> String:
 			msg_col = UI.BAD
 			boost = 1.5
 			stop_t = 0.0
-			Audio.play("swing", 0.1, -4.0)
+			Audio.play("shoot", 0.1, 3.0)
 		"wound":
 			msg = "Поранений! Добий"
 			msg_col = UI.GOLD
 			boost = 1.0
+			Audio.play("shoot", 0.1, 3.0)
 			Audio.play("hit", 0.1, -2.0)
 		"hit", "bullseye":
 			msg = "В яблучко!" if res == "bullseye" else "Влучив!"
 			msg_col = UI.GOOD
 			fall_t = 0.9
+			Audio.play("shoot", 0.1, 3.0)
 			Audio.play("crit" if res == "bullseye" else "hit", 0.05, -2.0)
 	_update_info()
 	if int(h["arrows"]) <= 0 and fall_t <= 0.0 and not h["wounded"]:

@@ -86,7 +86,8 @@ func press() -> void:
 			cast_t = 0.0
 			phase = "wait"
 			_say("Поплавок на воді...", UI.TEXT)
-			Audio.play("swing", 0.1, -6.0)
+			Audio.play("swing", 0.1, 0.0)
+			Audio.play("splash", 0.2, -8.0)
 		"wait":
 			if cast_t >= 0.6:
 				_fail("Рано! Риба сполохалась")
@@ -96,7 +97,7 @@ func press() -> void:
 			progress = 0.0
 			wave_t = 0.0
 			_say("%s на гачку! Тягни" % Acts.FISH[fish]["name"], UI.GOLD)
-			Audio.play("hit", 0.1, -4.0)
+			Audio.play("splash", 0.1, 0.0)
 	_update_info()
 
 
@@ -113,7 +114,7 @@ func _fail(text: String) -> void:
 	OutdoorService.use_bait(f)
 	phase = "idle"
 	_say(text, UI.BAD)
-	Audio.play("hurt", 0.1, -8.0)
+	Audio.play("splash", 0.25, -6.0)
 	_update_info()
 	if OutdoorService.fishing_over(f):
 		timer = 1.4
@@ -127,6 +128,7 @@ func _catch() -> void:
 	show_t = 1.6
 	phase = "idle"
 	_say("%s! +%d риби" % [Acts.FISH[fish]["name"], int(Acts.FISH[fish]["ryba"])], UI.GOOD)
+	Audio.play("splash", 0.1, 0.0)
 	Audio.play("quest", 0.05, -4.0)
 	_update_info()
 	if OutdoorService.fishing_over(f):
@@ -153,7 +155,7 @@ func step(delta: float) -> void:
 				phase = "bite"
 				timer = float(Acts.FISH[fish]["window"])
 				_say("Клює!", UI.GOLD)
-				Audio.play("coin", 0.2, -2.0)
+				Audio.play("splash", 0.3, -5.0)
 				_update_info()
 		"bite":
 			timer -= delta
