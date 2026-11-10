@@ -482,7 +482,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 				b.position = attack_slots[ai] if ai >= 0 else buff_slots[bi]
 				var no_mana: bool = player.mana < player.skill_cost(id)
 				b.set_cooldown(1.0 if no_mana and player.skill_timers.get(id, 0.0) <= 0.0 else player.skill_ready_ratio(id))
-	var pts: int = player.unspent_points() + ChallengeService.ready_count(world)
+	var pts: int = player.unspent_points() + ChallengeService.ready_count(world, player)
 	if pts > 0:
 		_pulse += maxf(delta, 0.016) * 5.0
 		char_btn.text = "%s +%d" % [player.class_name_ua(), pts]

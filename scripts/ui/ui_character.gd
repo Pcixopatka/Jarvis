@@ -22,7 +22,7 @@ static func build(game) -> Control:
 		["Слава", _glory(game)],
 		["Свята" + _pts(_holiday_ready(game)), _holidays(game)],
 		["Події" + _pts(game.EventsBoard.ready_count(game.world, p)), _events(game)],
-		["Виклики" + _pts(game.ChallengeService.ready_count(game.world)), _challenges(game)],
+		["Виклики" + _pts(game.ChallengeService.ready_count(game.world, p)), _challenges(game)],
 	]
 	return UI.screen("%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), p.level, UI.num(p.gold)], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i, [["Довідник", func(): game.open_wiki(game._build_character)]])

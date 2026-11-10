@@ -1041,6 +1041,12 @@ func _suite_challenges() -> void:
 	check(cm["weekly"].any(func(x): return x["stat"] == "elite" and int(x["progress"]) == 5) and cm["daily"].any(func(x): return x.get("group", "") == "event"), "тижневий із поступом лишився, а до денних додались події")
 	var again = CS.state(wm, hero)
 	check(again["daily"] == cm["daily"] and again["weekly"] == cm["weekly"], "удруге того ж дня виклики не перескладаються")
+	# Перше звернення до викликів — від екрана (лічильник нагород), а не від бою: склад однаково під героя
+	var wf = WorldState.new()
+	wf.story = story_mid.duplicate()
+	wf.challenges = {"day": CS.day_key(T0), "week": CS.week_key(T0), "ach": {}, "daily": [{"stat": "kill", "text": "Здолай 40 ворогів", "goal": 40, "progress": 3, "claimed": false}], "weekly": []}
+	CS.ready_count(wf, hero)
+	check(int(wf.challenges["v"]) == CS.VERSION and wf.challenges["daily"].filter(func(x): return x.get("group", "") == "event").size() == 2 and wf.challenges["weekly"].filter(func(x): return x.get("group", "") == "event").size() == 2, "після оновлення виклики з подіями, навіть якщо першим спитав лічильник на екрані")
 	var wsave = WorldState.new()
 	wsave.from_dict(wm.to_dict())
 	check(CS.state(wsave, hero)["daily"] == cm["daily"], "склад викликів переживає збереження")

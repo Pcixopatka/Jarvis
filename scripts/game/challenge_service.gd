@@ -203,7 +203,7 @@ static func can_claim(ch: Dictionary) -> bool:
 
 ## Забрати нагороду за виклик (weekly — тижневий). Повертає текст або "".
 static func claim(world, player, weekly: bool, index: int) -> String:
-	var list: Array = state(world)["weekly" if weekly else "daily"]
+	var list: Array = state(world, player)["weekly" if weekly else "daily"]
 	if index < 0 or index >= list.size() or not can_claim(list[index]):
 		return ""
 	list[index]["claimed"] = true
@@ -221,9 +221,10 @@ static func claim(world, player, weekly: bool, index: int) -> String:
 	return "Нагорода дня: %d грн і ресурси" % (40 + 20 * lvl)
 
 
-static func ready_count(world) -> int:
+## player — поточний герой: якщо виклики саме складаються, вони мають бути під нього, а не навмання.
+static func ready_count(world, player = null) -> int:
 	var n := 0
-	var c := state(world)
+	var c := state(world, player)
 	for ch in c["daily"] + c["weekly"]:
 		if can_claim(ch):
 			n += 1

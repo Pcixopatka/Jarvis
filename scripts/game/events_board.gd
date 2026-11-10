@@ -135,7 +135,7 @@ static func status(id: String, world, player) -> Dictionary:
 			return _st("Партій сьогодні: %d із %d" % [left, TS.games_max()], left > 0)
 		"challenges":
 			var CS = _svc("challenge_service")
-			var n: int = CS.ready_count(world)
+			var n: int = CS.ready_count(world, player)
 			return _st(("Готових нагород: %d" % n) if n > 0 else "Нагород поки нема: виконуй виклики", n > 0)
 		"hunt", "fish":
 			var OS = _svc("outdoor_service")
