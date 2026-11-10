@@ -106,6 +106,7 @@ var camp_sel_uid := -1
 func _ready() -> void:
 	randomize()
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().quit_on_go_back = false  # системне «Назад» розбирає go_back(): воно не має мовчки закривати гру посеред бою
 	var settings := SaveSystem.load_settings()
 	Audio.set_sound(settings["sound"])
 	Audio.set_music(settings["music"])
@@ -126,7 +127,11 @@ func _ready() -> void:
 	hud.skill_pressed.connect(func(id): if state == State.PLAYING: player.use_skill(id))
 	hud.potion_pressed.connect(func(): if state == State.PLAYING: player.use_potion())
 	hud.mana_pressed.connect(func(): if state == State.PLAYING: player.use_mana_potion())
-	hud.pause_pressed.connect(func(): if state == State.PLAYING: _show_pause())
+	hud.pause_pressed.connect(func():
+		if state == State.PLAYING:
+			_show_pause()
+		elif state == State.MAP:
+			_show_map_menu())
 	hud.character_pressed.connect(open_character)
 	hud.map_pressed.connect(func(): if state == State.PLAYING: _try_leave())
 	hud.map_location_selected.connect(_on_map_select)
@@ -417,6 +422,8 @@ func enter_map() -> void:
 	Audio.play_ambient("")
 	get_tree().paused = true
 	hud.set_mode(true, false)
+	hud.pause_btn.visible = true  # на мапі та сама кнопка відкриває привал: звук, головне меню, вихід
+	map_menu = false
 	hud.show_map(true)
 	var mv = hud.map_view
 	mv.current = map_here
@@ -1864,27 +1871,85 @@ func _input(event: InputEvent) -> void:
 		KEY_M:
 			if playing:
 				_try_leave()
-		KEY_ESCAPE, KEY_P:
+		KEY_P:
 			if playing:
 				_show_pause()
 			elif state == State.PAUSED:
 				_resume_play()
-			elif state == State.CHARACTER:
-				close_character()
-			elif state == State.ACTIVITY:
-				_quit_activity()
+		KEY_ESCAPE:
+			go_back(false)
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST:
 		save_game()
-	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if state == State.PLAYING:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and state == State.PLAYING:
+		_show_pause()
+	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		go_back(true)
+
+
+var map_menu := false  # на мапі відкрито меню привалу
+var allow_quit := true  # тести вимикають, щоб «Вийти з гри» не закрило їх самих
+var quit_requested := false
+
+
+## «Назад»: системна кнопка чи жест на Android (from_system) або Esc на комп'ютері.
+## Крок назад із будь-якого екрана; із застосунку виходить лише з головного меню й лише системне «Назад».
+func go_back(from_system: bool) -> void:
+	if Ads.is_busy() or hud.dialogue_root != null:
+		return  # рекламу й розмову з вибором треба довести до кінця
+	match state:
+		State.PLAYING:
 			_show_pause()
-		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.CHARACTER:
+		State.PAUSED:
+			_resume_play()
+		State.CHARACTER:
 			close_character()
-		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.ACTIVITY:
+		State.ACTIVITY:
 			_quit_activity()
+		State.CITY:
+			leave_city()
+		State.CAMP:
+			leave_camp()
+		State.MAP:
+			if map_menu and hud.overlay.visible:
+				_close_map_menu()
+			else:
+				_show_map_menu()
+		State.MENU:
+			if from_system:
+				_quit_app()
+
+
+## Привал на мапі: звук, головне меню, вихід. Раніше з мапи до головного меню дороги не було.
+func _show_map_menu() -> void:
+	if state != State.MAP or travel_to != "":
+		return  # у дорозі не спиняємось: поїздка триває кілька секунд
+	map_menu = true
+	_open_menu()
+	hud.add_title("Привал")
+	hud.add_button("Далі в дорогу", _close_map_menu)
+	_add_sound_toggles(_show_map_menu)
+	hud.add_button("Головне меню", func():
+		save_game()
+		map_menu = false
+		_show_main_menu())
+	hud.add_button("Вийти з гри", _quit_app)
+
+
+func _close_map_menu() -> void:
+	map_menu = false
+	hud.close_overlay()
+
+
+func _quit_app() -> void:
+	if state != State.MENU:
+		save_game()
+	map_menu = false
+	quit_requested = true
+	if allow_quit:
+		get_tree().quit()
 
 
 # ======================= Хутір =======================

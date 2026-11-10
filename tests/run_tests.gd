@@ -97,6 +97,7 @@ func _run() -> void:
 	_suite_escort()
 	await _suite_escort_game()
 	await _suite_safe_area()
+	await _suite_back_button()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -4574,6 +4575,92 @@ func _suite_safe_area() -> void:
 	HudS.insets_override = []
 	hud.layout()
 	check(hud.insets == zero and hud.btn_attack.position == atk0 and hud.joystick.rest_pos == joy0 and hud.map_view.map_rect == map0, "без вирізу все на своїх місцях")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_back_button() -> void:
+	suite("Кнопка «Назад»")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	var BACK := Node.NOTIFICATION_WM_GO_BACK_REQUEST
+	check(not quit_on_go_back, "система сама гру не закриває: «Назад» розбирає гра")
+	check(game.state == game.State.MENU, "старт: головне меню")
+	game.go_back(false)
+	check(not game.quit_requested, "Esc у головному меню гри не закриває")
+	game.new_game()
+	await _frames(2)
+	check(game.hud.dialogue_root != null, "нова гра: кобзар розповідає пролог")
+	game._notification(BACK)
+	check(game.hud.dialogue_root != null and not game.quit_requested, "під час розмови «Назад» нічого не робить і гри не закриває")
+	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "camp": true}
+	game.hud.dialogue_root._finish()
+	await _frames(3)
+	check(game.state == game.State.PLAYING and game.hud.dialogue_root == null, "після прологу — бій за рідне село")
+	game._notification(BACK)
+	check(game.state == game.State.PAUSED and game.hud.overlay.visible, "у бою «Назад» ставить паузу")
+	game._notification(BACK)
+	check(game.state == game.State.PLAYING and not game.hud.overlay.visible, "на паузі «Назад» повертає в бій")
+	game.open_character()
+	await _frames(2)
+	game._notification(BACK)
+	check(game.state == game.State.PLAYING, "з екрана героя «Назад» вертає туди, звідки прийшов")
+	game.enter_city("sich")
+	await _frames(2)
+	game._notification(BACK)
+	await _frames(2)
+	check(game.state == game.State.MAP, "з міста «Назад» виводить на мапу")
+	game.enter_camp()
+	await _frames(2)
+	game._notification(BACK)
+	await _frames(2)
+	check(game.state == game.State.MAP, "з хутора теж")
+	# Мапа: привал із налаштуваннями
+	game._notification(BACK)
+	await _frames(2)
+	var texts := []
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	check(game.state == game.State.MAP and game.hud.overlay.visible and game.map_menu and "Головне меню" in texts and "Вийти з гри" in texts, "на мапі «Назад» відкриває привал: %s" % str(texts))
+	game._notification(BACK)
+	await _frames(2)
+	check(game.state == game.State.MAP and not game.hud.overlay.visible and not game.map_menu, "ще раз «Назад» — привал закрито")
+	check(game.hud.pause_btn.visible, "на мапі є кнопка меню")
+	game.hud.pause_pressed.emit()
+	await _frames(2)
+	check(game.hud.overlay.visible and game.map_menu, "кнопка меню на мапі теж відкриває привал")
+	game.go_back(false)
+	check(not game.hud.overlay.visible, "Esc закриває привал")
+	game._go_to("wild_field")
+	game._notification(BACK)
+	check(not game.hud.overlay.visible and game.travel_to == "wild_field", "у дорозі привалу нема")
+	var frames := 0
+	while game.travel_to != "" and frames < 1200:
+		if game.hud.dialogue_root != null:
+			game.hud.dialogue_root._finish()
+		await process_frame
+		frames += 1
+	game.enter_map()
+	await _frames(2)
+	# З привалу в головне меню, а звідти системне «Назад» виходить із гри
+	game._show_map_menu()
+	await _frames(2)
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if b.text == "Головне меню":
+			b.pressed.emit()
+	await _frames(2)
+	check(game.state == game.State.MENU and SaveSystem.exists(TEST_SAVE), "привал → головне меню, гру збережено")
+	game._notification(BACK)
+	check(game.quit_requested, "у головному меню системне «Назад» виходить із гри")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
