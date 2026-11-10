@@ -128,6 +128,41 @@ static func icon(id: String, px: int = 28) -> TextureRect:
 	return t
 
 
+## Перший кадр спрайта персонажа чи нечисті (дивиться на нас) — для довідника.
+static func sprite_icon(id: String, px: int = 56) -> TextureRect:
+	var t := TextureRect.new()
+	var sheet: Texture2D = load("res://scripts/world/gfx.gd").sheet(id)
+	if sheet != null:
+		var at := AtlasTexture.new()
+		at.atlas = sheet
+		at.region = Rect2(0, 0, 48, 48)
+		t.texture = at
+	t.custom_minimum_size = Vector2(px, px)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return t
+
+
+## Значок зі старовинної мапи світу (замок, печера, курган...).
+static func map_icon(name: String, px: int = 48) -> TextureRect:
+	var t := TextureRect.new()
+	var order: Array = load("res://scripts/ui/world_map.gd").ICON_ORDER
+	var i := order.find(name)
+	if i >= 0:
+		var at := AtlasTexture.new()
+		at.atlas = load("res://assets/gfx/sprites/map_icons.png")
+		at.region = Rect2(i * 24, 0, 24, 24)
+		t.texture = at
+	t.custom_minimum_size = Vector2(px, px)
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return t
+
+
 ## Значок і підпис поруч: «[м'ясо] 5».
 static func icon_text(id: String, text: String, size: int = 20, col: Color = TEXT) -> HBoxContainer:
 	var h := HBoxContainer.new()

@@ -21,10 +21,11 @@ static func build(game) -> Control:
 		["Літопис", _chronicle(game)],
 		["Слава", _glory(game)],
 		["Свята" + _pts(_holiday_ready(game)), _holidays(game)],
+		["Події" + _pts(game.EventsBoard.ready_count(game.world, p)), _events(game)],
 		["Виклики" + _pts(game.ChallengeService.ready_count(game.world)), _challenges(game)],
 	]
 	return UI.screen("%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), p.level, UI.num(p.gold)], "Назад", game.close_character,
-		pages, game.char_tab, func(i: int): game.char_tab = i)
+		pages, game.char_tab, func(i: int): game.char_tab = i, [["Довідник", func(): game.open_wiki(game._build_character)]])
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -231,6 +232,65 @@ static func _holidays(game) -> Control:
 		table.add_child(UI.label(row["bonus"], 16, UI.MUTED, false))
 	v.add_child(table)
 	return v
+
+
+# ---------------- Події й заняття (як календар свят) ----------------
+
+static func _events(game) -> Control:
+	var EB = game.EventsBoard
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Зараз на мапі", 26, UI.GOLD, false))
+	var now: Array = EB.now_lines(w, p)
+	if now.is_empty():
+		v.add_child(UI.label("Спокійно: подій на мапі зараз нема. Вони трапляються після походів.", 18, UI.MUTED, false))
+	for line in now:
+		var l := UI.label("• " + line, 19, UI.GOOD, false)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(l)
+	var rows: Array = EB.rows(w, p)
+	for k in EB.Wiki.EVENT_KINDS:
+		v.add_child(UI.label(k[1], 24, UI.GOLD, false))
+		var grid := UI.grid(2)
+		grid.add_theme_constant_override("h_separation", 12)
+		grid.add_theme_constant_override("v_separation", 8)
+		for r in rows:
+			if r["kind"] == k[0]:
+				grid.add_child(_event_card(r))
+		v.add_child(grid)
+	v.add_child(UI.button("Докладно про кожну подію — у довіднику", func(): game.open_wiki(game._build_character, "events"), Vector2(620, 60), 20))
+	return v
+
+
+static func _event_card(r: Dictionary) -> Control:
+	var ready: bool = r["ready"]
+	var locked: bool = r["locked"]
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var border := UI.GOOD if ready else (Color(0.35, 0.32, 0.28) if locked else Color(0.55, 0.45, 0.28))
+	panel.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), border, 10, 8))
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	panel.add_child(h)
+	var icon := UI.map_icon(str(r["icon"]), 40)
+	if locked:
+		icon.modulate = Color(1, 1, 1, 0.45)
+	h.add_child(icon)
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 2)
+	h.add_child(col)
+	col.add_child(UI.label(r["name"], 20, UI.GOOD if ready else (UI.MUTED if locked else UI.TEXT), false))
+	var where := UI.label(str(r["where"]), 14, UI.MUTED, false)
+	where.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(where)
+	if str(r["status"]) != "":
+		var st := UI.label(str(r["status"]), 16, UI.GOOD if ready else (UI.MUTED if locked else UI.TEXT), false)
+		st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(st)
+	return panel
 
 
 # ---------------- Слава й рекорди роду ----------------

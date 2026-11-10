@@ -107,6 +107,8 @@ func _run() -> void:
 	await _suite_ring_muster_game()
 	_suite_far_lands()
 	await _suite_far_lands_game()
+	_suite_events_wiki()
+	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -6222,6 +6224,280 @@ func _suite_far_lands_game() -> void:
 	built2.free()
 	low.free()
 	check("небезпечно" in ptext2 and "коли доростеш до 24-го рівня" in ptext2, "новачкові панель каже, що рано")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+# ======================= Список подій і довідник =======================
+
+func _suite_events_wiki() -> void:
+	suite("Список подій і довідник: правила")
+	var Wiki = load("res://scripts/data/wiki_data.gd")
+	var EB = load("res://scripts/game/events_board.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var WM = load("res://scripts/ui/world_map.gd")
+	var Status = load("res://scripts/game/status.gd")
+	var Elites = load("res://scripts/data/elites.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var HS = load("res://scripts/game/holiday_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	CS.now_override = 1762700000
+	# Дані подій
+	var ids := {}
+	var kinds := {}
+	for k in Wiki.EVENT_KINDS:
+		kinds[k[0]] = true
+	var ev_ok := true
+	for e in Wiki.EVENTS:
+		ev_ok = ev_ok and not ids.has(e["id"]) and kinds.has(e["kind"]) and WM.ICON_ORDER.has(e["icon"]) and str(e["name"]) != "" and str(e["text"]) != "" and str(e["reward"]) != "" and str(e["where"]) != ""
+		ids[e["id"]] = true
+	check(ev_ok and Wiki.EVENTS.size() >= 28, "%d подій: різні, з описом, нагородою, місцем і значком" % Wiki.EVENTS.size())
+	for need in ["duel", "duel_free", "muster", "ring", "vigil", "bounty", "escort", "trade", "hunt", "fish", "dice", "rumor", "trail", "garden", "expedition", "tower", "depths", "far", "village_raid", "caravan", "captives", "wounded", "sich_siege", "siege", "night", "treasure", "fair", "theft", "holidays", "challenges"]:
+		check(ids.has(need), "у списку подій є «%s»" % need)
+	# Стан для селянина й бувалого козака
+	var peasant = _new_player()
+	peasant.job = "peasant"
+	var w0 = WorldState.new()
+	var locked_ok := true
+	for id in ["duel", "duel_free", "muster", "ring", "vigil", "tower", "depths", "village_raid", "captives", "sich_siege", "garden", "expedition"]:
+		var st: Dictionary = EB.status(id, w0, peasant)
+		locked_ok = locked_ok and st["locked"] and not st["ready"] and str(st["text"]) != ""
+	check(locked_ok, "селянинові більшість подій ще закрита, і сказано чому")
+	check(not EB.status("dice", w0, peasant)["locked"] and not EB.status("escort", w0, peasant)["locked"] and not EB.status("holidays", w0, peasant)["locked"], "кості, супровід і свята відкриті від початку")
+	check(EB.status("garden", w0, peasant)["text"] == "Збудуй город на хуторі" and EB.status("duel", w0, peasant)["text"].begins_with("Відкриється з 5-го рівня"), "причини — цілими реченнями")
+	var hero = _new_player()
+	hero.change_class("cossack")
+	hero.level = 30
+	hero.recalc()
+	var w = WorldState.new()
+	w.story = {"chapter": 3, "step": 0, "stage": "active", "progress": 0}
+	var all_text := true
+	for e in Wiki.EVENTS:
+		all_text = all_text and str(EB.status(e["id"], w, hero)["text"]) != ""
+	check(all_text, "у кожної події є стан для бувалого козака")
+	check(EB.status("duel", w, hero)["ready"] and EB.status("muster", w, hero)["ready"] and EB.status("ring", w, hero)["ready"] and EB.status("vigil", w, hero)["ready"], "тижневі й варта чекають")
+	check(EB.now_lines(w, hero).is_empty() and not EB.status("caravan", w, hero)["ready"], "спершу на мапі спокійно")
+	var r0: int = EB.ready_count(w, hero)
+	var ES = load("res://scripts/game/event_service.gd")
+	ES.start(w, hero, "caravan")
+	check(EB.status("caravan", w, hero)["ready"] and EB.ready_count(w, hero) == r0 + 1 and EB.now_lines(w, hero).any(func(l): return l.begins_with("Чумацька валка: ")), "з'явилась валка: картка світиться, рядок угорі, лічильник на вкладці")
+	ES.state(w)["night"]["black_forest"] = 2
+	w.defense = {"sieges": {"poltava": 2}, "ruined": {}, "won": 0, "lost": 0, "calm": 0}
+	ES.state(w)["fair"] = {"city": "kyiv", "left": 3}
+	var now: Array = EB.now_lines(w, hero)
+	check(now.any(func(l): return l == "Нічний похід: Чорний ліс") and now.any(func(l): return "Полтава, лишилось походів: 2" in l) and now.any(func(l): return l == "Ярмарок: Київ, ще походів: 3"), "ніч, облога й ярмарок угорі списку: %s" % str(now))
+	var DS = load("res://scripts/game/duel_service.gd")
+	for i in 3:
+		DS.win(w, hero)
+	check(not EB.status("duel", w, hero)["ready"] and EB.status("duel", w, hero)["text"].begins_with("Ти чемпіон"), "після трьох кіл — чемпіон тижня")
+	HS.forced = "rizdvo"
+	check(EB.status("holidays", w, hero)["ready"] and "Різдво" in EB.status("holidays", w, hero)["text"], "у свято воно в списку подій")
+	HS.forced = "none"
+	check(not EB.status("holidays", w, hero)["ready"], "без свята — лише найближче")
+	var rows: Array = EB.rows(w, hero)
+	check(rows.size() == Wiki.EVENTS.size() and rows.all(func(r): return r.has("status") and r.has("ready") and r.has("locked")), "рядки списку мають опис і стан")
+
+	# ---------------- Довідник ----------------
+	var secs: Array = WS.sections()
+	check(secs.size() == Wiki.SECTIONS.size() and secs.all(func(x): return not x["entries"].is_empty()), "%d розділів довідника, у кожному є статті" % secs.size())
+	var total := 0
+	var titles := {}
+	var icons_ok := true
+	for sx in secs:
+		total += sx["entries"].size()
+		for e in sx["entries"]:
+			titles[str(e["title"])] = true
+			var ic: Dictionary = e["icon"]
+			if ic.has("sprite"):
+				icons_ok = icons_ok and GfxS.has(str(ic["sprite"]))
+			if ic.has("map"):
+				icons_ok = icons_ok and WM.ICON_ORDER.has(str(ic["map"]))
+			if ic.has("loot"):
+				icons_ok = icons_ok and GfxS.ICON_ORDER.has(str(ic["loot"]))
+	check(total >= 200, "у довіднику %d статей" % total)
+	check(icons_ok, "у всіх статей справжні значки")
+	# Повнота: усе, що є в грі, є й у довіднику
+	var kinds_used := {}
+	for id in Data.LOCATIONS:
+		for e in Data.LOCATIONS[id]["enemies"]:
+			kinds_used[e] = true
+	var en_ok := true
+	for k in kinds_used:
+		en_ok = en_ok and Wiki.ENEMIES.has(k) and k in Wiki.ENEMY_ORDER
+	check(en_ok and Wiki.ENEMY_ORDER.size() == Wiki.ENEMIES.size(), "уся нечисть мапи описана в довіднику")
+	var bosses := {}
+	for id in Data.LOCATIONS:
+		if Data.LOCATIONS[id].has("boss"):
+			bosses[Data.LOCATIONS[id]["boss"]] = true
+	for b in load("res://scripts/game/tower_service.gd").SUPER_BOSSES + Acts.RING_POOL + load("res://scripts/game/depth_service.gd").BOSSES:
+		bosses[b] = true
+	var b_ok := true
+	for b in bosses:
+		b_ok = b_ok and Wiki.BOSSES.has(b) and b in Wiki.BOSS_ORDER and titles.has(Data.BOSS_NAMES[b])
+	check(b_ok and Wiki.BOSS_ORDER.size() == Wiki.BOSSES.size(), "усі боси описані: %d" % bosses.size())
+	var map_ok := true
+	for id in Data.CITIES:
+		map_ok = map_ok and titles.has(Data.CITIES[id]["name"])
+	for id in Data.LOCATIONS:
+		map_ok = map_ok and titles.has(Data.LOCATIONS[id]["name"])
+	for id in Acts.SPOTS:
+		map_ok = map_ok and titles.has(Acts.SPOTS[id]["name"])
+	check(map_ok, "у розділі «Мапа» кожне місто, місцевість і місце занять")
+	var cls_ok := true
+	for c in Classes.CLASSES:
+		cls_ok = cls_ok and titles.has(Classes.CLASSES[c]["name"])
+	check(cls_ok, "усі десять класів")
+	var hol_ok := true
+	for h in Acts.HOLIDAY_ORDER:
+		hol_ok = hol_ok and (titles.has(Acts.HOLIDAYS[h]["name"]) or titles.has("★ " + str(Acts.HOLIDAYS[h]["name"])))
+	check(hol_ok, "усі двадцять вісім свят")
+	var camp_ok := true
+	for b in Camp.BUILD_ORDER:
+		camp_ok = camp_ok and titles.has(Camp.BUILDINGS[b]["name"])
+	for k in Camp.KLEINOD_ORDER:
+		camp_ok = camp_ok and titles.has(Camp.KLEINODY[k]["name"])
+	for r in Acts.RECIPE_ORDER:
+		camp_ok = camp_ok and titles.has(Acts.RECIPES[r]["name"])
+	check(camp_ok, "будівлі, клейноди й страви хутора")
+	var rules_ok := true
+	for st in Status.INFO:
+		rules_ok = rules_ok and Wiki.STATUS_TEXT.has(st) and titles.has(Status.INFO[st]["name"])
+	for a in Elites.AFFIXES:
+		rules_ok = rules_ok and titles.has(Elites.AFFIXES[a]["m"])
+	for k in Data.AFFIX_POOL:
+		rules_ok = rules_ok and WS.PROP_NAMES.has(k)
+	for sl in Data.SLOTS:
+		rules_ok = rules_ok and WS.SLOT_MAIN.has(Data.SLOT_PRIMARY[sl])
+	check(rules_ok, "стани, властивості еліт і речей — усі з назвами")
+	for e in Wiki.EVENTS:
+		if not titles.has(e["name"]):
+			check(false, "подія «%s» є в довіднику" % e["name"])
+	# Пошук
+	var vii: Array = WS.search("Вій")
+	check(not vii.is_empty() and str(vii[0]["entry"]["title"]).begins_with("Вій") and not vii.any(func(x): return x["entry"]["title"] == "Герць на майдані"), "«Вій» знаходить Вія першим, а не «свій» у чужих статтях")
+	check(WS.search("ярмарок").any(func(x): return x["entry"]["title"] == "Ярмарок") and WS.search("зілля сили").any(func(x): return x["entry"]["title"] == "Зілля сили"), "пошук за кількома словами")
+	check(WS.search("в").is_empty() and WS.search("   ").is_empty() and WS.search("ЗМІЄВА ПЕЧЕРА").any(func(x): return x["entry"]["title"] == "Змієва печера"), "одна літера нічого не шукає, регістр не важить")
+	var md: String = WS.to_markdown()
+	check(md.begins_with("# Довідник") and "## Нечисть" in md and "### Вій, володар підземного мороку" in md and "### Острів Зміїний" in md, "довідник вивантажується в Markdown")
+	CS.now_override = 0
+	peasant.free()
+	hero.free()
+
+
+func _suite_events_wiki_game() -> void:
+	suite("Список подій і довідник: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	var texts := func(node) -> String:
+		var out := ""
+		for n in node.find_children("*", "Label", true, false):
+			out += n.text + "\n"
+		for n in node.find_children("*", "Button", true, false):
+			out += n.text + "\n"
+		return out
+	var overlay_buttons := func() -> Array:
+		return game.hud.overlay_box.find_children("*", "Button", true, false)
+	var press := func(part: String) -> bool:
+		for b in overlay_buttons.call():
+			if part in b.text:
+				b.pressed.emit()
+				return true
+		return false
+	# Головне меню → довідник → назад
+	game._show_main_menu()
+	await _frames(2)
+	check(press.call("Довідник"), "у головному меню є кнопка довідника")
+	await _frames(2)
+	check(game.wiki_open and game.hud.screen_root != null and "Довідник" in texts.call(game.hud.screen_root) and not game.hud.overlay.visible, "довідник відкрито поверх меню")
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(tc.get_tab_count() == game.WikiService.sections().size() + 1 and tc.get_tab_title(tc.get_tab_count() - 1) == "Пошук", "вкладки розділів і пошук")
+	game.go_back(true)
+	await _frames(2)
+	check(not game.wiki_open and game.state == game.State.MENU and game.hud.overlay.visible and game.hud.screen_root == null, "«Назад» повертає в головне меню")
+	# Пошук
+	game.open_wiki(game._show_main_menu)
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	tc.current_tab = tc.get_tab_count() - 1
+	await _frames(1)
+	var edit: LineEdit = game.hud.screen_root.find_children("*", "LineEdit", true, false)[0]
+	edit.text = "Шубін"
+	edit.text_changed.emit("Шубін")
+	await _frames(2)
+	check("Шубін, господар копалень" in texts.call(game.hud.screen_root) and game.wiki_query == "Шубін", "пошук показує знахідки й пам'ятає запит")
+	game.close_wiki()
+	await _frames(2)
+	# Гра: вкладка «Події» на екрані героя
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "camp": true}
+	p.change_class("cossack")
+	p.level = 20
+	p.recalc()
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	game.enter_map()
+	await _frames(2)
+	game.EventService.start(game.world, p, "village_raid")
+	game.open_character()
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var ev_i := -1
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i).begins_with("Події"):
+			ev_i = i
+	check(ev_i >= 0 and "(+" in tc.get_tab_title(ev_i), "на екрані героя є вкладка «Події» з лічильником: %s" % (tc.get_tab_title(ev_i) if ev_i >= 0 else "—"))
+	var et: String = texts.call(tc.get_child(ev_i))
+	check("Зараз на мапі" in et and "Набіг на село: " in et and "Щотижня" in et and "Події світу після походів" in et and "Герць на майдані" in et and "Коло Кожум'яки" in et, "у вкладці — що діє зараз і розклад")
+	var wb: Button = null
+	for b in tc.get_child(ev_i).find_children("*", "Button", true, false):
+		if "довіднику" in b.text:
+			wb = b
+	check(wb != null, "з вкладки можна перейти в довідник")
+	wb.pressed.emit()
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(game.wiki_open and game.wiki_tab == game.WikiService.index_of("events") and tc.current_tab == game.wiki_tab, "довідник відкрився на розділі «Події»")
+	game.go_back(true)
+	await _frames(2)
+	var tc_back: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0] if game.hud.screen_root != null else null
+	check(not game.wiki_open and game.state == game.State.CHARACTER and tc_back != null and tc_back.get_tab_title(0).begins_with("Характеристики"), "«Назад» повертає на екран героя")
+	game.close_character()
+	await _frames(2)
+	# Пауза в бою → довідник → назад
+	game.enter_location("wild_field")
+	await _frames(3)
+	game.go_back(true)
+	await _frames(1)
+	check(game.state == game.State.PAUSED and press.call("Довідник"), "у паузі є довідник")
+	await _frames(2)
+	var bg = game.hud.screen_root
+	check(game.wiki_open and bg is PanelContainer, "у бою під довідником суцільне тло")
+	game.go_back(true)
+	await _frames(2)
+	check(game.state == game.State.PAUSED and game.hud.overlay.visible and not game.wiki_open, "назад до паузи")
+	game._resume_play()
+	game.enter_map()
+	await _frames(2)
+	# Привал на мапі
+	game._show_map_menu()
+	await _frames(1)
+	check(press.call("Довідник"), "на привалі є довідник")
+	await _frames(2)
+	game.go_back(true)
+	await _frames(2)
+	check(game.state == game.State.MAP and game.map_menu and game.hud.overlay.visible and not game.wiki_open, "назад на привал")
+	game._close_map_menu()
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

@@ -28,6 +28,9 @@ const VigilService := preload("res://scripts/game/vigil_service.gd")
 const RingService := preload("res://scripts/game/ring_service.gd")
 const MusterService := preload("res://scripts/game/muster_service.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
+const EventsBoard := preload("res://scripts/game/events_board.gd")
+const WikiService := preload("res://scripts/game/wiki_service.gd")
+const UiWiki := preload("res://scripts/ui/ui_wiki.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const TavernService := preload("res://scripts/game/tavern_service.gd")
@@ -79,6 +82,10 @@ var map_sel := ""
 
 # Стан екранів (читають ui_character.gd та ui_city.gd)
 var char_tab := 0
+var wiki_open := false  # відкрито довідник (поверх меню, паузи, мапи чи екрана героя)
+var wiki_tab := 0
+var wiki_query := ""
+var _wiki_back := Callable()
 var char_sel_uid := -1
 var char_return := State.MAP
 var city_tab := 0
@@ -1901,6 +1908,7 @@ func _show_main_menu() -> void:
 		hud.add_button("Нова гра", _confirm_new_game)
 	else:
 		hud.add_button("Нова гра", new_game)
+	hud.add_button("Довідник", func(): open_wiki(_show_main_menu))
 	_add_sound_toggles(_show_main_menu)
 	hud.add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
 
@@ -2075,6 +2083,7 @@ func _show_pause() -> void:
 		hud.add_button("Здатися (мінус спроба)", _duel_lost)
 	else:
 		hud.add_button(leave_text, enter_map)
+	hud.add_button("Довідник", func(): open_wiki(_show_pause))
 	_add_sound_toggles(_show_pause)
 	hud.add_button("Головне меню", func():
 		save_game()
@@ -2163,6 +2172,9 @@ var quit_requested := false
 func go_back(from_system: bool) -> void:
 	if Ads.is_busy() or hud.dialogue_root != null:
 		return  # рекламу й розмову з вибором треба довести до кінця
+	if wiki_open:
+		close_wiki()
+		return
 	match state:
 		State.PLAYING:
 			_show_pause()
@@ -2186,6 +2198,31 @@ func go_back(from_system: bool) -> void:
 				_quit_app()
 
 
+# ======================= Довідник =======================
+
+## Відкрити довідник. back — що показати, коли його закриють (меню, паузу, привал чи екран героя);
+## section — з якої вкладки почати (id розділу з WikiData.SECTIONS).
+func open_wiki(back: Callable, section: String = "") -> void:
+	_wiki_back = back
+	wiki_open = true
+	if section != "":
+		wiki_tab = WikiService.index_of(section)
+	hud.close_overlay()
+	Audio.play("page", 0.08)
+	hud.set_screen(UiWiki.build(self))
+
+
+func close_wiki() -> void:
+	if not wiki_open:
+		return
+	wiki_open = false
+	hud.clear_screen()
+	var back := _wiki_back
+	_wiki_back = Callable()
+	if back.is_valid():
+		back.call()
+
+
 ## Привал на мапі: звук, головне меню, вихід. Раніше з мапи до головного меню дороги не було.
 func _show_map_menu() -> void:
 	if state != State.MAP or travel_to != "":
@@ -2194,6 +2231,7 @@ func _show_map_menu() -> void:
 	_open_menu()
 	hud.add_title("Привал")
 	hud.add_button("Далі в дорогу", _close_map_menu)
+	hud.add_button("Довідник", func(): open_wiki(_show_map_menu))
 	_add_sound_toggles(_show_map_menu)
 	hud.add_button("Головне меню", func():
 		save_game()
