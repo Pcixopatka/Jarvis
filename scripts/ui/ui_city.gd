@@ -378,7 +378,7 @@ static func _shynok(game, city: String) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(_wrap("Гамір, дим і стукіт кісток об стіл. Тут грають у «дванадцять» і розносять чутки з усього краю.", 17, UI.MUTED))
-	v.add_child(UI.label("Кості: партій сьогодні %d/%d  •  виграно %d, програно %d  •  найдовша серія %d" % [int(s["games"]), Acts.DICE_GAMES, int(s["wins"]), int(s["losses"]), int(s["best_streak"])], 19, UI.GOLD, false))
+	v.add_child(UI.label("Кості: партій сьогодні %d/%d  •  виграно %d, програно %d  •  найдовша серія %d" % [int(s["games"]), TS.games_max(), int(s["wins"]), int(s["losses"]), int(s["best_streak"])], 19, UI.GOLD, false))
 	var g: Dictionary = TS.game(w)
 	if g.is_empty():
 		v.add_child(_wrap("Кидаєш по одній кості й додаєш очки. Понад %d — перебір і програш. Зупинишся — кидає суперник: у кого більше, того й ставка. Рівно %d — виграш у півтора раза." % [Acts.DICE_LIMIT, Acts.DICE_LIMIT], 16, UI.TEXT))

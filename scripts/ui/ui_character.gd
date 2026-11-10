@@ -20,6 +20,7 @@ static func build(game) -> Control:
 		["Загартування" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
 		["Слава", _glory(game)],
+		["Свята" + _pts(_holiday_ready(game)), _holidays(game)],
 		["Виклики" + _pts(game.ChallengeService.ready_count(game.world)), _challenges(game)],
 	]
 	return UI.screen("%s — рівень %d   •   Гривні: %d" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), p.level, p.gold], "Назад", game.close_character,
@@ -159,6 +160,69 @@ static func _chronicle(game) -> Control:
 		var l := UI.label("•  " + r["text"], 20, UI.TEXT, false)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(l)
+	return v
+
+
+# ---------------- Сезонні свята ----------------
+
+## Скільки нагород свята можна забрати просто зараз.
+static func _holiday_ready(game) -> int:
+	var n := 0
+	for i in 3:
+		if game.HolidayService.can_claim(game.world, i):
+			n += 1
+	return n
+
+
+static func _holidays(game) -> Control:
+	var HS = game.HolidayService
+	var Acts = game.Acts
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	var id: String = HS.active()
+	if id != "":
+		var H: Dictionary = Acts.HOLIDAYS[id]
+		v.add_child(UI.label("Сьогодні свято: %s" % H["name"], 28, UI.GOLD, false))
+		var d := UI.label(H["desc"], 17, UI.TEXT, false)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(d)
+		v.add_child(UI.label("Святковий бонус: %s   •   днів лишилось: %d" % [H["bonus_text"], HS.days_left()], 19, UI.GOOD, false))
+		var have: int = HS.tokens(w)
+		v.add_child(UI.label("%s: %d   (падає з нечисті; жетони спільні для всіх твоїх персонажів)" % [H["token"], have], 19, UI.GOLD, false))
+		var tiers: Array = HS.tiers(id)
+		var claimed: Array = HS.progress(w)["claimed"]
+		for i in 3:
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 14)
+			var done: bool = claimed[i]
+			var l := UI.label("%s %d %s — %s" % ["✓" if done else "•", int(tiers[i]), H["tokens"], HS.reward_text(i, p.level)], 18, UI.MUTED if done else UI.TEXT, false)
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(l)
+			if done:
+				row.add_child(UI.button("Забрано", func(): pass, Vector2(220, 56), 18, false))
+			else:
+				row.add_child(UI.button("Забрати" if have >= int(tiers[i]) else "%d/%d" % [have, int(tiers[i])], _do(game, "holiday_claim", i), Vector2(220, 56), 18, HS.can_claim(w, i)))
+			v.add_child(row)
+	else:
+		var nx: Dictionary = HS.upcoming()
+		v.add_child(UI.label("Сьогодні будень", 26, UI.GOLD, false))
+		if not nx.is_empty():
+			v.add_child(UI.label("Найближче свято: %s — за %d дн." % [Acts.HOLIDAYS[nx["id"]]["name"], int(nx["in_days"])], 20, UI.TEXT, false))
+		var hint := UI.label("У свята діє особливий бонус, а з нечисті падають жетони. За жетони дають три нагороди: гривні з ресурсами, рідкісну річ і Алатир-камінь зі славою.", 16, UI.MUTED, false)
+		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(hint)
+	v.add_child(UI.label("Календар свят", 24, UI.GOLD, false))
+	var table := UI.grid(3)
+	table.add_theme_constant_override("h_separation", 30)
+	table.add_theme_constant_override("v_separation", 6)
+	for row in HS.calendar():
+		var col: Color = UI.GOOD if row["active"] else UI.TEXT
+		table.add_child(UI.label(row["name"], 18, col, false))
+		table.add_child(UI.label(row["dates"] + ("  •  триває" if row["active"] else "  •  за %d дн." % int(row["in_days"])), 16, col if row["active"] else UI.MUTED, false))
+		table.add_child(UI.label(row["bonus"], 16, UI.MUTED, false))
+	v.add_child(table)
 	return v
 
 

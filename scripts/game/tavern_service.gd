@@ -14,6 +14,7 @@ const EventService := preload("res://scripts/game/event_service.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
+const HolidayService := preload("res://scripts/game/holiday_service.gd")
 
 
 static func state(world) -> Dictionary:
@@ -46,8 +47,13 @@ static func stake(rival: String, level: int) -> int:
 	return int(Acts.DICE_RIVALS[rival]["stake"]) * (20 + 10 * level)
 
 
+## Скільки партій дозволено сьогодні (на Андрія шинки гуляють довше).
+static func games_max() -> int:
+	return Acts.DICE_GAMES + int(HolidayService.bonus("dice"))
+
+
 static func games_left(world) -> int:
-	return maxi(0, Acts.DICE_GAMES - int(state(world)["games"]))
+	return maxi(0, games_max() - int(state(world)["games"]))
 
 
 static func game(world) -> Dictionary:
@@ -190,7 +196,7 @@ static func result_text(g: Dictionary) -> String:
 # ======================= Чутки =======================
 
 static func rumor_cost(level: int) -> int:
-	return 20 + 10 * level
+	return int((20 + 10 * level) * (1.0 - HolidayService.bonus("rumor")))
 
 
 ## Які чутки зараз мають сенс у цьому місті.

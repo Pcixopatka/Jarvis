@@ -31,6 +31,7 @@ const TavernService := preload("res://scripts/game/tavern_service.gd")
 const GardenService := preload("res://scripts/game/garden_service.gd")
 const ExpeditionService := preload("res://scripts/game/expedition_service.gd")
 const RecordService := preload("res://scripts/game/record_service.gd")
+const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
@@ -94,6 +95,7 @@ var depth_sel := 1  # обрана глибина на мапі
 var tower_sel := 1  # обраний поверх Башти на мапі
 var theft_notice := ""  # крадіжка на хуторі між заходами (показати після завантаження)
 var leave_notice := ""  # підсумок бою, який треба показати після виходу з нього (варта тощо)
+var holiday_id := ""  # сезонне свято, що йде зараз ("" — будень); оновлюється на порозі мапи, міста й хутора
 var camp_sel_uid := -1
 
 
@@ -150,6 +152,7 @@ func _ready() -> void:
 	Events.trail_found.connect(func(kind: String):
 		_record("trail")
 		_record("trail:" + kind))
+	Events.holiday_token.connect(_on_holiday_token)
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
 		if player.can_change_class() and player.is_peasant():
@@ -186,6 +189,8 @@ func _process(delta: float) -> void:
 		top += "\n" + sl
 	if AdRewards.xp2_left(world) > 0.0:
 		top = "×2 досвіду: %s\n%s" % [AdRewards.format_time(AdRewards.xp2_left(world)), top]
+	if holiday_id != "":
+		top = "Свято: %s (%s)\n%s" % [Acts.HOLIDAYS[holiday_id]["name"], Acts.HOLIDAYS[holiday_id]["bonus_text"], top]
 	hud.update(player, world, _combat_info(), delta, top.strip_edges())
 
 
@@ -835,7 +840,9 @@ func _build_map_panel() -> void:
 	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world))
 	if map_sel == "":
 		var left := AdRewards.xp2_left(world)
-		panel.add_child(UI.label(("×2 досвіду ще %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 17, UI.GOLD, false))
+		var gift := UI.label(("×2 досвіду ще %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 17, UI.GOLD, false)
+		gift.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # довгий рядок не має розпирати панель за край екрана
+		panel.add_child(gift)
 		panel.add_child(UI.button("Переглянути рекламу", func(): _watch_xp2(_build_map_panel), Vector2(350, 56), 18, AdRewards.can_xp2(world)))
 	hud.set_map_panel(panel)
 
@@ -1048,13 +1055,45 @@ func _soft_defeat(text: String, city: String) -> void:
 			leave_notice = ""
 
 
-## Новини на порозі (мапа, місто, хутір): супутники, що повернулися з власних походів, і побиті рекорди роду.
+## Сезонне свято: надбавки герою й привітання (раз на свято). Повертає текст привітання або "".
+func _apply_holiday() -> String:
+	holiday_id = HolidayService.active()
+	var mods := HolidayService.player_mods()
+	if mods != player.festive:
+		var part: float = player.hp / maxf(1.0, player.max_hp)
+		player.festive = mods
+		player.recalc()
+		player.hp = minf(player.max_hp, player.max_hp * part)
+	return HolidayService.greeting(world)
+
+
+## Жетони свята з убитого ворога: у спільну скарбничку акаунта, напис над місцем, підказка про нагороду.
+func _on_holiday_token(amount: int, pos: Vector2) -> void:
+	var id := HolidayService.active()
+	if id == "":
+		return
+	var before := HolidayService.tokens(world)
+	var now_n := HolidayService.add_tokens(world, amount)
+	var H: Dictionary = Acts.HOLIDAYS[id]
+	combat.float_text(pos + Vector2(0, -70), "+%d %s" % [amount, H["token"]], Color(1.0, 0.85, 0.5))
+	_record("holiday_token", amount)
+	for tier in HolidayService.tiers(id):
+		if before < int(tier) and now_n >= int(tier):
+			hud.show_banner("%s: зібрано %d жетонів!\nНагорода чекає у вкладці «Свята»" % [H["name"], now_n], UI.GOLD)
+			Audio.play("quest", 0.0)
+
+
+## Новини на порозі (мапа, місто, хутір): свято, супутники, що повернулися з власних походів, і побиті рекорди роду.
 func _expedition_news(healed: bool = false) -> Array:
-	var msgs := ExpeditionService.collect(world, player, -1, healed)
-	if not msgs.is_empty():
+	var msgs := []
+	var hello := _apply_holiday()
+	if hello != "":
+		msgs.append(hello)
+	msgs.append_array(ExpeditionService.collect(world, player, -1, healed))
+	var came: int = msgs.size() - (1 if hello != "" else 0)
+	if came > 0:
 		Audio.play("quest", 0.0)
-		var extra := ChallengeService.record(world, player, "expedition", msgs.size())
-		msgs.append_array(extra)
+		msgs.append_array(ChallengeService.record(world, player, "expedition", came))
 	var recs := RecordService.sync(world, player, slot)
 	if not recs.is_empty():
 		Audio.play("quest", 0.0)
@@ -1533,6 +1572,15 @@ func char_do(action: String, arg) -> void:
 			player.set_panel(arg[0], arg[1], arg[2])
 		"panel_clear":
 			player.set_panel(arg[0], arg[1], "")
+		"holiday_claim":
+			var hm := HolidayService.claim(world, player, arg)
+			if not hm.is_empty():
+				hud.show_banner("\n".join(hm), UI.GOLD)
+				Audio.play("quest", 0.0)
+				_record("holiday_reward")
+				if int(arg) == 2:
+					_record("holiday_top")
+				save_game()
 		"claim":
 			var text := ChallengeService.claim(world, player, arg[0], arg[1])
 			if text != "":

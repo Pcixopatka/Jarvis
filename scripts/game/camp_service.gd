@@ -101,7 +101,8 @@ static func apply_effects(world, player) -> void:
 # ---------- Пасіка ----------
 
 static func pasika_rate(world, hero_level: int) -> float:
-	return Camp.PASIKA_RATE[level(world, "pasika")] * (1.0 + 0.2 * (hero_level - 1))
+	var feast: float = 1.0 + load("res://scripts/game/holiday_service.gd").bonus("harvest")  # на Спаса меду більше
+	return Camp.PASIKA_RATE[level(world, "pasika")] * (1.0 + 0.2 * (hero_level - 1)) * feast
 
 
 static func pasika_ready(world, hero_level: int, now: float = -1.0) -> int:

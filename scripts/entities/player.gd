@@ -48,6 +48,7 @@ var trip_buffs := {}  # зілля, випите перед походом: "str
 var bag_bonus := 0  # від складу на хуторі (не зберігається — рахується з будівель)
 var potion_bonus := 0  # від зілляварні
 var xp_boost := 1.0  # ×2 за рекламу (виставляє Game, поки діє)
+var festive := {}  # надбавки сезонного свята: {"gold", "xp", "hp"} (виставляє Game, у збереження не йде)
 var plague_immune := false
 var plague_resist := 0.0  # частка шкоди від зарази, яку козак не отримує (наслідок вибору; не зберігається)
 var inventory := []  # речі в торбі
@@ -419,6 +420,7 @@ func recalc() -> void:
 		max_hp *= 1.15
 	elif meal == "borshch":
 		max_hp *= 1.1
+	max_hp *= 1.0 + float(festive.get("hp", 0.0))
 	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0, 0.0, 0.75)
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0)
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll"))
@@ -427,8 +429,8 @@ func recalc() -> void:
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0)
-	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0)
-	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0))
+	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0))
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi))
 	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0
 	var ci := class_info()

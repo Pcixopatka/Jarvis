@@ -25,6 +25,7 @@ const SpectatorScript := preload("res://scripts/world/spectator.gd")
 const CampfireScript := preload("res://scripts/world/campfire.gd")
 const VigilService := preload("res://scripts/game/vigil_service.gd")
 const TrailService := preload("res://scripts/game/trail_service.gd")
+const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const TrailScript := preload("res://scripts/world/trail.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
@@ -955,6 +956,10 @@ func _on_enemy_killed(e: Node2D) -> void:
 		hitstop(0.03)
 	if is_vigil():
 		vigil_kills += 1
+	if not is_duel() and HolidayService.active() != "":
+		var tk := HolidayService.token_roll(e.is_boss, e.elite, randf())
+		if tk > 0:
+			Events.holiday_token.emit(tk, e.global_position)
 	if is_field() and not field_cleared:
 		field_kills += 1
 		if field_kills >= field_goal:

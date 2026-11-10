@@ -3,6 +3,7 @@ extends RefCounted
 
 const Acts := preload("res://scripts/data/activities.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
+const HolidayService := preload("res://scripts/game/holiday_service.gd")
 
 
 static func glory(world) -> int:
@@ -29,8 +30,13 @@ static func to_next(world) -> int:
 	return int(Acts.GLORY_RANKS[r + 1][0]) - glory(world)
 
 
-## Додати славу. Повертає повідомлення про нові ранги (з нагородами).
+## Додати славу (на Покрову — вдвічі). Повертає повідомлення про нові ранги (з нагородами).
 static func add(world, player, amount: int) -> Array:
+	return add_plain(world, player, int(round(amount * (1.0 + HolidayService.bonus("glory")))))
+
+
+## Додати славу без святкових надбавок.
+static func add_plain(world, player, amount: int) -> Array:
 	var msgs := []
 	if amount <= 0:
 		return msgs

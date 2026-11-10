@@ -7,6 +7,7 @@ extends RefCounted
 const Camp := preload("res://scripts/data/camp_data.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
+const HolidayService := preload("res://scripts/game/holiday_service.gd")
 
 
 static func level(world) -> int:
@@ -80,9 +81,10 @@ static func plant(world, player, i: int, crop: String) -> bool:
 ## Скільки дасть грядка цьому героєві (хміль росте в ціні з рівнем).
 static func yield_of(crop: String, hero_level: int) -> int:
 	var c: Dictionary = Camp.CROPS[crop]
+	var feast := 1.0 + HolidayService.bonus("harvest")  # на Спаса врожай щедріший
 	if c["gives"] == "gold":
-		return int(int(c["amount"]) * (1.0 + 0.2 * (hero_level - 1)))
-	return int(c["amount"])
+		return int(int(c["amount"]) * (1.0 + 0.2 * (hero_level - 1)) * feast)
+	return int(round(int(c["amount"]) * feast))
 
 
 ## Зібрати достиглу грядку. Повертає текст ("" — нема чого збирати).

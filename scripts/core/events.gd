@@ -33,3 +33,4 @@ signal vigil_minute(minute: int)  # варта: вистояно ще одну �
 signal banner(text: String, color: Color)
 signal hint(id: String, text: String)
 signal trail_found(kind)  # стежку слідів пройдено: cache | den | beast
+signal holiday_token(amount, pos)  # з ворога випали жетони свята
