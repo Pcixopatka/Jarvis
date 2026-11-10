@@ -11,6 +11,10 @@ const DAILY := [
 	{"stat": "dungeon", "goal": [1, 1], "text": "Пройди печеру до боса"},
 	{"stat": "parry", "goal": [3, 6], "text": "Відбий %d ударів парируванням"},
 	{"stat": "charged", "goal": [3, 6], "text": "Влуч зарядженим ударом %d разів"},
+	{"stat": "meat", "goal": [3, 6], "text": "Добудь %d м'яса на полюванні"},
+	{"stat": "ryba", "goal": [2, 5], "text": "Налови %d риби"},
+	{"stat": "dice_win", "goal": [1, 2], "text": "Виграй партій у кості: %d"},
+	{"stat": "cook", "goal": [1, 1], "text": "Звари страву в казані на хуторі"},
 ]
 const WEEKLY := [
 	{"stat": "kill", "goal": [300, 500], "text": "Здолай %d ворогів за тиждень"},
@@ -19,6 +23,11 @@ const WEEKLY := [
 	{"stat": "defense", "goal": [1, 2], "text": "Відстой облоги: %d"},
 	{"stat": "travel", "goal": [4, 6], "text": "Переживи %d пригод у дорозі"},
 	{"stat": "sharpen", "goal": [3, 5], "text": "Вдало нагостри зброю %d разів"},
+	{"stat": "bounty", "goal": [2, 3], "text": "Закрий оголошень розшуку: %d"},
+	{"stat": "duel", "goal": [2, 3], "text": "Виграй кіл у герці на майдані: %d"},
+	{"stat": "trail", "goal": [2, 3], "text": "Пройди стежок слідів до знахідки: %d"},
+	{"stat": "harvest", "goal": [4, 8], "text": "Збери врожаїв на городі: %d"},
+	{"stat": "expedition", "goal": [3, 5], "text": "Зустрінь супутників із власних походів: %d"},
 ]
 const DAILY_COUNT := 3
 const WEEKLY_COUNT := 2

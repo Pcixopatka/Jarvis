@@ -1155,6 +1155,12 @@ func _open_activity(c: Control) -> void:
 	hud.set_screen(c)
 
 
+## Кнопка «Назад» на телефоні чи Esc посеред мініігри — те саме, що «Досить».
+func _quit_activity() -> void:
+	if state == State.ACTIVITY and hud.screen_root != null and hud.screen_root.has_method("_finish"):
+		hud.screen_root._finish()
+
+
 func start_hunt() -> void:
 	var why := _outdoor_block("hunt")
 	if why != "":
@@ -1776,6 +1782,8 @@ func _input(event: InputEvent) -> void:
 				_resume_play()
 			elif state == State.CHARACTER:
 				close_character()
+			elif state == State.ACTIVITY:
+				_quit_activity()
 
 
 func _notification(what: int) -> void:
@@ -1786,6 +1794,8 @@ func _notification(what: int) -> void:
 			_show_pause()
 		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.CHARACTER:
 			close_character()
+		elif what == NOTIFICATION_WM_GO_BACK_REQUEST and state == State.ACTIVITY:
+			_quit_activity()
 
 
 # ======================= Хутір =======================

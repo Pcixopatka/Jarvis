@@ -7,6 +7,7 @@ const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 const Tiles := preload("res://scripts/world/tiles.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
+const Backdrop := preload("res://scripts/ui/backdrop.gd")
 const ANIMALS := preload("res://assets/gfx/sprites/animals.png")
 const ROW := {"hare": 0, "deer": 1, "boar": 2}
 const SCALE := 3.0
@@ -46,6 +47,9 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_seed = randi()
+	var bg = Backdrop.new()
+	bg.painter = _paint_backdrop
+	add_child(bg)
 	info = UI.label("", 24, UI.GOLD, false)
 	info.position = Vector2(20, 14)
 	add_child(info)
@@ -193,30 +197,38 @@ func _finish() -> void:
 		on_done.call(h)
 
 
-func _draw() -> void:
+## Нерухоме тло (малюється один раз): трава, затінені узлісся, дальній ряд дерев.
+func _paint_backdrop(ci: Control) -> void:
 	var ts := float(Tiles.TILE) * 1.5
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _seed
-	# Галявина: трава на весь екран
 	var y := 0.0
-	while y < size.y:
+	while y < ci.size.y:
 		var x := 0.0
-		while x < size.x:
+		while x < ci.size.x:
 			var cell: Array = Tiles.GRASS[0] if rng.randf() > 0.1 else Tiles.GRASS[1 + rng.randi() % 2]
-			draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(cell))
+			ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(cell))
 			if rng.randf() > 0.93:
-				draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.FLOWERS[rng.randi() % Tiles.FLOWERS.size()]))
+				ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.FLOWERS[rng.randi() % Tiles.FLOWERS.size()]))
 			x += ts
 		y += ts
 	var f := field()
-	draw_rect(Rect2(0, 0, size.x, f.position.y - 20.0), Color(0.05, 0.12, 0.05, 0.45))
-	draw_rect(Rect2(0, f.end.y + 30.0, size.x, size.y), Color(0.05, 0.12, 0.05, 0.45))
-	# Дальній ряд дерев
+	ci.draw_rect(Rect2(0, 0, ci.size.x, f.position.y - 20.0), Color(0.05, 0.12, 0.05, 0.45))
+	ci.draw_rect(Rect2(0, f.end.y + 30.0, ci.size.x, ci.size.y), Color(0.05, 0.12, 0.05, 0.45))
 	var tree: Array = Tiles.PROPS["tree"]["r"]
 	var tx := -20.0
-	while tx < size.x:
-		draw_texture_rect_region(Tiles.OV, Rect2(tx + rng.randf_range(-12, 12), f.position.y - 150.0 + rng.randf_range(-14, 14), 128, 128), Tiles.src(tree))
+	while tx < ci.size.x:
+		ci.draw_texture_rect_region(Tiles.OV, Rect2(tx + rng.randf_range(-12, 12), f.position.y - 150.0 + rng.randf_range(-14, 14), 128, 128), Tiles.src(tree))
 		tx += 92.0
+
+
+## Рухоме (щокадру): звір, ближні дерева перед ним, мисливець, стріла, напис.
+func _draw() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _seed + 1
+	var f := field()
+	var tree: Array = Tiles.PROPS["tree"]["r"]
+	var tx := 0.0
 	# Звір
 	if animal != "":
 		var frame := 2 if fall_t > 0.0 else (int(t * 10.0) % 2 if stop_t <= 0.0 else 1)

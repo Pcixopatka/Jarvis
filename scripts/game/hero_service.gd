@@ -134,8 +134,8 @@ static func on_event(world, type: String, arg: String) -> Array:
 		if id == "":
 			continue
 		var s := st(world, id)
-		if type == "kill" and not c.get("downed", false):
-			s["bond"] = int(s["bond"]) + 1
+		if type == "kill" and not c.get("downed", false) and c.get("away", {}).is_empty():
+			s["bond"] = int(s["bond"]) + 1  # дружба росте лише в спільному бою, не у власному поході побратима
 		if s["quest"] != "active":
 			continue
 		var obj: Dictionary = info(id)["quest"]["objective"]

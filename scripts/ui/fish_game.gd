@@ -8,6 +8,7 @@ const UI := preload("res://scripts/ui/ui_kit.gd")
 const Tiles := preload("res://scripts/world/tiles.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
+const Backdrop := preload("res://scripts/ui/backdrop.gd")
 const SHEET := preload("res://assets/gfx/sprites/fishing.png")
 const ICON := {"karas": 0, "shchuka": 1, "som": 2, "float": 3, "float_dip": 4, "splash": 5}
 
@@ -27,6 +28,7 @@ var show_fish := ""
 var show_t := 0.0
 var t := 0.0
 var done := false
+var cast_t := 0.0  # скільки минуло від закиду (перші миті випадковий другий дотик не рахується)
 var info: Label
 var btn: Button
 var _seed := 0
@@ -43,6 +45,9 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_seed = randi()
+	var bg = Backdrop.new()
+	bg.painter = _paint_backdrop
+	add_child(bg)
 	info = UI.label("", 24, UI.GOLD, false)
 	info.position = Vector2(20, 14)
 	add_child(info)
@@ -78,11 +83,13 @@ func press() -> void:
 				return
 			fish = OutdoorService.roll_fish(f)
 			timer = OutdoorService.bite_delay(f)
+			cast_t = 0.0
 			phase = "wait"
 			_say("Поплавок на воді...", UI.TEXT)
 			Audio.play("swing", 0.1, -6.0)
 		"wait":
-			_fail("Рано! Риба сполохалась")
+			if cast_t >= 0.6:
+				_fail("Рано! Риба сполохалась")
 		"bite":
 			phase = "reel"
 			tension = 0.5
@@ -140,6 +147,7 @@ func step(delta: float) -> void:
 		return
 	match phase:
 		"wait":
+			cast_t += delta
 			timer -= delta
 			if timer <= 0.0:
 				phase = "bite"
@@ -178,28 +186,33 @@ func _finish() -> void:
 		on_done.call(f)
 
 
-func _draw() -> void:
+## Нерухоме тло (малюється один раз): вода зверху, прибій, берег унизу.
+func _paint_backdrop(ci: Control) -> void:
 	var ts := float(Tiles.TILE) * 1.5
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _seed
-	var shore := size.y * 0.62
-	# Вода зверху, берег унизу
+	var shore := ci.size.y * 0.62
 	var y := 0.0
-	while y < size.y:
+	while y < ci.size.y:
 		var x := 0.0
-		while x < size.x:
+		while x < ci.size.x:
 			if y < shore - ts:
-				draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.WATER[rng.randi() % Tiles.WATER.size()]))
+				ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.WATER[rng.randi() % Tiles.WATER.size()]))
 				if rng.randf() > 0.95:
-					draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.LILY[rng.randi() % Tiles.LILY.size()]))
+					ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.LILY[rng.randi() % Tiles.LILY.size()]))
 			elif y < shore:
-				draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.WAVES[rng.randi() % Tiles.WAVES.size()]))
+				ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.WAVES[rng.randi() % Tiles.WAVES.size()]))
 			else:
-				draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.GRASS[0]))
+				ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.GRASS[0]))
 				if rng.randf() > 0.92:
-					draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.FLOWERS[rng.randi() % Tiles.FLOWERS.size()]))
+					ci.draw_texture_rect_region(Tiles.OV, Rect2(x, y, ts, ts), Tiles.src(Tiles.FLOWERS[rng.randi() % Tiles.FLOWERS.size()]))
 			x += ts
 		y += ts
+
+
+## Рухоме (щокадру): рибалка, вудка, поплавок, смуга натягу, спіймана риба, напис.
+func _draw() -> void:
+	var shore := size.y * 0.62
 	var hero := Vector2(size.x * 0.38, shore + 60.0)
 	var float_pos := Vector2(size.x * 0.5, size.y * 0.3)
 	# Рибалка на березі

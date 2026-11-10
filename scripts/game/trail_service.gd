@@ -13,7 +13,7 @@ static func chance(player) -> float:
 
 ## Чи є стежка в цьому поході (roll — випадкове 0..1).
 static func should_spawn(player, roll: float) -> bool:
-	return roll < chance(player)
+	return player.level >= Acts.TRAIL_MIN_LEVEL and roll < chance(player)
 
 
 ## Яка знахідка чекає наприкінці (roll — випадкове 0..1).

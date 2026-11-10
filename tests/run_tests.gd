@@ -2217,6 +2217,10 @@ func _suite_outdoor_game() -> void:
 	check(fg.phase == "wait" and fg.fish != "", "закинув — чекаємо клювання")
 	fg.press()
 	fg.release()
+	check(fg.phase == "wait" and int(fg.f["bait"]) == game.Acts.FISH_BAIT, "випадковий другий дотик одразу після закиду не рахується")
+	fg.step(0.7)
+	fg.press()
+	fg.release()
 	check(fg.phase == "idle" and int(fg.f["bait"]) == game.Acts.FISH_BAIT - 1, "смикнув зарано — закид пропав")
 	frames = 0
 	var caught := 0
@@ -2251,6 +2255,31 @@ func _suite_outdoor_game() -> void:
 	await _frames(2)
 	check(OS2.eaten(p) == "" and absf(p.max_hp - hp0) < 1.0, "після походу страва вивітрилась")
 	check(OS2.ready(game.world, "hunt") and OS2.ready(game.world, "fish"), "після походу знову можна полювати й рибалити")
+	# Кнопка «Назад» посеред мініігри — те саме, що «Досить»
+	game.enter_spot("fish")
+	await _frames(3)
+	check(game.state == game.State.ACTIVITY, "знову на тоні")
+	game._quit_activity()
+	await _frames(2)
+	check(game.state == game.State.MAP and OS2.ready(game.world, "fish"), "«Назад» виводить на мапу; вудку не закидав — риба не сполохана")
+	# Герць на майдані походом не є: страва лишається
+	p.resources["meat"] = 2
+	p.resources["herbs"] = 2
+	game.enter_camp()
+	await _frames(2)
+	game.camp_do("cook", "kulish")
+	p.level = 10
+	p.recalc()
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	game.start_duel()
+	await _frames(3)
+	check(game.combat.is_duel() and OS2.eaten(p) == "kulish", "на майдані страва діє")
+	game.combat.duel_over = true
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	await _frames(2)
+	check(OS2.eaten(p) == "kulish", "після герцю страва лишилась на справжній похід")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -2438,6 +2467,8 @@ func _suite_trail() -> void:
 	var TS = load("res://scripts/game/trail_service.gd")
 	var Acts = load("res://scripts/data/activities.gd")
 	var p = _new_player()
+	check(not TS.should_spawn(p, 0.0), "новачкові першого рівня сліди не трапляються")
+	p.level = 5
 	check(TS.should_spawn(p, 0.1) and not TS.should_spawn(p, 0.9), "стежка трапляється не в кожному поході")
 	p.job = "plastun"
 	check(TS.chance(p) > Acts.TRAIL_CHANCE and TS.should_spawn(p, 0.5), "пластун натрапляє на сліди частіше")
