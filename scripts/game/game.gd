@@ -38,6 +38,7 @@ const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const EscortService := preload("res://scripts/game/escort_service.gd")
+const SaveTransfer := preload("res://scripts/core/save_transfer.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
 const Paths := preload("res://scripts/data/paths.gd")
@@ -1716,6 +1717,7 @@ func _show_main_menu() -> void:
 	Audio.play_music("menu")
 	Audio.play_ambient("")
 	hud.set_mode(false, false)
+	hud.show_map(false)  # з привалу на мапі сюди теж приходять: мапа під меню зайва
 	if use_slots:
 		SaveSystem.migrate_single_to_slots()  # перший запуск після оновлення: hero.save → слот 1
 		save_path = SaveSystem.slot_path(slot)
@@ -1774,7 +1776,108 @@ func _show_heroes_menu() -> void:
 				_continue_game(), Vector2(520, 64), 20)
 			var del := UI.button("✕", func(): _confirm_delete_slot(n), Vector2(84, 64), 24)
 			hud.add_row([play, del])
+	hud.add_button("Перенести на інший пристрій", _show_transfer_menu, Vector2(620, 56))
 	hud.add_button("Назад", _show_main_menu)
+
+
+# ---------- Перенесення роду між пристроями (див. SaveTransfer) ----------
+
+var transfer_buffer := ""  # початок коду, коли його вставляють частинами
+
+
+## Файли роду на цьому пристрої: {слот: шлях}.
+func _transfer_paths() -> Dictionary:
+	var out := {}
+	if not use_slots:
+		out[1] = save_path
+		return out
+	for i in range(1, SaveSystem.MAX_SLOTS + 1):
+		out[i] = SaveSystem.slot_path(i)
+	return out
+
+
+func _show_transfer_menu(note: String = "", col: Color = UI.TEXT) -> void:
+	_open_menu()
+	hud.add_title("Перенесення роду", 52)
+	hud.add_title("Усі персонажі, хутір і скриня одним кодом.\nСкопіюй код тут, надішли його собі (пошта, нотатки, месенджер)\nі встав на іншому пристрої в цьому ж меню.", 20, UI.TEXT)
+	if note != "":
+		hud.add_title(note, 22, col)
+	hud.add_button("Скопіювати код роду", transfer_copy, Vector2(620, 64))
+	hud.add_button("Вставити код" if transfer_buffer == "" else "Вставити наступну частину", transfer_paste, Vector2(620, 64))
+	if SaveTransfer.has_backup(_transfer_paths(), account_path):
+		hud.add_button("Повернути рід, який був до перенесення", transfer_restore, Vector2(620, 56))
+	hud.add_button("Назад", func():
+		transfer_buffer = ""
+		if use_slots:
+			_show_heroes_menu()
+		else:
+			_show_main_menu())
+
+
+func transfer_copy() -> void:
+	if player != null and state != State.MENU:
+		save_game()
+	var profile := SaveTransfer.collect(_transfer_paths(), account_path)
+	if profile["heroes"].is_empty():
+		_show_transfer_menu("На цьому пристрої ще немає персонажів.", UI.BAD)
+		return
+	var code := SaveTransfer.pack(profile)
+	SaveTransfer.clipboard_set(code)
+	_show_transfer_menu("Код скопійовано: %d знаків, персонажів: %d.\nВстав його в лист чи нотатку й відкрий на іншому пристрої." % [code.length(), profile["heroes"].size()], UI.GOOD)
+
+
+func transfer_paste() -> void:
+	var clip := SaveTransfer.clipboard_get().strip_edges()
+	if clip.begins_with("KZ") or transfer_buffer == "":
+		transfer_buffer = clip  # новий код із початку
+	elif not transfer_buffer.ends_with(clip):
+		transfer_buffer += clip  # продовження: месенджер розрізав код на кілька повідомлень
+	var r := SaveTransfer.unpack(transfer_buffer)
+	if r["partial"]:
+		_show_transfer_menu("Вставлено %d із %d знаків.\nСкопіюй наступну частину повідомлення й натисни «Вставити наступну частину»." % [r["have"], r["need"]], UI.GOLD)
+		return
+	transfer_buffer = ""
+	if not r["ok"]:
+		_show_transfer_menu(r["error"], UI.BAD)
+		return
+	_transfer_confirm(r["profile"])
+
+
+func _transfer_confirm(profile: Dictionary) -> void:
+	_open_menu()
+	hud.add_title("Замінити рід на цьому пристрої?", 44)
+	hud.add_title("У коді:\n" + "\n".join(SaveTransfer.summary(profile)), 22, UI.GOLD)
+	hud.add_title("Нинішні персонажі, хутір і скриня на цьому пристрої зникнуть.\nЇх можна буде повернути в цьому ж меню до наступного перенесення.", 20, UI.TEXT)
+	hud.add_button("Так, замінити", transfer_apply.bind(profile), Vector2(620, 64))
+	hud.add_button("Ні", _show_transfer_menu, Vector2(620, 64))
+
+
+func transfer_apply(profile: Dictionary) -> void:
+	if not SaveTransfer.apply(profile, _transfer_paths(), account_path):
+		_show_transfer_menu("Не вдалося записати рід. На пристрої все лишилось, як було.", UI.BAD)
+		return
+	_forget_hero()
+	if use_slots:
+		slot = int(profile["heroes"][0]["slot"])
+		save_path = SaveSystem.slot_path(slot)
+	_show_transfer_menu("Рід перенесено. Персонажів: %d." % profile["heroes"].size(), UI.GOOD)
+
+
+func transfer_restore() -> void:
+	if SaveTransfer.restore(_transfer_paths(), account_path):
+		_forget_hero()
+		_show_transfer_menu("Повернуто рід, який був до перенесення.", UI.GOOD)
+	else:
+		_show_transfer_menu("Запасу немає.", UI.BAD)
+
+
+## Після заміни файлів героя в пам'яті більше не існує: інакше перше ж автозбереження затерло б перенесене.
+func _forget_hero() -> void:
+	if player != null:
+		player.queue_free()
+		player = null
+		combat.player = null
+	account = AccountScript.new()
 
 
 func _confirm_delete_slot(n: int) -> void:

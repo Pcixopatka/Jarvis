@@ -98,6 +98,8 @@ func _run() -> void:
 	await _suite_escort_game()
 	await _suite_safe_area()
 	await _suite_back_button()
+	_suite_transfer()
+	await _suite_transfer_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -4661,6 +4663,221 @@ func _suite_back_button() -> void:
 	check(game.state == game.State.MENU and SaveSystem.exists(TEST_SAVE), "привал → головне меню, гру збережено")
 	game._notification(BACK)
 	check(game.quit_requested, "у головному меню системне «Назад» виходить із гри")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Збереження героя для перевірок перенесення: рівень, гривні й клас — щоб було що впізнати.
+func _transfer_hero(level: int, gold: int, job: String = "cossack") -> Dictionary:
+	var p = _new_player()
+	p.change_class(job)
+	p.level = level
+	p.gold = gold
+	p.add_item(Data.gen_item(level, 2))
+	var w = WorldState.new()
+	w.board("sich")
+	w.add_loyalty("sich", 120)
+	var d := {"player": p.to_dict(), "world": w.to_dict(), "meta": {"playtime": 60.0 * level}, "version": SaveSystem.SAVE_VERSION}
+	p.free()
+	return d
+
+
+func _suite_transfer() -> void:
+	suite("Перенесення роду: код")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	var profile := {"v": 1, "account": {"chest": {"gold": 777, "items": [], "stones": {}}, "camp": {"buildings": {"kuznia": 2}}},
+		"heroes": [{"slot": 1, "data": _transfer_hero(26, 1840)}, {"slot": 3, "data": _transfer_hero(9, 55)}], "made": 1762700000}
+	var code: String = ST.pack(profile)
+	var rx := RegEx.create_from_string("^KZ1:\\d+:\\d+:[0-9a-f]{8}:[A-Za-z0-9+/]+$")
+	check(rx.search(code) != null, "код складається лише зі знаків, які не ламають месенджери")
+	check(code.length() < 16000, "двоє героїв і хутір — %d знаків" % code.length())
+	var r: Dictionary = ST.unpack(code)
+	check(r["ok"] and not r["partial"] and r["error"] == "" and r["profile"] == profile, "код розпаковується в той самий рід")
+	check(r["profile"]["heroes"][0]["data"]["player"]["level"] == 26 and typeof(r["profile"]["heroes"][0]["data"]["player"]["level"]) == TYPE_INT, "типи збережено: рівень лишився цілим числом")
+	# Месенджер розбив код рядками й пробілами, а в кінці дописав своє
+	var broken := ""
+	for i in range(0, code.length(), 61):
+		broken += code.substr(i, 61) + ("\n" if i % 2 == 0 else "  ")
+	check(ST.unpack("  " + broken + "\n")["ok"], "пробіли й переноси рядків усередині коду не заважають")
+	check(ST.unpack(code + "\nНадіслано з телефона")["ok"], "дописане після коду відтинається")
+	# Вставлено лише початок
+	var half: String = code.substr(0, code.length() / 2)
+	var part: Dictionary = ST.unpack(half)
+	check(not part["ok"] and part["partial"] and part["error"] == "" and int(part["have"]) > 0 and int(part["have"]) < int(part["need"]), "початок коду: каже, скільки знаків бракує (%d із %d)" % [part["have"], part["need"]])
+	check(ST.unpack(half + code.substr(code.length() / 2))["ok"], "початок і решта разом — цілий код")
+	# Зіпсований і чужий текст
+	var body_at: int = code.rfind(":") + 1
+	var flipped: String = code.substr(0, body_at + 40) + ("A" if code[body_at + 40] != "A" else "B") + code.substr(body_at + 41)
+	var bad: Dictionary = ST.unpack(flipped)
+	check(not bad["ok"] and not bad["partial"] and "пошкоджено" in bad["error"], "змінений знак: код пошкоджено")
+	check("немає коду" in ST.unpack("Привіт, як справи?")["error"] and "немає коду" in ST.unpack("")["error"], "не код: зрозуміле пояснення")
+	check("новішій версії" in ST.unpack("KZ2:" + code.substr(4))["error"], "код новішого формату: просить оновити гру")
+	check("пошкоджено" in ST.unpack("KZ1:abc:12:00000000:AAAA")["error"] and "пошкоджено" in ST.unpack("KZ1:4:999999999:00000000:AAAA")["error"], "зіпсований заголовок")
+	# Перевірка вмісту
+	check(ST.check(profile) == "", "справжній рід проходить перевірку")
+	check(ST.check({}) != "" and ST.check([]) != "" and ST.check(null) != "" and ST.check({"v": 1, "account": {}, "heroes": []}) != "", "порожнє й чуже — не рід")
+	var twice: Dictionary = profile.duplicate(true)
+	twice["heroes"][1]["slot"] = 1
+	var far: Dictionary = profile.duplicate(true)
+	far["heroes"][0]["slot"] = 9
+	var lvl0: Dictionary = profile.duplicate(true)
+	lvl0["heroes"][0]["data"]["player"]["level"] = 0
+	var noworld: Dictionary = profile.duplicate(true)
+	noworld["heroes"][0]["data"].erase("world")
+	check(ST.check(twice) != "" and ST.check(far) != "" and ST.check(lvl0) != "" and ST.check(noworld) != "", "два герої в одному слоті, слот 9, рівень 0, герой без світу — відмова")
+	var newer: Dictionary = profile.duplicate(true)
+	newer["heroes"][0]["data"]["version"] = SaveSystem.SAVE_VERSION + 1
+	var newer2: Dictionary = profile.duplicate(true)
+	newer2["v"] = 2
+	check("новішій версії" in ST.check(newer) and "новішій версії" in ST.check(newer2), "рід із новішої гри: просить оновити")
+	var lines: Array = ST.summary(profile)
+	check(lines.size() == 2 and "Слот 1" in lines[0] and "рівень 26" in lines[0] and "Козак" in lines[0] and "Слот 3" in lines[1], "підсумок для підтвердження: %s" % str(lines))
+	# Файли: пристрій зі своїми героями у слотах 1 і 2 приймає рід зі слотами 1 і 3
+	var paths := {1: "user://t_transfer_1.save", 2: "user://t_transfer_2.save", 3: "user://t_transfer_3.save"}
+	var acc_path := "user://t_transfer_acc.save"
+	for k in paths:
+		SaveSystem.delete(paths[k])
+		for suffix in [ST.BACKUP, ST.NONE]:
+			if FileAccess.file_exists(paths[k] + suffix):
+				DirAccess.remove_absolute(paths[k] + suffix)
+	SaveSystem.delete(acc_path)
+	for suffix in [ST.BACKUP, ST.NONE]:
+		if FileAccess.file_exists(acc_path + suffix):
+			DirAccess.remove_absolute(acc_path + suffix)
+	SaveSystem.save(_transfer_hero(4, 11), paths[1])
+	SaveSystem.save(_transfer_hero(5, 22), paths[2])
+	var f := FileAccess.open(acc_path, FileAccess.WRITE)
+	f.store_var({"chest": {"gold": 5, "items": [], "stones": {}}})
+	f.close()
+	var own: Dictionary = ST.collect(paths, acc_path)
+	check(own["heroes"].size() == 2 and int(own["account"]["chest"]["gold"]) == 5 and ST.check(own) == "", "збирання роду з файлів пристрою")
+	check(not ST.has_backup(paths, acc_path), "до перенесення запасу немає")
+	check(ST.apply(profile, paths, acc_path), "рід записано")
+	var got: Dictionary = ST.collect(paths, acc_path)
+	var slots := []
+	for h in got["heroes"]:
+		slots.append(int(h["slot"]))
+	check(slots == [1, 3] and int(got["heroes"][0]["data"]["player"]["level"]) == 26 and int(got["account"]["chest"]["gold"]) == 777, "на пристрої тепер перенесений рід: слоти %s" % str(slots))
+	check(ST.has_backup(paths, acc_path), "те, що було, лежить у запасі")
+	check(ST.restore(paths, acc_path), "повернення попереднього роду")
+	var back: Dictionary = ST.collect(paths, acc_path)
+	slots = []
+	for h in back["heroes"]:
+		slots.append(int(h["slot"]))
+	check(slots == [1, 2] and int(back["heroes"][0]["data"]["player"]["level"]) == 4 and int(back["heroes"][1]["data"]["player"]["gold"]) == 22 and int(back["account"]["chest"]["gold"]) == 5, "усе як до перенесення: слоти %s" % str(slots))
+	check(not ST.has_backup(paths, acc_path) and not ST.restore(paths, acc_path), "запас одноразовий")
+	check(not ST.apply(profile, {1: paths[1]}, acc_path) and int(ST.collect(paths, acc_path)["heroes"][0]["data"]["player"]["level"]) == 4, "якщо слота для героя нема — нічого не чіпаємо")
+	check(not ST.apply({"v": 1, "account": {}, "heroes": []}, paths, acc_path), "порожній рід не записується")
+	for k in paths:
+		SaveSystem.delete(paths[k])
+	SaveSystem.delete(acc_path)
+
+
+func _suite_transfer_game() -> void:
+	suite("Перенесення роду: у грі")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	for path in [TEST_SAVE, TEST_ACCOUNT]:
+		for suffix in [ST.BACKUP, ST.NONE]:
+			if FileAccess.file_exists(path + suffix):
+				DirAccess.remove_absolute(path + suffix)
+	ST.clipboard_override = ""
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	game.transfer_copy()
+	check(ST.clipboard_override == "", "без персонажів копіювати нічого")
+	# Пристрій А: герой 12 рівня, скриня з гривнями
+	game.new_game()
+	game.hud.close_dialogue()
+	game.world.hints = {"combat": true, "city": true, "map": true, "camp": true}
+	var p = game.player
+	p.change_class("cossack")
+	p.level = 12
+	p.gold = 4321
+	game.account.chest["gold"] = 900
+	game.enter_map()
+	await _frames(2)
+	game.save_game()
+	game._show_main_menu()
+	await _frames(2)
+	game._show_transfer_menu()
+	await _frames(2)
+	game.transfer_copy()
+	await _frames(2)
+	var code: String = ST.clipboard_override
+	check(code.begins_with("KZ1:") and ST.unpack(code)["ok"], "код роду в буфері обміну (%d знаків)" % code.length())
+	var texts := []
+	for l in game.hud.overlay_box.find_children("*", "Label", true, false):
+		texts.append(l.text)
+	check("\n".join(texts).contains("Код скопійовано"), "гра каже, що код скопійовано")
+	# Пристрій Б: там свій герой 3 рівня
+	game.new_game()
+	game.hud.close_dialogue()
+	game.player.level = 3
+	game.player.gold = 7
+	game.account.chest["gold"] = 1
+	game.save_game()
+	game._show_main_menu()
+	await _frames(2)
+	# Чужий текст у буфері
+	ST.clipboard_override = "купити хліба"
+	game.transfer_paste()
+	await _frames(2)
+	check(game.transfer_buffer == "" and int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 3, "чужий текст нічого не міняє")
+	# Месенджер розрізав код на два повідомлення
+	var cut: int = code.length() / 2
+	ST.clipboard_override = code.substr(0, cut)
+	game.transfer_paste()
+	await _frames(2)
+	texts = []
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	check(game.transfer_buffer != "" and "Вставити наступну частину" in texts, "перша частина коду: гра чекає на решту")
+	ST.clipboard_override = code.substr(cut)
+	game.transfer_paste()
+	await _frames(2)
+	texts = []
+	for l in game.hud.overlay_box.find_children("*", "Label", true, false):
+		texts.append(l.text)
+	var yes: Button = null
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if b.text == "Так, замінити":
+			yes = b
+	check(yes != null and "\n".join(texts).contains("рівень 12") and int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 3, "підтвердження показує, хто в коді; до згоди нічого не змінено")
+	yes.pressed.emit()
+	await _frames(2)
+	var d: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	check(int(d["player"]["level"]) == 12 and int(d["player"]["gold"]) == 4321, "рід перенесено: герой 12 рівня з гривнями")
+	check(game.player == null, "старого героя в пам'яті більше нема")
+	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 12, "згортання гри не затирає перенесене")
+	game._continue_game()
+	await _frames(3)
+	check(game.player != null and game.player.level == 12 and game.player.gold == 4321 and int(game.account.chest["gold"]) == 900 and game.state == game.State.CITY, "гра продовжується перенесеним героєм зі спільною скринею")
+	# Передумав: повернути, як було
+	game._show_main_menu()
+	await _frames(2)
+	game._show_transfer_menu()
+	await _frames(2)
+	texts = []
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	check("Повернути рід, який був до перенесення" in texts, "кнопка повернення є")
+	game.transfer_restore()
+	await _frames(2)
+	check(int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 3 and int(SaveSystem.load_data(TEST_SAVE)["player"]["gold"]) == 7 and game.player == null, "повернуто героя 3 рівня")
+	game._continue_game()
+	await _frames(3)
+	check(game.player.level == 3 and int(game.account.chest["gold"]) == 1, "і його скриню")
+	ST.clipboard_override = null
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
