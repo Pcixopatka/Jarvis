@@ -344,6 +344,8 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 		vanish()  # мара розвіюється від першого ж удару
 		return
 	amount *= dmg_taken_mult
+	if is_boss:
+		amount *= 1.0 + float(combat.festive.get("boss", 0.0))  # на Юрія змієборцеві легше
 	if exposed > 0.0:
 		amount *= 1.5  # осліплий Вій беззахисний
 	if statuses.has("curse"):

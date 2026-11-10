@@ -52,6 +52,8 @@ static func _weighted(table: Dictionary, rng: RandomNumberGenerator, boost: Dict
 
 ## Чутка з шинку: наступне заняття буде багатим (великий звір, більше сомів).
 static func rich(world, kind: String) -> bool:
+	if load("res://scripts/game/holiday_service.gd").bonus("outdoor") > 0.0:
+		return true  # на Петра й Павла кожен день щедрий
 	return bool(state(world).get("rich_hunt" if kind == "hunt" else "rich_fish", false))
 
 

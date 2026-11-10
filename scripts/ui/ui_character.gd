@@ -210,16 +210,19 @@ static func _holidays(game) -> Control:
 		v.add_child(UI.label("Сьогодні будень", 26, UI.GOLD, false))
 		if not nx.is_empty():
 			v.add_child(UI.label("Найближче свято: %s — за %d дн." % [Acts.HOLIDAYS[nx["id"]]["name"], int(nx["in_days"])], 20, UI.TEXT, false))
-		var hint := UI.label("У свята діє особливий бонус, а з нечисті падають жетони. За жетони дають три нагороди: гривні з ресурсами, рідкісну річ і Алатир-камінь зі славою.", 16, UI.MUTED, false)
+		var hint := UI.label("У свята діє особливий бонус, а з нечисті падають жетони. За жетони дають три нагороди: гривні з ресурсами, річ і славу, а на великі свята ще й Алатир-камінь.", 16, UI.MUTED, false)
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(hint)
 	v.add_child(UI.label("Календар свят", 24, UI.GOLD, false))
+	var legend := UI.label("★ велике свято: жетонів треба більше, зате найвища нагорода — Алатир-камінь. Малі свята коротші, і нагороди в них скромніші.", 15, UI.MUTED, false)
+	legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(legend)
 	var table := UI.grid(3)
 	table.add_theme_constant_override("h_separation", 30)
 	table.add_theme_constant_override("v_separation", 6)
 	for row in HS.calendar():
 		var col: Color = UI.GOOD if row["active"] else UI.TEXT
-		table.add_child(UI.label(row["name"], 18, col, false))
+		table.add_child(UI.label(("★ " if row["great"] else "") + row["name"], 18, col, false))
 		table.add_child(UI.label(row["dates"] + ("  •  триває" if row["active"] else "  •  за %d дн." % int(row["in_days"])), 16, col if row["active"] else UI.MUTED, false))
 		table.add_child(UI.label(row["bonus"], 16, UI.MUTED, false))
 	v.add_child(table)

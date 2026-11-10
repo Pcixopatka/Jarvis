@@ -1108,6 +1108,7 @@ func city_tab_changed(title: String) -> void:
 ## Сезонне свято: надбавки герою й привітання (раз на свято). Повертає текст привітання або "".
 func _apply_holiday() -> String:
 	holiday_id = HolidayService.active()
+	combat.festive = HolidayService.combat_mods()
 	var mods := HolidayService.player_mods()
 	if mods != player.festive:
 		var part: float = player.hp / maxf(1.0, player.max_hp)
@@ -1583,7 +1584,7 @@ func _sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0) -> vo
 	var before: int = player.find_item(uid).get("up", 0)
 	# Жетон безпечної заточки витрачається лише на ризиковану спробу
 	var safe := before >= Data.SHARPEN_RISK_FROM and AdRewards.use_safe(world)
-	match player.sharpen(uid, cost_mult, chance_bonus, safe):
+	match player.sharpen(uid, cost_mult, chance_bonus + HolidayService.bonus("sharpen"), safe):  # на Кузьми й Дем'яна ковалям щастить
 		"ok":
 			Audio.play("sharpen_ok", 0.03)
 			_record("sharpen")

@@ -196,7 +196,7 @@ static func _forge(game) -> Control:
 	det.add_child(UI.item_card(it))
 	if it["up"] < Data.MAX_UPGRADE:
 		var cost := int(Data.sharpen_cost(it) * CampService.forge_cost_mult(w))
-		var chance := minf(1.0, Data.sharpen_chance(it) + CampService.forge_chance_bonus(w))
+		var chance := minf(1.0, Data.sharpen_chance(it) + CampService.forge_chance_bonus(w) + game.HolidayService.bonus("sharpen"))
 		var risk := ""
 		if it["up"] >= Data.SHARPEN_RISK_FROM:
 			risk = "  без ризику" if AdRewards.safe_tokens(w) > 0 else "  ризик -1"

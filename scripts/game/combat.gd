@@ -65,6 +65,7 @@ var companion_nodes: Array = []
 
 var active := false
 var plague := 0  # рівень зарази поточної місцевості
+var festive := {}  # святкові надбавки до здобичі (ключі — Acts.HOLIDAY_COMBAT_KEYS; виставляє Game)
 var boss_revives := 0
 var defense_loc := {}
 var custom_loc := {}
@@ -1064,20 +1065,20 @@ func _drop_loot(e: Node2D) -> void:
 		for i in 10:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
 		for i in 2:
-			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, Data.roll_rarity(ilvl, 2)))
+			spawn_pickup(pos, "item", 0, _loot(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
-		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy") + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 	elif e.bounty_id > 0:
 		for i in 6:
 			spawn_pickup(pos, "coin", maxi(2, e.xp_value / 5))
-		spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, maxi(1, Data.roll_rarity(ilvl, 1))))
+		spawn_pickup(pos, "item", 0, _loot(ilvl, maxi(1, Data.roll_rarity(ilvl, 1))))
 		_resource_bundle(pos, 3)
-		spawn_pickup(pos, "res", 2 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 2 + player.pk("h_trophy") + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 		Events.bounty_killed.emit(e.bounty_id)
 	elif e.treasure_guard:
 		Events.banner.emit("Сторожа скарбу вбито!\nСкриня твоя", Color(1.0, 0.85, 0.35))
-		spawn_pickup(pos, "item", 0, Data.gen_item(ilvl + 1, maxi(2, Data.roll_rarity(ilvl, 2))))
+		spawn_pickup(pos, "item", 0, _loot(ilvl + 1, maxi(2, Data.roll_rarity(ilvl, 2))))
 		for i in 8:
 			spawn_pickup(pos, "coin", maxi(2, e.xp_value / 4))
 		_resource_bundle(pos, 4)
@@ -1086,24 +1087,36 @@ func _drop_loot(e: Node2D) -> void:
 		Events.banner.emit("%s переможена!" % e.title if e.kind in Elites.FEMININE else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
 		for i in 3:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 3))
-		if randf() < Elites.ITEM_CHANCE:
-			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl, 1)))
+		if randf() < Elites.ITEM_CHANCE * (1.0 + float(festive.get("loot", 0.0))):
+			spawn_pickup(pos, "item", 0, _loot(ilvl, Data.roll_rarity(ilvl, 1)))
 		_resource_bundle(pos, 2)
-		spawn_pickup(pos, "res", 1 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 1 + player.pk("h_trophy") + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 		if randf() < 0.3:
 			spawn_pickup(pos, "potion", 1)
 	else:
 		spawn_pickup(pos, "coin", e.xp_value)
-		if randf() < 0.05 * (1 + player.varenyk_bonus):
+		if randf() < 0.05 * (1 + player.varenyk_bonus) * (1.0 + float(festive.get("varenyk", 0.0))):
 			spawn_pickup(pos, "varenyk", heal_value)
 		if randf() < Camp.RESOURCE_DROP_CHANCE:
-			spawn_pickup(pos, "res", 1, {"res": _roll_resource()})
+			spawn_pickup(pos, "res", _res_amount(1), {"res": _roll_resource()})
 		if randf() < Data.POTION_DROP_CHANCE:
 			spawn_pickup(pos, "potion", 1)
 		if randf() < Data.MANA_POTION_DROP_CHANCE * (2.0 if player.is_volkhv() else 1.0):
 			spawn_pickup(pos, "mana", 1)
-		if randf() < Data.ITEM_DROP_CHANCE:
-			spawn_pickup(pos, "item", 0, Data.gen_item(ilvl, Data.roll_rarity(ilvl)))
+		if randf() < Data.ITEM_DROP_CHANCE * (1.0 + float(festive.get("loot", 0.0))):
+			spawn_pickup(pos, "item", 0, _loot(ilvl, Data.roll_rarity(ilvl)))
+
+
+## Річ із нечисті. На Катерини доля всміхається: частина речей на рідкість краща.
+func _loot(ilvl: int, rarity: int) -> Dictionary:
+	if rarity < Data.RARITY_NAMES.size() - 1 and randf() < float(festive.get("rare", 0.0)):
+		rarity += 1
+	return Data.gen_item(ilvl, rarity)
+
+
+## Скільки ресурсу в одній купці з урахуванням свята (Зелені свята — вдвічі).
+func _res_amount(n: int) -> int:
+	return int(round(n * (1.0 + float(festive.get("res", 0.0)))))
 
 
 ## Ресурс для хутора: здебільшого той, яким багатий ландшафт.
@@ -1115,7 +1128,7 @@ func _roll_resource() -> String:
 
 func _resource_bundle(pos: Vector2, n: int) -> void:
 	for i in n:
-		spawn_pickup(pos, "res", 1 + int(loc.get("level", 1)) / 4, {"res": _roll_resource()})
+		spawn_pickup(pos, "res", _res_amount(1 + int(loc.get("level", 1)) / 4), {"res": _roll_resource()})
 
 
 func add_resource(r: String, amount: int) -> void:

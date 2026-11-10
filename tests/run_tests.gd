@@ -3021,33 +3021,66 @@ func _suite_holidays() -> void:
 	var Account = load("res://scripts/game/account.gd")
 	var CS = load("res://scripts/game/challenge_service.gd")
 	HS.forced = ""
+	var GfxH = load("res://scripts/world/gfx.gd")
+	var known_keys: Array = Acts.HOLIDAY_PLAYER_KEYS + Acts.HOLIDAY_COMBAT_KEYS + ["glory", "harvest", "dice", "rumor", "loyalty", "outdoor", "sharpen", "hire"]
+	var great_n := 0
 	for id in Acts.HOLIDAY_ORDER:
 		var H: Dictionary = Acts.HOLIDAYS[id]
-		check(H["name"] != "" and H["desc"] != "" and H["token"] != "" and not H["bonus"].is_empty() and (H.has("from") or H.has("easter")), "%s: свято описано" % id)
+		check(H["name"] != "" and H["desc"] != "" and H["token"] != "" and H["tokens"] != "" and H["bonus_text"] != "" and not H["bonus"].is_empty() and (H.has("from") or H.has("easter") or H.has("nth")), "%s: свято описано" % id)
+		check(H["rank"] in ["great", "small"] and GfxH.ICON_ORDER.has("tok_" + id), "%s: має ранг і значок жетона" % id)
+		for k in H["bonus"]:
+			check(k in known_keys, "%s: бонус «%s» гра вміє застосувати" % [id, k])
+		great_n += 1 if H["rank"] == "great" else 0
+	check(Acts.HOLIDAYS.size() == Acts.HOLIDAY_ORDER.size() and Acts.HOLIDAY_ORDER.size() == 28 and great_n == 9, "двадцять вісім свят, із них дев'ять великих")
 	# Великдень за східним обрядом
 	var e25: Dictionary = Time.get_date_dict_from_unix_time(HS.easter_day(2025) * 86400)
 	var e26: Dictionary = Time.get_date_dict_from_unix_time(HS.easter_day(2026) * 86400)
 	var e27: Dictionary = Time.get_date_dict_from_unix_time(HS.easter_day(2027) * 86400)
 	check(e25["month"] == 4 and e25["day"] == 20 and e26["month"] == 4 and e26["day"] == 12 and e27["month"] == 5 and e27["day"] == 2, "Великдень: 20 квітня 2025, 12 квітня 2026, 2 травня 2027")
 	# Які дні святкові
-	check(HS.active(_ts(2026, 11, 9)) == "", "9 листопада — будень")
-	check(HS.active(_ts(2026, 12, 25)) == "rizdvo" and HS.active(_ts(2027, 1, 7)) == "rizdvo" and HS.active(_ts(2027, 1, 15)) == "", "Різдво: від 24 грудня до 14 січня")
+	check(HS.active(_ts(2026, 11, 18)) == "" and HS.active(_ts(2026, 11, 11)) == "" and HS.active(_ts(2027, 1, 20)) == "", "18 листопада, 11 листопада й 20 січня — будні")
+	check(HS.active(_ts(2026, 12, 25)) == "rizdvo" and HS.active(_ts(2027, 1, 7)) == "rizdvo" and HS.active(_ts(2026, 12, 23)) == "", "Різдво: від 24 грудня до 7 січня")
+	check(HS.active(_ts(2027, 1, 8)) == "malanka" and HS.active(_ts(2027, 1, 14)) == "malanka" and HS.active(_ts(2027, 1, 15)) == "vodokhreshche" and HS.active(_ts(2027, 1, 22)) == "sobornist", "після Різдва: Маланка, Водохреще, Соборність")
 	check(HS.season(_ts(2026, 12, 25)) == "rizdvo:2026" and HS.season(_ts(2027, 1, 7)) == "rizdvo:2026", "січневі дні належать тому самому Різдву")
 	check(HS.active(_ts(2026, 4, 11)) == "velykden" and HS.active(_ts(2026, 4, 19)) == "velykden" and HS.active(_ts(2026, 4, 20)) == "" and HS.active(_ts(2026, 4, 10)) == "", "Великдень 2026: від суботи до кінця світлого тижня")
 	check(HS.active(_ts(2026, 6, 24)) == "kupala" and HS.active(_ts(2026, 8, 6)) == "spas" and HS.active(_ts(2026, 8, 24)) == "nezalezhnist" and HS.active(_ts(2026, 10, 1)) == "pokrova" and HS.active(_ts(2026, 11, 30)) == "andrii", "Купала, Спас, Незалежність, Покрова, Андрія")
 	check(HS.active(_ts(2026, 8, 20)) == "" and HS.active(_ts(2026, 8, 26)) == "", "між Спасом і Незалежністю та після неї — будні")
-	check(HS.days_left(_ts(2026, 10, 1)) == 14 and HS.days_left(_ts(2026, 10, 14)) == 1 and HS.days_left(_ts(2026, 11, 9)) == 0, "скільки днів свята лишилось")
-	var nx: Dictionary = HS.upcoming(_ts(2026, 11, 9))
-	check(nx["id"] == "andrii" and int(nx["in_days"]) == 21, "найближче свято 9 листопада: Андрія за 21 день")
-	check(HS.upcoming(_ts(2026, 12, 20))["id"] == "rizdvo" and HS.upcoming(_ts(2027, 1, 20))["id"] == "velykden", "черга свят переходить через Новий рік")
-	check(HS.dates_text("rizdvo", 2026) == "24 грудня – 14 січня" and HS.dates_text("velykden", 2026) == "11 квітня – 19 квітня", "дати словами")
-	var cal: Array = HS.calendar(_ts(2026, 11, 9))
-	check(cal.size() == Acts.HOLIDAY_ORDER.size() and cal[0]["id"] == "andrii" and cal[1]["id"] == "rizdvo" and not cal[0]["active"], "календар від найближчого свята")
+	check(HS.days_left(_ts(2026, 10, 1)) == 14 and HS.days_left(_ts(2026, 10, 14)) == 1 and HS.days_left(_ts(2026, 11, 18)) == 0, "скільки днів свята лишилось")
+	var nx: Dictionary = HS.upcoming(_ts(2026, 11, 18))
+	check(nx["id"] == "kateryny" and int(nx["in_days"]) == 6, "найближче свято 18 листопада: Катерини за 6 днів")
+	check(HS.upcoming(_ts(2026, 12, 20))["id"] == "rizdvo" and HS.upcoming(_ts(2026, 12, 30))["id"] == "malanka", "черга свят переходить через Новий рік")
+	check(HS.dates_text("rizdvo", 2026) == "24 грудня – 7 січня" and HS.dates_text("velykden", 2026) == "11 квітня – 19 квітня", "дати словами")
+	var cal: Array = HS.calendar(_ts(2026, 11, 18))
+	check(cal.size() == Acts.HOLIDAY_ORDER.size() and cal[0]["id"] == "kateryny" and cal[1]["id"] == "andrii" and not cal[0]["active"] and cal[1]["great"] and not cal[0]["great"], "календар від найближчого свята")
+	# Свята нових видів: рухомі від Великодня й «третій четвер травня»
+	check(HS.active(_ts(2026, 2, 16)) == "masnytsia" and HS.active(_ts(2026, 2, 22)) == "masnytsia" and HS.active(_ts(2026, 2, 23)) == "", "Масниця 2026: тиждень за сім тижнів до Великодня")
+	check(HS.active(_ts(2026, 4, 5)) == "verbna" and HS.active(_ts(2026, 5, 31)) == "zeleni" and HS.active(_ts(2026, 6, 6)) == "zeleni" and HS.active(_ts(2026, 6, 7)) == "", "Вербна неділя й Зелені свята 2026")
+	check(HS.dates_text("vyshyvanka", 2026) == "21 травня – 23 травня" and HS.dates_text("vyshyvanka", 2027) == "20 травня – 22 травня" and HS.active(_ts(2026, 5, 21)) == "vyshyvanka", "День вишиванки: третій четвер травня")
+	var d3: Dictionary = Time.get_date_dict_from_unix_time(HS.nth_weekday(2026, 5, 3, 4) * 86400)
+	check(int(d3["weekday"]) == 4 and int(d3["day"]) == 21, "третій четвер травня 2026 — двадцять перше")
+	# Коли свята припадають на один день: велике перебиває мале, серед рівних коротше перебиває довше
+	check(HS.active(_ts(2027, 3, 8)) == "masnytsia" and HS.active(_ts(2027, 3, 9)) == "shevchenko" and HS.active(_ts(2027, 3, 11)) == "masnytsia", "Шевченківські дні посеред Масниці 2027")
+	check(HS.active(_ts(2027, 4, 23)) == "yurii" and HS.active(_ts(2027, 4, 25)) == "verbna" and HS.active(_ts(2027, 5, 2)) == "velykden" and HS.active(_ts(2027, 4, 28)) == "yurii", "Весняний Юрій поступається Вербній неділі й Великодню")
+	check(HS.active(_ts(2027, 6, 20)) == "zeleni" and HS.active(_ts(2027, 6, 27)) == "kupala" and HS.active(_ts(2027, 6, 22)) == "zeleni", "пізні Зелені свята 2027 перебивають початок Купала")
+	var shadowed := []
+	for year in [2025, 2027, 2030, 2033, 2036]:
+		var seen := {}
+		var d0: int = _ts(year, 1, 1)
+		for i in 366:
+			seen[HS.active(d0 + i * 86400)] = true
+		for id in Acts.HOLIDAY_ORDER:
+			if not seen.has(id):
+				shadowed.append("%d:%s" % [year, id])
+	check(shadowed.is_empty(), "кожне свято щороку має хоч один свій день: %s" % str(shadowed))
+	var busy := 0
+	for i in 365:
+		busy += 1 if HS.active(_ts(2026, 1, 1) + i * 86400) != "" else 0
+	check(busy > 170 and busy < 220, "святкових днів у 2026 році близько половини: %d" % busy)
 	cal = HS.calendar(_ts(2026, 12, 30))
 	check(cal[0]["id"] == "rizdvo" and cal[0]["active"] and int(cal[0]["in_days"]) == 0, "свято, що триває, стоїть першим")
 	# Бонуси
-	CS.now_override = _ts(2026, 11, 9)
-	check(HS.bonus("gold") == 0.0 and HS.player_mods().is_empty(), "у будень бонусів нема")
+	CS.now_override = _ts(2026, 11, 18)
+	check(HS.bonus("gold") == 0.0 and HS.player_mods().is_empty() and HS.combat_mods().is_empty(), "у будень бонусів нема")
 	var p = _new_player()
 	p.level = 10
 	p.recalc()
@@ -3070,25 +3103,108 @@ func _suite_holidays() -> void:
 	CS.now_override = _ts(2026, 10, 5)
 	GS.add(w, p, 10)
 	check(GS.glory(w) == 20, "Покрова: слава вдвічі")
-	CS.now_override = _ts(2026, 11, 9)
+	CS.now_override = _ts(2026, 11, 18)
 	GS.add(w, p, 10)
 	check(GS.glory(w) == 30, "у будень слава звичайна")
 	var veg0: int = GardenS.yield_of("veg", 10)
 	var honey0: float = CampService.pasika_rate(w, 10)
 	CS.now_override = _ts(2026, 8, 6)
 	check(GardenS.yield_of("veg", 10) == 6 and veg0 == 4 and CampService.pasika_rate(w, 10) == honey0 * 1.5, "Спас: урожай і мед у півтора раза")
-	CS.now_override = _ts(2026, 11, 9)
+	CS.now_override = _ts(2026, 11, 18)
 	var cost0: int = TS.rumor_cost(10)
 	var games0: int = TS.games_max()
 	CS.now_override = _ts(2026, 12, 1)
 	check(TS.games_max() == games0 + 4 and TS.rumor_cost(10) == cost0 / 2, "Андрія: більше партій у кості, чутки за пів ціни")
+	# --- Бонуси нових свят: показники героя ---
+	CS.now_override = _ts(2026, 11, 18)
+	p.festive = HS.player_mods()
+	p.recalc()
+	var dmg0: float = p.damage
+	var armor0: float = p.armor
+	var crit0: float = p.crit_chance
+	var regen0: float = p.regen
+	var mreg0: float = p.mana_regen
+	var sp0: float = p.skill_power
+	var cd0: float = p.skill_cd_mult
+	var cases := [[_ts(2026, 11, 9), "mykhaila"], [_ts(2026, 2, 2), "stritennia"], [_ts(2026, 4, 5), "verbna"], [_ts(2026, 5, 21), "vyshyvanka"],
+		[_ts(2026, 3, 25), "blahovishchennia"], [_ts(2026, 7, 21), "illi"], [_ts(2026, 10, 26), "didy"], [_ts(2026, 3, 9), "shevchenko"], [_ts(2026, 12, 6), "mykolai"]]
+	var got := {}
+	for c in cases:
+		CS.now_override = int(c[0])
+		check(HS.active() == c[1], "%s цього дня" % c[1])
+		p.festive = HS.player_mods()
+		p.recalc()
+		got[c[1]] = {"dmg": p.damage, "armor": p.armor, "crit": p.crit_chance, "regen": p.regen, "mana": p.mana_regen, "skill": p.skill_power, "cd": p.skill_cd_mult, "xp": p.xp_mult, "gold": p.gold_mult, "hp": p.max_hp}
+	check(absf(got["mykhaila"]["dmg"] / dmg0 - 1.15) < 0.001 and got["mykhaila"]["hp"] == hp0, "Михайла: +15% шкоди")
+	check(absf(got["stritennia"]["armor"] - armor0 - 0.1) < 0.001, "Стрітення: +10% захисту")
+	check(absf(got["verbna"]["crit"] - crit0 - 0.1) < 0.001, "Вербна неділя: +10% до критичного удару")
+	check(absf(got["vyshyvanka"]["regen"] - regen0 - hp0 * 0.005) < 0.01, "День вишиванки: рани гояться самі")
+	check(absf(got["blahovishchennia"]["mana"] / mreg0 - 1.3) < 0.001, "Благовіщення: наснага на 30% швидше")
+	check(absf(got["illi"]["skill"] - sp0 - 0.2) < 0.001, "Іллі: +20% сили вмінь")
+	check(absf(got["didy"]["cd"] / cd0 - 0.85) < 0.001, "Осінні Діди: вміння відновлюються на 15% швидше")
+	check(absf(got["shevchenko"]["xp"] - xm0 - 0.3) < 0.001, "Шевченківські дні: +30% досвіду")
+	check(absf(got["mykolai"]["xp"] - xm0 - 0.15) < 0.001 and absf(got["mykolai"]["gold"] - gm0 - 0.15) < 0.001, "Миколая: +15% досвіду й гривень")
+	# Водохреще: зілля дужче. Здвиження: стани коротші
+	CS.now_override = _ts(2026, 11, 18)
+	p.festive = HS.player_mods()
+	p.recalc()
+	p.potions = 5
+	p.hp = 1.0
+	p.potion_timer = 0.0
+	p.use_potion()
+	var healed0: float = p.hp - 1.0
+	p.add_status("burn", 6.0, 0.0)
+	var burn0: float = float(p.statuses["burn"]["t"])
+	p.statuses.clear()
+	CS.now_override = _ts(2026, 1, 16)
+	p.festive = HS.player_mods()
+	p.recalc()
+	p.hp = 1.0
+	p.potion_timer = 0.0
+	p.use_potion()
+	check(HS.active() == "vodokhreshche" and absf((p.hp - 1.0) / healed0 - 1.3) < 0.01, "Водохреще: зілля лікує на 30% більше")
+	CS.now_override = _ts(2026, 9, 15)
+	p.festive = HS.player_mods()
+	p.recalc()
+	p.add_status("burn", 6.0, 0.0)
+	check(HS.active() == "zdvyzhennia" and absf(float(p.statuses["burn"]["t"]) / burn0 - 0.5) < 0.01, "Здвиження: стани тривають удвічі менше")
+	p.statuses.clear()
+	p.hp = p.max_hp
+	# --- Бонуси нових свят: служби ---
+	var ws = WorldState.new()
+	CS.now_override = _ts(2026, 11, 18)
+	ws.add_loyalty("sich", 10)
+	var OutS = load("res://scripts/game/outdoor_service.gd")
+	var rich0: bool = OutS.rich(ws, "hunt")
+	p.gold = 100000
+	ws.add_loyalty("kyiv", 500)
+	var hire0: int = CityService.hire_price(ws, p, "kyiv", "dzhura")
+	CS.now_override = _ts(2026, 1, 22)
+	ws.add_loyalty("sich", 10)
+	ws.add_loyalty("sich", -4)
+	check(ws.loyalty_points("sich") == 10 + 15 - 4, "День Соборності: +50% лояльності (а штраф не росте)")
+	CS.now_override = _ts(2026, 7, 9)
+	check(not rich0 and OutS.rich(ws, "hunt") and OutS.rich(ws, "fish"), "Петра й Павла: полювання й рибалка щедрі")
+	CS.now_override = _ts(2026, 7, 15)
+	check(CityService.hire_price(ws, p, "kyiv", "dzhura") == hire0 / 2, "День Державності: найм за пів ціни")
+	CS.now_override = _ts(2026, 11, 13)
+	check(HS.active() == "kuzma" and absf(HS.bonus("sharpen") - 0.1) < 0.001, "Кузьми й Дем'яна: +10% до заточки")
+	# --- Бонуси нових свят: здобич у бою ---
+	var loot_days := {"malanka": [_ts(2026, 1, 9), "loot", 0.5], "kateryny": [_ts(2026, 11, 25), "rare", 0.25], "zeleni": [_ts(2026, 5, 31), "res", 1.0],
+		"masnytsia": [_ts(2026, 2, 17), "varenyk", 2.0], "obzhynky": [_ts(2026, 9, 2), "trophy", 1.0], "yurii": [_ts(2026, 4, 24), "boss", 0.2]}
+	for id in loot_days:
+		CS.now_override = int(loot_days[id][0])
+		var cm: Dictionary = HS.combat_mods()
+		check(HS.active() == id and cm.size() == 1 and absf(float(cm[loot_days[id][1]]) - float(loot_days[id][2])) < 0.001 and HS.player_mods().is_empty(), "%s: бонус до здобичі «%s»" % [id, loot_days[id][1]])
 	# Жетони й нагороди (спільні для акаунта)
 	check(HS.token_roll(true, false, 0.9) == Acts.TOKEN_BOSS and HS.token_roll(false, true, 0.9) == Acts.TOKEN_ELITE and HS.token_roll(false, false, 0.01) == 1 and HS.token_roll(false, false, 0.5) == 0, "жетони: бос, еліта, інколи звичайна нечисть")
 	check(HS.tiers("nezalezhnist") == Acts.TOKEN_TIERS_SHORT and HS.tiers("rizdvo") == Acts.TOKEN_TIERS and HS.tiers("velykden") == Acts.TOKEN_TIERS, "коротке свято має нижчі пороги")
+	check(HS.tiers("mykhaila") == Acts.TOKEN_TIERS_TINY and HS.tiers("malanka") == Acts.TOKEN_TIERS_SHORT and HS.tiers("andrii") == Acts.TOKEN_TIERS and HS.length("mykhaila") == 3 and HS.length("rizdvo") == 15, "мале свято: пороги нижчі, найкоротші — найнижчі")
+	check("Алатир" in HS.reward_text(2, 10, "pokrova") and "Алатир" not in HS.reward_text(2, 10, "mykhaila") and "рідкісна" in HS.reward_text(2, 10, "mykhaila") and "добротна" in HS.reward_text(1, 10, "mykhaila"), "нагороди малого свята скромніші")
 	var acc = Account.new()
 	var w1 = WorldState.new()
 	acc.attach(w1)
-	CS.now_override = _ts(2026, 11, 9)
+	CS.now_override = _ts(2026, 11, 18)
 	check(HS.add_tokens(w1, 5) == 0 and HS.progress(w1).is_empty() and not HS.can_claim(w1, 0), "у будень жетонів нема")
 	CS.now_override = _ts(2026, 10, 3)
 	check(HS.add_tokens(w1, 14) == 14 and not HS.can_claim(w1, 0), "14 хрестів — замало для першої нагороди")
@@ -3111,6 +3227,25 @@ func _suite_holidays() -> void:
 	var gl0: int = GS.glory(w2)
 	msgs = HS.claim(w2, p2, 2)
 	check(int(p2.stones.get("alatyr", 0)) == stones0 + 1 and GS.glory(w2) == gl0 + Acts.TOKEN_GLORY, "третя нагорода: Алатир-камінь і слава (без святкового подвоєння)")
+	# Мале свято: Михайла. Пороги 6, 15, 30; замість Алатир-каменя — рідкісна річ
+	CS.now_override = _ts(2026, 11, 9)
+	var p3 = _new_player()
+	p3.level = 20
+	HS.add_tokens(w2, 30)
+	check(HS.season() == "mykhaila:2026" and HS.tokens(w2) == 30 and HS.can_claim(w2, 0) and HS.can_claim(w2, 2), "Михайла: 30 пер — усі три нагороди")
+	var g3: int = p3.gold
+	var res3: int = int(p3.resources.get("wood", 0))
+	HS.claim(w2, p3, 0)
+	check(p3.gold == g3 + 150 + 30 * 20 and int(p3.resources.get("wood", 0)) == res3 + 3, "мале свято, перша нагорода: гривні й по три ресурси")
+	var inv3: int = p3.inventory.size()
+	HS.claim(w2, p3, 1)
+	check(p3.inventory.size() == inv3 + 1 and int(p3.inventory[-1]["rarity"]) >= 1 and int(p3.resources.get("trophy", 0)) == 2, "друга: добротна річ і два трофеї")
+	var st3: int = int(p3.stones.get("alatyr", 0))
+	var gl3: int = GS.glory(w2)
+	g3 = p3.gold
+	msgs = HS.claim(w2, p3, 2)
+	check(int(p3.stones.get("alatyr", 0)) == st3 and p3.inventory.size() == inv3 + 2 and int(p3.inventory[-1]["rarity"]) >= 2 and GS.glory(w2) == gl3 + Acts.TOKEN_GLORY_SMALL and p3.gold == g3 + 300 + 60 * 20, "третя: рідкісна річ, слава й гривні, без Алатир-каменя")
+	p3.free()
 	# Наступного року — нове свято з чистого аркуша
 	CS.now_override = _ts(2027, 10, 3)
 	check(HS.season() == "pokrova:2027" and HS.tokens(w2) == 0 and not HS.progress(w2)["claimed"][0], "наступної Покрови жетони збирають заново")
@@ -3118,7 +3253,7 @@ func _suite_holidays() -> void:
 	CS.now_override = _ts(2026, 12, 24)
 	var hello: String = HS.greeting(w1)
 	check("Різдво" in hello and "гривень" in hello and HS.greeting(w1) == "" and HS.greeting(w2) == "", "вітаємо зі святом один раз на весь акаунт")
-	CS.now_override = _ts(2026, 11, 9)
+	CS.now_override = _ts(2026, 11, 18)
 	check(HS.greeting(w1) == "", "у будень привітань нема")
 	# Примусове свято для перевірок
 	HS.forced = "kupala"
@@ -3139,7 +3274,7 @@ func _suite_holidays_game() -> void:
 	var HS = load("res://scripts/game/holiday_service.gd")
 	var CS = load("res://scripts/game/challenge_service.gd")
 	HS.forced = ""
-	CS.now_override = _ts(2026, 11, 9)
+	CS.now_override = _ts(2026, 11, 18)
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
 	game.account_path = TEST_ACCOUNT
@@ -3202,6 +3337,31 @@ func _suite_holidays_game() -> void:
 	game.save_game()
 	var raw = FileAccess.open(TEST_ACCOUNT, FileAccess.READ).get_var()
 	check(raw is Dictionary and raw.get("holidays", {}).has("rizdvo:2026"), "свято записано у файл акаунта")
+	# Свята зі здобиччю: Весняний Юрій (шкода по босах), а далі рідкість речей і ресурси
+	CS.now_override = _ts(2026, 4, 24)
+	game.enter_map()
+	await _frames(2)
+	check(game.holiday_id == "yurii" and absf(float(game.combat.festive.get("boss", 0.0)) - 0.2) < 0.001 and p.festive.is_empty(), "Весняний Юрій: бій знає про святковий бонус")
+	game.enter_location("wild_field")
+	await _frames(3)
+	game.combat.spawn_enemy("upyr", 5, true, p.global_position + Vector2(400, 0))
+	var yb = game.combat._last_enemy()
+	yb.stun = 9.0
+	var yhp: float = yb.hp
+	yb.take_damage(10.0, Vector2.ZERO)
+	var hit_fest: float = yhp - yb.hp
+	game.combat.festive = {}
+	yhp = yb.hp
+	yb.take_damage(10.0, Vector2.ZERO)
+	check(hit_fest > 0.0 and absf(hit_fest / (yhp - yb.hp) - 1.2) < 0.01, "на Юрія бос дістає на 20% більше шкоди")
+	game.combat.festive = {"rare": 1.0, "res": 1.0}
+	check(int(game.combat._loot(5, 0)["rarity"]) == 1 and int(game.combat._loot(5, 3)["rarity"]) == 3 and game.combat._res_amount(3) == 6, "рідкість речі росте (але не вище легендарної), ресурсів удвічі більше")
+	game.combat.festive = {}
+	check(int(game.combat._loot(5, 0)["rarity"]) == 0 and game.combat._res_amount(3) == 3, "у будень здобич звичайна")
+	yb.take_damage(1e9, Vector2.ZERO)
+	await _frames(3)
+	game.enter_map()
+	await _frames(2)
 	# Свято минуло
 	CS.now_override = _ts(2027, 1, 20)
 	game.enter_map()

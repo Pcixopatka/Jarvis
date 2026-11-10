@@ -53,7 +53,10 @@ static func draw(ci: CanvasItem, id: String, facing: Vector2, frame: int, origin
 const OBJECTS := preload("res://assets/gfx/cc0/objects.png")  # Zelda-like objects (CC0): скриня, монети, серце
 ## Порядок значків на листі assets/gfx/sprites/icons.png (його малює tools/pixel/icons.py, там той самий ORDER).
 const ICON_ORDER := ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "mana", "meat", "ryba", "veg",
-	"tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory", "khmil"]
+	"tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii", "glory", "khmil",
+	"tok_malanka", "tok_vodokhreshche", "tok_sobornist", "tok_stritennia", "tok_masnytsia", "tok_shevchenko", "tok_blahovishchennia",
+	"tok_verbna", "tok_yurii", "tok_vyshyvanka", "tok_zeleni", "tok_petra", "tok_derzhavnist", "tok_illi", "tok_obzhynky",
+	"tok_zdvyzhennia", "tok_didy", "tok_mykhaila", "tok_kuzma", "tok_kateryny", "tok_mykolai"]
 static var _loot_tex := {}
 
 

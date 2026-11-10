@@ -234,7 +234,7 @@ static func _smith(game) -> Control:
 		det.add_child(UI.label("Заточено до межі!", 22, UI.GOLD, false))
 	else:
 		var cost := Data.sharpen_cost(it)
-		var chance := Data.sharpen_chance(it)
+		var chance := minf(1.0, Data.sharpen_chance(it) + game.HolidayService.bonus("sharpen"))
 		var risk := ""
 		if it["up"] >= Data.SHARPEN_RISK_FROM:
 			risk = "  без ризику" if safe_n > 0 else "  ризик -1"

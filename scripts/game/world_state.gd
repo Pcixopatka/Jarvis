@@ -55,6 +55,9 @@ func loyalty_level(city: String) -> int:
 
 func add_loyalty(city: String, v: int) -> bool:
 	var before := loyalty_level(city)
+	if v > 0:
+		# у День Соборності міста вдячніші
+		v = int(round(v * (1.0 + load("res://scripts/game/holiday_service.gd").bonus("loyalty"))))
 	loyalty[city] = loyalty_points(city) + v
 	return loyalty_level(city) > before
 
