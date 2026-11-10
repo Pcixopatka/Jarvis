@@ -34,3 +34,4 @@ signal banner(text: String, color: Color)
 signal hint(id: String, text: String)
 signal trail_found(kind)  # стежку слідів пройдено: cache | den | beast
 signal holiday_token(amount, pos)  # з ворога випали жетони свята
+signal vii_blinded  # повікарів здолано: Вій осліп

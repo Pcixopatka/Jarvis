@@ -93,6 +93,7 @@ func _run() -> void:
 	await _suite_audio_game()
 	_suite_mana_potion()
 	await _suite_mana_potion_game()
+	await _suite_new_bosses()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -3493,6 +3494,212 @@ func _suite_mana_potion_game() -> void:
 	game.combat.spawn_pickup(p.global_position, "res", 2, {"res": "meat"})
 	await _frames(30)
 	check(int(p.resources.get("meat", 0)) >= 2, "м'ясо підбирається як ресурс")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Прибрати з арени всю нечисть (щоб перевіряти боса наодинці).
+func _clear_enemies(game) -> void:
+	for e in game.combat.get_tree().get_nodes_in_group("enemies"):
+		e.remove_from_group("enemies")
+		e.queue_free()
+
+
+func _suite_new_bosses() -> void:
+	suite("Нові боси: Відьма й Вій")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var Stones = load("res://scripts/game/stone_service.gd")
+	for id in ["lysa_hora", "vii_church"]:
+		var L: Dictionary = Data.LOCATIONS[id]
+		check(L["type"] == "dungeon" and Data.BOSS_NAMES.has(L["boss"]) and Data.ENEMY_NAMES.has(L["boss"]) and GfxS.has(L["boss"]), "%s: печера з босом %s, спрайт є" % [id, L["boss"]])
+		var clash := false
+		for other in Data.LOCATIONS:
+			if other != id and Data.LOCATIONS[other]["pos"].distance_to(L["pos"]) < 0.6:
+				clash = true
+		for c in Data.CITIES:
+			if Data.CITIES[c]["pos"].distance_to(L["pos"]) < 0.6:
+				clash = true
+		check(not clash, "%s: не налазить на інші місця мапи" % id)
+		check(Stones.FIRST_KILL.has(L["boss"]), "%s: перша перемога дає камінь долі" % L["boss"])
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "vii_gaze"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 12
+	p.stats["str"] = 60
+	p.stats["vit"] = 200
+	p.recalc()
+	p.hp = p.max_hp
+	# ---------------- Відьма ----------------
+	game.enter_location("lysa_hora")
+	await _frames(3)
+	check(c.is_dungeon() and c.loc.get("night", false) and root.get_node("Audio").current_ambient == "night", "Лиса гора: нічна печера-галявина із цвіркунами")
+	_clear_enemies(game)
+	await _frames(1)
+	c.spawn_enemy("vidma", 9, true, p.global_position + Vector2(0, -300))
+	var w = c._last_enemy()
+	check(w.is_boss and w.kind == "vidma" and w.ranged and w.title != "Мара", "Відьма — бос-стрілець")
+	# 1) зілля: три кола, після них калюжі, що знесилюють
+	w.ability_step = 0
+	w._boss_ability(p)
+	var circles := 0
+	for t in c.effects.get_children():
+		if t.has_method("contains") and t.shape == "circle":
+			circles += 1
+	check(circles == 3, "зілля: три кола під ногами")
+	p.invuln = 3.0
+	await _frames(70)
+	var puddles := 0
+	for t in c.effects.get_children():
+		if "status" in t and t.status == "weak":
+			puddles += 1
+	check(puddles == 3, "після ударів лишаються калюжі слабкості: %d" % puddles)
+	# 2) мари
+	var spot0: Vector2 = w.global_position
+	w.ability_step = 1
+	w._boss_ability(p)
+	await _frames(2)
+	var maras := []
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.illusion:
+			maras.append(e)
+	check(maras.size() == 2 and w.global_position != spot0 and maras[0].title == "Мара" and maras[0].modulate.a < 1.0 and not maras[0].is_boss, "мари: дві примари, сама відьма перескочила")
+	var kills0: int = int(game.world.stats.get("kill", 0))
+	var gold0: int = p.gold
+	maras[0].take_damage(1.0, Vector2.ZERO)
+	await _frames(3)
+	check(not is_instance_valid(maras[0]) or maras[0].dead, "мара розвіюється від першого удару")
+	check(int(game.world.stats.get("kill", 0)) == kills0 and p.gold == gold0, "за мару ні вбивства, ні здобичі")
+	maras[1].life_left = 0.05
+	await _frames(6)
+	check(not is_instance_valid(maras[1]) or maras[1].dead, "мара сама зникає з часом")
+	# 3) віяло проклять
+	w.ability_step = 2
+	w._boss_ability(p)
+	await _frames(2)
+	var shots := 0
+	for n in c.effects.get_children():
+		if n.get_script() == c.ProjectileScript:
+			shots += 1
+	check(shots >= 5, "віяло проклять: п'ять згустків (%d)" % shots)
+	# 4) лють на половині здоров'я
+	w.take_damage(w.max_hp * 0.55, Vector2.ZERO)
+	await _frames(2)
+	check(w.phase2 and c.alive_enemy_count() >= 4, "на половині здоров'я відьма скликає шабаш")
+	var stones0: int = int(p.stones.get("zabuttia", 0))
+	w.take_damage(1.0e9, Vector2.ZERO)
+	await _frames(5)
+	check(int(game.world.stats.get("boss:vidma", 0)) == 1 and game.account.challenges["ach"].has("vidma") and int(p.stones.get("zabuttia", 0)) == stones0 + 1, "Відьму здолано: досягнення й Камінь забуття")
+	game.enter_map()
+	await _frames(2)
+	# ---------------- Вій ----------------
+	game.enter_location("vii_church")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(1)
+	c.spawn_enemy("vii", 15, true, p.global_position + Vector2(0, -260))
+	var v = c._last_enemy()
+	v._rock_timer = 999.0
+	check(v.is_boss and v.kind == "vii" and not v.ranged, "Вій — повільний бос ближнього бою")
+	v.ability_timer = 999.0  # прийоми в цій перевірці запускаємо самі
+	# Скам'яніння героя
+	check(p.petrify(1.0) and p.petrified > 0.0, "герой кам'яніє")
+	var pos0: Vector2 = p.global_position
+	game.hud.joystick.vector = Vector2.RIGHT
+	var skills0: float = p.attack_timer
+	p.attack()
+	p.dodge()
+	await _frames(10)
+	check(p.global_position.distance_to(pos0) < 2.0 and p.dodge_time_left <= 0.0, "скам'янілий не ходить і не перекидається")
+	check(not p.petrify(1.0), "двічі поспіль не скам'яніти")
+	p.petrified = 0.0
+	p.petrify_guard = 0.0
+	p.dodge_time_left = 0.2
+	check(not p.petrify(1.0), "перекид саме в мить погляду рятує")
+	p.dodge_time_left = 0.0
+	game.hud.joystick.vector = Vector2.ZERO
+	# Погляд: герой перед очима й нічого не робить — скам'яніє
+	p.global_position = v.global_position + Vector2(0, 200)
+	v._start_gaze(p, Vector2.DOWN)
+	await _frames(2)
+	check(v._gaze != null and v._lid_bearers.size() == 2 and v._lid_bearers[0].title == "Повікар" and v.cast_time > 2.0, "«Підніміть мені повіки!»: два повікарі й три секунди")
+	for b in v._lid_bearers:
+		b.global_position = v.global_position + Vector2(0, -400)  # подалі від героя, щоб не заважали
+		b.speed = 0.0
+	var hp0: float = p.hp
+	await _frames(190)
+	check(p.petrified > 0.0 and p.hp < hp0, "погляд ударив: герой скам'янів і поранений")
+	check(v._gaze == null, "погляд відпрацював")
+	# Погляд: герой устиг забігти за спину — цілий
+	p.petrified = 0.0
+	p.petrify_guard = 0.0
+	p.hp = p.max_hp
+	_clear_enemies(game)
+	await _frames(1)
+	c.spawn_enemy("vii", 15, true, p.global_position + Vector2(0, -260))
+	v = c._last_enemy()
+	v._rock_timer = 999.0
+	v.ability_timer = 999.0
+	v._start_gaze(p, Vector2.DOWN)
+	for b in v._lid_bearers:
+		b.speed = 0.0
+		b.global_position = v.global_position + Vector2(300, -300)
+	p.global_position = v.global_position + Vector2(0, -180)
+	await _frames(190)
+	check(p.petrified <= 0.0 and p.hp == p.max_hp, "за спиною Вія погляд не дістає")
+	# Погляд: повікарів убито — Вій осліп
+	p.global_position = v.global_position + Vector2(0, 200)
+	v._start_gaze(p, Vector2.DOWN)
+	await _frames(2)
+	var blind0: int = int(game.world.stats.get("vii_blind", 0))
+	for b in v._lid_bearers:
+		b.take_damage(1.0e9, Vector2.ZERO)
+	await _frames(4)
+	check(v._gaze == null and v.stun > 2.0 and v.exposed > 2.0 and int(game.world.stats.get("vii_blind", 0)) == blind0 + 1, "обох повікарів здолано: повіки впали, Вій осліп")
+	var before: float = v.hp
+	v.take_damage(100.0, Vector2.ZERO)
+	check(absf((before - v.hp) - 150.0) < 1.0, "осліплий Вій отримує в півтора раза більше")
+	await _frames(190)
+	check(p.petrified <= 0.0, "скасований погляд нікого не скам'янив")
+	check(game.account.challenges["ach"].has("vii_blind"), "досягнення «Повіки впали»")
+	# Тупіт і каміння
+	v.stun = 0.0
+	v.exposed = 0.0
+	v.ability_step = 1
+	v._boss_ability(p)
+	var lines := 0
+	var rings := 0
+	for t in c.effects.get_children():
+		if t.has_method("contains") and not t.is_queued_for_deletion():
+			lines += 1 if t.shape == "line" else 0
+			rings += 1 if t.shape == "circle" else 0
+	check(lines == 6 and rings >= 1, "тупіт: коло довкола й шість тріщин")
+	v.cast_time = 0.0
+	v._rock_timer = 0.0
+	var rocks0 := rings
+	await _frames(3)
+	rings = 0
+	for t in c.effects.get_children():
+		if t.has_method("contains") and t.shape == "circle" and not t.is_queued_for_deletion():
+			rings += 1
+	check(rings > rocks0, "зі стелі падає каміння")
+	var alatyr0: int = int(p.stones.get("alatyr", 0))
+	v.take_damage(1.0e9, Vector2.ZERO)
+	await _frames(5)
+	check(int(game.world.stats.get("boss:vii", 0)) == 1 and game.account.challenges["ach"].has("vii") and int(p.stones.get("alatyr", 0)) == alatyr0 + 1, "Вія здолано: досягнення й Алатир-камінь")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

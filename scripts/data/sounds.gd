@@ -20,7 +20,7 @@ const DEATH := {
 	"upyr": "die_undead", "zarazhenyi": "die_undead",
 	"mavka": "die_spirit",
 	"bolotianyk": "die_slime",
-	"pishchalnyk": "die_human", "chaklun": "die_human", "rival": "die_human",
+	"pishchalnyk": "die_human", "chaklun": "die_human", "rival": "die_human", "vidma": "die_spirit", "vii": "die_undead",
 }
 
 ## Фоновий шум за ландшафтом ("" — тиша).

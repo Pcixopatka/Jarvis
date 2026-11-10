@@ -1298,11 +1298,14 @@ func spawn_bullet(pos: Vector2, dir: Vector2, dmg: float, crit: bool) -> void:
 	p.life = 0.9
 
 
-func spawn_plague(pos: Vector2, dps: float) -> void:
+func spawn_plague(pos: Vector2, dps: float, status: String = "plague", tint: Color = Color(0.35, 0.6, 0.12), life: float = 3.0) -> void:
 	var c = PlagueScript.new()
 	c.combat = self
 	c.position = pos
 	c.dps = dps
+	c.status = status
+	c.tint = tint
+	c.life = life
 	effects.add_child(c)
 
 

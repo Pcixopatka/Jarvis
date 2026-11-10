@@ -44,6 +44,8 @@ var rank := ""  # почесне звання (hetman — після фінал�
 var potions := Data.POTION_START
 var potion_timer := 0.0
 var mana_potions := 0  # зілля наснаги
+var petrified := 0.0  # скам'янів від погляду Вія: не рухається, не б'є, не ухиляється
+var petrify_guard := 0.0  # щойно скам'янілого вдруге поспіль не скам'янити
 var mana_potion_timer := 0.0
 var resources := {"wood": 0, "iron": 0, "herbs": 0}  # для будівництва хутора
 var trip_buffs := {}  # зілля, випите перед походом: "strength", "antiplague"
@@ -595,6 +597,8 @@ func _process(delta: float) -> void:
 	dodge_timer = maxf(0.0, dodge_timer - delta)
 	potion_timer = maxf(0.0, potion_timer - delta)
 	mana_potion_timer = maxf(0.0, mana_potion_timer - delta)
+	petrified = maxf(0.0, petrified - delta)
+	petrify_guard = maxf(0.0, petrify_guard - delta)
 	for id in skill_timers:
 		skill_timers[id] = maxf(0.0, skill_timers[id] - delta)
 	invuln = maxf(0.0, invuln - delta)
@@ -609,6 +613,8 @@ func _process(delta: float) -> void:
 			_whirl_hit(0.7, 480.0)
 
 	var input_vec: Vector2 = combat.get_move_input()
+	if petrified > 0.0:
+		input_vec = Vector2.ZERO
 	moving = false
 	if dodge_time_left > 0.0:
 		dodge_time_left -= delta
@@ -633,7 +639,7 @@ func _process(delta: float) -> void:
 	var pad := Vector2(radius, radius)
 	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
 
-	if attack_held and attack_timer <= 0.0 and not blocking:
+	if attack_held and attack_timer <= 0.0 and not blocking and petrified <= 0.0:
 		attack()
 	queue_redraw()
 
@@ -641,6 +647,10 @@ func _process(delta: float) -> void:
 ## Блок: натиснув — щит догори (перша мить — парирування); тримаєш — заряджається удар;
 ## відпустив після CHARGE_MIN — заряджений удар.
 func _update_block(delta: float) -> void:
+	if petrified > 0.0:
+		blocking = false  # камінь не боронить себе
+		block_time = 0.0
+		return
 	if block_held and not blocking and block_cd <= 0.0 and dodge_time_left <= 0.0:
 		blocking = true
 		block_time = 0.0
@@ -794,7 +804,7 @@ func _alive_enemies() -> Array:
 
 
 func attack() -> void:
-	if not alive or attack_timer > 0.0 or dodge_time_left > 0.0:
+	if not alive or attack_timer > 0.0 or dodge_time_left > 0.0 or petrified > 0.0:
 		return
 	attack_timer = attack_cooldown
 	if combo_timer <= 0.0:
@@ -868,6 +878,20 @@ func add_potion() -> bool:
 	return true
 
 
+## Погляд Вія: герой кам'яніє на dur секунд. Перекид саме в цю мить, оберіг чи недавнє скам'яніння рятують.
+## Коротка невразливість після удару не рятує: погляд і б'є, і кам'янить одним махом.
+func petrify(dur: float) -> bool:
+	if not alive or petrify_guard > 0.0 or cleanse_timer > 0.0 or dodge_time_left > 0.0:
+		return false
+	petrified = dur
+	petrify_guard = dur + 6.0
+	blocking = false
+	if combat:
+		combat.float_text(global_position + Vector2(0, -90), "Скам'янів!", Color(0.8, 0.82, 0.85))
+		combat.fx.ring(global_position, Color(0.75, 0.75, 0.8), 18, 160, 5, 0.4)
+	return true
+
+
 ## Ковтнути зілля наснаги: відновлює частку наснаги. Повертає true, якщо вдалося.
 func use_mana_potion() -> bool:
 	if not alive or mana_potions <= 0 or mana_potion_timer > 0.0 or mana >= max_mana * 0.95:
@@ -891,7 +915,7 @@ func add_mana_potion() -> bool:
 
 
 func dodge() -> void:
-	if not alive or dodge_timer > 0.0:
+	if not alive or dodge_timer > 0.0 or petrified > 0.0:
 		return
 	blocking = false
 	combo_step = 0
@@ -939,7 +963,7 @@ func skill_cost(id: String) -> float:
 
 
 func use_skill(id: String) -> void:
-	if not alive or sk(id) <= 0 or skill_timers.get(id, 0.0) > 0.0:
+	if not alive or sk(id) <= 0 or skill_timers.get(id, 0.0) > 0.0 or petrified > 0.0:
 		return
 	if mana < skill_cost(id):
 		if _in_combat():
@@ -1760,6 +1784,8 @@ func _draw() -> void:
 	if not alive:
 		draw_set_transform(Vector2(0, 8), PI / 2.0, Vector2.ONE)
 	var side := 1.0 if facing.x >= 0.0 else -1.0
+	if petrified > 0.0:
+		tint = Color(0.62, 0.63, 0.66)  # сірий камінь
 	if Gfx.has(sprite_id()):
 		_draw_sprite(tint)
 	else:

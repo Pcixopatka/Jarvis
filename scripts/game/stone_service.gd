@@ -13,7 +13,8 @@ const NAMES := {"zabuttia": "Камінь забуття", "alatyr": "Алати
 const CHANCE := {"zabuttia": 0.12, "alatyr": 0.06}
 ## Перша перемога над цим босом — гарантований камінь
 const FIRST_KILL := {"zmii": ["zabuttia"], "chaklun": ["zabuttia"], "koshchii": ["alatyr"], "putinoid": ["alatyr", "zabuttia"],
-	"baba_yaha": ["zabuttia"], "solovei": ["alatyr"], "lykho": ["zabuttia"], "oprychnyk": ["alatyr"]}
+	"baba_yaha": ["zabuttia"], "solovei": ["alatyr"], "lykho": ["zabuttia"], "oprychnyk": ["alatyr"],
+	"vidma": ["zabuttia"], "vii": ["alatyr"]}
 
 
 static func count(player, id: String) -> int:

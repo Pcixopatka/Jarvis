@@ -270,6 +270,21 @@ def humanoid(p, d, frame, c):
         eyes(p, d, hy, c, side)
     face(p, d, hy, c, side)
     hair_and_hat(p, d, hy, c, side)
+    if c.get("lids") and d != "up":
+        # Вій: залізні повіки до землі. У кадрах удару їх піднято, і видно розпечені очі
+        lc = mul(skin, 0.6); fire = hexc("ff4a1a"); glow = hexc("ffd23a")
+        if atk:
+            if side:
+                p.rect(CX - 8, hy + 6, 5, 2, lc); p.rect(CX - 7, hy + 8, 3, 3, fire); p.px(CX - 6, hy + 9, glow)
+            else:
+                p.rect(CX - 7, hy + 6, 5, 2, lc); p.rect(CX + 3, hy + 6, 5, 2, lc)
+                p.rect(CX - 6, hy + 8, 3, 3, fire); p.rect(CX + 4, hy + 8, 3, 3, fire); p.px(CX - 5, hy + 9, glow); p.px(CX + 5, hy + 9, glow)
+        else:
+            if side:
+                p.rect(CX - 8, hy + 7, 5, 16, lc); p.rect(CX - 8, hy + 22, 5, 1, mul(lc, 0.7))
+            else:
+                p.rect(CX - 7, hy + 7, 5, 17, lc); p.rect(CX + 3, hy + 7, 5, 17, lc)
+                p.rect(CX - 7, hy + 23, 5, 1, mul(lc, 0.7)); p.rect(CX + 3, hy + 23, 5, 1, mul(lc, 0.7))
     if c.get("aura"):
         a = c["aura"]
         for i in range(4): p.px(CX - 12 + i * 8, by - 4 - (i % 2) * 3, a)
@@ -446,6 +461,11 @@ CHARS["rival_danylo"] = coss(hexc("3f6a3a"), weapon="pike", sash=hexc("c6281e"),
 CHARS["rival_hnat"] = coss(hexc("2f4f8a"), weapon="musket", hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("4a90d8"), sash=hexc("d8d8d8"), vyshyvka=None, mustache=False)
 CHARS["rival_marko"] = coss(hexc("1e1a22"), weapon="sabre", hat="long", hair=hexc("9a9aa2"), sash=hexc("5a2a8a"), pants=hexc("2a2a3a"), eye=hexc("6fd0ff"), vyshyvka=None, weapon_col=hexc("a8d8ff"))
 CHARS["rival_taras"] = coss(hexc("7a4a22"), weapon="mace", beard=hexc("3a2518"), sash=hexc("2a2220"), vyshyvka=None)
+# Боси печер поза сюжетом
+CHARS["vidma"] = dict(pants=hexc("2a1830"), boots=hexc("1a1020"), body=hexc("3c2050"), sleeve=hexc("3c2050"), robe=True, sash=hexc("a040d0"),
+                      skin=hexc("e2dcc6"), hair=hexc("17101c"), hat="long", eye=hexc("6fe07a"), brows=True, aura=hexc("b868ff"), weapon="broom")
+CHARS["vii"] = dict(pants=hexc("382c20"), boots=hexc("1c1510"), body=hexc("4c3c2a"), sleeve=hexc("4c3c2a"), hump=True, sash=hexc("2a2018"),
+                    skin=hexc("747a80"), hair=hexc("3a3020"), hat="moss", lids=True, gloves=hexc("565c62"), eye=hexc("ff4a1a"), weapon=None)
 # Мисливці з луком і беззбройні постаті для мирних занять (полювання, рибалка): по одній на клас
 _LOOKS = {"peasant": "peasant", "cossack": "cossack_sabre", "volkhv": "volkhv_staff", "zaporozhets": "zaporozhets_sabre", "plastun": "plastun_sabre",
           "samopalnyk": "samopalnyk_sabre", "kharakternyk": "kharakternyk_sabre", "znakhar": "znakhar_staff", "perun_zhrets": "perun_zhrets_staff", "molfar": "molfar_staff"}

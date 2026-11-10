@@ -157,6 +157,7 @@ func _ready() -> void:
 		_record("trail")
 		_record("trail:" + kind))
 	Events.holiday_token.connect(_on_holiday_token)
+	Events.vii_blinded.connect(func(): _record("vii_blind"))
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
 		if player.can_change_class() and player.is_peasant():

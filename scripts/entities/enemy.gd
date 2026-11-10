@@ -58,6 +58,12 @@ var bounty_id := 0  # ціль із дошки розшуку (див. BountySer
 var style := ""  # суперник у герці: rubaka | spysnyk | strilets | kharakternyk | bulavnyk (див. Activities.RIVALS)
 var sprite := ""  # лист спрайтів, якщо він не збігається з kind
 var cast_time := 0.0  # стоїть і заносить удар (серія рубаки, удар булави)
+var illusion := false  # мара відьми: зникає від першого ж удару й нічого не лишає
+var life_left := 0.0  # скільки ще живе мара
+var exposed := 0.0  # Вій без повік осліп: стоїть і отримує більше шкоди
+var _gaze = null  # Вій: попередження погляду, що зараз наростає
+var _lid_bearers: Array = []  # чорти, які піднімають Вієві повіки
+var _rock_timer := 2.5  # Вій: церква двигтить, зі стелі падає каміння
 var dmg_cap := 0.0  # суперник тримає удар: за секунду втрачає не більше цієї частки здоров'я (0 — без межі)
 var _dmg_window := 0.0  # скільки шкоди отримав за останню секунду
 
@@ -125,6 +131,14 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 		"oprychnyk":
 			radius = 24.0; max_hp = 200.0; speed = 120.0; damage = 28.0; xp_value = 10
 			color = Color(0.12, 0.1, 0.1)
+		# ---- Боси печер поза сюжетом ----
+		"vidma":
+			radius = 21.0; max_hp = 140.0; speed = 135.0; damage = 21.0; xp_value = 9
+			color = Color(0.45, 0.2, 0.6)
+			ranged = true; keep_distance = 300.0; shoot_cd = 2.2
+		"vii":
+			radius = 30.0; max_hp = 380.0; speed = 62.0; damage = 32.0; xp_value = 11
+			color = Color(0.4, 0.42, 0.45)
 	r_draw = radius
 	max_hp *= s
 	damage *= 1.0 + Data.ENEMY_DMG_PER_LEVEL * (lvl - 1)
@@ -191,6 +205,19 @@ func _process(delta: float) -> void:
 		take_damage(dot, Vector2.ZERO)
 		if dead:
 			return
+	if illusion:
+		life_left -= delta
+		if life_left <= 0.0:
+			vanish()
+			return
+	exposed = maxf(0.0, exposed - delta)
+	if _gaze != null:
+		_watch_gaze()
+	if kind == "vii" and is_boss and stun <= 0.0 and cast_time <= 0.0:
+		_rock_timer -= delta
+		if _rock_timer <= 0.0:
+			_rock_timer = 1.6 if phase2 else 2.3
+			_drop_rock()
 	if stun > 0.0:
 		stun -= delta * (2.5 if style != "" else 1.0)  # суперник у герці оговтується швидше
 		windup = 0.0
@@ -313,7 +340,12 @@ func _process(delta: float) -> void:
 func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	if dead:
 		return
+	if illusion:
+		vanish()  # мара розвіюється від першого ж удару
+		return
 	amount *= dmg_taken_mult
+	if exposed > 0.0:
+		amount *= 1.5  # осліплий Вій беззахисний
 	if statuses.has("curse"):
 		amount *= 1.35  # прокляття мольфара
 	if dmg_cap > 0.0:
@@ -333,7 +365,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
 		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
-	if is_boss and kind in ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk"] and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
+	if is_boss and kind in ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii"] and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
 		_enter_phase2()
 	if hp <= 0.0 and kind == "koshchii" and combat.boss_revives > 0:
 		# Кощієва смерть схована в голці — поки голка ціла, він встає знову
@@ -629,10 +661,172 @@ func _boss_ability(target) -> void:
 				0:
 					Audio.play("roar", 0.15, -4.0)
 					_summon(["zarazhenyi", "pishchalnyk"], 3 if phase2 else 2)
+		"vidma":
+			# Відьма з Лисої гори: зілля, що знесилює; мари — дві примари поруч зі справжньою; віяло проклять; у люті кличе шабаш
+			ability_timer = 3.4 if phase2 else 4.6
+			match ability_step % (4 if phase2 else 3):
+				1:
+					Audio.play("spell", 0.1, 2.0)
+					for i in 3:
+						var pos: Vector2 = target.global_position + (Vector2.ZERO if i == 0 else Vector2.from_angle(randf() * TAU) * 140.0)
+						var t = _telegraph("circle", pos, 1.0, damage * 0.9)
+						t.radius = 80.0
+						t.color = Color(0.65, 0.3, 0.95)
+						t.on_fire = func(): combat.spawn_plague(pos, damage * 0.35, "weak", Color(0.5, 0.2, 0.75), 4.0)
+				2:
+					_cast_illusions(target)
+				3:
+					Audio.play("roar", 0.15, -4.0)
+					_summon(["chort", "mavka"], 3)
+				0:
+					# Віяло проклять: п'ять повільних згустків, між якими треба прослизнути
+					Audio.play("spell", 0.1, 2.0)
+					for i in 5:
+						_shoot(global_position, to_t.rotated((i - 2) * 0.28), 210.0, damage * 0.55, Color(0.75, 0.4, 1.0), 12.0)
+		"vii":
+			# Вій: «Підніміть мені повіки!» — погляд скам'янює всіх перед ним, якщо не здолати чортів-повікарів;
+			# тупіт — коло довкола й тріщини променями; кличе упирів із трун
+			ability_timer = 6.0 if phase2 else 7.5
+			match ability_step % 3:
+				1:
+					_start_gaze(target, to_t)
+				2:
+					Audio.play("boom", 0.0, -4.0)
+					var ring = _telegraph("circle", global_position, 1.1, damage * 1.3)
+					ring.radius = 210.0
+					ring.color = Color(0.6, 0.5, 0.4)
+					var spin := randf() * TAU
+					for i in (8 if phase2 else 6):
+						var t = _telegraph("line", global_position, 1.9, damage * 1.1)
+						t.dir = Vector2.from_angle(spin + TAU * i / (8.0 if phase2 else 6.0))
+						t.length = 720.0
+						t.width = 70.0
+						t.color = Color(0.55, 0.45, 0.35)
+					cast_time = 1.9
+				0:
+					Audio.play("roar", 0.15, -4.0)
+					_summon(["upyr", "upyr", "mavka"], 4 if phase2 else 3)
 		_:
 			ability_timer = 6.0
 			var t = _telegraph("circle", target.global_position, 1.0, damage * 1.3)
 			t.radius = 110.0
+
+
+# --- Відьма: мари ---
+
+## Відьма зникає в диму й з'являється деінде, а поруч постають дві мари: з виду такі самі, лише трохи прозоріші.
+func _cast_illusions(target) -> void:
+	Audio.play("portal", 0.1, -2.0)
+	combat.fx.burst(global_position, Color(0.6, 0.3, 0.9), 30, 260, 8, 0.6)
+	var spots := []
+	for i in 3:
+		var best := global_position
+		for attempt in 8:
+			var cand := Vector2(randf_range(combat.arena.position.x + 140, combat.arena.end.x - 140), randf_range(combat.arena.position.y + 140, combat.arena.end.y - 140))
+			var ok: bool = cand.distance_to(target.global_position) > 240.0
+			for s in spots:
+				ok = ok and cand.distance_to(s) > 200.0
+			if ok:
+				best = cand
+				break
+		spots.append(best)
+	global_position = spots[0]
+	combat.fx.burst(global_position, Color(0.6, 0.3, 0.9), 24, 240, 8, 0.5)
+	for i in range(1, 3):
+		combat.spawn_enemy("vidma", level, false, spots[i])
+		var m = combat._last_enemy()
+		if m != null and m != self:
+			m.make_illusion(self)
+			combat.fx.burst(spots[i], Color(0.6, 0.3, 0.9), 24, 240, 8, 0.5)
+
+
+## Перетворює ворога на мару: вигляд господині, один удар — і її нема; здобичі й досвіду не дає.
+func make_illusion(owner_boss) -> void:
+	illusion = true
+	life_left = 9.0
+	is_boss = false
+	elite = false
+	title = "Мара"
+	max_hp = 1.0
+	hp = 1.0
+	damage = owner_boss.damage * 0.35
+	xp_value = 0
+	shoot_cd = 2.6
+	base_scale = owner_boss.base_scale
+	scale = Vector2.ONE * base_scale
+	modulate.a = 0.78
+
+
+## Зникнути без сліду (мара): ні здобичі, ні зарахованого вбивства.
+func vanish() -> void:
+	if dead:
+		return
+	dead = true
+	remove_from_group("enemies")
+	combat.fx.burst(global_position, Color(0.6, 0.3, 0.9, 0.8), 18, 200, 7, 0.5)
+	Audio.play("die_spirit", 0.2, -4.0)
+	queue_free()
+
+
+# --- Вій: погляд ---
+
+## «Підніміть мені повіки!» Два чорти беруться за повіки; три секунди — і погляд скам'янить усіх перед Вієм.
+## Устигнеш здолати обох чортів — повіки впадуть, Вій осліпне й стане беззахисним.
+func _start_gaze(target, to_t: Vector2) -> void:
+	Audio.play("roar", 0.0, 2.0)
+	Events.banner.emit("«Підніміть мені повіки!»\nЗдолай чортів-повікарів або тікай з-перед очей", Color(1.0, 0.5, 0.35))
+	Events.hint.emit("vii_gaze", "Погляд Вія скам'янює. Поки чорти піднімають йому повіки, є три секунди: убий обох чортів, і Вій осліпне, або забіжи йому за спину.")
+	cast_time = 3.0
+	var t = _telegraph("cone", global_position, 3.0, damage * 1.6)
+	t.dir = to_t
+	t.length = 760.0
+	t.half_angle = 0.62
+	t.color = Color(1.0, 0.3, 0.15)
+	t.on_fire = func():
+		for a in combat.allies():
+			if is_instance_valid(a) and t.contains(a.global_position) and a.has_method("petrify"):
+				a.petrify(2.2)
+	_gaze = t
+	_lid_bearers = []
+	for side_k in [-1.0, 1.0]:
+		var pos: Vector2 = combat._clamp_in(global_position + to_t.orthogonal() * side_k * (radius * base_scale + 46.0), 60.0)
+		combat.spawn_enemy("chort", level, false, pos)
+		var b = combat._last_enemy()
+		if b != null and b != self:
+			b.title = "Повікар"
+			b.max_hp *= 1.5
+			b.hp = b.max_hp
+			b.speed *= 0.35  # тримають повіки, далеко не відходять
+			_lid_bearers.append(b)
+
+
+## Каміння зі стелі: коло під ногами цілі. Вій повільний, тож стояти на місці не дає сама церква.
+func _drop_rock() -> void:
+	var target = combat.player
+	if target == null or not target.alive:
+		return
+	var t = _telegraph("circle", target.global_position, 0.9, damage * 0.7)
+	t.radius = 85.0
+	t.color = Color(0.6, 0.55, 0.5)
+
+
+func _watch_gaze() -> void:
+	if not is_instance_valid(_gaze) or _gaze.is_queued_for_deletion():
+		_gaze = null  # погляд уже вдарив
+		return
+	for b in _lid_bearers:
+		if is_instance_valid(b) and not b.dead:
+			return
+	# Обидва повікарі впали: повіки падають, погляду не буде
+	_gaze.queue_free()
+	_gaze = null
+	cast_time = 0.0
+	stun = 3.5
+	exposed = 3.5
+	Events.banner.emit("Повіки впали! Вій осліп — бий!", Color(0.6, 1.0, 0.6))
+	Events.vii_blinded.emit()
+	Audio.play("sharpen_ok", 0.05)
+	combat.fx.ring(global_position, Color(0.7, 1.0, 0.7), 26, 320, 6, 0.5)
 
 
 # --- Герць: суперники-козаки ---
@@ -816,7 +1010,8 @@ func _enter_phase2() -> void:
 	combat.shake(12.0)
 	Audio.play("roar", 0.0)
 	var text: String = {"putinoid": "Путіноїд скидає личину!", "koshchii": "Кощій лютує!", "baba_yaha": "Яга розпалює піч!",
-		"solovei": "Соловей свище на повну!", "lykho": "Лихо шаленіє!", "oprychnyk": "Кат спускає псів!"}.get(kind, "Бос лютує!")
+		"solovei": "Соловей свище на повну!", "lykho": "Лихо шаленіє!", "oprychnyk": "Кат спускає псів!",
+		"vidma": "Відьма скликає шабаш!", "vii": "Вій тупоче: церква ходить ходором!"}.get(kind, "Бос лютує!")
 	Events.banner.emit(text, Color(1.0, 0.4, 0.3))
 	var kinds: Array = ["zarazhenyi", "pishchalnyk", "chort"]
 	match kind:
@@ -825,6 +1020,8 @@ func _enter_phase2() -> void:
 		"solovei": kinds = ["vovkulaka", "chort"]
 		"lykho": kinds = ["upyr", "bolotianyk"]
 		"oprychnyk": kinds = ["zarazhenyi", "pishchalnyk", "vovkulaka"]
+		"vidma": kinds = ["chort", "mavka"]
+		"vii": kinds = ["upyr", "chort"]
 	_summon(kinds, 3)
 
 
