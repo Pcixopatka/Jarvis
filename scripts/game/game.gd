@@ -553,6 +553,8 @@ func enter_location(id: String) -> void:
 	combat.boss_revives = 0 if StoryService.effect(world, "koshchii_mortal") > 0.0 else 1
 	var extra := EventService.mods_for(world, id)
 	extra.merge(BountyService.mods_for(world, id, player))
+	if ChallengeService.pending(world, "trail"):
+		extra["trail_sure"] = true  # виклик просить стежку слідів — вона буде в цьому ж поході
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
 	hud.set_mode(true, true)
 	state = State.PLAYING
@@ -800,6 +802,7 @@ func _on_dungeon_cleared(loc_id: String) -> void:
 		hud.show_banner(DepthService.on_clear(world, d), UI.GOLD)
 		depth_sel = int(DepthService.state(world)["max"])
 		_record("depth", d)
+		_record("depth_clear")
 		if randf() < 0.15 + 0.005 * d:
 			StoneService.grant(player, "zabuttia" if randf() < 0.6 else "alatyr")
 			combat.float_text(player.global_position + Vector2(0, -150), "Камінь долі з глибин!", Color(0.85, 0.7, 1.0))
@@ -1043,6 +1046,7 @@ func _on_tower_cleared(floor_: int) -> void:
 	var msg: String = r[0]
 	tower_sel = clampi(floor_ + 1, 1, int(TowerService.state(world)["max"]))
 	_record("tower", floor_)
+	_record("tower_floor")
 	var lvl := TowerService.level_of(floor_)
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	if first:
@@ -1085,11 +1089,18 @@ func start_defense(target: String) -> void:
 
 # ======================= Герць на майдані =======================
 
-func start_duel() -> void:
-	if not DuelService.can_fight(world, player):
+## free — вільний герць поза турніром: до першої поразки, спроб не лічать.
+func start_duel(free: bool = false) -> void:
+	if free:
+		if not DuelService.unlocked(player):
+			hud.show_banner("На майдан зараз не вийти", UI.BAD)
+			return
+		combat.defense_loc = DuelService.free_loc(world, player)
+	elif not DuelService.can_fight(world, player):
 		hud.show_banner("На майдан зараз не вийти", UI.BAD)
 		return
-	combat.defense_loc = DuelService.battle_loc(world, player)
+	else:
+		combat.defense_loc = DuelService.battle_loc(world, player)
 	enter_location("duel")
 	map_here = "sich"
 	hint("duel", "Герць — сам на сам. Червоні зони на землі показують, куди вдарить суперник: виходь із них або відбивай «Блоком». Смерті на майдані нема.")
@@ -1097,6 +1108,12 @@ func start_duel() -> void:
 
 func _on_duel_won() -> void:
 	defense_target = "sich"  # з порталу — назад на Січ
+	if combat.loc.get("free", false):
+		hud.show_banner("\n".join(DuelService.free_win(world, player)), UI.GOLD)
+		_record("duel")
+		_record("duel_free")
+		save_game()
+		return
 	var msgs := DuelService.win(world, player)
 	hud.show_banner("\n".join(msgs), UI.GOLD)
 	_record("duel")
@@ -1107,7 +1124,7 @@ func _on_duel_won() -> void:
 
 ## Поразка чи здача в герці: без втрат, лише мінус спроба; повертаємось на Січ.
 func _duel_lost() -> void:
-	_soft_defeat(DuelService.lose(world), "sich")
+	_soft_defeat(DuelService.free_lose(world) if combat.loc.get("free", false) else DuelService.lose(world), "sich")
 
 
 ## Поразка без втрат (герць, варта): показати повідомлення й за мить отямитись у місті.
@@ -1337,6 +1354,7 @@ func _on_vigil_minute(m: int) -> void:
 		text += "\n(нагороду за цю хвилину сьогодні вже взято)"
 	hud.show_banner(text, UI.GOLD)
 	_record("vigil", m)
+	_record("vigil_min")
 	save_game()
 
 
@@ -1587,6 +1605,9 @@ func city_do(action: String, arg) -> void:
 				hud.show_banner(m["text"], UI.GOLD)
 		"duel_start":
 			start_duel()
+			return
+		"duel_free":
+			start_duel(true)
 			return
 		"trade_buy":
 			if TradeService.buy(world, player, city_id, arg[0], arg[1]) > 0:

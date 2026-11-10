@@ -1,8 +1,14 @@
 extends RefCounted
 ## Шаблони щоденних і тижневих викликів та постійні досягнення.
 ## stat — лічильник із world.stats (kill, kill:<вид>, elite, boss, boss:<вид>, field, dungeon, parry,
-## charged, defense, travel, sharpen, bond, level — найвищий рівень, hetman, kleinod — куплені ступені клейнодів).
+## charged, defense, travel, sharpen, bond, level — найвищий рівень, hetman, kleinod — куплені ступені клейнодів,
+## vigil_min — хвилини на варті, tower_floor — пройдені поверхи Башти, depth_clear — пройдені глибини).
 
+## Виклик має групу: "base" (бій і господарство; за замовчуванням) або "event" — проходження подій і занять:
+## варта, герць, розшук, супровід, події світу, сліди, Башта, Глибини. Щодня й щотижня частина викликів
+## обов'язково з групи подій (DAILY_EVENTS / WEEKLY_EVENTS).
+## need — що має бути відкрито гравцеві, щоб виклик міг випасти (див. ChallengeService.available);
+## where — підказка, куди йти.
 const DAILY := [
 	{"stat": "kill", "goal": [30, 60], "text": "Здолай %d ворогів"},
 	{"stat": "kill:zarazhenyi", "goal": [10, 25], "text": "Здолай %d заражених"},
@@ -11,27 +17,43 @@ const DAILY := [
 	{"stat": "dungeon", "goal": [1, 1], "text": "Пройди печеру до боса"},
 	{"stat": "parry", "goal": [3, 6], "text": "Відбий %d ударів парируванням"},
 	{"stat": "charged", "goal": [3, 6], "text": "Влуч зарядженим ударом %d разів"},
-	{"stat": "meat", "goal": [3, 6], "text": "Добудь %d м'яса на полюванні"},
-	{"stat": "ryba", "goal": [2, 5], "text": "Налови %d риби"},
-	{"stat": "dice_win", "goal": [1, 2], "text": "Виграй партій у кості: %d"},
-	{"stat": "cook", "goal": [1, 1], "text": "Звари страву в казані на хуторі"},
+	{"stat": "meat", "goal": [3, 6], "text": "Добудь %d м'яса на полюванні", "need": "hunt", "where": "Мисливські угіддя на мапі"},
+	{"stat": "ryba", "goal": [2, 5], "text": "Налови %d риби", "need": "fish", "where": "Рибальська тоня на мапі"},
+	{"stat": "dice_win", "goal": [1, 2], "text": "Виграй партій у кості: %d", "need": "tavern", "where": "Шинок у місті"},
+	{"stat": "cook", "goal": [1, 1], "text": "Звари страву в казані на хуторі", "need": "hunt", "where": "Казан на хуторі"},
+	# ---- події й заняття ----
+	{"stat": "vigil_min", "goal": [2, 4], "text": "Простій на Козацькій варті хвилин: %d", "group": "event", "need": "vigil", "where": "Сторожова могила на мапі"},
+	{"stat": "duel", "goal": [1, 2], "text": "Виграй герців на майдані: %d", "group": "event", "need": "duel", "where": "Майдан на Січі: турнір або вільний герць"},
+	{"stat": "bounty", "goal": [1, 1], "text": "Закрий оголошення з дошки розшуку", "group": "event", "need": "bounty", "where": "Вкладка «Розшук» у місті"},
+	{"stat": "escort", "goal": [1, 1], "text": "Проведи мандрівника через дику місцевість", "group": "event", "need": "escort", "where": "Завдання на супровід у місті"},
+	{"stat": "event", "goal": [1, 1], "text": "Прийди на поміч: відбий набіг, валку чи полон", "group": "event", "need": "event", "where": "Подія з'явиться на мапі після походу"},
+	{"stat": "trail", "goal": [1, 1], "text": "Пройди стежку слідів до знахідки", "group": "event", "need": "trail", "where": "Сліди будуть у першій же дикій місцевості"},
+	{"stat": "tower_floor", "goal": [2, 4], "text": "Пройди поверхів Башти Кощія: %d", "group": "event", "need": "tower", "where": "Башта Кощія на мапі"},
+	{"stat": "depth_clear", "goal": [1, 2], "text": "Пройди глибин зарази: %d", "group": "event", "need": "depth", "where": "Глибини зарази на мапі"},
 ]
 const WEEKLY := [
 	{"stat": "kill", "goal": [300, 500], "text": "Здолай %d ворогів за тиждень"},
 	{"stat": "boss", "goal": [3, 5], "text": "Здолай босів: %d"},
 	{"stat": "elite", "goal": [15, 25], "text": "Здолай %d еліт"},
-	{"stat": "defense", "goal": [1, 2], "text": "Відстой облоги: %d"},
-	{"stat": "travel", "goal": [4, 6], "text": "Переживи %d пригод у дорозі"},
 	{"stat": "sharpen", "goal": [3, 5], "text": "Вдало нагостри зброю %d разів"},
-	{"stat": "bounty", "goal": [2, 3], "text": "Закрий оголошень розшуку: %d"},
-	{"stat": "duel", "goal": [2, 3], "text": "Виграй кіл у герці на майдані: %d"},
-	{"stat": "trail", "goal": [2, 3], "text": "Пройди стежок слідів до знахідки: %d"},
-	{"stat": "harvest", "goal": [4, 8], "text": "Збери врожаїв на городі: %d"},
-	{"stat": "expedition", "goal": [3, 5], "text": "Зустрінь супутників із власних походів: %d"},
-	{"stat": "escort", "goal": [2, 3], "text": "Проведи мандрівників через дикі місця: %d"},
+	{"stat": "harvest", "goal": [4, 8], "text": "Збери врожаїв на городі: %d", "need": "garden", "where": "Город на хуторі"},
+	{"stat": "expedition", "goal": [3, 5], "text": "Зустрінь супутників із власних походів: %d", "need": "party", "where": "Корчма: відправ супутника в похід"},
+	{"stat": "travel", "goal": [4, 6], "text": "Переживи %d пригод у дорозі"},
+	# ---- події й заняття ----
+	{"stat": "defense", "goal": [1, 2], "text": "Відстой облоги: %d", "group": "event", "need": "defense", "where": "Облога з'явиться на мапі червоним кільцем"},
+	{"stat": "bounty", "goal": [2, 3], "text": "Закрий оголошень розшуку: %d", "group": "event", "need": "bounty", "where": "Вкладка «Розшук» у місті"},
+	{"stat": "duel", "goal": [3, 5], "text": "Виграй герців на майдані: %d", "group": "event", "need": "duel", "where": "Майдан на Січі: турнір або вільний герць"},
+	{"stat": "trail", "goal": [2, 3], "text": "Пройди стежок слідів до знахідки: %d", "group": "event", "need": "trail", "where": "Сліди в диких місцевостях"},
+	{"stat": "escort", "goal": [2, 3], "text": "Проведи мандрівників через дикі місця: %d", "group": "event", "need": "escort", "where": "Завдання на супровід у місті"},
+	{"stat": "vigil_min", "goal": [8, 12], "text": "Простій на Козацькій варті хвилин: %d", "group": "event", "need": "vigil", "where": "Сторожова могила на мапі"},
+	{"stat": "event", "goal": [2, 3], "text": "Прийди на поміч у подіях світу: %d", "group": "event", "need": "event", "where": "Події з'являються на мапі після походів"},
+	{"stat": "tower_floor", "goal": [6, 10], "text": "Пройди поверхів Башти Кощія: %d", "group": "event", "need": "tower", "where": "Башта Кощія на мапі"},
+	{"stat": "depth_clear", "goal": [3, 5], "text": "Пройди глибин зарази: %d", "group": "event", "need": "depth", "where": "Глибини зарази на мапі"},
 ]
-const DAILY_COUNT := 3
-const WEEKLY_COUNT := 2
+const DAILY_COUNT := 4
+const DAILY_EVENTS := 2  # скільки з них про події й заняття
+const WEEKLY_COUNT := 3
+const WEEKLY_EVENTS := 2
 
 const ACHIEVEMENTS := [
 	{"id": "first_blood", "name": "Перша кров", "desc": "Здолай першого ворога", "stat": "kill", "goal": 1, "gold": 20},

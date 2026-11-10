@@ -211,7 +211,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	elif loc["type"] == "dungeon":
 		_spawn_room()
 	else:
-		var with_trail: bool = is_field() and TrailService.should_spawn(player, randf())
+		var with_trail: bool = is_field() and (TrailService.should_spawn(player, randf()) or bool(loc.get("trail_sure", false)))
 		var trail_note := ""
 		if with_trail:
 			trail_note = "\nОко пластуна: бачиш усю стежку слідів" if player.job == "plastun" else "\nНеподалік чиїсь сліди"
@@ -450,7 +450,10 @@ func enter_duel(dl: Dictionary) -> void:
 	e.make_rival(Acts.RIVALS[dl["rival"]], float(dl["rival_hp"]), float(dl["rival_dmg"]), float(dl.get("rival_cap", 0.0)))
 	_duel_hp = e.hp
 	_spawn_spectators()
-	Events.banner.emit("%s\nКоло %d із 3" % [dl["name"], int(dl["round"]) + 1], Color(1.0, 0.85, 0.4))
+	if dl.get("free", false):
+		Events.banner.emit("%s\nСуперник %d у серії" % [dl["name"], int(dl["round"]) + 1], Color(1.0, 0.85, 0.4))
+	else:
+		Events.banner.emit("%s\nКоло %d із 3" % [dl["name"], int(dl["round"]) + 1], Color(1.0, 0.85, 0.4))
 
 
 func _spawn_spectators() -> void:

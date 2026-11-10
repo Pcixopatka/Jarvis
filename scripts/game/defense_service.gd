@@ -13,6 +13,7 @@ const PlagueService := preload("res://scripts/game/plague_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
 const CHANCE := 0.22  # шанс нової облоги після походу
+const CHANCE_WANTED := 0.6  # те саме, коли облогу просить виклик тижня
 const CALM := 3  # походів спокою після кожної облоги
 const DEADLINE := 3  # скільки походів місто протримається саме
 const THREAT_RANGE := 4.0  # градусів: заражена місцевість ближче — місту загрожує облога
@@ -75,7 +76,9 @@ static func tick(world, player) -> Array:
 	if int(s["calm"]) > 0:
 		s["calm"] = int(s["calm"]) - 1
 		return msgs
-	if randf() >= CHANCE:
+	# Виклик тижня просить відстояти облогу: нечисть не бариться
+	var wanted: bool = load("res://scripts/game/challenge_service.gd").pending(world, "defense")
+	if randf() >= (CHANCE_WANTED if wanted else CHANCE):
 		return msgs
 	var options := threatened(world, player)
 	if load("res://scripts/game/camp_service.gd").built_count(world) > 0:

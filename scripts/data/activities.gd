@@ -35,6 +35,14 @@ const DUEL_SECONDS := [16.0, 24.0, 34.0]
 const DUEL_HIT := [0.10, 0.13, 0.17]
 const DUEL_GOLD := [30, 60, 120]  # × рівень героя
 const DUEL_GLORY := [5, 10, 25]
+## Вільний герць: поза турніром, до першої поразки. Кожен наступний суперник у серії міцніший.
+const FREE_DUEL_SECONDS := 20.0  # скільки секунд шкоди героя тримає перший суперник
+const FREE_DUEL_HIT := 0.11  # частка здоров'я героя за удар першого суперника
+const FREE_DUEL_HP_STEP := 0.12  # за кожну перемогу в серії суперник на стільки здоровіший
+const FREE_DUEL_HIT_STEP := 0.05  # і на стільки сильніше б'є
+const FREE_DUEL_GOLD := 15  # × рівень героя; за серію більше (див. DuelService.free_gold)
+const FREE_DUEL_PAID := 3  # скільки перемог на день оплачується
+const FREE_DUEL_GLORY := 2  # слава за першу оплачену перемогу дня
 ## Глядачі на майдані (листи спрайтів)
 const SPECTATORS := ["comp_dzhura", "comp_strilets", "comp_petro", "cossack_sabre", "cossack_pike", "peasant_pike", "comp_znakhar", "comp_oksana", "zaporozhets_sabre", "plastun_pike"]
 
@@ -206,8 +214,9 @@ const RECORDS := {
 	"bounties": {"name": "Голови з дошки розшуку", "fmt": "%d голів", "step": 10, "glory": 5},
 	"trade_profit": {"name": "Зиск із торгівлі", "fmt": "%d грн", "step": 0, "glory": 0},
 	"dice_streak": {"name": "Серія перемог у кості", "fmt": "%d поспіль", "step": 0, "glory": 0},
+	"duel_streak": {"name": "Серія у вільному герці", "fmt": "%d поспіль", "step": 5, "glory": 4},
 }
-const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "bounties", "trade_profit", "dice_streak"]
+const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "bounties", "trade_profit", "dice_streak"]
 ## Звідки береться слава (підказка у вкладці «Слава»).
 const GLORY_SOURCES := [
 	"Герць на майдані: кожне вигране коло й титул чемпіона",

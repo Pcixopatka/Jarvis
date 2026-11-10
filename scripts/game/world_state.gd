@@ -82,7 +82,29 @@ func board(city: String) -> Array:
 				break
 			q = _gen_quest(city)
 		b.append(q)
+	_ensure_escort(city, b)
 	return b
+
+
+## Виклик дня чи тижня просить супроводу, а його ніде нема (ні на дошках, ні серед узятих):
+## одне оголошення цього міста стає супроводом, щоб виклик було де виконати.
+func _ensure_escort(city: String, b: Array) -> void:
+	if not load("res://scripts/game/challenge_service.gd").pending(self, "escort"):
+		return
+	for q in quests:
+		if EscortService.is_open(q):
+			return
+	for c in boards:
+		for q in boards[c]:
+			if EscortService.is_open(q):
+				return
+	var q := _gen_quest(city, true)
+	if q.get("type", "") != "escort":
+		return
+	for i in range(b.size() - 1, -1, -1):
+		if b[i].get("type", "") != "dungeon" or i == 0:
+			b[i] = q
+			return
 
 
 func _has_text(list: Array, text: String) -> bool:
@@ -92,15 +114,22 @@ func _has_text(list: Array, text: String) -> bool:
 	return false
 
 
-func _gen_quest(city: String) -> Dictionary:
+## want_escort — потрібен саме супровід (його просить виклик): місцевість беремо лише дику.
+func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 	var lvl: int = Data.CITIES[city]["level"] + loyalty_level(city)
 	var locs := []
 	for id in Data.LOCATIONS:
 		if Data.LOCATIONS[id].get("endless", false):
 			continue  # Глибини — не для доручень
+		if want_escort and Data.LOCATIONS[id]["type"] == "dungeon":
+			continue
 		var l: int = Data.LOCATIONS[id]["level"]
 		if l >= lvl - 2 and l <= lvl + 3:
 			locs.append(id)
+	if locs.is_empty() and want_escort:
+		for id in Data.LOCATIONS:
+			if Data.LOCATIONS[id]["type"] != "dungeon" and not Data.LOCATIONS[id].get("endless", false) and int(Data.LOCATIONS[id]["level"]) <= lvl + 3:
+				locs.append(id)
 	if locs.is_empty():
 		locs = Data.LOCATIONS.keys()
 	var loc_id: String = locs[randi() % locs.size()]
@@ -115,7 +144,7 @@ func _gen_quest(city: String) -> Dictionary:
 		q["count"] = 1
 		q["text"] = "Очисти: %s" % L["name"]
 		mult = 2.0
-	elif L["type"] != "dungeon" and r < Acts.ESCORT_CHANCE:
+	elif L["type"] != "dungeon" and (want_escort or r < Acts.ESCORT_CHANCE):
 		EscortService.fill(q, randf())  # проведи мандрівника через цю місцевість
 		mult = Acts.ESCORT_MULT
 	else:

@@ -649,6 +649,14 @@ static func _maidan(game) -> Control:
 		v.add_child(UI.button("Вийти на герць: %s" % rival["name"], _do(game, "duel_start"), Vector2(520, 70), 24, DS.can_fight(w, p)))
 		if not s["belt"]:
 			v.add_child(UI.label("Перший чемпіонський титул — легендарний «%s»." % DS.BELT_NAME, 16, UI.GOLD, false))
+	# Вільний герць: поза турніром, скільки завгодно
+	v.add_child(UI.label("Вільний герць", 24, UI.GOLD, false))
+	v.add_child(_wrap("Поза турніром охочі виходять один за одним, до твоєї першої поразки. Кожен наступний міцніший за попереднього. Перші %d перемоги дня — з гаманцем, далі б'ються за серію й рекорд у Літописі. Спроб не лічать." % game.Acts.FREE_DUEL_PAID, 17, UI.MUTED))
+	var streak: int = int(s["streak"])
+	v.add_child(UI.label("Серія: %d   •   Найдовша: %d   •   Гаманців сьогодні лишилось: %d" % [streak, int(s["best_streak"]), DS.free_paid_left(w)], 18, UI.TEXT, false))
+	var fr: Dictionary = DS.free_rival(w)
+	var purse := ("+%s грн" % UI.num(DS.free_gold(p.level, streak))) if DS.free_paid_left(w) > 0 else "за серію"
+	v.add_child(UI.button("Вільний герць: %s (%s)" % [fr["name"], purse], _do(game, "duel_free"), Vector2(520, 64), 22))
 	return v
 
 

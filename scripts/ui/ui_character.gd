@@ -92,7 +92,7 @@ static func _challenges(game) -> Control:
 	var CS = game.ChallengeService
 	var w = game.world
 	var p = game.player
-	var c: Dictionary = CS.state(w)
+	var c: Dictionary = CS.state(w, p)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	var left: int = CS.seconds_to_reset()
@@ -130,7 +130,11 @@ static func _challenge_row(game, ch: Dictionary, weekly: bool, i: int) -> Contro
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var done: bool = int(ch["progress"]) >= int(ch["goal"])
 	col.add_child(UI.label("%s  %d/%d" % [ch["text"], ch["progress"], ch["goal"]], 20, UI.GOOD if done else UI.TEXT, false))
-	col.add_child(UI.label("Нагорода: " + CS.reward_text(weekly, game.player.level), 15, UI.MUTED, false))
+	var where: String = str(ch.get("where", ""))
+	var sub: String = "Нагорода: " + CS.reward_text(weekly, game.player.level)
+	if where != "" and not done:
+		sub = "Де: %s   •   %s" % [where, sub]
+	col.add_child(UI.label(sub, 15, UI.MUTED, false))
 	row.add_child(col)
 	var label := "Отримано" if ch["claimed"] else "Забрати"
 	row.add_child(UI.button(label, _do(game, "claim", [weekly, i]), Vector2(170, 56), 18, CS.can_claim(ch)))

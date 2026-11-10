@@ -110,15 +110,20 @@ static func tick(world, player) -> Array:
 	# Бойова подія
 	if not s["active"].is_empty():
 		return msgs
-	if int(s["calm"]) > 0:
+	# Виклик дня чи тижня просить відбити подію: вона приходить одразу, без перепочинку й жеребу
+	var wanted: bool = load("res://scripts/game/challenge_service.gd").pending(world, "event")
+	if int(s["calm"]) > 0 and not wanted:
 		s["calm"] = int(s["calm"]) - 1
 		return msgs
-	if randf() >= CHANCE:
+	if randf() >= CHANCE and not wanted:
 		return msgs
 	var kind := pick_kind(world, player)
 	if kind == "":
 		return msgs
 	var m := start(world, player, kind)
+	if m == "" and wanted:
+		# для цього героя така подія неможлива (нема місцевостей по силі) — валка між містами є завжди
+		m = start(world, player, "caravan")
 	if m != "":
 		msgs.append(m)
 	return msgs

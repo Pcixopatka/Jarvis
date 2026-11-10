@@ -861,44 +861,53 @@ func _suite_defense_battle() -> void:
 func _suite_challenges() -> void:
 	suite("Виклики й досягнення")
 	var CS = load("res://scripts/game/challenge_service.gd")
+	var A = load("res://scripts/data/achievements.gd")
+	var ES = load("res://scripts/game/event_service.gd")
+	var DS = load("res://scripts/game/defense_service.gd")
+	var EscortS = load("res://scripts/game/escort_service.gd")
 	var p = _new_player()
+	p.job = "peasant"  # нова гра починається селянином: події й заняття йому ще закриті
 	var w = WorldState.new()
-	CS.now_override = 1762700000  # фіксований день
-	var c = CS.state(w)
-	check(c["daily"].size() == 3 and c["weekly"].size() == 2, "3 щоденні й 2 тижневі виклики")
+	var T0 := 1762700000  # фіксований день
+	CS.now_override = T0
+	var c = CS.state(w, p)
+	check(A.DAILY_COUNT == 4 and A.WEEKLY_COUNT == 3 and c["daily"].size() == 4 and c["weekly"].size() == 3, "4 щоденні й 3 тижневі виклики")
+	check(c["daily"].all(func(x): return x["group"] == "base") and c["weekly"].all(func(x): return x["group"] == "base"), "селянинові викликів про події не дають: вони ще закриті")
 	var w_same = WorldState.new()
-	check(CS.state(w_same)["daily"][0]["text"] == c["daily"][0]["text"], "у всіх гравців того ж дня — ті самі виклики")
+	check(CS.state(w_same, p)["daily"][0]["text"] == c["daily"][0]["text"], "у всіх гравців того ж дня — ті самі виклики")
 	var stats := {}
 	for ch in c["daily"]:
 		stats[ch["stat"]] = true
-	check(stats.size() == 3, "щоденні виклики різні")
+	check(stats.size() == 4, "щоденні виклики різні")
 	var ch0: Dictionary = c["daily"][0]
 	var msgs := []
 	for i in int(ch0["goal"]):
 		msgs.append_array(CS.record(w, p, ch0["stat"]))
 	check(ch0["progress"] == ch0["goal"] and msgs.any(func(m): return "Виклик виконано" in m), "виклик виконано")
-	check(CS.ready_count(w) >= 1, "нагорода чекає")
+	check(CS.ready_count(w) >= 1 and not CS.pending(w, ch0["stat"]) or c["weekly"].any(func(x): return x["stat"] == ch0["stat"]), "нагорода чекає, виклик більше не «в роботі»")
 	var g0: int = p.gold
 	var t = CS.claim(w, p, false, 0)
 	check(t != "" and p.gold > g0 and c["daily"][0]["claimed"], "нагороду забрано")
 	check(CS.claim(w, p, false, 0) == "", "двічі не забереш")
 	check(CS.claim(w, p, true, 0) == "" or c["weekly"][0]["progress"] >= c["weekly"][0]["goal"], "невиконаний тижневий не віддає нагороди")
 	# Новий день — нові виклики, тиждень той самий
-	CS.now_override = 1762700000 + 86400
-	var c2 = CS.state(w)
+	CS.now_override = T0 + 86400
+	var c2 = CS.state(w, p)
 	check(not c2["daily"][0]["claimed"] and c2["day"] != "" , "наступного дня — нові виклики")
-	# Досягнення
+	# Досягнення (на чистому світі, щоб виклики вище не заважали рахунку)
+	var wa = WorldState.new()
+	var ca = CS.state(wa, p)
 	var g1: int = p.gold
-	var m2 = CS.record(w, p, "kill")
-	check(c2["ach"].has("first_blood") and p.gold == g1 + 20 and m2.any(func(m): return "Перша кров" in m), "досягнення «Перша кров»")
-	CS.record(w, p, "kill")
+	var m2 = CS.record(wa, p, "kill")
+	check(ca["ach"].has("first_blood") and p.gold == g1 + 20 and m2.any(func(m): return "Перша кров" in m), "досягнення «Перша кров»")
+	CS.record(wa, p, "kill")
 	check(p.gold == g1 + 20, "досягнення відкривається лише раз")
-	CS.record(w, p, "level", 10)
-	CS.record(w, p, "level", 7)
-	check(w.stats["level"] == 10 and c2["ach"].has("level_10"), "рівень — найвищий, а не сума")
+	CS.record(wa, p, "level", 10)
+	CS.record(wa, p, "level", 7)
+	check(wa.stats["level"] == 10 and ca["ach"].has("level_10"), "рівень — найвищий, а не сума")
 	for i in 3:
-		CS.record(w, p, "boss:zmii")
-	check(c2["ach"].has("zmii"), "Змієборець")
+		CS.record(wa, p, "boss:zmii")
+	check(ca["ach"].has("zmii"), "Змієборець")
 	# Тижнева нагорода
 	var wk: Dictionary = c2["weekly"][0]
 	CS.record(w, p, wk["stat"], int(wk["goal"]))
@@ -906,10 +915,134 @@ func _suite_challenges() -> void:
 	var inv0: int = p.inventory.size()
 	check(CS.claim(w, p, true, 0) != "" and int(w.boosts["safe_sharpen"]) == tok0 + 1 and p.inventory.size() == inv0 + 1, "тижнева нагорода: річ і жетон заточки")
 	var w2 = WorldState.new()
-	w2.from_dict(w.to_dict())
-	check(w2.stats["kill"] == w.stats["kill"] and w2.challenges["ach"].has("zmii"), "лічильники й досягнення зберігаються")
+	w2.from_dict(wa.to_dict())
+	check(w2.stats["kill"] == wa.stats["kill"] and w2.challenges["ach"].has("zmii"), "лічильники й досягнення зберігаються")
+
+	# ---- Події у викликах ----
+	var hero = _new_player()
+	hero.change_class("cossack")
+	hero.level = 30
+	var story_mid := {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	var wh = WorldState.new()
+	wh.story = story_mid.duplicate()
+	CS.now_override = T0
+	var chh = CS.state(wh, hero)
+	var ev_d: Array = chh["daily"].filter(func(x): return x["group"] == "event")
+	var ev_w: Array = chh["weekly"].filter(func(x): return x["group"] == "event")
+	check(A.DAILY_EVENTS == 2 and ev_d.size() == 2 and chh["daily"].size() == 4, "бувалому героєві щодня два виклики про події й заняття: %s" % str(chh["daily"].map(func(x): return x["stat"])))
+	check(A.WEEKLY_EVENTS == 2 and ev_w.size() == 2 and chh["weekly"].size() == 3, "і два на тиждень: %s" % str(chh["weekly"].map(func(x): return x["stat"])))
+	check(chh["daily"][0]["group"] == "base" and chh["daily"][3]["group"] == "event", "спершу бій і господарство, потім події")
+	check(ev_d.all(func(x): return str(x["where"]) != "") and ev_w.all(func(x): return str(x["where"]) != ""), "у викликів про події є підказка, куди йти")
+	var seen := {}
+	var seen_w := {}
+	var always_two := true
+	for d in 70:
+		CS.now_override = T0 + 86400 * d
+		var wd = WorldState.new()
+		wd.story = story_mid.duplicate()
+		var cd = CS.state(wd, hero)
+		always_two = always_two and cd["daily"].filter(func(x): return x["group"] == "event").size() == 2 and cd["weekly"].filter(func(x): return x["group"] == "event").size() == 2
+		for x in cd["daily"]:
+			seen[x["stat"]] = true
+		for x in cd["weekly"]:
+			seen_w[x["stat"]] = true
+	var all_daily := true
+	for st in ["vigil_min", "duel", "bounty", "escort", "event", "trail", "tower_floor"]:
+		all_daily = all_daily and seen.has(st)
+	for wk_i in 40:
+		CS.now_override = T0 + 7 * 86400 * wk_i
+		var ww = WorldState.new()
+		ww.story = story_mid.duplicate()
+		for x in CS.state(ww, hero)["weekly"]:
+			seen_w[x["stat"]] = true
+	var all_weekly := true
+	for st in ["vigil_min", "duel", "bounty", "escort", "event", "trail", "tower_floor"]:
+		all_weekly = all_weekly and seen_w.has(st)
+	check(always_two and all_daily and all_weekly, "за десять тижнів у щоденних і за сорок у тижневих побували варта, герць, розшук, супровід, події, сліди й Башта: %s / %s" % [str(seen.keys()), str(seen_w.keys())])
+	check(not seen.has("depth_clear") and not seen_w.has("depth_clear"), "Глибини у виклики не потрапляють, доки сюжет не пройдено")
+	var wdone = WorldState.new()
+	wdone.story = {"chapter": 5, "step": 0, "stage": "done", "progress": 0}
+	check(CS.available("depth", wdone, hero) and not CS.available("depth", wh, hero), "після перемоги над Путіноїдом Глибини відкриті для викликів")
+	var young = _new_player()
+	young.change_class("cossack")
+	young.level = 5
+	check(CS.available("duel", wh, young) and not CS.available("vigil", wh, young) and not CS.available("tower", wh, young) and CS.available("bounty", wh, young), "на п'ятому рівні є герць і розшук, а варти й Башти ще нема")
+	check(not CS.available("garden", wh, hero) and not CS.available("party", wh, hero) and not CS.available("defense", WorldState.new(), hero), "город, загін і облоги — лише коли вони справді є")
+	# Нові лічильники сумуються й просувають виклики
+	CS.now_override = T0
+	var wv = WorldState.new()
+	wv.story = story_mid.duplicate()
+	var cv = CS.state(wv, hero)
+	cv["daily"][3] = {"stat": "vigil_min", "text": "Простій на Козацькій варті хвилин: 2", "goal": 2, "progress": 0, "claimed": false, "group": "event", "where": "Сторожова могила на мапі"}
+	check(CS.pending(wv, "vigil_min"), "виклик про варту ще не виконано")
+	CS.record(wv, hero, "vigil", 1)
+	CS.record(wv, hero, "vigil_min")
+	CS.record(wv, hero, "vigil", 2)
+	CS.record(wv, hero, "vigil_min")
+	check(int(wv.stats["vigil"]) == 2 and int(wv.stats["vigil_min"]) == 2 and int(cv["daily"][3]["progress"]) == 2 and not CS.pending(wv, "vigil_min"), "дві хвилини на варті закривають виклик")
+	# Виклик просить подію — вона приходить після першого ж походу, без перепочинку
+	cv["daily"][2] = {"stat": "event", "text": "Прийди на поміч", "goal": 1, "progress": 0, "claimed": false, "group": "event", "where": ""}
+	ES.state(wv)["calm"] = 9
+	ES.tick(wv, hero)
+	check(not ES.active(wv).is_empty(), "подія світу з'явилась на вимогу виклику: %s" % str(ES.active(wv).get("kind", "")))
+	var wcalm = WorldState.new()
+	wcalm.story = story_mid.duplicate()
+	CS.state(wcalm, hero)["daily"] = []
+	wcalm.challenges["weekly"] = []
+	ES.state(wcalm)["calm"] = 9
+	ES.tick(wcalm, hero)
+	check(ES.active(wcalm).is_empty() and int(ES.state(wcalm)["calm"]) == 8, "без виклику події чекають свого часу")
+	# Герой, якому місцевості вже не по силі: подія однаково знайдеться (валка між містами)
+	var vet = _new_player()
+	vet.change_class("cossack")
+	vet.level = 66
+	var wvet = WorldState.new()
+	wvet.story = {"chapter": 5, "step": 0, "stage": "done", "progress": 0}
+	CS.state(wvet, vet)["daily"] = [{"stat": "event", "text": "Прийди на поміч", "goal": 1, "progress": 0, "claimed": false, "group": "event", "where": ""}]
+	var got_event := true
+	for i in 12:
+		ES.state(wvet)["active"] = {}
+		ES.tick(wvet, vet)
+		got_event = got_event and not ES.active(wvet).is_empty()
+	check(got_event, "і героєві 66 рівня подія приходить щоразу")
+	# Виклик просить супроводу — на дошці міста він є
+	var wq = WorldState.new()
+	wq.story = story_mid.duplicate()
+	CS.state(wq, hero)["daily"] = [{"stat": "escort", "text": "Проведи мандрівника", "goal": 1, "progress": 0, "claimed": false, "group": "event", "where": ""}]
+	var all_boards := true
+	for city in ["kyiv", "sich", "lviv", "chyhyryn"]:
+		var wq2 = WorldState.new()
+		wq2.challenges = wq.challenges.duplicate(true)
+		var board: Array = wq2.board(city)
+		all_boards = all_boards and board.size() == 3 and board.any(func(q): return EscortS.is_open(q))
+	check(all_boards, "на дошці будь-якого міста є супровід, коли його просить виклик")
+	var bq: Array = wq.board("kyiv")
+	var esc: Array = bq.filter(func(q): return EscortS.is_open(q))
+	check(not esc.is_empty() and Data.LOCATIONS[esc[0]["loc"]]["type"] != "dungeon", "супровід веде в дику місцевість, не в печеру")
+	check(DS.CHANCE_WANTED > DS.CHANCE * 2.0, "облога, яку просить виклик тижня, приходить швидше")
+	# Оновлення гри посеред дня: розпочате лишається, решта — за новою схемою
+	var wm = WorldState.new()
+	wm.story = story_mid.duplicate()
+	wm.challenges = {"day": CS.day_key(T0), "week": CS.week_key(T0), "ach": {"first_blood": true},
+		"daily": [{"stat": "kill", "text": "Здолай 40 ворогів", "goal": 40, "progress": 12, "claimed": false},
+			{"stat": "parry", "text": "Відбий 4 ударів парируванням", "goal": 4, "progress": 0, "claimed": false},
+			{"stat": "field", "text": "Очисти місцевості: 1", "goal": 1, "progress": 1, "claimed": true}],
+		"weekly": [{"stat": "boss", "text": "Здолай босів: 3", "goal": 3, "progress": 0, "claimed": false},
+			{"stat": "elite", "text": "Здолай 20 еліт", "goal": 20, "progress": 5, "claimed": false}]}
+	var cm = CS.state(wm, hero)
+	check(int(cm["v"]) == CS.VERSION and cm["daily"].size() == 4 and cm["weekly"].size() == 3 and cm["ach"].has("first_blood"), "старі виклики перескладено за новою схемою")
+	check(cm["daily"].any(func(x): return x["stat"] == "kill" and int(x["progress"]) == 12) and cm["daily"].any(func(x): return x["stat"] == "field" and x["claimed"]), "розпочатий і забраний виклики дня лишились")
+	check(cm["weekly"].any(func(x): return x["stat"] == "elite" and int(x["progress"]) == 5) and cm["daily"].any(func(x): return x.get("group", "") == "event"), "тижневий із поступом лишився, а до денних додались події")
+	var again = CS.state(wm, hero)
+	check(again["daily"] == cm["daily"] and again["weekly"] == cm["weekly"], "удруге того ж дня виклики не перескладаються")
+	var wsave = WorldState.new()
+	wsave.from_dict(wm.to_dict())
+	check(CS.state(wsave, hero)["daily"] == cm["daily"], "склад викликів переживає збереження")
 	CS.now_override = 0
 	p.free()
+	hero.free()
+	young.free()
+	vet.free()
 
 
 func _suite_craft() -> void:
@@ -1670,7 +1803,7 @@ func _suite_depth_battle() -> void:
 		await process_frame
 		frames += 1
 	check(game.DepthService.state(game.world)["best"] == 1 and game.DepthService.state(game.world)["max"] == 2, "глибину 1 пройдено (кадрів: %d)" % frames)
-	check(int(game.world.stats.get("depth", 0)) == 1, "рекорд глибини записано")
+	check(int(game.world.stats.get("depth", 0)) == 1 and int(game.world.stats.get("depth_clear", 0)) == 1, "рекорд глибини записано, пройдена глибина йде у виклики")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -2558,6 +2691,18 @@ func _suite_trail_battle() -> void:
 	p.stats["vit"] = 80
 	p.recalc()
 	p.hp = p.max_hp
+	# Виклик дня просить стежку слідів — вона є в першому ж поході, без жеребу
+	var sure := true
+	game.ChallengeService.state(game.world, p)["daily"] = [{"stat": "trail", "text": "Пройди стежку слідів до знахідки", "goal": 1, "progress": 0, "claimed": false, "group": "event", "where": ""}]
+	for i in 4:
+		game.enter_location("wild_field")
+		await _frames(3)
+		sure = sure and c.trail != null
+		game.enter_map()
+		await _frames(2)
+	check(sure, "сліди є в кожному поході, поки їх просить виклик")
+	game.world.challenges["daily"] = []
+	game.world.challenges["weekly"] = []
 	for kind in ["cache", "beast", "den"]:
 		game.enter_location("wild_field")
 		await _frames(3)
@@ -4017,6 +4162,7 @@ func _suite_vigil_battle() -> void:
 		p.hp = p.max_hp
 		await process_frame
 	check(c.vigil_minute == 1 and p.gold > gold0 and int(game.world.stats.get("vigil", 0)) == 1 and int(game.VigilService.state(game.world)["paid"]) == 1, "перша хвилина: нагорода й лічильник")
+	check(int(game.world.stats.get("vigil_min", 0)) == 1, "хвилина на варті йде в лічильник для викликів")
 	c.vigil_time = 239.6
 	for i in 40:
 		_bot_fight(game)
@@ -4339,6 +4485,75 @@ func _suite_duel_battle() -> void:
 		await process_frame
 		frames += 1
 	check(game.state == game.State.CITY and p.alive and p.gold == gold1, "після поразки — на Січі, живий і при грошах")
+	# Вільний герць: поза турніром, до першої поразки
+	var DS = game.DuelService
+	var Acts = game.Acts
+	game.hud.close_dialogue()
+	var texts := ""
+	for n in game.hud.screen_root.find_children("*", "Button", true, false):
+		texts += n.text + "\n"
+	check("Вільний герць: " in texts, "на майдані є кнопка вільного герцю")
+	var tries0: int = int(DS.state(game.world)["tries"])
+	var round0: int = int(DS.state(game.world)["round"])
+	var first: Dictionary = DS.free_rival(game.world)
+	var loc0: Dictionary = DS.free_loc(game.world, p)
+	check(loc0["free"] and loc0["type"] == "duel" and loc0["rival"] == first["id"] and is_equal_approx(float(loc0["rival_hp"]), load("res://scripts/game/power.gd").dps(p) * Acts.FREE_DUEL_SECONDS), "перший суперник тримає двадцять секунд шкоди героя")
+	var duels0: int = int(game.world.stats.get("duel", 0))
+	var glory0: int = game.GloryService.glory(game.world)
+	var wins := 0
+	var paid_ok := true
+	var harder := true
+	var last_hp := 0.0
+	for bout in 4:
+		var gold_b: int = p.gold
+		var want_gold: int = DS.free_gold(p.level, bout) if bout < Acts.FREE_DUEL_PAID else 0
+		game.city_do("duel_free", null)
+		await _frames(2)
+		var rv = game.combat.nearest_enemy(p.global_position, 5000.0)
+		if not (game.combat.is_duel() and game.combat.loc.get("free", false) and rv != null):
+			break
+		harder = harder and rv.max_hp > last_hp
+		last_hp = rv.max_hp / (1.25 if rv.style == "bulavnyk" else 1.0)
+		frames = 0
+		while not game.combat.duel_over and frames < 9000 and game.state == game.State.PLAYING:
+			_bot_fight(game)
+			p.hp = p.max_hp
+			await process_frame
+			frames += 1
+		if game.combat.duel_over:
+			wins += 1
+		paid_ok = paid_ok and p.gold - gold_b == want_gold
+		frames = 0
+		while game.state == game.State.PLAYING and frames < 600:
+			_bot_fight(game)
+			await process_frame
+			frames += 1
+		game.hud.close_dialogue()
+	var st: Dictionary = DS.state(game.world)
+	check(wins == 4 and int(st["streak"]) == 4 and int(st["best_streak"]) == 4, "чотири перемоги поспіль: серія й рекорд")
+	check(paid_ok and int(st["free_paid"]) == Acts.FREE_DUEL_PAID and DS.free_paid_left(game.world) == 0, "гаманець дають за перші три перемоги дня, четверта — за серію")
+	check(harder, "кожен наступний суперник у серії здоровіший")
+	check(int(game.world.stats.get("duel", 0)) == duels0 + 4 and int(game.world.stats.get("duel_free", 0)) == 4 and game.GloryService.glory(game.world) == glory0 + Acts.FREE_DUEL_GLORY, "вільний герць іде в лічильник викликів, слава — за першу перемогу дня")
+	check(int(st["tries"]) == tries0 and int(st["round"]) == round0, "турнірні спроби й кола вільний герць не чіпає")
+	check(DS.free_rival(game.world)["id"] != first["id"] or Acts.RIVAL_ORDER.size() == 1, "суперники в серії міняються")
+	check(game.RecordService.hero_values(game.world, p)["duel_streak"] == 4 and Acts.RECORDS.has("duel_streak") and "duel_streak" in Acts.RECORD_ORDER, "серія потрапляє в Літопис слави")
+	# Поразка рве серію, рекорд лишається
+	game.city_do("duel_free", null)
+	await _frames(2)
+	p.invuln = 0.0
+	p.take_damage(p.max_hp * 20.0, null)
+	await _frames(3)
+	check(int(DS.state(game.world)["streak"]) == 0 and int(DS.state(game.world)["best_streak"]) == 4 and int(DS.state(game.world)["tries"]) == tries0, "поразка рве серію, рекорд і турнірні спроби цілі")
+	frames = 0
+	while game.state != game.State.CITY and frames < 300:
+		await process_frame
+		frames += 1
+	check(game.state == game.State.CITY and p.alive, "після поразки у вільному герці — на Січі й живий")
+	# Наступного дня гаманці знову є
+	var CSx = game.ChallengeService
+	CSx.now_override = int(Time.get_unix_time_from_system()) + 86400
+	check(DS.free_paid_left(game.world) == Acts.FREE_DUEL_PAID, "наступного дня гаманці знову чекають")
+	CSx.now_override = 0
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -4386,7 +4601,7 @@ func _suite_tower_battle() -> void:
 		frames += 1
 	check(game.TowerService.state(game.world)["best"] == 1 and game.TowerService.state(game.world)["max"] == 2, "поверх 1 пройдено (кадрів: %d)" % frames)
 	check(saw_mini, "міні-бос з іменем був на арені")
-	check(p.gold > gold0 and int(game.world.stats.get("tower", 0)) == 1, "нагорода за перше проходження й рекорд")
+	check(p.gold > gold0 and int(game.world.stats.get("tower", 0)) == 1 and int(game.world.stats.get("tower_floor", 0)) == 1, "нагорода за перше проходження, рекорд і поверх для викликів")
 	# Портал «Вище» веде на другий поверх без виходу на мапу
 	frames = 0
 	while game.combat.loc.get("floor", 0) == 1 and frames < 600:

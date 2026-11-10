@@ -2,7 +2,10 @@ extends RefCounted
 ## Герць на майдані Січі — тижневий турнір один на один: три кола проти іменованих суперників.
 ## Без смерті: програв — мінус спроба. Стан — world.duel:
 ##   {"week": ключ тижня, "round": скільки кіл уже виграно (0..3), "tries": спроб лишилось,
-##    "titles": скільки разів ставав чемпіоном, "wins": виграних кіл за весь час, "belt": чи вже має пояс}
+##    "titles": скільки разів ставав чемпіоном, "wins": виграних кіл за весь час, "belt": чи вже має пояс,
+##    "streak": серія у вільному герці, "best_streak": найдовша серія, "free_day": день, "free_paid": оплачено сьогодні}
+## Вільний герць — поза турніром, скільки завгодно: суперники виходять один за одним до першої поразки,
+## кожен наступний міцніший. Перші перемоги дня — з гаманцем, далі б'ються за серію й рекорд.
 
 const Acts := preload("res://scripts/data/activities.gd")
 const Data := preload("res://scripts/data/data.gd")
@@ -26,11 +29,15 @@ static func state(world) -> Dictionary:
 		s["week"] = week()
 		s["round"] = 0
 		s["tries"] = TRIES
-	for k in ["titles", "wins"]:
+	for k in ["titles", "wins", "streak", "best_streak", "free_paid"]:
 		if not s.has(k):
 			s[k] = 0
 	if not s.has("belt"):
 		s["belt"] = false
+	var day := ChallengeService.day_key(ChallengeService._now())
+	if s.get("free_day", "") != day:
+		s["free_day"] = day
+		s["free_paid"] = 0
 	return s
 
 
@@ -130,6 +137,76 @@ static func lose(world) -> String:
 	if int(s["tries"]) <= 0:
 		return "Тебе поклали на лопатки. Спроб цього тижня більше нема — приходь наступного."
 	return "Тебе поклали на лопатки. Лишилось спроб: %d." % int(s["tries"])
+
+
+# ---------- Вільний герць ----------
+
+## Хто вийде наступним: суперники міняються щодня й ідуть колом, поки триває серія.
+static func free_rival(world) -> Dictionary:
+	var s := state(world)
+	var order: Array = Acts.RIVAL_ORDER
+	var id: String = order[(absi(hash(str(s["free_day"]))) + int(s["streak"])) % order.size()]
+	var info: Dictionary = Acts.RIVALS[id].duplicate()
+	info["id"] = id
+	return info
+
+
+## Скільки ще перемог сьогодні оплачується.
+static func free_paid_left(world) -> int:
+	return maxi(0, int(Acts.FREE_DUEL_PAID) - int(state(world)["free_paid"]))
+
+
+## Гаманець за перемогу над суперником номер streak+1 у серії.
+static func free_gold(level: int, streak: int) -> int:
+	return int(Acts.FREE_DUEL_GOLD * level * (1.0 + 0.25 * mini(streak, 8)))
+
+
+## Опис бою вільного герцю: суперник міряється з героєм і міцнішає з кожною перемогою в серії.
+static func free_loc(world, player) -> Dictionary:
+	var k := int(state(world)["streak"])
+	var rival := free_rival(world)
+	var secs: float = float(Acts.FREE_DUEL_SECONDS) * (1.0 + float(Acts.FREE_DUEL_HP_STEP) * k)
+	var hit_frac: float = float(Acts.FREE_DUEL_HIT) * (1.0 + float(Acts.FREE_DUEL_HIT_STEP) * k) * hit_scale(player.level)
+	return {"name": "Вільний герць: " + str(rival["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
+		"rival": rival["id"], "round": k, "free": true,
+		"rival_hp": Power.dps(player) * secs, "rival_cap": 1.0 / (0.6 * secs),
+		"rival_dmg": Power.hit(player, hit_frac), "desc": ""}
+
+
+## Перемога у вільному герці: серія росте; перші перемоги дня — з гаманцем і славою.
+static func free_win(world, player) -> Array:
+	var s := state(world)
+	var k := int(s["streak"])
+	s["streak"] = k + 1
+	s["wins"] = int(s["wins"]) + 1
+	var record: bool = int(s["streak"]) > int(s["best_streak"])
+	s["best_streak"] = maxi(int(s["best_streak"]), int(s["streak"]))
+	var text := "Перемога! Серія: %d" % int(s["streak"])
+	if record and int(s["streak"]) > 1:
+		text += " — твій рекорд"
+	var msgs := []
+	if int(s["free_paid"]) < int(Acts.FREE_DUEL_PAID):
+		var g := free_gold(player.level, k)
+		player.gold += g
+		text += "\n+%d грн" % g
+		if int(s["free_paid"]) == 0:
+			text += ", +%d слави" % int(Acts.FREE_DUEL_GLORY)
+			msgs.append_array(GloryService.add(world, player, int(Acts.FREE_DUEL_GLORY)))
+		s["free_paid"] = int(s["free_paid"]) + 1
+	else:
+		text += "\nГаманці на сьогодні роздано: далі герць іде за серію"
+	msgs.push_front(text)
+	return msgs
+
+
+## Поразка чи здача у вільному герці: серію перервано, більше нічого не втрачено.
+static func free_lose(world) -> String:
+	var s := state(world)
+	var k := int(s["streak"])
+	s["streak"] = 0
+	if k > 0:
+		return "Тебе поклали на лопатки. Серію перервано на %d." % k
+	return "Тебе поклали на лопатки. Спробуй ще: у вільному герці спроб не лічать."
 
 
 ## Пояс чемпіона: легендарний пояс рівня героя з власною назвою.
