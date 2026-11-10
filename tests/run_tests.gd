@@ -94,6 +94,8 @@ func _run() -> void:
 	_suite_mana_potion()
 	await _suite_mana_potion_game()
 	await _suite_new_bosses()
+	_suite_escort()
+	await _suite_escort_game()
 	await _suite_travel_ride()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
@@ -184,7 +186,7 @@ func _suite_data() -> void:
 	for city in Data.CITIES:
 		for i in 10:
 			var q: Dictionary = w._gen_quest(city)
-			check(q["type"] in ["kill", "fetch", "dungeon"], "тип завдання")
+			check(q["type"] in ["kill", "fetch", "dungeon", "escort"], "тип завдання")
 			check(int(q["count"]) > 0 and int(q["gold"]) > 0 and int(q["xp"]) > 0 and int(q["loyalty"]) > 0, "нагорода/кількість")
 			check(Data.LOCATIONS.has(q["loc"]), "локація завдання")
 		var b: Array = w.board(city)
@@ -4250,6 +4252,272 @@ func _suite_bulk_sell() -> void:
 	p.free()
 
 
+func _suite_escort() -> void:
+	suite("Супровід: правила")
+	var Acts = load("res://scripts/data/activities.gd")
+	var ES = load("res://scripts/game/escort_service.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	for id in Acts.ESCORT_ORDER:
+		var W: Dictionary = Acts.ESCORT_WHO[id]
+		check(W["name"] != "" and W["acc"] != "" and W["thanks"] != "" and GfxS.has(W["sheet"]), "%s: назва, знахідний відмінок, подяка й спрайт" % id)
+	check(Acts.ESCORT_WHO.size() == Acts.ESCORT_ORDER.size(), "усі мандрівники в черзі")
+	# Дошка: супровід трапляється лише в дику місцевість, не в печеру
+	seed(20261110)
+	var w = WorldState.new()
+	var field_n := 0
+	var escort_n := 0
+	var kinds := {}
+	var types := {}
+	for i in 900:
+		var q: Dictionary = w._gen_quest(["sich", "kyiv", "lviv"][i % 3])
+		var L: Dictionary = Data.LOCATIONS[q["loc"]]
+		types[q["type"]] = true
+		if L["type"] != "dungeon":
+			field_n += 1
+		if q["type"] != "escort":
+			continue
+		escort_n += 1
+		kinds[q["target"]] = true
+		check(L["type"] != "dungeon" and int(q["count"]) == 1 and Acts.ESCORT_WHO.has(q["target"]), "супровід: дика місцевість, один мандрівник")
+		check(q["text"] == "Проведи %s (%s)" % [Acts.ESCORT_WHO[q["target"]]["acc"], L["name"]], "текст завдання: %s" % q["text"])
+		check(int(q["gold"]) == int((40 + 25 * int(L["level"])) * Acts.ESCORT_MULT), "нагорода більша за звичайну")
+	var share := float(escort_n) / float(maxi(field_n, 1))
+	check(share > Acts.ESCORT_CHANCE - 0.08 and share < Acts.ESCORT_CHANCE + 0.08, "частка супроводів серед завдань у поле: %.2f" % share)
+	check(kinds.size() == Acts.ESCORT_ORDER.size(), "трапляються всі мандрівники")
+	check(types.has("kill") and types.has("fetch") and types.has("dungeon"), "решта типів завдань лишилась")
+	for r in [0.0, 0.26, 0.51, 0.76, 0.999, 1.0]:
+		var qq := {"id": 1, "city": "sich", "loc": "wild_field", "progress": 0, "lvl": 1}
+		ES.fill(qq, r)
+		check(qq["target"] == Acts.ESCORT_ORDER[mini(int(r * 4.0), 3)], "вибір мандрівника за кидком %.2f" % r)
+	# Узяте завдання: служба бачить його в місцевості
+	var w2 = WorldState.new()
+	var p = _new_player()
+	var q1 := {"id": 77, "city": "sich", "loc": "rapids", "progress": 0, "lvl": 2, "gold": 100, "xp": 50, "loyalty": 40}
+	ES.fill(q1, 0.0)
+	check(ES.at(w2, "rapids").is_empty(), "не взяте завдання в місцевості не чекає")
+	w2.quests.append(q1)
+	check(ES.at(w2, "rapids") == q1 and ES.at(w2, "wild_field").is_empty() and ES.is_open(q1), "узяте завдання чекає у своїй місцевості")
+	check(w2.quest_targets().has("rapids"), "місцевість позначено на мапі")
+	check(w2.on_kill("mavka").is_empty() and int(q1["progress"]) == 0, "убита нечисть супроводу не зараховує")
+	w2.on_dungeon("rapids")
+	check(int(q1["progress"]) == 0, "зачистка печери теж")
+	# Опис бою
+	var B: Dictionary = ES.battle_loc(q1)
+	var L1: Dictionary = Data.LOCATIONS["rapids"]
+	check(B["type"] == "defense" and B["variant"] == "escort" and int(B["waves"]) == Acts.ESCORT_WAVES and int(B["escort"]) == 77 and B["who"] == "kobzar", "бій: оборона з мандрівником, три засідки")
+	check(int(B["level"]) == int(L1["level"]) and B["enemies"] == L1["enemies"] and B["target"] == "rapids" and B["biome"] == L1["biome"], "рівень, нечисть і краєвид — від місцевості")
+	check(is_equal_approx(float(B["gate_hp"]), Acts.ESCORT_HP + Acts.ESCORT_HP_LVL * int(L1["level"])) and ES.hp(10) > ES.hp(2), "здоров'я мандрівника росте з рівнем")
+	check("кобзар" in B["name"], "назва бою: %s" % B["name"])
+	# Не вберіг: завдання лишається
+	var lost: String = ES.lose(w2, 77)
+	check("спробуй ще раз" in lost and "Кобзар" in lost and "втік" in lost and ES.is_open(q1) and w2.quests.size() == 1, "поразка: завдання лишилось")
+	# Довів: виконано, вдячність за цілого мандрівника, нагорода в місті
+	p.gold = 0
+	var won: String = ES.win(w2, p, 77, 1.0)
+	check(w2.is_done(q1) and not ES.is_open(q1) and ES.at(w2, "rapids").is_empty(), "перемога: завдання виконано")
+	check(p.gold == Acts.ESCORT_TIP * 2 and "дійшов" in won and Data.CITIES["sich"]["name"] in won and str(Acts.ESCORT_WHO["kobzar"]["thanks"]) in won, "подяка й гривні на дорогу: %d" % p.gold)
+	check(ES.win(w2, p, 77, 1.0) == "Мандрівник дійшов." and p.gold == Acts.ESCORT_TIP * 2, "двічі те саме завдання не зарахувати")
+	check(not w2.quest_targets().has("rapids"), "позначка з мапи зникла")
+	var g0: int = p.gold
+	var loy0: int = w2.loyalty_points("sich")
+	var r1: Dictionary = CityService.turn_in(w2, p, 77)
+	check(not r1.is_empty() and p.gold == g0 + 100 and w2.loyalty_points("sich") == loy0 + 40 and w2.quests.is_empty(), "здача в місті: гривні й лояльність")
+	# Побитий мандрівник дякує скупіше; знахарка — жіночого роду
+	var q2 := {"id": 78, "city": "kyiv", "loc": "black_forest", "progress": 0, "lvl": 4, "gold": 10, "xp": 10, "loyalty": 10}
+	ES.fill(q2, 0.99)
+	w2.quests.append(q2)
+	check(q2["target"] == "znakharka" and "втекла" in ES.lose(w2, 78), "знахарка: «втекла»")
+	p.gold = 0
+	var won2: String = ES.win(w2, p, 78, 0.5)
+	check(p.gold == int(round(Acts.ESCORT_TIP * 4 * 0.5)) and "дійшла" in won2, "половина здоров'я — половина подяки")
+	var q3 := {"id": 79, "city": "kyiv", "loc": "black_forest", "progress": 0, "lvl": 4, "gold": 10, "xp": 10, "loyalty": 10}
+	ES.fill(q3, 0.3)
+	w2.quests.append(q3)
+	p.gold = 0
+	check("грн" not in ES.win(w2, p, 79, 0.0) and p.gold == 0 and w2.is_done(q3), "ледве живий — без гривень, але завдання виконано")
+	# Збереження
+	var w3 = WorldState.new()
+	w3.from_dict(w2.to_dict())
+	check(w3.quests.size() == 2 and w3.quests[0]["type"] == "escort" and w3.is_done(w3.quests[0]), "супровід зберігається разом із завданнями")
+	# Досягнення й тижневий виклик
+	var ach := {}
+	for a in Ach.ACHIEVEMENTS:
+		ach[a["id"]] = a
+	check(ach.has("escort_1") and ach.has("escort_15") and ach.has("escort_clean") and ach["escort_clean"]["stat"] == "escort_clean", "досягнення супроводу")
+	var weekly := false
+	for c in Ach.WEEKLY:
+		if c["stat"] == "escort":
+			weekly = true
+	check(weekly, "тижневий виклик на супровід")
+	p.free()
+
+
+func _suite_escort_game() -> void:
+	suite("Супровід: у грі")
+	var Acts = load("res://scripts/data/activities.gd")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	root.get_node("Ads").instant = true
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	p.change_class("cossack")
+	p.level = 20
+	p.stats["str"] = 120
+	p.stats["vit"] = 120
+	p.skills = {"whirl": 5}
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "trail": true}
+	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	var ES = game.EscortService
+	var q := {"id": 901, "city": "sich", "loc": "wild_field", "progress": 0, "lvl": 1, "gold": 104, "xp": 80, "loyalty": 56}
+	ES.fill(q, 0.0)
+	game.world.quests.append(q)
+	# Мапа: окрема кнопка «Провести», звичайний похід супроводу не починає
+	game.enter_map()
+	await _frames(2)
+	game._on_map_select("wild_field")
+	await _frames(2)
+	var texts := []
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	check("Провести кобзаря" in texts and "Вирушити" in texts, "на мапі дві кнопки: %s" % str(texts))
+	game._on_map_select("rapids")
+	await _frames(2)
+	texts = []
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	check("Вирушити" in texts and texts.size() == 1, "в іншій місцевості кнопки супроводу нема")
+	await _ride(game, "wild_field")
+	check(game.state == game.State.PLAYING and not game.combat.is_defense() and ES.is_open(q), "«Вирушити» — звичайний похід")
+	# «Провести»: бій із мандрівником
+	await _ride(game, "wild_field", true)
+	var c = game.combat
+	check(game.state == game.State.PLAYING and c.is_defense() and c.gate != null and c.gate.variant == "escort", "«Провести» — супровід")
+	check(c.gate.sheet == "trav_kobzar" and c.gate.label_text() == "Кобзар" and c.gate.radius < 30.0 and is_equal_approx(c.gate.max_hp, ES.hp(1)), "мандрівник на арені: кобзар")
+	check(game.world.hints.has("escort"), "підказку про супровід показано")
+	check("Шлях 0%" in game._combat_info()["sub"] and "Кобзар 100%" in game._combat_info()["sub"], "рядок бою: %s" % game._combat_info()["sub"])
+	var y0: float = c.gate.position.y
+	for i in 260:
+		await process_frame
+	check(c.gate.position.y < y0 - 40.0 and c.gate.walking and not c.gate.scared and c.wave == 0, "мандрівник іде ареною сам (пройшов %.0f)" % (y0 - c.gate.position.y))
+	check(c.escort_part() > 0.03 and c.escort_part() < 0.25, "частка шляху: %.2f" % c.escort_part())
+	# Перша засідка на чверті шляху
+	var frames := 0
+	while c.wave == 0 and frames < 900:
+		await process_frame
+		frames += 1
+	var pack: int = Acts.ESCORT_PACK + Acts.ESCORT_PACK_STEP
+	check(c.wave == 1 and c.alive_enemy_count() == pack and absf(c.escort_part() - 0.25) < 0.02, "засідка на чверті шляху: %d ворогів" % c.alive_enemy_count())
+	var near := 0
+	var rams := 0
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.global_position.distance_to(c.gate.global_position) < 380.0:
+			near += 1
+		if e.rams_gate:
+			rams += 1
+	check(near == 0 and rams == pack / 2, "нечисть вискакує не впритул, половина кидається на мандрівника")
+	# Нечисть поруч — стоїть; лікування діє
+	var foe = c.get_tree().get_nodes_in_group("enemies")[0]
+	foe.global_position = c.gate.global_position + Vector2(120, 0)
+	foe.stun = 5.0
+	await _frames(3)
+	var y1: float = c.gate.position.y
+	await _frames(20)
+	check(c.gate.scared and not c.gate.walking and is_equal_approx(c.gate.position.y, y1), "нечисть поруч — мандрівник стоїть")
+	c.gate.take_damage(100.0, foe)
+	var hp1: float = c.gate.hp
+	c.gate.heal(40.0)
+	check(hp1 < c.gate.max_hp and is_equal_approx(c.gate.hp, hp1 + 40.0), "мандрівника можна лікувати")
+	# Влучили здалеку (стрілець за межею страху): однаково на мить завмирає
+	foe.global_position = c.gate.global_position + Vector2(0, -700)
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e != foe:
+			e.global_position = c.gate.global_position + Vector2(randf_range(-80, 80), -720)
+			e.stun = 5.0
+	c.gate.flinch = 0.0
+	await _frames(3)
+	var far_ok: bool = not c.gate.scared
+	c.gate.take_damage(1.0, foe)
+	await _frames(3)
+	check(far_ok and c.gate.scared and not c.gate.walking and c.gate.flinch > 0.0, "постріл здалеку теж спиняє мандрівника")
+	check("Кобзар" in game._combat_info()["sub"] and "Шлях 25%" in game._combat_info()["sub"], "рядок бою: %s" % game._combat_info()["sub"])
+	# Бот доводить до кінця
+	var kills0 := int(game.world.stats.get("escort", 0))
+	frames = 0
+	var max_wave := 0
+	while not c.defense_over and frames < 9000:
+		_bot_fight(game)
+		c.gate.hp = c.gate.max_hp
+		p.hp = p.max_hp
+		max_wave = maxi(max_wave, c.wave)
+		await process_frame
+		frames += 1
+	check(c.defense_over and c.field_cleared and max_wave == 3 and c.escort_part() >= 1.0, "довів до кінця через три засідки (кадрів: %d)" % frames)
+	check(game.world.is_done(q) and int(game.world.stats.get("escort", 0)) == kills0 + 1 and int(game.world.stats.get("escort_clean", 0)) == 1, "завдання виконано, лічильники зросли")
+	var ach_open: Dictionary = load("res://scripts/game/challenge_service.gd").state(game.world)["ach"]
+	check(ach_open.has("escort_1") and ach_open.has("escort_clean"), "досягнення «Надійний провідник» і «Ані подряпини»")
+	check("Портал веде на мапу" in game._combat_info()["sub"], "рядок після перемоги: %s" % game._combat_info()["sub"])
+	frames = 0
+	while game.state == game.State.PLAYING and frames < 600:
+		_bot_fight(game)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.MAP, "з порталу — на мапу")
+	game._on_map_select("wild_field")
+	await _frames(2)
+	texts = []
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		texts.append(b.text)
+	check("Провести кобзаря" not in texts, "виконане завдання кнопки не лишає")
+	var g0: int = p.gold
+	check(not CityService.turn_in(game.world, p, 901).is_empty() and p.gold == g0 + 104, "нагорода в місті")
+	# Не вберіг: мандрівник тікає, завдання лишається
+	var q2 := {"id": 902, "city": "sich", "loc": "wild_field", "progress": 0, "lvl": 1, "gold": 104, "xp": 80, "loyalty": 56}
+	ES.fill(q2, 0.99)
+	game.world.quests.append(q2)
+	await _ride(game, "wild_field", true)
+	c = game.combat
+	check(c.is_defense() and c.gate.sheet == "trav_znakharka" and c.gate.label_text() == "Знахарка", "другий супровід: знахарка")
+	var y2: float = c.gate.position.y
+	c.gate.take_damage(99999.0, null)
+	check(c.defense_over and not c.gate.alive and ES.is_open(q2), "не вберіг: бій програно, завдання лишилось")
+	await _frames(30)
+	check(c.gate.position.y > y2 + 20.0, "мандрівниця тікає назад")
+	await create_timer(2.8).timeout
+	await _frames(3)
+	check(game.state == game.State.MAP and game.world.quests.has(q2) and int(game.world.stats.get("escort", 0)) == kills0 + 1, "після поразки — на мапу, завдання чекає")
+	# Звичайна поїздка після супроводу не тягне супровід за собою
+	await _ride(game, "wild_field")
+	check(game.state == game.State.PLAYING and not game.combat.is_defense(), "наступний звичайний похід — звичайний")
+	# Герой поліг під час супроводу: завдання лишається, місто нічого не втрачає
+	await _ride(game, "wild_field", true)
+	check(game.combat.is_defense() and game.combat.gate.variant == "escort", "третій супровід почався")
+	var loy0: int = game.world.loyalty_points("sich")
+	p.unbreak_ready = false
+	p.berehynia_ready = false
+	p.take_damage(1e9)
+	await _frames(3)
+	check(game.state == game.State.DEAD and game.combat.defense_over and ES.is_open(q2) and game.world.loyalty_points("sich") == loy0, "герой поліг: супровід зірвано, завдання чекає")
+	await create_timer(1.6).timeout
+	await _frames(3)
+	game.enter_city(game.world.last_city)
+	await _frames(2)
+	check(game.state == game.State.CITY and game.world.quests.has(q2), "після поразки герой у місті, завдання при ньому")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
 func _suite_travel_ride() -> void:
 	suite("Подорож мапою")
 	SaveSystem.delete(TEST_SAVE)
@@ -4511,11 +4779,14 @@ func _bot_fight(game) -> void:
 
 ## Натиснути «Вирушити» й дочекатись прибуття (подорож мапою триває кілька секунд).
 ## Поїздка рухається лише на мапі — тож спершу виходимо на неї, як і справжній гравець.
-func _ride(game, id: String) -> void:
+func _ride(game, id: String, escort: bool = false) -> void:
 	if game.state != game.State.MAP:
 		game.enter_map()
 		await _frames(2)
-	game._go_to(id)
+	if escort:
+		game._go_escort(id)  # кнопка «Провести» на мапі
+	else:
+		game._go_to(id)
 	var frames := 0
 	while game.travel_to != "" and frames < 1200:
 		if game.hud.dialogue_root != null:

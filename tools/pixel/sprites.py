@@ -100,7 +100,7 @@ def hair_and_hat(p, d, hy, c, side):
     hair = c["hair"]; style = c.get("hat", "hair")
     hc = c.get("hat_col", hair)
     if d == "up":
-        if style in ("shapka", "straw", "hood", "helmet"):
+        if style in ("shapka", "straw", "hood", "helmet", "kerchief"):
             p.rect_sh(CX - 9, hy - 2, 19, 11, hc)
         else:
             p.rect_sh(CX - 8, hy - 1, 17, 10, hair)
@@ -288,6 +288,8 @@ def humanoid(p, d, frame, c):
     if c.get("aura"):
         a = c["aura"]
         for i in range(4): p.px(CX - 12 + i * 8, by - 4 - (i % 2) * 3, a)
+    # ---- ноша мандрівника ----
+    carry(p, d, c, by, side)
     # ---- зброя ----
     weapon(p, d, frame, c, by, atk, side)
     p.outline()
@@ -297,6 +299,54 @@ def humanoid(p, d, frame, c):
             p.px(x, y, (255, 230, 90, 255)); p.px(x + 1, y, (255, 230, 90, 255)); p.px(x, y + 1, (255, 230, 90, 255))
     if frame == "dead":
         p.rotate_dead()
+
+
+def carry(p, d, c, by, side):
+    """Ноша мандрівника за спиною: кобза, мішок із сіллю, торба гінця."""
+    kind = c.get("carry")
+    if not kind: return
+    strap = hexc("4a3020")
+    if kind == "kobza":
+        wood = hexc("b47a3c"); dark = mul(wood, 0.7); neck = hexc("6b4a2a")
+        if d == "up":
+            # Зі спини кобзу видно всю: корпус на попереку, гриф над плечем
+            p.line(CX + 3, by + 6, CX + 10, by - 9, neck, 2)
+            p.rect(CX + 9, by - 12, 3, 4, dark)
+            p.ell_sh(CX - 7, by + 3, 13, 12, wood)
+            p.px(CX - 1, by + 8, dark); p.px(CX, by + 8, dark); p.px(CX - 1, by + 9, dark)
+            p.line(CX - 9, by + 1, CX + 7, by + 13, strap, 1)
+        elif side:
+            p.ell_sh(CX + 4, by + 2, 8, 12, wood)
+            p.line(CX + 8, by + 3, CX + 11, by - 9, neck, 2)
+            p.rect(CX + 10, by - 12, 3, 4, dark)
+        else:
+            # Спереду: ремінь через груди й гриф над плечем
+            p.line(CX - 8, by + 1, CX + 7, by + 11, strap, 1)
+            p.line(CX - 10, by + 1, CX - 12, by - 9, neck, 2)
+            p.rect(CX - 14, by - 12, 3, 4, dark)
+            p.rect(CX + 9, by + 9, 3, 6, wood); p.rect(CX + 11, by + 10, 1, 4, dark)
+    elif kind == "sack":
+        cloth = hexc("c9b48a"); dark = mul(cloth, 0.72)
+        if d == "up":
+            p.ell_sh(CX - 8, by - 3, 16, 17, cloth)
+            p.rect(CX - 2, by - 5, 4, 3, dark); p.line(CX - 3, by - 3, CX + 2, by - 3, strap, 1)
+            p.rect(CX - 5, by + 5, 3, 3, dark)  # латка
+        elif side:
+            p.ell_sh(CX + 3, by - 3, 10, 16, cloth); p.rect(CX + 6, by - 5, 4, 3, dark)
+        else:
+            p.rect(CX - 8, by + 1, 2, 9, strap); p.rect(CX + 6, by + 1, 2, 9, strap)
+            p.rect(CX - 11, by - 3, 4, 4, cloth); p.rect(CX + 8, by - 3, 4, 4, cloth)
+    elif kind == "bag":
+        leather = hexc("8a5a2a"); dark = mul(leather, 0.7)
+        if d == "up":
+            p.line(CX + 8, by + 1, CX - 7, by + 12, strap, 1)
+            p.rect_sh(CX - 11, by + 10, 7, 7, leather)
+        elif side:
+            p.line(CX - 2, by + 1, CX + 3, by + 11, strap, 1)
+            p.rect_sh(CX + 1, by + 10, 7, 7, leather); p.px(CX + 4, by + 12, hexc("d4a63a"))
+        else:
+            p.line(CX - 8, by + 1, CX + 7, by + 12, strap, 1)
+            p.rect_sh(CX + 5, by + 10, 7, 7, leather); p.rect(CX + 5, by + 10, 7, 2, dark); p.px(CX + 8, by + 13, hexc("d4a63a"))
 
 
 def weapon(p, d, frame, c, by, atk, side):
@@ -365,6 +415,22 @@ def weapon(p, d, frame, c, by, atk, side):
             p.px(belly + (-8 if side else 8), hy - 2 - up, hexc("dfe4ee"))
         else:
             p.line(top[0], top[1], bot[0], bot[1], string, 1)
+    elif kind == "stick":
+        # Ціпок: палиця від руки до землі з гулькою нагорі
+        p.line(hx + (-3 if side else 2), hy - 9, hx + (-4 if side else 3), GROUND - 1, handle, 2)
+        p.rect(hx + (-5 if side else 1), hy - 11, 3, 3, mul(handle, 1.25))
+    elif kind == "letter":
+        # Лист із сургучем у руці
+        lx = hx + (-6 if side else -1)
+        p.rect(lx, hy - 3, 7, 5, hexc("f4eeda")); p.rect(lx, hy + 1, 7, 1, hexc("cfc6aa")); p.px(lx + 3, hy - 1, hexc("c6281e")); p.px(lx + 4, hy - 1, hexc("c6281e"))
+    elif kind == "basket":
+        # Кошик із зіллям
+        wick = hexc("b08a4a"); bx = hx + (-7 if side else -3)
+        p.line(bx + 1, hy + 1, bx + 4, hy - 3, mul(wick, 0.7), 1); p.line(bx + 4, hy - 3, bx + 7, hy + 1, mul(wick, 0.7), 1)
+        p.rect_sh(bx, hy + 1, 9, 6, wick); p.rect(bx, hy + 3, 9, 1, mul(wick, 0.7))
+        for i, gc in enumerate((hexc("5aa040"), hexc("7fc85a"), hexc("5aa040"))):
+            p.rect(bx + 1 + i * 3, hy - 1, 2, 2, gc)
+        p.px(bx + 4, hy - 2, hexc("ffd23a"))
     elif kind == "scythe":
         p.line(hx, hy + 8, hx + (atk and (-6 if side else 6)), hy - 24, handle, 2)
         tip = (hx + (atk and (-6 if side else 6)), hy - 24)
@@ -472,6 +538,15 @@ _LOOKS = {"peasant": "peasant", "cossack": "cossack_sabre", "volkhv": "volkhv_st
 for _job, _src in _LOOKS.items():
     CHARS["hunter_" + _job] = dict(CHARS[_src], weapon="bow")
     CHARS["plain_" + _job] = dict(CHARS[_src], weapon=None)
+# Мандрівники для завдань на супровід: кобзар, чумак, гонець, знахарка
+CHARS["trav_kobzar"] = dict(pants=hexc("8a8478"), boots=hexc("5a4030"), body=hexc("7a6a58"), sleeve=hexc("7a6a58"), robe=True, sash=hexc("b8261c"),
+                            hair=hexc("d9d2c4"), hat="straw", hat_col=hexc("c9a85a"), beard=hexc("d9d2c4"), mustache=True, brows=True, weapon="stick", carry="kobza")
+CHARS["trav_chumak"] = dict(pants=hexc("2a2a34"), wide_pants=True, boots=hexc("3a2a20"), body=hexc("f2ecdc"), sleeve=hexc("f2ecdc"), vyshyvka=hexc("2a2a34"),
+                            sash=hexc("3a6a9a"), hair=hexc("3a2518"), hat="straw", hat_col=hexc("e0c070"), mustache=True, brows=True, weapon="stick", carry="sack")
+CHARS["trav_honets"] = coss(hexc("a8322a"), hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("f2c23a"), mustache=False, brows=True, sash=hexc("f2c23a"),
+                            vyshyvka=None, weapon="letter", carry="bag")
+CHARS["trav_znakharka"] = dict(pants=hexc("7a2f3a"), boots=hexc("5a3020"), body=hexc("f6efe0"), sleeve=hexc("f6efe0"), robe=True, vyshyvka=hexc("c6281e"),
+                               sash=hexc("3a9a4a"), hair=hexc("6a4a2a"), hat="kerchief", hat_col=hexc("b8343a"), brows=True, weapon="basket")
 # Накладки на голову
 CHARS["overlay_hat"] = dict(only_hat=True, hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("ffffff"), hair=hexc("2a2220"))
 CHARS["overlay_wolf"] = dict(only_hat=True, hat="wolf_ears", hat_col=hexc("7a7a7e"), hair=hexc("7a7a7e"))

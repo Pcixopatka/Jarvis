@@ -10,9 +10,17 @@ var alive := true
 var dead := false
 var plague_immune := true  # хмари зарази стіну не точать
 var camp := false  # тин хутора замість частоколу
-var variant := "city"  # city | camp | village | caravan | captives | wounded (події, див. EventService)
+var variant := "city"  # city | camp | village | caravan | captives | wounded (події, див. EventService) | escort (супровід)
 var phase := 0.0
 var flash := 0.0
+# Супровід (див. EscortService): замість брами — мандрівник, що сам іде ареною
+var sheet := ""  # аркуш спрайтів мандрівника
+var who_name := ""
+var walking := false  # іде (true) чи стоїть
+var scared := false  # нечисть поруч: стоїть і озирається
+var step := 0.0  # фаза кроку
+var flinch := 0.0  # щойно влучили (здалеку теж): на мить завмирає
+const FLINCH_TIME := 1.2
 
 
 func take_damage(amount: float, _source = null) -> bool:
@@ -20,6 +28,7 @@ func take_damage(amount: float, _source = null) -> bool:
 		return false
 	hp -= amount
 	flash = 0.12
+	flinch = FLINCH_TIME
 	if hp <= 0.0:
 		hp = 0.0
 		alive = false
@@ -28,18 +37,29 @@ func take_damage(amount: float, _source = null) -> bool:
 	return false  # стіна не кровить і не горить
 
 
-func heal(_amount: float, _show: bool = true) -> void:
-	pass  # знахарка браму не лікує
+func heal(amount: float, _show: bool = true) -> void:
+	if variant != "escort" or not alive:
+		return  # знахарка браму не лікує, а от мандрівника — так
+	hp = minf(max_hp, hp + amount)
 
 
 func _process(delta: float) -> void:
 	flash = maxf(0.0, flash - delta)
+	flinch = maxf(0.0, flinch - delta)
 	phase += delta
+	if variant == "escort":
+		if not alive:
+			# Не вберегли: мандрівник тікає назад, звідки прийшов
+			step += delta * 11.0
+			position.y += 170.0 * delta
+		elif walking:
+			step += delta * 5.0
 	queue_redraw()
 
 
 func label_text() -> String:
 	match variant:
+		"escort": return who_name
 		"camp": return "Тин хутора"
 		"village": return "Хати"
 		"caravan": return "Вози"
@@ -53,6 +73,9 @@ const Tiles := preload("res://scripts/world/tiles.gd")
 
 
 func _draw() -> void:
+	if variant == "escort":
+		_draw_traveller()
+		return
 	if Gfx.has("defense"):
 		_draw_sprites()
 	else:
@@ -177,3 +200,41 @@ func _draw_event(tint: Color) -> void:
 			if alive:
 				draw_rect(Rect2(-12, -8, 24, 6), Color(0.9, 0.9, 0.9))
 				draw_rect(Rect2(-6, -8, 4, 6), Color(0.8, 0.15, 0.15))
+
+
+## Супровід: мандрівник зі смужкою здоров'я над головою. Іде спиною до нас (угору ареною),
+## а коли нечисть поруч — стоїть лицем і лякається.
+func _draw_traveller() -> void:
+	draw_set_transform(Vector2(0, 16), 0.0, Vector2(1.0, 0.38))
+	draw_circle(Vector2.ZERO, 17.0, Color(0, 0, 0, 0.3))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	var tint := Color.WHITE
+	var frame := Gfx.IDLE
+	var look := Vector2(0, 1)
+	if not alive:
+		frame = Gfx.walk_frame(step)
+	elif flash > 0.0:
+		tint = Color(1.8, 1.5, 1.5)
+		frame = Gfx.HURT
+	elif walking:
+		frame = Gfx.walk_frame(step)
+		look = Vector2(0, -1)
+	if Gfx.has(sheet):
+		Gfx.draw(self, sheet, look, frame, Vector2(-24, -30), tint)
+	else:
+		draw_circle(Vector2(0, -6), 15.0, Color(0.92, 0.86, 0.7).lerp(Color(1, 0.6, 0.5), 0.6 if flash > 0.0 else 0.0))
+		draw_circle(Vector2(0, -24), 9.0, Color(0.95, 0.8, 0.65))
+	var font := ThemeDB.fallback_font
+	if alive and scared:
+		# Знак оклику: боїться йти далі
+		var bob := sin(phase * 9.0) * 2.0
+		draw_string_outline(font, Vector2(-20, -66 + bob), "!", HORIZONTAL_ALIGNMENT_CENTER, 40, 22, 5, Color(0, 0, 0, 0.8))
+		draw_string(font, Vector2(-20, -66 + bob), "!", HORIZONTAL_ALIGNMENT_CENTER, 40, 22, Color(1.0, 0.85, 0.3))
+	if not alive:
+		return
+	var bw := 60.0
+	draw_rect(Rect2(Vector2(-bw / 2 - 1, -45), Vector2(bw + 2, 7)), Color(0, 0, 0, 0.65))
+	var part := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0)
+	draw_rect(Rect2(Vector2(-bw / 2, -44), Vector2(bw * part, 5)), Color(0.45, 0.85, 0.4) if part > 0.35 else Color(0.95, 0.4, 0.3))
+	draw_string_outline(font, Vector2(-80, -50), who_name, HORIZONTAL_ALIGNMENT_CENTER, 160, 14, 4, Color(0, 0, 0, 0.7))
+	draw_string(font, Vector2(-80, -50), who_name, HORIZONTAL_ALIGNMENT_CENTER, 160, 14, Color(1.0, 0.9, 0.6))

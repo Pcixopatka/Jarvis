@@ -623,14 +623,25 @@ func enter_defense(dl: Dictionary, companions: Array) -> void:
 	gate.max_hp = float(dl["gate_hp"])
 	gate.hp = gate.max_hp
 	gate.position = Vector2(0, arena.end.y - 170)
+	if gate.variant == "escort":
+		# Супровід: замість брами — мандрівник; він менший за мур, його можна лікувати
+		var w: Dictionary = Acts.ESCORT_WHO[dl["who"]]
+		gate.sheet = w["sheet"]
+		gate.who_name = w["name"]
+		gate.radius = 22.0
+		gate.plague_immune = false
 	entities.add_child(gate)
-	var hint_line: String = {"village": "Не дай спалити хати!", "caravan": "Вози їдуть — не дай їх розбити!", "captives": "Вбережи бранців!", "wounded": "Вбережи пораненого!"}.get(gate.variant, "Не дай зламати браму!")
+	var hint_line: String = {"village": "Не дай спалити хати!", "caravan": "Вози їдуть — не дай їх розбити!", "captives": "Вбережи бранців!", "wounded": "Вбережи пораненого!",
+		"escort": "Іди поруч: на шляху засідки!"}.get(gate.variant, "Не дай зламати браму!")
 	Events.banner.emit(dl["name"] + "\n" + hint_line, Color(1.0, 0.6, 0.4))
 
 
 func _update_defense(delta: float) -> void:
 	if defense_over:
 		_check_exit_portal()
+		return
+	if gate != null and is_instance_valid(gate) and gate.variant == "escort":
+		_update_escort(delta)
 		return
 	if gate != null and is_instance_valid(gate) and gate.variant == "caravan" and gate.alive:
 		# Валка повільно їде вгору ареною; нечисть наздоганяє
@@ -665,6 +676,63 @@ func _spawn_wave() -> void:
 		spawn_enemy(en[0], lvl, true, Vector2(0, arena.position.y + 140))
 
 
+## Де починається й де кінчається шлях мандрівника (y на арені).
+func escort_route() -> Vector2:
+	return Vector2(arena.end.y - 170.0, arena.position.y + 190.0)
+
+
+## Яку частку шляху мандрівник уже пройшов (0..1).
+func escort_part() -> float:
+	if gate == null or not is_instance_valid(gate):
+		return 0.0
+	var r := escort_route()
+	return clampf((r.x - gate.position.y) / (r.x - r.y), 0.0, 1.0)
+
+
+## Супровід: мандрівник іде ареною знизу вгору. На шляху засідки; поки нечисть поруч — стоїть.
+## Дійшов до кінця, і нечисті не лишилось — завдання виконано.
+func _update_escort(delta: float) -> void:
+	if not gate.alive:
+		return
+	gate.walking = false
+	# Боїться, коли нечисть поруч або коли щойно влучили здалеку (стрільці тримаються осторонь)
+	gate.scared = gate.flinch > 0.0 or nearest_enemy(gate.global_position, Acts.ESCORT_FEAR) != null
+	wave_timer -= delta
+	if wave_timer > 0.0 or gate.scared:
+		return
+	var waves := int(loc["waves"])
+	var part := escort_part()
+	if wave < waves and part >= float(wave + 1) / float(waves + 1):
+		if alive_enemy_count() > 0:
+			return  # попередню засідку ще не добито — далі не йде
+		wave += 1
+		_spawn_ambush()
+		return
+	if part >= 1.0:
+		if alive_enemy_count() == 0:
+			_defense_complete()
+		return
+	gate.walking = true
+	gate.position.y = maxf(escort_route().y, gate.position.y - Acts.ESCORT_SPEED * delta)
+
+
+## Засідка на шляху: нечисть вискакує півколом попереду й з боків, не впритул до мандрівника.
+func _spawn_ambush() -> void:
+	var en: Array = loc["enemies"]
+	var lvl := int(loc["level"])
+	var last := wave == int(loc["waves"])
+	Events.banner.emit("Засідка %d/%d%s" % [wave, loc["waves"], "\nВатажок!" if last else ""], Color(1.0, 0.7, 0.4))
+	Audio.play("roar", 0.1, -6.0)
+	for i in Acts.ESCORT_PACK + Acts.ESCORT_PACK_STEP * wave:
+		var ang := -PI / 2.0 + randf_range(-1.9, 1.9)
+		var pos := _clamp_in(gate.position + Vector2.from_angle(ang) * randf_range(430.0, 580.0), 70.0)
+		spawn_enemy(en[randi() % en.size()], lvl, false, pos)
+		var e = _last_enemy()
+		e.rams_gate = i % 2 == 1  # половина нечисті одразу кидається на мандрівника
+		if last and i == 0:
+			e.make_elite(Elites.roll_affixes(lvl))  # ватажок засідки
+
+
 func _defense_complete() -> void:
 	defense_over = true
 	field_cleared = true
@@ -675,7 +743,7 @@ func _defense_complete() -> void:
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 3)
 	spawn_pickup(pos, "item", 0, Data.gen_item(int(loc["level"]), Data.roll_rarity(int(loc["level"]), 1)))
-	_spawn_portal("До брами" if not loc.has("event") else "На мапу", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
+	_spawn_portal("До брами" if not (loc.has("event") or loc.has("escort")) else "На мапу", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
 	Events.defense_won.emit(loc["target"])
 
 
@@ -684,9 +752,15 @@ func on_gate_destroyed() -> void:
 	if defense_over:
 		return
 	defense_over = true
-	shake(16.0)
-	Audio.play("boom", 0.0)
-	fx.burst(gate.global_position, Color(0.5, 0.35, 0.2), 40, 320, 9, 0.8)
+	if gate.variant == "escort":
+		# Мандрівника не вберегли: він кидає все й тікає (див. gate.gd)
+		shake(8.0)
+		Audio.play("hurt", 0.0)
+		fx.burst(gate.global_position, Color(0.9, 0.85, 0.7), 14, 200, 6, 0.6)
+	else:
+		shake(16.0)
+		Audio.play("boom", 0.0)
+		fx.burst(gate.global_position, Color(0.5, 0.35, 0.2), 40, 320, 9, 0.8)
 	Events.defense_lost.emit(loc["target"])
 
 

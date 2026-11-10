@@ -4,6 +4,8 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
+const Acts := preload("res://scripts/data/activities.gd")
+const EscortService := preload("res://scripts/game/escort_service.gd")
 
 var loyalty := {}  # місто -> очки
 var boards := {}  # місто -> доступні завдання
@@ -110,11 +112,14 @@ func _gen_quest(city: String) -> Dictionary:
 		q["count"] = 1
 		q["text"] = "Очисти: %s" % L["name"]
 		mult = 2.0
+	elif L["type"] != "dungeon" and r < Acts.ESCORT_CHANCE:
+		EscortService.fill(q, randf())  # проведи мандрівника через цю місцевість
+		mult = Acts.ESCORT_MULT
 	else:
 		var enemies: Array = L["enemies"]
 		var e: String = enemies[randi() % enemies.size()]
 		q["target"] = e
-		if r < 0.5:
+		if randf() < 0.5:
 			q["type"] = "kill"
 			q["count"] = 8 + L["level"] * 2
 			q["text"] = "Знищ %d %s (%s)" % [q["count"], Data.ENEMY_PLURAL[e], L["name"]]

@@ -160,7 +160,7 @@ static func _siege_note(v: Control, world, sel: String) -> bool:
 
 
 ## on_go(id) викликається кнопкою «Вирушити» / «Увійти до міста».
-static func build(sel: String, world, player: Player, on_go: Callable, story_target: String = "", story_line: String = "") -> Control:
+static func build(sel: String, world, player: Player, on_go: Callable, story_target: String = "", story_line: String = "", on_escort: Callable = Callable()) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	if story_line != "" and (sel == "" or sel == story_target):
@@ -239,6 +239,12 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		v.add_child(_wrapped("Розшук: тут ходить %s." % bt["name"], 17, UI.GOLD))
 	if _event_note(v, world, sel, on_go):
 		return v
+	# Завдання на супровід: окрема кнопка, бо звичайний похід його не зараховує
+	var EscS = load("res://scripts/game/escort_service.gd")
+	var eq: Dictionary = EscS.at(world, sel)
+	if not eq.is_empty() and on_escort.is_valid():
+		v.add_child(_wrapped("%s чекає край дороги. Проведи через три засідки." % EscS.who(eq)["name"], 16, UI.GOLD))
+		v.add_child(UI.button("Провести %s" % EscS.who(eq)["acc"], on_escort.bind(sel), Vector2(350, 62), 22))
 	v.add_child(UI.button("Вирушити", on_go.bind(sel), Vector2(350, 70), 26))
 	return v
 

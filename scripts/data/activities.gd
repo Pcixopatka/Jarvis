@@ -254,3 +254,26 @@ const TOKEN_BOSS := 5
 const TOKEN_TIERS := [15, 40, 80]
 const TOKEN_TIERS_SHORT := [10, 25, 50]  # для свят до трьох днів
 const TOKEN_GLORY := 15  # слава за найвищу нагороду
+
+# ---------- Супровід: завдання міста «проведи мандрівника» (див. EscortService) ----------
+const ESCORT_CHANCE := 0.22  # частка завдань у дику місцевість, що стають супроводом
+const ESCORT_MULT := 1.6  # нагорода проти звичайного завдання
+const ESCORT_WAVES := 3  # засідок на шляху
+const ESCORT_PACK := 2  # нечисті в засідці: основа й приріст за кожну наступну (4, 6, 8)
+const ESCORT_PACK_STEP := 2
+const ESCORT_SPEED := 46.0  # крок мандрівника, пікселів за секунду
+const ESCORT_FEAR := 250.0  # нечисть ближче — мандрівник стоїть і чекає
+const ESCORT_HP := 260.0  # здоров'я мандрівника: основа й приріст за рівень місцевості
+const ESCORT_HP_LVL := 45.0
+const ESCORT_TIP := 6  # гривень за рівень від вдячного мандрівника, якщо дійшов цілим
+const ESCORT_ORDER := ["kobzar", "chumak", "honets", "znakharka"]
+const ESCORT_WHO := {
+	"kobzar": {"name": "Кобзар", "acc": "кобзаря", "sheet": "trav_kobzar",
+		"thanks": "Складу про тебе думу, козаче."},
+	"chumak": {"name": "Чумак", "acc": "чумака", "sheet": "trav_chumak",
+		"thanks": "І сіль ціла, і голова на плечах. Спасибі!"},
+	"honets": {"name": "Гонець", "acc": "гінця", "sheet": "trav_honets",
+		"thanks": "Лист дійде до кошового. Слава!"},
+	"znakharka": {"name": "Знахарка", "acc": "знахарку", "sheet": "trav_znakharka", "she": true,
+		"thanks": "Зілля донесла. Хай тебе куля минає."},
+}

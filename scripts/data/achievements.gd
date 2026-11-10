@@ -28,6 +28,7 @@ const WEEKLY := [
 	{"stat": "trail", "goal": [2, 3], "text": "Пройди стежок слідів до знахідки: %d"},
 	{"stat": "harvest", "goal": [4, 8], "text": "Збери врожаїв на городі: %d"},
 	{"stat": "expedition", "goal": [3, 5], "text": "Зустрінь супутників із власних походів: %d"},
+	{"stat": "escort", "goal": [2, 3], "text": "Проведи мандрівників через дикі місця: %d"},
 ]
 const DAILY_COUNT := 3
 const WEEKLY_COUNT := 2
@@ -82,6 +83,9 @@ const ACHIEVEMENTS := [
 	{"id": "holiday_top", "name": "Свято вдалося", "desc": "Забери найвищу нагороду сезонного свята", "stat": "holiday_top", "goal": 1, "gold": 2000},
 	{"id": "vidma", "name": "Кінець шабашу", "desc": "Здолай Відьму з Лисої гори", "stat": "boss:vidma", "goal": 1, "gold": 700},
 	{"id": "vii", "name": "Не глянув", "desc": "Здолай Вія в Проклятій церкві", "stat": "boss:vii", "goal": 1, "gold": 1800},
+	{"id": "escort_1", "name": "Надійний провідник", "desc": "Проведи мандрівника через дику місцевість", "stat": "escort", "goal": 1, "gold": 200},
+	{"id": "escort_15", "name": "Дорога без страху", "desc": "Проведи 15 мандрівників", "stat": "escort", "goal": 15, "gold": 1800},
+	{"id": "escort_clean", "name": "Ані подряпини", "desc": "Доведи мандрівника так, щоб його жодного разу не зачепили", "stat": "escort_clean", "goal": 1, "gold": 500},
 	{"id": "vii_blind", "name": "Повіки впали", "desc": "Осліпи Вія: здолай обох повікарів, доки він не глянув", "stat": "vii_blind", "goal": 1, "gold": 600},
 	{"id": "vigil_5", "name": "Вартовий", "desc": "Вистій на варті 5 хвилин", "stat": "vigil", "goal": 5, "gold": 1500},
 	{"id": "vigil_8", "name": "Нічна сторожа", "desc": "Вистій на варті 8 хвилин", "stat": "vigil", "goal": 8, "gold": 5000},

@@ -37,6 +37,7 @@ const Gfx := preload("res://scripts/world/gfx.gd")
 const HuntGame := preload("res://scripts/ui/hunt_game.gd")
 const FishGame := preload("res://scripts/ui/fish_game.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
+const EscortService := preload("res://scripts/game/escort_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PathService := preload("res://scripts/game/path_service.gd")
 const Paths := preload("res://scripts/data/paths.gd")
@@ -216,8 +217,12 @@ func _combat_info() -> Dictionary:
 	elif combat.is_defense():
 		var gp: int = roundi(100.0 * combat.gate.hp / combat.gate.max_hp) if combat.gate != null and is_instance_valid(combat.gate) else 0
 		sub = "Хвиля %d/%d  •  Брама %d%%" % [combat.wave, L["waves"], gp]
+		if L.has("escort"):
+			sub = "Шлях %d%%  •  %s %d%%" % [roundi(100.0 * combat.escort_part()), combat.gate.label_text() if gp > 0 else "Мандрівник", gp]
 		if combat.defense_over and combat.field_cleared:
-			sub = "Оборону виграно! Портал веде до брами"
+			sub = "Оборону виграно! Портал веде до брами" if not L.has("escort") else "Довів! Портал веде на мапу"
+		elif combat.defense_over and L.has("escort"):
+			sub = "Не вберіг. Повертаємось на мапу"
 	elif combat.is_tower():
 		if combat.field_cleared:
 			sub = "Поверх пройдено! Портал веде вище"
@@ -790,7 +795,9 @@ func _on_player_died() -> void:
 	if combat.is_defense() and not combat.defense_over:
 		combat.defense_over = true
 		var ev := EventService.battle_at(world, combat.loc["target"])
-		if combat.loc.get("ambush", false):
+		if combat.loc.has("escort"):
+			pass  # супровід: завдання лишається, місто нічого не втрачає
+		elif combat.loc.get("ambush", false):
 			hud.show_banner(TradeService.lose_half(world), UI.BAD)
 		elif not ev.is_empty():
 			hud.show_banner(EventService.lose(world, player, ev), UI.BAD)
@@ -849,7 +856,7 @@ func _build_map_panel() -> void:
 	if Acts.SPOTS.has(map_sel):
 		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to))
 		return
-	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world))
+	var panel := MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort)
 	if map_sel == "":
 		var left := AdRewards.xp2_left(world)
 		var gift := UI.label(("×2 досвіду ще %s" % AdRewards.format_time(left)) if left > 0.0 else "Подарунок спонсора: ×2 досвіду на годину гри", 17, UI.GOLD, false)
@@ -860,9 +867,15 @@ func _build_map_panel() -> void:
 
 
 ## Кнопка «Вирушити» на мапі: спершу поїздка фігуркою, прибуття — у _arrive.
-func _go_to(id: String) -> void:
+## Вирушити з мандрівником: завдання міста на супровід у цій місцевості.
+func _go_escort(id: String) -> void:
+	_go_to(id, true)
+
+
+func _go_to(id: String, escort: bool = false) -> void:
 	if travel_to != "":
 		return  # уже їдемо
+	escort_go = id if escort else ""
 	if id == map_here:
 		_arrive(id)
 		return
@@ -887,12 +900,15 @@ func _go_to(id: String) -> void:
 
 
 var pending_event := {}
+var escort_go := ""  # куди їдемо саме заради супроводу (кнопка «Провести» на мапі)
 
 
 ## Прибуття: те, що раніше робив _go_to одразу.
 func _arrive(id: String) -> void:
 	travel_to = ""
 	hud.map_view.travel = {}
+	var escort_q: Dictionary = EscortService.at(world, id) if escort_go == id else {}
+	escort_go = ""
 	var ev := EventService.battle_at(world, id)
 	if not ev.is_empty():
 		start_event(ev)  # подія чекає саме тут: набіг, валка, бранці...
@@ -911,6 +927,8 @@ func _arrive(id: String) -> void:
 			start_ambush(id)  # на валку з крамом напали дорогою
 		else:
 			enter_city(id)
+	elif not escort_q.is_empty():
+		start_escort(escort_q)  # завдання міста: провести мандрівника
 	else:
 		enter_location(id)
 
@@ -1293,6 +1311,14 @@ func start_event(ev: Dictionary) -> void:
 		"wounded": "Поранений лежить посередині. Три хвилі — і він урятований."}[ev["kind"]])
 
 
+## Супровід мандрівника (завдання міста): оборона, де замість брами — людина, що сама йде ареною.
+func start_escort(q: Dictionary) -> void:
+	combat.defense_loc = EscortService.battle_loc(q)
+	enter_location("defense")
+	map_here = q["loc"]
+	hint("escort", "Супровід: мандрівник сам іде через арену. Коли нечисть поруч, він стоїть і чекає. На шляху три засідки. Тримайся поруч і не дай його скривдити.")
+
+
 ## Напад на валку з крамом дорогою до міста: відбий три хвилі й вбережи вози.
 func start_ambush(city: String) -> void:
 	combat.defense_loc = TradeService.battle_loc(world, city, player)
@@ -1303,6 +1329,15 @@ func start_ambush(city: String) -> void:
 
 
 func _on_defense_won(target: String) -> void:
+	if combat.loc.has("escort"):
+		defense_target = ""  # з порталу — на мапу; нагорода за завдання чекає в місті
+		var whole: float = combat.gate.hp / maxf(combat.gate.max_hp, 1.0) if combat.gate != null and is_instance_valid(combat.gate) else 1.0
+		hud.show_banner(EscortService.win(world, player, int(combat.loc["escort"]), whole), UI.GOLD)
+		_record("escort")
+		if whole >= 1.0:
+			_record("escort_clean")
+		save_game()
+		return
 	if combat.loc.get("ambush", false):
 		defense_target = target  # з порталу — у місто, куди їхав
 		hud.show_banner("Напад відбито! Крам цілий.", UI.GOLD)
@@ -1325,6 +1360,12 @@ func _on_defense_won(target: String) -> void:
 
 
 func _on_defense_lost(target: String) -> void:
+	if combat.loc.has("escort"):
+		hud.show_banner(EscortService.lose(world, int(combat.loc["escort"])), UI.BAD)
+		await get_tree().create_timer(2.5).timeout
+		if state == State.PLAYING and combat.is_defense():
+			enter_map()
+		return
 	if combat.loc.get("ambush", false):
 		hud.show_banner(TradeService.lose_half(world), UI.BAD)
 		save_game()
