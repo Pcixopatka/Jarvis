@@ -499,13 +499,16 @@ func _draw_tiles() -> void:
 					Tiles.tile(self, tex, Tiles.GRASS[0], pos, Color(0.82, 0.86, 0.8))
 				continue
 			if biome == "snow":
-				# Сніг: тайли снігу з листа Kenney, подекуди проталини й сліди
-				Tiles.rg_tile(self, Tiles.SNOW[rng.randi() % Tiles.SNOW.size()], pos, tint)
-				if inside and roll > 0.985:
-					# голий камінь, що визирає з-під снігу
-					draw_rect(Rect2(pos + Vector2(ts * 0.3, ts * 0.35), Vector2(ts * 0.4, ts * 0.25)), Color(0.62, 0.66, 0.72) * tint)
-				elif inside and roll < 0.02:
-					draw_rect(Rect2(pos + Vector2(ts * 0.25, ts * 0.4), Vector2(6.0, 4.0)), Color(0.72, 0.78, 0.86) * tint)
+				# Сніг: холодно-білі клітинки (тайл Kenney кремовий), замети, сліди, камінь із-під снігу
+				var snow_shade := 0.975 + 0.025 * rng.randf()
+				draw_rect(Rect2(pos, Vector2(ts, ts)), Color(0.9 * snow_shade, 0.93 * snow_shade, 0.98 * snow_shade) * tint)
+				if inside and roll > 0.93:
+					draw_rect(Rect2(pos + Vector2(4.0, ts * 0.55), Vector2(ts - 8.0, 3.0)), Color(0.76, 0.82, 0.92) * tint)  # замет
+				elif inside and roll < 0.015:
+					draw_rect(Rect2(pos + Vector2(ts * 0.3, ts * 0.35), Vector2(ts * 0.4, ts * 0.25)), Color(0.62, 0.66, 0.72) * tint)  # камінь з-під снігу
+				elif inside and roll < 0.04:
+					draw_rect(Rect2(pos + Vector2(ts * 0.25, ts * 0.4), Vector2(3.0, 4.0)), Color(0.66, 0.72, 0.84) * tint)
+					draw_rect(Rect2(pos + Vector2(ts * 0.55, ts * 0.62), Vector2(3.0, 4.0)), Color(0.66, 0.72, 0.84) * tint)
 				continue
 			if biome == "sand":
 				# Піски: світлі бархани, подекуди темніші смуги, які намів вітер

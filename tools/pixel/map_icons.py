@@ -7,7 +7,7 @@ S = 24
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites")
 def hx(h, a=255): h = h.lstrip('#'); return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
 INK = hx("3a2a1a"); INK2 = hx("5a4030"); PAPER = hx("e8d7b0"); GREEN = hx("5a7a3a"); GREEN2 = hx("7a9a4a"); GREY = hx("8a8278"); RED = hx("a83a2a"); BLUE = hx("4a7aa8"); GOLD = hx("c8a040")
-ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent", "dune", "island", "ruin", "mine", "oak", "izba"]
+ORDER = ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent", "dune", "island", "ruin", "mine", "oak", "izba", "cannon", "leshy", "doghead", "kotel", "frost", "bell"]
 
 def outline(im, col=INK):
     src = im.load(); out = im.copy(); o = out.load(); w, h = im.size
@@ -143,6 +143,36 @@ def icon(kind):
         d.rectangle([10, 9, 13, 14], fill=INK); d.rectangle([15, 9, 16, 10], fill=hx("ffd040"))
         for x in (8, 15):
             d.line([(x, 14), (x, 19)], fill=hx("d8a030"), width=1); d.line([(x - 2, 21), (x, 19)], fill=hx("d8a030")); d.line([(x + 2, 21), (x, 19)], fill=hx("d8a030"))
+    elif kind == "cannon":  # Цар-гармата на лафеті, поруч ядра
+        d.polygon([(2, 12), (17, 7), (19, 11), (4, 16)], fill=hx("8a8278")); d.line([(3, 12), (17, 8)], fill=hx("b8b0a4"))
+        d.ellipse([16, 6, 21, 12], fill=INK); d.ellipse([17, 7, 20, 11], fill=hx("2a2018"))
+        d.rectangle([4, 15, 16, 17], fill=hx("8a5a2a"))
+        d.ellipse([3, 15, 10, 22], fill=INK2); d.ellipse([10, 15, 17, 22], fill=INK2); d.point((6, 18), fill=GOLD); d.point((13, 18), fill=GOLD)
+        for x, y in ((19, 20), (22, 20), (20, 17)): d.ellipse([x - 1, y - 1, x + 1, y + 1], fill=GREY)
+    elif kind == "leshy":  # лісовик: пень із гілками-рогами, зелені очі, моховита борода
+        d.rectangle([7, 9, 16, 21], fill=hx("8a5a2a")); d.line([(8, 9), (5, 3)], fill=INK2, width=2); d.line([(15, 9), (18, 3)], fill=INK2, width=2)
+        d.line([(6, 5), (3, 5)], fill=INK2); d.line([(17, 5), (20, 5)], fill=INK2)
+        d.rectangle([9, 12, 10, 13], fill=hx("a0ff60")); d.rectangle([13, 12, 14, 13], fill=hx("a0ff60"))
+        d.polygon([(8, 15), (15, 15), (14, 21), (12, 19), (11, 22), (9, 19)], fill=hx("5a7a3a"))
+        d.line([(4, 22), (19, 22)], fill=hx("6a4a2a"))
+    elif kind == "doghead":  # опричнина: собача голова й мітла
+        d.line([(3, 22), (16, 6)], fill=hx("8a5a2a"), width=2)
+        for i in range(-2, 3): d.line([(16, 6), (19 + i, 1 + abs(i))], fill=hx("d9b25c"))
+        dog = hx("2a2220"); d.polygon([(5, 9), (8, 3), (10, 9)], fill=dog); d.ellipse([4, 8, 15, 18], fill=dog); d.polygon([(13, 11), (22, 14), (13, 17)], fill=dog)
+        d.point((9, 12), fill=RED); d.point((21, 14), fill=INK); d.line([(13, 16), (17, 17)], fill=hx("f0f0f0"))
+    elif kind == "kotel":
+        d.ellipse([3, 7, 20, 21], fill=hx("3a3430")); d.rectangle([3, 7, 20, 10], fill=hx("5a524a")); d.rectangle([5, 7, 18, 8], fill=hx("e8c070"))
+        d.arc([5, 0, 18, 13], 180, 360, fill=GREY, width=1); d.line([(9, 5), (8, 2)], fill=hx("e8e8e8")); d.line([(14, 5), (15, 2)], fill=hx("e8e8e8"))
+        for x in (6, 11, 16): d.polygon([(x - 2, 23), (x + 2, 23), (x, 19)], fill=hx("ff8a2a"))
+    elif kind == "frost":  # сніжинка
+        ice = hx("8ac8f0")
+        for a in (0, 60, 120):
+            ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+            d.line([(11.5 - 10 * ca, 11.5 - 10 * sa), (11.5 + 10 * ca, 11.5 + 10 * sa)], fill=ice, width=2)
+        d.ellipse([9, 9, 14, 14], fill=hx("f0f8ff"))
+    elif kind == "bell":
+        d.polygon([(8, 6), (15, 6), (19, 18), (4, 18)], fill=hx("b8862a")); d.rectangle([3, 18, 20, 20], fill=hx("8a6420")); d.rectangle([10, 3, 13, 6], fill=hx("8a6420"))
+        d.line([(13, 8), (11, 12), (13, 16)], fill=INK); d.line([(14, 3), (17, 0)], fill=GREY); d.line([(9, 3), (7, 1)], fill=GREY)
     elif kind == "flag":
         d.line([(8, 22), (8, 2)], fill=INK2, width=2); d.polygon([(9, 2), (20, 6), (9, 10)], fill=RED)
     return outline(im)

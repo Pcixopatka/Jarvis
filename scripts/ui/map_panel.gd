@@ -30,7 +30,7 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 	row.add_child(UI.button("▸", func(): on_change.call(sel + 1), Vector2(70, 60), 26, sel < mx))
 	v.add_child(row)
 	var danger: bool = int(L["level"]) > player.level + 2
-	v.add_child(UI.label("Рівень %d  •  кімнат: %d" % [L["level"], L["rooms"]], 19, UI.BAD if danger else UI.TEXT, false))
+	v.add_child(_wrapped("Рівень %d  •  кімнат: %d" % [L["level"], L["rooms"]], 19, UI.BAD if danger else UI.TEXT))
 	var names := []
 	for e in L["enemies"]:
 		names.append(Data.ENEMY_NAMES[e])
@@ -45,7 +45,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 	var S: Dictionary = Acts.SPOTS[sel]
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
-	v.add_child(UI.label(S["name"], 28, UI.GOLD, false))
+	v.add_child(_wrapped(S["name"], 28, UI.GOLD))
 	v.add_child(_wrapped(S["desc"], 18, UI.TEXT))
 	if player.level < int(S["level"]):
 		v.add_child(_wrapped("Відкриється з %d-го рівня героя." % int(S["level"]), 18, UI.BAD))
@@ -59,7 +59,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 			var s: Dictionary = VS.state(world)
 			var goal_min := int(Acts.VIGIL_GOAL / 60.0)
 			v.add_child(_wrapped("Вистій %d хвилин: нечисть суне без упину й щохвилини лютішає. Смерті нема — варту просто знято." % goal_min, 17, UI.TEXT))
-			v.add_child(UI.label("Рекорд: %s  •  убитих: %d" % [VS.time_text(float(s["best_time"])), int(s["best_kills"])], 19, UI.GOLD, false))
+			v.add_child(_wrapped("Рекорд: %s  •  убитих: %d" % [VS.time_text(float(s["best_time"])), int(s["best_kills"])], 19, UI.GOLD))
 			var paid := int(s["paid"])
 			if paid >= goal_min:
 				v.add_child(_wrapped("Сьогоднішню нагороду вже взято (хвилин: %d). Стій далі — на рекорд і нові хвилини." % paid, 16, UI.MUTED))
@@ -89,7 +89,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 			else:
 				v.add_child(_wrapped("За всі три кола ще рідкісна річ і 3 трофеї. Новий склад чудовиськ за %d дн." % RS.days_to_reset(), 16, UI.GOLD))
 			var best: float = float(rs["best_time"])
-			v.add_child(UI.label("Пройдено разів: %d  •  найкращий час: %s" % [int(rs["titles"]), RS.time_text(best) if best > 0.0 else "—"], 19, UI.GOLD, false))
+			v.add_child(_wrapped("Пройдено разів: %d  •  найкращий час: %s" % [int(rs["titles"]), RS.time_text(best) if best > 0.0 else "—"], 19, UI.GOLD))
 			v.add_child(UI.button("Стати в коло", on_go.bind(sel), Vector2(350, 70), 26))
 		"hunt", "fish":
 			var OS = load("res://scripts/game/outdoor_service.gd")
@@ -140,7 +140,7 @@ static func build_tower(world, player, sel: int, on_change: Callable, on_go: Cal
 	row.add_child(UI.button("▸", func(): on_change.call(sel + 1), Vector2(70, 60), 26, sel < mx))
 	v.add_child(row)
 	var danger: bool = int(L["level"]) > player.level + 2
-	v.add_child(UI.label("Рівень %d  •  хвиль: %d" % [L["level"], L["waves"]], 19, UI.BAD if danger else UI.TEXT, false))
+	v.add_child(_wrapped("Рівень %d  •  хвиль: %d" % [L["level"], L["waves"]], 19, UI.BAD if danger else UI.TEXT))
 	var names := []
 	for e in L["enemies"]:
 		names.append(Data.ENEMY_NAMES[e])
@@ -194,7 +194,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return v
 	if sel == Camp.CAMP_ID:
-		v.add_child(UI.label(Camp.CAMP["name"], 28, UI.GOLD, false))
+		v.add_child(_wrapped(Camp.CAMP["name"], 28, UI.GOLD))
 		v.add_child(_wrapped(Camp.CAMP["desc"], 18, UI.TEXT))
 		var built := []
 		for id in Camp.BUILD_ORDER:
@@ -216,10 +216,10 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		return v
 	if Data.CITIES.has(sel):
 		var C: Dictionary = Data.CITIES[sel]
-		v.add_child(UI.label(C["name"], 28, UI.GOLD, false))
+		v.add_child(_wrapped(C["name"], 28, UI.GOLD))
 		v.add_child(UI.label("Місто", 18, UI.MUTED, false))
 		v.add_child(_wrapped(C["desc"], 18, UI.TEXT))
-		v.add_child(UI.label("Лояльність: %s (%d)" % [Data.LOYALTY_NAMES[world.loyalty_level(sel)], world.loyalty_points(sel)], 18, UI.TEXT, false))
+		v.add_child(_wrapped("Лояльність: %s (%d)" % [Data.LOYALTY_NAMES[world.loyalty_level(sel)], world.loyalty_points(sel)], 18, UI.TEXT))
 		var done := 0
 		for q in world.quests:
 			if q["city"] == sel and world.is_done(q):
@@ -234,20 +234,20 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		v.add_child(UI.button("Увійти до міста", on_go.bind(sel), Vector2(350, 70), 26))
 		return v
 	var L: Dictionary = Data.LOCATIONS[sel]
-	v.add_child(UI.label(L["name"], 28, UI.GOLD, false))
+	v.add_child(_wrapped(L["name"], 28, UI.GOLD))
 	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], Data.BOSS_NAMES[L["boss"]]]) if L["type"] == "dungeon" else "Дика місцевість"
-	v.add_child(UI.label(kind_text, 17, UI.MUTED, false))
+	v.add_child(_wrapped(kind_text, 17, UI.MUTED))
 	var danger: bool = L["level"] > player.level + 2
 	if L.get("scale", false):
 		var Far = load("res://scripts/game/far_service.gd")
 		var region: String = str(Data.REGIONS.get(str(L.get("region", "")), {}).get("name", "Далекий край"))
-		v.add_child(UI.label("%s  •  з %d-го рівня%s" % [region, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
+		v.add_child(_wrapped("%s  •  з %d-го рівня%s" % [region, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
 		if Far.matched(L, player):
 			v.add_child(_wrapped("Далекий край: нечисть тут міряється з тобою, а здобич і досвід — за твоїм %d-м рівнем." % player.level, 16, UI.GOOD))
 		else:
 			v.add_child(_wrapped("Далекий край: коли доростеш до %d-го рівня, він ростиме разом із тобою." % int(L["level"]), 16, UI.MUTED))
 	else:
-		v.add_child(UI.label("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT, false))
+		v.add_child(_wrapped("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
 	v.add_child(_wrapped(L["desc"], 18, UI.TEXT))
 	var pl: int = load("res://scripts/game/plague_service.gd").level(world, sel)
 	if pl > 0:

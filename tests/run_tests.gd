@@ -107,6 +107,8 @@ func _run() -> void:
 	await _suite_ring_muster_game()
 	_suite_far_lands()
 	await _suite_far_lands_game()
+	_suite_muscovy()
+	await _suite_muscovy_game()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -6055,7 +6057,7 @@ func _suite_far_lands() -> void:
 	var Sounds = load("res://scripts/data/sounds.gd")
 	var Camp = load("res://scripts/data/camp_data.gd")
 	var Ground = load("res://scripts/world/ground.gd")
-	check(Data.REGION_ORDER.size() == 4 and Data.REGIONS.size() == 4, "чотири далекі краї")
+	check(Data.REGION_ORDER.size() == 7 and Data.REGIONS.size() == 7, "сім далеких країв: чотири українські й три в Московії")
 	var all_regions_ok := true
 	for r in Data.REGION_ORDER:
 		var pl: Dictionary = Far.places(r)
@@ -6074,7 +6076,7 @@ func _suite_far_lands() -> void:
 			data_ok = data_ok and Data.ENEMY_NAMES.has(e) and Data.ENEMY_PLURAL.has(e) and Data.QUEST_ITEMS.has(e) and GfxS.has(e)
 		if L["type"] == "dungeon":
 			data_ok = data_ok and Data.BOSS_NAMES.has(L["boss"]) and GfxS.has(L["boss"]) and int(L["rooms"]) >= 4
-	check(far_n == 18 and data_ok, "вісімнадцять нових місць: назви, нечисть зі спрайтами, боси (%d)" % far_n)
+	check(far_n == 36 and data_ok, "тридцять шість далеких місць: назви, нечисть зі спрайтами, боси (%d)" % far_n)
 	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden", "morskyi_tsar", "shubin", "bila_pani"]:
 		check(Data.ENEMY_NAMES.has(kind) and GfxS.has(kind) and Sounds.DEATH.has(kind), "%s: ім'я, спрайт і голос смерті" % kind)
 	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden"]:
@@ -6101,9 +6103,10 @@ func _suite_far_lands() -> void:
 				tight.append("%s—%s" % [ids[i], ids[j]])
 	check(tight.is_empty(), "жодні два місця на мапі не злипаються: %s" % str(tight))
 	var map_ok := true
+	var WM0 = load("res://scripts/ui/world_map.gd")
 	for id in ids:
 		var pos: Vector2 = places[id]
-		map_ok = map_ok and pos.x > 19.3 and pos.x < 41.7 and pos.y > 44.1 and pos.y < 56.15
+		map_ok = map_ok and pos.x > 19.3 and pos.x < 41.7 and pos.y > 44.1 and pos.y < WM0.LAT1 - 0.15
 	check(map_ok, "усе вміщається в межах мапи")
 	# Рівні
 	var L16: Dictionary = Data.LOCATIONS["oleshky"]
@@ -6274,6 +6277,260 @@ func _suite_far_lands_game() -> void:
 	SaveSystem.delete(TEST_ACCOUNT)
 
 # ======================= Список подій і довідник =======================
+
+
+# ======================= Московія =======================
+
+const MUSCOVY_MINIONS := ["vedmid", "kikimora", "mertvyi_strilets", "kromeshnyk", "boyaryn", "lisovyk"]
+const MUSCOVY_BOSSES := {"tula_zbroiarnia": "pushkar", "okovskyi_lis": "lisovyi_did", "suzdal_medovarni": "idolyshche", "kryzhanyi_ostroh": "karachun", "oleksandrivska_sloboda": "oprychnyk"}
+
+
+func _suite_muscovy() -> void:
+	suite("Московія: дані")
+	var Far = load("res://scripts/game/far_service.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Sounds = load("res://scripts/data/sounds.gd")
+	var Ground = load("res://scripts/world/ground.gd")
+	var Wiki = load("res://scripts/data/wiki_data.gd")
+	var WM = load("res://scripts/ui/world_map.gd")
+	var EnemyS = load("res://scripts/entities/enemy.gd")
+	check(Data.REGION_ORDER.slice(4) == ["oka", "tvershchyna", "zalissia"], "три краї Московії йдуть після українських")
+	# Краї йдуть кільцями без прогалин у рівнях
+	var bands := {}
+	for r in ["oka", "tvershchyna", "zalissia"]:
+		var lv := []
+		var pl: Dictionary = Far.places(r)
+		for id in pl["fields"] + pl["dungeons"]:
+			lv.append(int(Data.LOCATIONS[id]["level"]))
+		lv.sort()
+		bands[r] = [lv[0], lv[lv.size() - 1], lv.size()]
+	check(bands["oka"] == [14, 18, 6] and bands["tvershchyna"] == [19, 23, 5] and bands["zalissia"] == [24, 30, 7], "рівні країв без прогалин: %s" % str(bands))
+	for city in ["yelets", "tver", "cherkaskyi_stan"]:
+		var prices: Dictionary = Acts.TRADE_CITIES.get(city, {})
+		check(Data.CITIES.has(city) and Data.CITIES[city]["region"] in ["oka", "tvershchyna", "zalissia"] and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
+	for kind in MUSCOVY_MINIONS:
+		var ok: bool = Data.ENEMY_NAMES.has(kind) and Data.ENEMY_PLURAL.has(kind) and Data.QUEST_ITEMS.has(kind) and GfxS.has(kind) and Sounds.DEATH.has(kind)
+		ok = ok and Acts.BOUNTY_NAMES.has(kind) and Acts.BOUNTY_NAMES[kind].size() >= 3 and Wiki.ENEMIES.has(kind) and str(Wiki.ENEMIES[kind]["tip"]) != ""
+		ok = ok and kind in EnemyS.MINION_ABILITIES and EnemyS.HIT_STATUS.has(kind)
+		check(ok, "%s: ім'я, спрайт, голос, розшук, довідник і свій прийом" % kind)
+	for loc_id in MUSCOVY_BOSSES:
+		var b: String = MUSCOVY_BOSSES[loc_id]
+		var L: Dictionary = Data.LOCATIONS[loc_id]
+		check(L["type"] == "dungeon" and L["boss"] == b and L.get("scale", false) and Data.BOSS_NAMES.has(b) and GfxS.has(b) and Sounds.DEATH.has(b) and Wiki.BOSSES.has(b) and WM.ICON_ORDER.has(str(L.get("icon", ""))), "%s: лігво, спрайт, голос, довідник і свій значок на мапі" % Data.BOSS_NAMES.get(b, b))
+	check(Data.BOSS_NAMES["idolyshche"] == "Ідолище Погане" and not "п'ятидесятник" in str(Acts.BOUNTY_NAMES["mertvyi_strilets"]).to_lower(), "назви без мовних огріхів")
+	var snow := []
+	for id in Data.LOCATIONS:
+		if Data.LOCATIONS[id]["biome"] == "snow":
+			snow.append(id)
+	check(snow.size() == 3 and "snow" in Ground.TILED and Data.LOCATIONS["kryzhanyi_ostroh"].get("night", false), "три снігові місця, у Крижаному острозі вічна ніч: %s" % str(snow))
+	var icons_tex: Texture2D = load("res://assets/gfx/sprites/map_icons.png")
+	check(icons_tex.get_width() == WM.ICON_ORDER.size() * 24, "на аркуші значків мапи є всі %d значків" % WM.ICON_ORDER.size())
+	check(WM.LAT1 >= 58.6 and Data.LOCATIONS["kryzhanyi_ostroh"]["pos"].y < WM.LAT1 - 0.3, "мапа сягає півночі за Кострому")
+	var town_names := []
+	for t in WM.TOWNS:
+		town_names.append(t[0])
+	var river_names := []
+	for r in WM.RIVERS:
+		river_names.append(r[0])
+	check("Рязань" in town_names and "Волга" in river_names and "Ока" in river_names, "на мапі Волга, Ока й сусідні міста")
+
+
+func _suite_muscovy_game() -> void:
+	suite("Московія: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Status = load("res://scripts/game/status.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "pushkar_misfire", "idol_feast", "karachun_wind"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 40
+	p.stats["str"] = 120
+	p.stats["vit"] = 150
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	# Снігове поле росте з героєм
+	game.enter_location("vedmezhyi_kut")
+	await _frames(3)
+	check(c.is_field() and int(c.loc["level"]) == 40 and int(c.loc["base_level"]) == 29 and c.ground.biome == "snow", "Ведмежий кут: рівень героя, сніг під ногами")
+	# Рядова нечисть: у кожного свій прийом
+	for kind in MUSCOVY_MINIONS:
+		_clear_enemies(game)
+		await _frames(1)
+		p.hp = p.max_hp
+		p.invuln = 5.0
+		p.push = Vector2.ZERO
+		p.statuses.clear()
+		var dist := 240.0
+		c.spawn_enemy(kind, 40, false, p.global_position + Vector2(dist, 0))
+		var e = c._last_enemy()
+		var n0: int = c.effects.get_child_count()
+		var foes0: int = c.alive_enemy_count()
+		e._minion_ability(p, dist)
+		await _frames(1)
+		if kind == "boyaryn":
+			check(c.alive_enemy_count() == foes0 + 2 and c._last_enemy().kind == "zlyden" and c._last_enemy().xp_value == 0, "боярин кличе двох злиднів, досвіду за них нема")
+		else:
+			check(c.effects.get_child_count() > n0 and e.cast_time > 0.0, "%s малює свій прийом на землі" % Data.ENEMY_NAMES[kind])
+	# Аркан кромішника тягне до нього, подих лісовика відкидає
+	for pair in [["kromeshnyk", -1.0], ["lisovyk", 1.0]]:
+		_clear_enemies(game)
+		await _frames(1)
+		p.push = Vector2.ZERO
+		p.invuln = 5.0
+		var x0: float = p.global_position.x
+		c.spawn_enemy(pair[0], 40, false, p.global_position + Vector2(-240, 0))
+		var e2 = c._last_enemy()
+		e2._minion_ability(p, 240.0)
+		for i in 80:
+			p.hp = p.max_hp
+			await process_frame
+		var moved: float = p.global_position.x - x0
+		check(moved * pair[1] > 120.0, "%s зрушив героя на %d (у свій бік)" % [Data.ENEMY_NAMES[pair[0]], roundi(moved)])
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	# Боси: лігво, прийоми, друга фаза, перемога
+	for loc_id in MUSCOVY_BOSSES:
+		var bk: String = MUSCOVY_BOSSES[loc_id]
+		game.enter_location(loc_id)
+		await _frames(3)
+		_clear_enemies(game)
+		await _frames(1)
+		# порожня кімната вже відкрила портал далі: прибрати, щоб герой не вийшов із зали посеред бою
+		if c.portal != null and is_instance_valid(c.portal):
+			c.portal.queue_free()
+		c.portal = null
+		c.room = int(c.loc["rooms"])
+		c._spawn_room()
+		await _frames(2)
+		var boss = null
+		for e in c.get_tree().get_nodes_in_group("enemies"):
+			if e.is_boss:
+				boss = e
+		check(boss != null and boss.kind == bk and int(boss.level) == p.level, "%s: у залі чекає %s" % [loc_id, bk])
+		if boss == null:
+			continue
+		p.global_position = boss.global_position + Vector2(0, 260)
+		match bk:
+			"pushkar":
+				boss._cannon_shots = 2
+				boss.ability_step = 0
+				boss._boss_ability(p)
+				for i in 90:
+					p.hp = p.max_hp
+					p.invuln = 1.0
+					await process_frame
+				check(boss.stun > 0.0 and boss.exposed > 0.0, "Цар-гармата: третій постріл — осічка, пушкар приголомшений")
+				boss.stun = 0.0
+				boss.exposed = 0.0
+			"lisovyi_did":
+				var big_r: float = boss.radius
+				boss._set_size(true)
+				check(boss.radius < big_r and boss.dmg_taken_mult > 1.0 and boss.speed > boss._base_speed, "Лісовий Дід малий: швидкий і крихкий")
+				boss._set_size(false)
+				check(is_equal_approx(boss.radius, big_r) and boss.dmg_taken_mult < 1.0 and boss.speed < boss._base_speed, "Лісовий Дід великий: повільний і товстошкірий")
+			"idolyshche":
+				boss.ability_step = 3
+				boss._boss_ability(p)
+				boss.hp = boss.max_hp * 0.8
+				for i in 60:
+					p.hp = p.max_hp
+					p.invuln = 1.0
+					await process_frame
+				check(boss._feast > 0.0 and boss.hp > boss.max_hp * 0.82, "Ідолище бенкетує й гоїть рани")
+				boss.take_damage(boss.max_hp * 0.06, Vector2.ZERO)
+				check(boss._feast <= 0.0 and boss.stun > 0.0 and boss.exposed > 0.0, "багато шкоди за бенкетом — Ідолище вдавилося")
+				boss.stun = 0.0
+				boss.exposed = 0.0
+				boss.hp = boss.max_hp
+			"karachun":
+				boss.ability_step = 0
+				boss._boss_ability(p)
+				var wd: Vector2 = boss._wind_dir
+				var a0: float = p.global_position.dot(wd)
+				for i in 40:
+					p.hp = p.max_hp
+					p.invuln = 1.0
+					await process_frame
+				check(boss._wind_t > 0.0 and p.global_position.dot(wd) - a0 > 60.0, "хуртовина зносить героя за вітром")
+				Status.apply(p, "chill", 5.0)
+				var old_input: Callable = c.move_input
+				c.move_input = func() -> Vector2: return -wd
+				var a1: float = p.global_position.dot(wd)
+				for i in 40:
+					p.hp = p.max_hp
+					p.invuln = 1.0
+					await process_frame
+				c.move_input = old_input
+				check(p.global_position.dot(wd) < a1 - 10.0, "і застуджений герой може йти проти вітру")
+				boss._wind_t = 0.0
+				p.statuses.clear()
+		var tele0: int = c.effects.get_child_count()
+		for step in 4:
+			boss.ability_step = step
+			boss.cast_time = 0.0
+			boss._boss_ability(p)
+			await _frames(2)
+		check(c.effects.get_child_count() > tele0, "%s: прийоми бос малює на землі" % bk)
+		for i in 90:
+			p.hp = p.max_hp
+			p.invuln = 1.0
+			await process_frame
+		boss._feast = 0.0
+		boss.hp = boss.max_hp
+		boss.take_damage(boss.max_hp * 0.55 / boss.dmg_taken_mult, Vector2.ZERO)
+		check(boss.phase2, "%s: друга фаза на половині здоров'я" % bk)
+		var hits := 0
+		while is_instance_valid(boss) and not boss.dead and hits < 200:
+			boss.take_damage(boss.max_hp * 3.0, Vector2.ZERO)
+			p.hp = p.max_hp
+			await process_frame
+			hits += 1
+		_clear_enemies(game)
+		await _frames(4)
+		check(game.world.cleared.get(loc_id, 0) > 0 or c.room_cleared, "%s: лігво пройдено" % loc_id)
+		game.enter_map()
+		await _frames(2)
+	# Мапа й довідник
+	var wm = game.hud.map_view
+	check(wm._loc_icon(Data.LOCATIONS["tula_zbroiarnia"]) == "cannon" and wm._loc_icon(Data.LOCATIONS["uhlych"]) == "bell" and wm._loc_icon(Data.LOCATIONS["volochok"]) == "pine", "значки нових місць на мапі")
+	var built: Control = load("res://scripts/ui/map_panel.gd").build("kryzhanyi_ostroh", game.world, p, func(_x): pass)
+	var ptext := ""
+	for n in built.find_children("*", "Label", true, false):
+		ptext += n.text + "\n"
+	built.free()
+	check("Залісся" in ptext and "з 30-го рівня" in ptext and "Карачун" in ptext, "панель Крижаного острогу: край, рівень і бос")
+	# Бічна панель мапи не вилазить за край екрана для жодного місця (довгі назви переносяться)
+	game.enter_map()
+	await _frames(2)
+	var Camp2 = load("res://scripts/data/camp_data.gd")
+	var Acts2 = load("res://scripts/data/activities.gd")
+	var wide := []
+	for id in Data.CITIES.keys() + Data.LOCATIONS.keys() + Acts2.SPOTS.keys() + [Camp2.CAMP_ID]:
+		game._on_map_select(id)
+		await _frames(2)
+		if game.hud.map_panel.size.x > 380.0 or game.hud.map_panel.size.y > game.get_viewport().get_visible_rect().size.y - 100.0:
+			wide.append("%s %dx%d" % [id, roundi(game.hud.map_panel.size.x), roundi(game.hud.map_panel.size.y)])
+	check(wide.is_empty(), "панель мапи вміщається на екрані для кожного місця: %s" % str(wide))
+	var hits2: Array = game.WikiService.search("Карачун")
+	check(not hits2.is_empty() and str(hits2[0]["entry"]["title"]).begins_with("Карачун"), "довідник знає Карачуна")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
 
 func _suite_events_wiki() -> void:
 	suite("Список подій і довідник: правила")

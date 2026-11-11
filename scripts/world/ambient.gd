@@ -7,7 +7,7 @@ var biome := "steppe"
 var parts := []  # [позиція, швидкість, фаза, розмір]
 var _t := 0.0
 
-const COUNT := {"steppe": 40, "river": 35, "forest": 45, "swamp": 14, "mountain": 110, "cave": 40, "plague": 50, "village": 60}
+const COUNT := {"steppe": 40, "river": 35, "forest": 45, "swamp": 14, "mountain": 110, "cave": 40, "plague": 50, "village": 60, "snow": 90}
 
 
 func setup(b: String) -> void:
@@ -29,7 +29,7 @@ func _new_part(view: Rect2, anywhere: bool) -> Array:
 	var vel := Vector2.ZERO
 	var size := 3.0
 	match biome:
-		"mountain":
+		"mountain", "snow":
 			vel = Vector2(randf_range(-30, 10), randf_range(60, 120))
 			size = randf_range(2, 4)
 			if not anywhere:
@@ -61,7 +61,7 @@ func _process(delta: float) -> void:
 		var p: Array = parts[i]
 		p[0] += p[1] * delta + Vector2(sin(_t + p[2]) * 8.0 * delta, 0)
 		if not view.grow(200 if biome == "swamp" else 20).has_point(p[0]):
-			parts[i] = _new_part(view, biome != "mountain")
+			parts[i] = _new_part(view, not biome in ["mountain", "snow"])
 	queue_redraw()
 
 
@@ -76,7 +76,7 @@ func _draw() -> void:
 				draw_circle(pos, s, Color(1.0, 1.0, 0.6, 0.8 * flick))
 			"swamp":
 				draw_circle(pos, s, Color(0.85, 0.9, 0.85, 0.06))
-			"mountain":
+			"mountain", "snow":
 				draw_circle(pos, s, Color(1, 1, 1, 0.85))
 			"cave":
 				draw_circle(pos, s, Color(1.0, 0.8, 0.5, 0.35 * flick))

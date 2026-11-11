@@ -1199,7 +1199,7 @@ func _drop_loot(e: Node2D) -> void:
 		shake(14.0)
 		Audio.jingle("victory")
 		Audio.play_music("map")  # бій скінчено: замість бойової теми — спокійна
-		Events.banner.emit("%s переможений!" % Data.BOSS_NAMES.get(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
+		Events.banner.emit("Перемога!\n%s" % Data.BOSS_NAMES.get(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
 		for i in 10:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
 		for i in (3 if drop_boost > 1.0 else 2):

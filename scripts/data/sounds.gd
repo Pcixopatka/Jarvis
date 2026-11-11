@@ -22,6 +22,7 @@ const DEATH := {
 	"bolotianyk": "die_slime",
 	"pishchalnyk": "die_human", "chaklun": "die_human", "rival": "die_human", "vidma": "die_spirit", "vii": "die_undead",
 	"potopelnyk": "die_undead", "pesyholovets": "die_beast", "kamiana_baba": "die_undead", "mara": "die_spirit", "zlyden": "die_beast",
+	"oprychnyk": "die_human", "vedmid": "die_beast", "kikimora": "die_spirit", "mertvyi_strilets": "die_undead", "kromeshnyk": "die_human", "boyaryn": "die_undead", "lisovyk": "die_spirit", "pushkar": "die_human", "lisovyi_did": "die_spirit", "idolyshche": "die_beast", "karachun": "die_spirit",
 	"morskyi_tsar": "die_slime", "shubin": "die_undead", "bila_pani": "die_spirit",
 }
 

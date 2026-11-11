@@ -242,7 +242,7 @@ static func _boss_where(kind: String) -> Array:
 
 static func _bosses() -> Array:
 	var out := []
-	var phase2 := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani"]
+	var phase2 := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani", "pushkar", "lisovyi_did", "idolyshche", "karachun"]
 	for kind in Wiki.BOSS_ORDER:
 		var W: Dictionary = Wiki.BOSSES[kind]
 		var text: String = W["text"]
@@ -287,7 +287,7 @@ static func _map_icon(L: Dictionary) -> String:
 		return "tower"
 	if L["type"] == "dungeon":
 		return "skull" if L["biome"] == "plague" else "cave"
-	return {"forest": "tree", "mountain": "mountain", "swamp": "swamp", "river": "wave", "village": "hut", "sand": "dune"}.get(L["biome"], "sabres")
+	return {"forest": "tree", "mountain": "mountain", "swamp": "swamp", "river": "wave", "village": "hut", "sand": "dune", "snow": "pine"}.get(L["biome"], "sabres")
 
 
 static func _city_entry(id: String, head: String) -> Dictionary:

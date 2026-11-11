@@ -341,6 +341,13 @@ const CITIES := {
 		"desc": "Фортеця на Кременці над Дінцем. Стереже Ізюмський шлях, яким ходять зі степу."},
 	"khadzhybei": {"name": "Хаджибей", "pos": Vector2(30.73, 46.48), "level": 16, "region": "pivden",
 		"desc": "Портове містечко над лиманами. Чумаки везуть звідси сіль і рибу, а чайки йдуть у море."},
+	# ---- Московія ----
+	"yelets": {"name": "Єлець", "pos": Vector2(38.5, 52.62), "level": 15, "region": "oka",
+		"desc": "Порубіжна фортеця над річкою Сосною. 1618 року Сагайдачний, ідучи на Москву, узяв Єлець хитрощами: частина козаків виманила залогу в поле, а решта ввірвалася до міста. Тепер тут знову стоїть козацька залога."},
+	"tver": {"name": "Твер", "pos": Vector2(35.9, 56.86), "level": 21, "region": "tvershchyna",
+		"desc": "Місто над Волгою, давня суперниця Москви. 1327 року тверичі повстали проти Орди, і Москва разом з Ордою спалила місто. Тут цього не забули й радо приймають козаків."},
+	"cherkaskyi_stan": {"name": "Черкаський стан", "pos": Vector2(38.5, 56.95), "level": 26, "region": "zalissia",
+		"desc": "Козацький кіш над Плещеєвим озером. Черкасами московити здавна звуть козаків, а за Смути ті доходили аж сюди. На березі лежить Синій камінь: його і закопували, і топили, а він щоразу вилазить нагору, як і козаки."},
 }
 
 ## Далекі краї: чотири сторони світу довкола старої мапи. Їхні місцевості міряються з героєм ("scale"),
@@ -350,8 +357,11 @@ const REGIONS := {
 	"volyn": {"name": "Волинь і Поділля", "desc": "Замки, озера й дністровські кручі."},
 	"slobid": {"name": "Слобожанщина й Донеччина", "desc": "Крейдяні гори, кургани й соляні копальні."},
 	"pivden": {"name": "Чорномор'я і Крим", "desc": "Піски, солоні болота, гори й відкрите море."},
+	"oka": {"name": "Засіки й Пооччя", "desc": "Південний рубіж Московії: засічні ліси, Куликове поле й мещерські болота."},
+	"tvershchyna": {"name": "Тверщина й Верхня Волга", "desc": "Оковський ліс, де починаються три ріки, озеро Селігер і старий волок на північ."},
+	"zalissia": {"name": "Залісся", "desc": "Давні міста за лісами, старші за саму Москву: Ростов Великий, Суздаль, Ярославль. Опричні слободи й тайга за Волгою."},
 }
-const REGION_ORDER := ["siver", "volyn", "slobid", "pivden"]
+const REGION_ORDER := ["siver", "volyn", "slobid", "pivden", "oka", "tvershchyna", "zalissia"]
 
 const LOCATIONS := {
 	"ridne_selo": {"name": "Рідне село", "type": "field", "biome": "village", "pos": Vector2(36.3, 49.75), "level": 1, "goal": 15,
@@ -460,6 +470,48 @@ const LOCATIONS := {
 	"zmiinyi": {"name": "Острів Зміїний", "type": "dungeon", "biome": "sand", "pos": Vector2(30.25, 45.2), "level": 24, "scale": true, "region": "pivden",
 		"rooms": 5, "enemies": ["potopelnyk", "mara", "pesyholovets"], "boss": "morskyi_tsar", "icon": "island",
 		"desc": "Скелястий острів посеред моря. Кажуть, під ним палац Морського царя, і непроханих гостей він топить."},
+	# ======================= Московія =======================
+	"kromy": {"name": "Кромський острог", "type": "field", "biome": "steppe", "pos": Vector2(35.77, 52.69), "level": 14, "scale": true, "region": "oka",
+		"enemies": ["mertvyi_strilets", "upyr", "pesyholovets"], "icon": "mound", "desc": "Земляні вали над річкою Кромою. 1605 року жменька донських козаків отамана Корели кілька місяців трималася тут проти всього царського війська. Стрільці-мерці досі йдуть на приступ."},
+	"uhra": {"name": "Над Угрою", "type": "field", "biome": "river", "pos": Vector2(35.55, 54.7), "level": 15, "scale": true, "region": "oka",
+		"enemies": ["potopelnyk", "mertvyi_strilets", "kikimora"], "desc": "Річка, на якій восени 1480 року два війська тижнями стояли одне проти одного й так і не зійшлися. Мерці й тепер стоять тут і стріляють через воду."},
+	"kulykove": {"name": "Куликове поле", "type": "field", "biome": "steppe", "pos": Vector2(38.66, 53.67), "level": 15, "scale": true, "region": "oka",
+		"enemies": ["boyaryn", "mara", "kamiana_baba"], "desc": "Тут, у верхів'ях Дону, 1380 року розбили Мамая. Засадний полк, що вирішив битву, вів волинянин Боброк. Полеглі бояри встають із землі й ділять, кому яка вотчина."},
+	"zaseky": {"name": "Тульські засіки", "type": "field", "biome": "forest", "pos": Vector2(36.85, 53.95), "level": 16, "scale": true, "region": "oka",
+		"enemies": ["vedmid", "lisovyk", "vovkulaka"], "desc": "Смуга поваленого лісу, якою Москва віками відгороджувалась від степу. Тепер завалами никають шатуни, а лісовики водять подорожніх колами."},
+	"tula_zbroiarnia": {"name": "Тульська зброярня", "type": "dungeon", "biome": "cave", "pos": Vector2(37.62, 54.19), "level": 17, "scale": true, "region": "oka",
+		"rooms": 5, "enemies": ["mertvyi_strilets", "kromeshnyk", "chort"], "boss": "pushkar", "icon": "cannon",
+		"desc": "Підземні кузні під Тулою, де кують зброю для царя. Сюди з Москви привезли Цар-гармату, щоб нарешті навчити її стріляти. Пушкар пробує й досі."},
+	"meshchera": {"name": "Мещерські болота", "type": "field", "biome": "swamp", "pos": Vector2(40.15, 55.3), "level": 18, "scale": true, "region": "oka",
+		"enemies": ["kikimora", "bolotianyk", "potopelnyk"], "desc": "Торфові болота за Окою, без краю й без дна. Кікімори прядуть тут туман, і хто в нього вступить, той грузне."},
+	"yamskyi_shliakh": {"name": "Ямський шлях", "type": "field", "biome": "forest", "pos": Vector2(36.45, 56.5), "level": 19, "scale": true, "region": "tvershchyna",
+		"enemies": ["kromeshnyk", "mertvyi_strilets", "upyr"], "desc": "Стара поштова дорога з Москви на Твер. Колись нею мчала опричнина палити місто, і мертві кромішники мчать нею й тепер."},
+	"staritsa": {"name": "Старицькі каменоломні", "type": "field", "biome": "mountain", "pos": Vector2(34.9, 56.45), "level": 20, "scale": true, "region": "tvershchyna",
+		"enemies": ["vedmid", "mara", "chort"], "desc": "Тут над Волгою віками ламали білий камінь, а тепер каменоломні стоять порожні. У покинутих штольнях ховаються від морозу шатуни, а в темряві блукають мари."},
+	"seliger": {"name": "Озеро Селігер", "type": "field", "biome": "river", "pos": Vector2(33.1, 57.15), "level": 21, "scale": true, "region": "tvershchyna",
+		"enemies": ["potopelnyk", "kikimora", "mavka"], "desc": "Велике лісове озеро із сотнею островів. Між островами легко заблукати, а з води за човном стежать потопельники."},
+	"okovskyi_lis": {"name": "Оковський ліс", "type": "dungeon", "biome": "forest", "pos": Vector2(32.55, 56.35), "level": 22, "scale": true, "region": "tvershchyna",
+		"rooms": 5, "enemies": ["lisovyk", "vedmid", "vovkulaka"], "boss": "lisovyi_did", "icon": "leshy",
+		"desc": "Праліс із київського літопису: з нього течуть Дніпро на південь, Двіна на північ, а Волга на схід. Тут починається наш Дніпро. Господар пралісу, Лісовий Дід, водить манівцями кожного, хто зайде."},
+	"volochok": {"name": "Вишній Волочок", "type": "field", "biome": "snow", "pos": Vector2(34.55, 57.6), "level": 23, "scale": true, "region": "tvershchyna",
+		"enemies": ["vedmid", "lisovyk", "mara"], "desc": "Старий волок, де човни тягли суходолом від Волги на північ. Тепер його замело снігом, а заметами бродять шатуни, яким не спиться."},
+	"nero": {"name": "Озеро Неро", "type": "field", "biome": "swamp", "pos": Vector2(39.45, 57.2), "level": 24, "scale": true, "region": "zalissia",
+		"enemies": ["kikimora", "potopelnyk", "boyaryn"], "desc": "Мілке озеро під Ростовом Великим, рідним містом Олешка Поповича. Ростов майже на три століття старший за Москву. Води тут по коліно, а мулу на кілька сажнів: хто загруз, той там і лишився."},
+	"uhlych": {"name": "Углич", "type": "field", "biome": "river", "pos": Vector2(38.33, 57.53), "level": 25, "scale": true, "region": "zalissia",
+		"enemies": ["kromeshnyk", "mara", "potopelnyk"], "icon": "bell", "desc": "Містечко над Волгою, де за царським наказом відшмагали батогами дзвін, вирвали йому язика й заслали до Сибіру, бо вдарив на сполох. Додому він вернувся аж через триста років."},
+	"oleksandrivska_sloboda": {"name": "Олександрівська слобода", "type": "dungeon", "biome": "village", "pos": Vector2(38.71, 56.4), "level": 26, "scale": true, "region": "zalissia", "night": true,
+		"rooms": 6, "enemies": ["kromeshnyk", "mertvyi_strilets", "boyaryn"], "boss": "oprychnyk", "icon": "doghead",
+		"desc": "Опричне гніздо за валами й ровом. Звідси кромішники із собачими головами при сідлах їздили гризти власну землю. Тут досі хазяйнує Малюта й вимітає мітлою всіх, хто йому не до вподоби."},
+	"votchyna": {"name": "Боярська вотчина", "type": "field", "biome": "village", "pos": Vector2(41, 57), "level": 27, "scale": true, "region": "zalissia",
+		"enemies": ["boyaryn", "zlyden", "upyr"], "desc": "Село, де мертвий боярин досі збирає оброк. Злидні ходять від хати до хати й забирають останнє."},
+	"suzdal_medovarni": {"name": "Суздальські медоварні", "type": "dungeon", "biome": "cave", "pos": Vector2(40.45, 56.42), "level": 28, "scale": true, "region": "zalissia",
+		"rooms": 6, "enemies": ["boyaryn", "chort", "zlyden"], "boss": "idolyshche", "icon": "kotel",
+		"desc": "Глибокі погреби, де варили мед на цілий край. Тепер його п'є Ідолище Погане й закусює всім, що трапиться. Суздаль старший за Москву й пам'ятає її ще селом."},
+	"vedmezhyi_kut": {"name": "Ведмежий кут", "type": "field", "biome": "snow", "pos": Vector2(39.9, 57.68), "level": 29, "scale": true, "region": "zalissia",
+		"enemies": ["vedmid", "vovkulaka", "lisovyk"], "desc": "Мис над Волгою, де київський князь Ярослав Мудрий зарубав сокирою ведмедя й заклав місто Ярославль. Ведмідь із сокирою й тепер на гербі міста. А тутешні ведмеді відтоді не сплять."},
+	"kryzhanyi_ostroh": {"name": "Крижаний острог", "type": "dungeon", "biome": "snow", "pos": Vector2(41.4, 58.2), "level": 30, "scale": true, "region": "zalissia", "night": true,
+		"rooms": 7, "enemies": ["vedmid", "lisovyk", "mara"], "boss": "karachun", "icon": "frost",
+		"desc": "Фортеця з криги в тайзі за Костромою, де ніколи не світає. Тут панує Карачун, і зима при ньому не минає."},
 }
 
 
@@ -472,20 +524,50 @@ const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "
 	"baba_yaha": "Баба Яга", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Опричник-кат",
 	"vidma": "Відьма", "vii": "Вій",
 	"potopelnyk": "Потопельник", "pesyholovets": "Песиголовець", "kamiana_baba": "Кам'яна баба", "mara": "Мара", "zlyden": "Злидень",
-	"morskyi_tsar": "Морський цар", "shubin": "Шубін", "bila_pani": "Біла Пані"}
+	"morskyi_tsar": "Морський цар", "shubin": "Шубін", "bila_pani": "Біла Пані",
+	"vedmid": "Ведмідь-шатун",
+	"kikimora": "Кікімора",
+	"mertvyi_strilets": "Стрілець-мрець",
+	"kromeshnyk": "Кромішник",
+	"boyaryn": "Боярин-упир",
+	"lisovyk": "Лісовик",
+	"pushkar": "Пушкар",
+	"lisovyi_did": "Лісовий Дід",
+	"idolyshche": "Ідолище",
+	"karachun": "Карачун"}
 const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotianyk": "болотяників", "vovkulaka": "вовкулак", "zarazhenyi": "заражених",
 	"zmii": "зміїв", "chaklun": "чаклунів", "chort": "чортів", "pishchalnyk": "пищальників", "koshchii": "кощіїв", "putinoid": "путіноїдів",
 	"baba_yaha": "бабів яг", "solovei": "солов'їв", "lykho": "лих", "oprychnyk": "опричників", "vidma": "відьом", "vii": "віїв",
 	"potopelnyk": "потопельників", "pesyholovets": "песиголовців", "kamiana_baba": "кам'яних баб", "mara": "мар", "zlyden": "злиднів",
-	"morskyi_tsar": "морських царів", "shubin": "шубінів", "bila_pani": "білих пань"}
+	"morskyi_tsar": "морських царів", "shubin": "шубінів", "bila_pani": "білих пань",
+	"vedmid": "ведмедів-шатунів",
+	"kikimora": "кікімор",
+	"mertvyi_strilets": "стрільців-мерців",
+	"kromeshnyk": "кромішників",
+	"boyaryn": "бояр-упирів",
+	"lisovyk": "лісовиків",
+	"pushkar": "пушкарів",
+	"lisovyi_did": "лісових дідів",
+	"idolyshche": "ідолищ",
+	"karachun": "карачунів"}
 const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда",
 	"koshchii": "Кощій Безсмертний", "putinoid": "Путіноїд, кремлівський упир-цар",
 	"baba_yaha": "Баба Яга Кістяна Нога", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Малюта, опричник-кат",
 	"vidma": "Відьма з Лисої гори", "vii": "Вій, володар підземного мороку",
-	"morskyi_tsar": "Морський цар", "shubin": "Шубін, господар копалень", "bila_pani": "Біла Пані Підгорецька"}
+	"morskyi_tsar": "Морський цар", "shubin": "Шубін, господар копалень", "bila_pani": "Біла Пані Підгорецька",
+	"pushkar": "Пушкар із Цар-гарматою",
+	"lisovyi_did": "Лісовий Дід, господар Оковського лісу",
+	"idolyshche": "Ідолище Погане",
+	"karachun": "Карачун, дух найдовшої ночі"}
 const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази",
 	"chort": "Чортів ріг", "pishchalnyk": "Наказ воєводи",
-	"potopelnyk": "Мокра сорочка", "pesyholovets": "Собачий нашийник", "kamiana_baba": "Уламок ідола", "mara": "Пасмо туману", "zlyden": "Дірява торбина"}
+	"potopelnyk": "Мокра сорочка", "pesyholovets": "Собачий нашийник", "kamiana_baba": "Уламок ідола", "mara": "Пасмо туману", "zlyden": "Дірява торбина",
+	"vedmid": "Ведмежий пазур",
+	"kikimora": "Кікіморине веретено",
+	"mertvyi_strilets": "Стрілецька порохівниця",
+	"kromeshnyk": "Опричницька мітла",
+	"boyaryn": "Горлатна шапка",
+	"lisovyk": "Лісовикова шишка"}
 
 const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
 const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]

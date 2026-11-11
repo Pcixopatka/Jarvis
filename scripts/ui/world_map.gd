@@ -10,7 +10,7 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const PARCHMENT := preload("res://assets/gfx/sprites/map_parchment.png")
 const ICONS := preload("res://assets/gfx/sprites/map_icons.png")
-const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent", "dune", "island", "ruin", "mine", "oak", "izba"]
+const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave", "tower", "skull", "sabres", "wave", "camp", "ship", "rider", "flag", "town", "raid", "wagon", "chains", "wounded", "tent", "moon", "chest", "mound", "bow", "fish", "cart", "dice", "rider2", "serpent", "dune", "island", "ruin", "mine", "oak", "izba", "cannon", "leshy", "doghead", "kotel", "frost", "bell"]
 # Кольори чорнила старовинної мапи
 const INK := Color(0.23, 0.16, 0.1)
 const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
@@ -44,6 +44,7 @@ func _loc_icon(L: Dictionary) -> String:
 		"river": return "wave"
 		"village": return "hut"
 		"sand": return "dune"
+		"snow": return "pine"
 	return "sabres"
 
 
@@ -97,12 +98,19 @@ const RIVERS := [
 		Vector2(31.0, 47.5), Vector2(31.9, 46.95)]],
 	["Десна", [Vector2(33.6, 52.4), Vector2(32.9, 51.85), Vector2(31.3, 51.48), Vector2(30.9, 51.0), Vector2(30.55, 50.6)]],
 	["Сіверський Донець", [Vector2(36.6, 50.4), Vector2(37.3, 49.6), Vector2(38.0, 49.0), Vector2(38.9, 48.85), Vector2(39.9, 48.4), Vector2(40.6, 47.8)]],
-	["Дніпро (верхів'я)", [Vector2(32.05, 54.78), Vector2(31.2, 54.6), Vector2(30.4, 54.5), Vector2(30.3, 53.9), Vector2(30.1, 53.2), Vector2(30.6, 52.4)]],
+	["Дніпро (верхів'я)", [Vector2(33.35, 55.85), Vector2(33.45, 55.35), Vector2(33.28, 54.91), Vector2(32.05, 54.78), Vector2(32.05, 54.78), Vector2(31.2, 54.6), Vector2(30.4, 54.5), Vector2(30.3, 53.9), Vector2(30.1, 53.2), Vector2(30.6, 52.4)]],
 	["Прип'ять", [Vector2(24.5, 51.75), Vector2(25.8, 51.9), Vector2(27.3, 52.1), Vector2(28.6, 52.1), Vector2(29.6, 51.8), Vector2(30.2, 51.35), Vector2(30.55, 51.0)]],
 	["Вісла", [Vector2(19.0, 50.05), Vector2(19.9, 50.05), Vector2(21.0, 50.4), Vector2(21.8, 51.0), Vector2(21.6, 51.6), Vector2(21.0, 52.25), Vector2(20.2, 52.5), Vector2(19.0, 52.7)]],
 	["Західний Буг", [Vector2(24.1, 49.9), Vector2(24.1, 50.85), Vector2(23.65, 51.55), Vector2(23.6, 52.1), Vector2(22.6, 52.4), Vector2(21.4, 52.6)]],
 	["Дон", [Vector2(38.4, 54.0), Vector2(38.9, 53.0), Vector2(39.2, 51.66), Vector2(40.0, 50.5), Vector2(41.2, 49.6), Vector2(42.0, 48.9)]],
 	["Німан", [Vector2(26.6, 53.5), Vector2(25.5, 53.6), Vector2(24.4, 53.9), Vector2(23.9, 54.6), Vector2(22.9, 55.0)]],
+	["Волга", [Vector2(32.47, 57.25), Vector2(33, 57.05), Vector2(33.47, 56.85), Vector2(34, 56.35), Vector2(34.33, 56.26), Vector2(34.6, 56.2), Vector2(34.93, 56.48), Vector2(35.4, 56.75), Vector2(35.9, 56.86), Vector2(36.6, 56.78), Vector2(37.17, 56.73), Vector2(37.5, 56.95), Vector2(37.84, 57.24), Vector2(38.33, 57.53), Vector2(38.84, 58.05), Vector2(39.4, 57.85), Vector2(39.89, 57.63), Vector2(40.4, 57.7), Vector2(40.93, 57.77), Vector2(41.5, 57.6), Vector2(42, 57.47)]],
+	["Ока", [Vector2(36.07, 52.97), Vector2(36.15, 53.5), Vector2(36.13, 53.81), Vector2(36, 54.2), Vector2(36.25, 54.51), Vector2(36.7, 54.45), Vector2(37.07, 54.51), Vector2(37.41, 54.92), Vector2(38.15, 54.83), Vector2(38.78, 55.1), Vector2(39.3, 54.8), Vector2(39.74, 54.63), Vector2(40.4, 54.75), Vector2(41, 54.75), Vector2(41.42, 54.94), Vector2(41.8, 55.3), Vector2(42, 55.55)]],
+	["Москва-ріка", [Vector2(35.7, 55.6), Vector2(36.03, 55.5), Vector2(36.86, 55.73), Vector2(37.3, 55.8), Vector2(37.62, 55.75), Vector2(37.95, 55.6), Vector2(38.4, 55.45), Vector2(38.68, 55.32), Vector2(38.78, 55.1)]],
+	["Клязьма", [Vector2(37, 56), Vector2(37.6, 55.95), Vector2(38.2, 55.9), Vector2(38.9, 55.95), Vector2(39.4, 56.05), Vector2(40, 56.12), Vector2(40.4, 56.13), Vector2(41, 56.2), Vector2(41.6, 56.25), Vector2(42, 56.2)]],
+	["Угра", [Vector2(33.3, 54.6), Vector2(34, 54.75), Vector2(34.6, 54.8), Vector2(35.24, 54.74), Vector2(35.8, 54.62), Vector2(36.3, 54.53)]],
+	["Західна Двіна", [Vector2(32.75, 56.9), Vector2(32.27, 56.65), Vector2(32.07, 56.26), Vector2(31.2, 55.6), Vector2(30.2, 55.2), Vector2(28.8, 55.5), Vector2(27.5, 55.8), Vector2(26.5, 55.87), Vector2(25.3, 56.4), Vector2(24.1, 56.95)]],
+	["Сосна", [Vector2(36.6, 52.45), Vector2(37.6, 52.42), Vector2(38.5, 52.62), Vector2(38.98, 52.65)]],
 ]
 const POLAND := [
 	Vector2(19.0, 54.4), Vector2(22.8, 54.38), Vector2(23.5, 53.95), Vector2(23.9, 53.2), Vector2(23.5, 52.6),
@@ -117,10 +125,12 @@ const BELARUS := [
 	Vector2(23.65, 51.55), Vector2(23.2, 52.2), Vector2(23.5, 52.6), Vector2(23.9, 53.2),
 ]
 const BALTIC := [
-	Vector2(18.0, 54.4), Vector2(19.6, 54.45), Vector2(19.95, 54.95), Vector2(21.2, 55.2), Vector2(21.1, 56.5), Vector2(18.0, 56.5),
+	Vector2(18.0, 54.4), Vector2(19.6, 54.45), Vector2(19.95, 54.95), Vector2(21.2, 55.2), Vector2(21.05, 56.5), Vector2(21.55, 57.4),
+	Vector2(22.6, 57.75), Vector2(23.5, 57.05), Vector2(24.1, 57.0), Vector2(24.35, 57.75), Vector2(24.5, 58.35), Vector2(23.5, 58.6),
+	Vector2(23.45, 58.9), Vector2(18.0, 58.9),
 ]
 const COUNTRY_NAMES := [
-	["ПОЛЬЩА", Vector2(20.9, 52.9)], ["БІЛОРУСЬ", Vector2(27.6, 53.4)], ["МОСКОВІЯ", Vector2(38.2, 52.8)],
+	["ПОЛЬЩА", Vector2(20.9, 52.9)], ["БІЛОРУСЬ", Vector2(27.6, 53.4)], ["МОСКОВІЯ", Vector2(40.7, 53.4)], ["ЛАТВІЯ", Vector2(25.8, 57.2)],
 	["УКРАЇНА", Vector2(29.0, 49.75)], ["МОЛДОВА", Vector2(28.6, 47.2)], ["РУМУНІЯ", Vector2(24.8, 46.9)],
 	["СЛОВАЧЧИНА", Vector2(20.6, 48.75)], ["УГОРЩИНА", Vector2(21.0, 47.4)], ["ЛИТВА", Vector2(24.6, 55.0)],
 ]
@@ -131,6 +141,7 @@ const TOWNS := [
 	["Смоленськ", Vector2(32.05, 54.78)], ["Брянськ", Vector2(34.36, 53.24)], ["Курськ", Vector2(36.19, 51.73)],
 	["Бєлгород", Vector2(36.6, 50.6)], ["Воронеж", Vector2(39.2, 51.66)], ["Ростов", Vector2(39.7, 47.24)],
 	["Яси", Vector2(27.6, 47.16)], ["Вільнюс", Vector2(25.28, 54.69)],
+	["Калуга", Vector2(36.25, 54.51)], ["Рязань", Vector2(39.74, 54.63)], ["Кострома", Vector2(40.93, 57.77)], ["Вітебськ", Vector2(30.2, 55.19)], ["Псков", Vector2(28.33, 57.82)], ["Рига", Vector2(24.1, 56.95)],
 ]
 
 const MOUNTAINS := [
@@ -144,6 +155,7 @@ const FORESTS := [
 	Vector2(26.0, 50.6), Vector2(25.0, 50.2),
 	Vector2(23.9, 52.75), Vector2(26.2, 52.5), Vector2(27.6, 52.3), Vector2(28.6, 54.2), Vector2(25.3, 53.3),
 	Vector2(33.5, 53.2), Vector2(34.6, 53.6), Vector2(35.1, 52.6), Vector2(22.8, 51.8), Vector2(21.6, 53.6),
+	Vector2(34.3, 55.9), Vector2(37.3, 57.2), Vector2(40.3, 58.25), Vector2(41.2, 56.3), Vector2(37.2, 53.0), Vector2(34.7, 55.4), Vector2(39.4, 54.1), Vector2(31.4, 56.9), Vector2(35.6, 57.9), Vector2(41.3, 54.4), Vector2(32.0, 57.8),
 ]
 
 
@@ -151,7 +163,7 @@ const FORESTS := [
 const LON0 := 19.0
 const LON1 := 42.0
 const LAT0 := 43.8
-const LAT1 := 56.3
+const LAT1 := 58.6
 const KX := 0.67  # довгота коротша за широту на цих широтах
 const MAP_W := (LON1 - LON0) * KX
 const MAP_H := LAT1 - LAT0
@@ -170,7 +182,7 @@ var hero_level := 1
 var travel := {}
 var map_rect := Rect2()  # область для мапи на екрані
 var zoom := 1.6
-var center := Vector2(MAP_W * 0.55, MAP_H * 0.55)  # центр огляду в одиницях мапи
+var center := Vector2(MAP_W * 0.55, MAP_H * 0.62)  # центр огляду в одиницях мапи
 var _scale := 60.0
 var _origin := Vector2.ZERO
 var _k := 1.0  # множник розміру підписів і значків
