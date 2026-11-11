@@ -174,6 +174,7 @@ var moving := false
 var alive := true
 var unbreak_ready := true
 var berehynia_ready := true  # Берегиня (Загартування): раз на бій
+var ladanka_ready := true  # Материна ладанка (божий дар): раз на бій
 # --- Дії вмінь у часі ---
 var cry_timer := 0.0  # Бойовий клич
 var cry_bonus := 0.0
@@ -712,8 +713,8 @@ func recalc() -> void:
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0) * (1.0 + fx("speed") / 100.0)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0))) * (1.0 + float(divine_fx.get("pickup", 0.0)))
-	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0))
-	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0)) + float(divine_fx.get("xp", 0.0))
+	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0 + float(divine_fx.get("gold", 0.0))
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
 	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0) * (1.0 - fx("cd") / 100.0))
 	skill_power = (1.0 + 0.05 * Data.soft_spi(s_spi) + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0))) * (1.0 + float(set_fx.get("skill", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("skill", 0.0)) / 100.0) * (1.0 + fx("skill") / 100.0)
@@ -2550,6 +2551,16 @@ func _check_death() -> void:
 		heal(max_hp * 0.3, false)
 		Events.banner.emit("Берегиня вберегла!", Color(0.6, 0.9, 1.0))
 		return
+	var revive: float = float(divine_fx.get("revive", 0.0))
+	if revive > 0.0 and ladanka_ready:
+		# Материна ладанка: раз на бій підіймає героя з часткою здоров'я
+		ladanka_ready = false
+		hp = 1.0
+		invuln = 2.0
+		statuses.clear()
+		heal(max_hp * revive, false)
+		Events.banner.emit("Ладанка вберегла!", Color(1.0, 0.82, 0.4))
+		return
 	hp = 0.0
 	alive = false
 	queue_redraw()
@@ -2873,6 +2884,56 @@ func _draw_relic(tint: Color) -> void:
 		draw_line(at + Vector2(-4, -10), at + Vector2(-7, -14), c, 1.5)
 
 
+## Материна ладанка на грудях героя.
+func _draw_ladanka(tint: Color) -> void:
+	if Gfx.dir_of(facing)[0] == "up":
+		return  # зі спини її не видно
+	draw_rect(Rect2(-3, -9, 6, 7), DIVINE_OUTLINE)
+	draw_rect(Rect2(-2, -8, 4, 5), Color(0.7, 0.18, 0.18) * tint)
+	draw_rect(Rect2(-2, -8, 4, 1), Color(0.92, 0.72, 0.25) * tint)
+
+
+## Бойовий стяг за плечем: держак і малинове полотнище, що тріпоче.
+func _draw_banner(tint: Color) -> void:
+	var d := Gfx.dir_of(facing)
+	var sx := -13.0 if (d[0] != "side" or d[1]) else 13.0
+	var wave := sin(Time.get_ticks_msec() / 1000.0 * 5.0) * 1.5
+	var dir := -1.0 if sx < 0.0 else 1.0
+	draw_rect(Rect2(sx - 1.5, -37, 3, 34), DIVINE_OUTLINE)
+	draw_rect(Rect2(sx - 0.5, -36, 1, 32), Color(0.5, 0.32, 0.18) * tint)
+	var cloth := PackedVector2Array([Vector2(sx, -36), Vector2(sx + dir * 14.0, -34 + wave), Vector2(sx + dir * 11.0, -30), Vector2(sx + dir * 14.0, -26 - wave), Vector2(sx, -25)])
+	var edge := PackedVector2Array()
+	for v in cloth:
+		edge.append(v + (v - Vector2(sx + dir * 7.0, -30.5)).normalized() * 1.4)
+	draw_colored_polygon(edge, DIVINE_OUTLINE)
+	draw_colored_polygon(cloth, Color(0.68, 0.14, 0.24) * tint)
+	draw_rect(Rect2(sx + dir * 6.0 - 1.5, -32, 3, 3), Color(0.92, 0.72, 0.25) * tint)
+
+
+## Чарівний ліхтар у руці: скляний, із живим вогником.
+func _draw_lantern(tint: Color) -> void:
+	var d := Gfx.dir_of(facing)
+	var sx := -15.0 if (d[0] != "side" or d[1]) else 15.0
+	var glow := 0.75 + sin(Time.get_ticks_msec() / 1000.0 * 7.0) * 0.15
+	draw_circle(Vector2(sx, 3), 9.0, Color(1.0, 0.85, 0.4, 0.16 * glow))
+	draw_rect(Rect2(sx - 3.5, -2, 7, 10), DIVINE_OUTLINE)
+	draw_rect(Rect2(sx - 2.5, 0, 5, 6), Color(1.0, 0.85, 0.42) * tint)
+	draw_rect(Rect2(sx - 1.0, 1, 2, 4), Color(1.0, 0.98, 0.85) * tint)
+	draw_rect(Rect2(sx - 2.5, -1, 5, 1), Color(0.4, 0.42, 0.48) * tint)
+
+
+## Німб праведника над головою: золоте кільце, що ледь мерехтить.
+func _draw_halo(tint: Color) -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	var c := Vector2(0, -33 + sin(t * 2.0) * 1.0)
+	var pts := PackedVector2Array()
+	for i in 17:
+		var a := TAU * i / 16.0
+		pts.append(c + Vector2(cos(a) * 9.0, sin(a) * 3.2))
+	draw_polyline(pts, DIVINE_OUTLINE, 4.0)
+	draw_polyline(pts, Color(1.0, 0.82, 0.3, 0.85 + sin(t * 4.0) * 0.15) * tint, 2.0)
+
+
 func _draw_sprite(tint: Color) -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)  # лежачий кадр уже намальовано на листі
 	var frame := Gfx.IDLE
@@ -2892,8 +2953,16 @@ func _draw_sprite(tint: Color) -> void:
 	Gfx.draw(self, sprite_id(), facing, frame, Vector2(-24, -30), tint)
 	if winged and back_view:
 		_draw_wings(tint)
-	if alive and str(divine.get("relic", "")) != "":
+	if alive and str(divine.get("relic", "")) == "molot":
 		_draw_relic(tint)
+	elif alive and str(divine.get("relic", "")) == "ladanka":
+		_draw_ladanka(tint)
+	if alive and str(divine.get("banner", "")) != "":
+		_draw_banner(tint)
+	if alive and str(divine.get("lantern", "")) != "":
+		_draw_lantern(tint)
+	if alive and str(divine.get("halo", "")) != "":
+		_draw_halo(tint)
 	# Накладки: вдягнена шапка (шлик кольору рідкості) і вовча подоба
 	if equipment.has("head") and costume == "" and not Classes.is_volkhv_line(job) and wolf_timer <= 0.0 and Gfx.has("overlay_hat"):
 		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]

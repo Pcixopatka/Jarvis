@@ -64,9 +64,10 @@ static func unequip(world, player, slot: String) -> void:
 	apply(world, player)
 
 
-## Що дають вдягнені дари: {"bag", "stats", "pickup", "shop", "fx": {ключ: значення}}.
+## Що дають вдягнені дари: {"bag", "stats", "pickup", "shop", "xp", "gold", "revive", "party", "sight", "light", "fx": {ключ: значення}}.
 static func fx_of(world, player) -> Dictionary:
-	var out := {"bag": 0, "stats": 0.0, "pickup": 0.0, "shop": false, "fx": {}}
+	var out := {"bag": 0, "stats": 0.0, "pickup": 0.0, "shop": false, "xp": 0.0, "gold": 0.0, "revive": 0.0,
+		"party": 0.0, "sight": false, "light": 1.0, "fx": {}}
 	for slot in player.divine.keys():
 		var id: String = str(player.divine[slot])
 		if not Divine.has(id) or not owned(world, id) or str(Divine.DEFS[id]["slot"]) != str(slot):
@@ -76,6 +77,12 @@ static func fx_of(world, player) -> Dictionary:
 		out["stats"] = float(out["stats"]) + float(D.get("stats", 0.0))
 		out["pickup"] = float(out["pickup"]) + float(D.get("pickup", 0.0))
 		out["shop"] = bool(out["shop"]) or bool(D.get("shop", false))
+		out["xp"] = float(out["xp"]) + float(D.get("xp", 0.0))
+		out["gold"] = float(out["gold"]) + float(D.get("gold", 0.0))
+		out["revive"] = maxf(float(out["revive"]), float(D.get("revive", 0.0)))
+		out["party"] = float(out["party"]) + float(D.get("party", 0.0))
+		out["sight"] = bool(out["sight"]) or bool(D.get("sight", false))
+		out["light"] = maxf(float(out["light"]), float(D.get("light", 1.0)))
 		for k in D.get("fx", {}):
 			out["fx"][k] = float(out["fx"].get(k, 0.0)) + float(D["fx"][k])
 	return out

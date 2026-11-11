@@ -12995,7 +12995,7 @@ func _suite_loot_rates() -> void:
 
 
 func _suite_divine() -> void:
-	suite("Божі дари: чотири речі у власних гніздах")
+	suite("Божі дари: дев'ять речей у семи власних гніздах")
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
 	var Div = load("res://scripts/data/divine.gd")
@@ -13012,10 +13012,15 @@ func _suite_divine() -> void:
 	for id in Div.ORDER:
 		var D: Dictionary = Div.DEFS[id]
 		slots[D["slot"]] = id
-		data_ok = data_ok and D["slot"] in Div.SLOTS and str(D["name"]) != "" and int(D["price"]) > 0 and GfxS.icon_tex(str(D["icon"])) != null and not D["lines"].is_empty() and Div.for_slot(D["slot"]) == id
+		data_ok = data_ok and D["slot"] in Div.SLOTS and str(D["name"]) != "" and int(D["price"]) > 0 and GfxS.icon_tex(str(D["icon"])) != null and not D["lines"].is_empty() and id in Div.in_slot(D["slot"])
 		for k in D.get("fx", {}):
 			data_ok = data_ok and Classes.FX_TEXT.has(k)
-	check(data_ok and slots.size() == Div.SLOTS.size() and Div.ORDER.size() == 4, "чотири дари, кожен зі своїм гніздом, значком і ціною")
+	var two := 0
+	for sl in Div.SLOTS:
+		data_ok = data_ok and not Div.in_slot(sl).is_empty() and Div.SLOT_NAMES.has(sl)
+		if Div.in_slot(sl).size() > 1:
+			two += 1
+	check(data_ok and slots.size() == Div.SLOTS.size() and Div.ORDER.size() == 9 and Div.SLOTS.size() == 7 and two == 2, "дев'ять дарів на сім гнізд: у двох гніздах вибір із двох")
 	# ---- Купівля й гнізда ----
 	var w = WorldState.new()
 	var p = _new_player()
@@ -13056,6 +13061,33 @@ func _suite_divine() -> void:
 	check(p3.divine.size() == 4 and p3.bag_size() == p.bag_size() and DS.remote_shop(p3) and p3.fx("dmg") > 0.0, "вдягнені дари зберігаються з героєм і діють після завантаження")
 	Camp.apply_effects(WorldState.new(), p3)
 	check(p3.divine.is_empty() and p3.bag_size() == Data.INVENTORY_SIZE and not DS.remote_shop(p3) and p3.fx("dmg") == 0.0, "у роду без цих дарів вони знімаються")
+	# ---- Нові дари: вибір у гнізді й нові гнізда ----
+	var w5 = WorldState.new()
+	var p5 = _new_player()
+	p5.change_class("cossack")
+	p5.level = 50
+	SH.state(w5)["coins"] = 100000
+	Camp.apply_effects(w5, p5)
+	var sp0: float = p5.speed
+	var xp0: float = p5.xp_mult
+	var gm0: float = p5.gold_mult
+	DS.buy(w5, p5, "khovanets")
+	check(DS.buy(w5, p5, "skakun") and DS.worn(p5, "pet") == "skakun" and not DS.remote_shop(p5) and DS.owned(w5, "khovanets") and is_equal_approx(p5.speed, sp0 * 1.2), "скакун стає в гніздо «Супутник» замість Хованця: біг +20%, Хованець лишився в роду")
+	check(DS.equip(w5, p5, "khovanets") and DS.remote_shop(p5) and is_equal_approx(p5.speed, sp0) and p5.divine.size() == 1, "назад на Хованця: у гнізді завжди один дар")
+	DS.buy(w5, p5, "molot")
+	check(DS.buy(w5, p5, "ladanka") and DS.worn(p5, "relic") == "ladanka" and p5.fx("dmg") == 0.0 and is_equal_approx(float(p5.divine_fx["revive"]), 0.5), "ладанка лягає в гніздо «Реліквія» замість молота")
+	check(DS.buy(w5, p5, "nimb") and is_equal_approx(p5.xp_mult, xp0 + 0.15) and is_equal_approx(p5.gold_mult, gm0 + 0.15), "німб: досвід і гривні +15%")
+	check(DS.buy(w5, p5, "stiah") and is_equal_approx(float(p5.divine_fx["party"]), 0.25) and DS.buy(w5, p5, "likhtar") and bool(p5.divine_fx["sight"]) and float(p5.divine_fx["light"]) > 1.0, "стяг і ліхтар мають власні гнізда")
+	check(p5.divine.size() == 5 and p5.inventory.is_empty(), "п'ять гнізд зайнято: супутник, реліквія, німб, стяг, ліхтар")
+	var CompS = load("res://scripts/entities/companion.gd")
+	var c_plain = CompS.new()
+	c_plain.setup("dzhura", 30, 0)
+	var c_boost = CompS.new()
+	c_boost.boost = 1.25
+	c_boost.setup("dzhura", 30, 0)
+	check(is_equal_approx(c_boost.max_hp, c_plain.max_hp * 1.25) and is_equal_approx(c_boost.damage, c_plain.damage * 1.25) and is_equal_approx(c_boost.hp, c_boost.max_hp), "під стягом побратим має на чверть більше здоров'я й шкоди")
+	c_plain.free()
+	c_boost.free()
 	# ---- Екран героя: гнізда ----
 	check(UD.slot_of(UD.sel_of("wings")) == "wings" and UD.slot_of(-2) == "" and UD.slot_of(5) == "", "гніздо вибирається окремим номером, не плутаючись із речами")
 	# ---- Довідник ----
@@ -13169,6 +13201,41 @@ func _suite_divine() -> void:
 	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
 		pause_trader = pause_trader or (not b.is_queued_for_deletion() and b.text.begins_with("Хованець"))
 	check(pause_trader, "у паузі теж є крамниця Хованця")
+	game._resume_play()
+	await _frames(2)
+	# ладанка, стяг і ліхтар у бою
+	game.enter_map()
+	await _frames(2)
+	SH.state(gw)["coins"] = 20000
+	for nid in ["ladanka", "stiah", "likhtar", "skakun", "nimb"]:
+		game.shop_do("divine", nid)
+		game.shop_do("divine", nid)
+	check(gp.divine.size() == 7 and DS.worn(gp, "relic") == "ladanka" and DS.worn(gp, "pet") == "skakun", "усі сім гнізд зайнято")
+	gw.companions = [{"type": "dzhura", "downed": false, "level": 20, "xp": 0}]
+	game.enter_location("wild_field")
+	await _frames(4)
+	var cb = game.combat
+	var horse := false
+	for n in cb.entities.get_children():
+		horse = horse or (n.get_script() == cb.PetScript and n.kind == "skakun")
+	var mate = cb.companion_nodes[0] if not cb.companion_nodes.is_empty() else null
+	check(horse and mate != null and is_equal_approx(mate.boost, 1.25), "скакун біжить поруч, побратим б'ється під стягом")
+	_clear_enemies(game)
+	await _frames(2)
+	cb.spawn_timer = 9999.0
+	if cb.trail != null and is_instance_valid(cb.trail):
+		cb.trail.found = true
+	cb.spawn_enemy("upyr", 40, false, gp.global_position + Vector2(600, 0))
+	check(not (cb.objective().get("label", "") == "Еліта"), "звичайну нечисть ліхтар не показує")
+	var el = cb._last_enemy()
+	el.make_elite(load("res://scripts/data/elites.gd").roll_affixes(40))
+	check(cb.objective().get("label", "") == "Еліта" and cb.objective()["pos"] == el.global_position, "ліхтар веде стрілку до еліти")
+	gp.hp = 10.0
+	gp.invuln = 0.0
+	gp.ladanka_ready = true
+	gp.hp = -5.0
+	gp._check_death()
+	check(gp.alive and gp.hp >= gp.max_hp * 0.49 and not gp.ladanka_ready, "ладанка підняла героя з половиною здоров'я (%d із %d)" % [int(gp.hp), int(gp.max_hp)])
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

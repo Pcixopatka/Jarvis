@@ -35,6 +35,8 @@ func _process(delta: float) -> void:
 		home = player.position - player.facing * 62.0 + Vector2(0, 6)  # мажа котиться просто за спиною
 	elif kind == "khovanets":
 		home = player.position - player.facing * 30.0 + Vector2(34.0, 26.0)
+	elif kind == "skakun":
+		home = player.position - player.facing * 44.0 + Vector2(-40.0, 18.0)
 	_goal = home
 	if kind in ["pes", "khovanets"]:
 		_fetch_t -= delta
@@ -91,6 +93,8 @@ func _draw() -> void:
 			_draw_cart()
 		"khovanets":
 			_draw_khovanets(bob)
+		"skakun":
+			_draw_horse(bob)
 		"kit":
 			_draw_cat(bob)
 		"voron":
@@ -177,3 +181,23 @@ func _draw_khovanets(bob: float) -> void:
 	_px(-10, -8 + bob, 5, 7, Color(0.6, 0.45, 0.25))  # торба
 	_fills.append([Rect2((1.0 if _face > 0.0 else -3.0), -11 + bob, 2, 2), Color(1.0, 0.95, 0.5)])
 	_fills.append([Rect2((-3.0 if _face > 0.0 else 1.0), -11 + bob, 2, 2), Color(1.0, 0.95, 0.5)])
+
+
+## Вороний скакун: кінь на повний зріст, що біжить поруч із героєм.
+func _draw_horse(bob: float) -> void:
+	var coat := Color(0.2, 0.18, 0.23)
+	var mane := Color(0.38, 0.34, 0.44)
+	draw_circle(Vector2(0, 12), 15.0, Color(0, 0, 0, 0.22))
+	var a := 3.0 if _moving and sin(_step) > 0.0 else 0.0
+	_px(-13, 2 - a, 4, 11, coat)  # ноги
+	_px(-6, 2 - (3.0 - a if _moving else 0.0), 4, 11, coat)
+	_px(6, 2 - (3.0 - a if _moving else 0.0), 4, 11, coat)
+	_px(12, 2 - a, 4, 11, coat)
+	_px(-15, -10 + bob, 32, 13, coat)  # тулуб
+	_px(13, -22 + bob, 8, 14, coat)  # шия
+	_px(15, -27 + bob, 13, 8, coat)  # голова
+	_px(15, -30 + bob, 3, 4, coat)  # вухо
+	_px(10, -22 + bob, 4, 12, mane)  # грива
+	_px(-19, -9 + bob + sin(_t * 6.0) * 1.5, 4, 12, mane)  # хвіст
+	_px(-4, -11 + bob, 10, 3, Color(0.68, 0.14, 0.24))  # попона
+	_fills.append([Rect2((22.0 if _face > 0.0 else -24.0), -25 + bob, 2, 2), Color(1.0, 0.95, 0.75)])

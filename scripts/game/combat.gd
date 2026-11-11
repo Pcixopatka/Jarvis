@@ -238,6 +238,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	spawn_timer = 1.0
 	player.unbreak_ready = true
 	player.berehynia_ready = true
+	player.ladanka_ready = true
 	_setup_arena(companions)
 	set_visible_world(true)
 	active = true
@@ -422,6 +423,7 @@ func enter_vigil(dl: Dictionary, companions: Array) -> void:
 	spawn_timer = 2.5
 	player.unbreak_ready = true
 	player.berehynia_ready = true
+	player.ladanka_ready = true
 	_setup_arena(companions)
 	_vigil_day = canvas_mod.color
 	ground._prop("wall:tower", Vector2(0, -150))
@@ -487,6 +489,7 @@ func enter_duel(dl: Dictionary, companions: Array = []) -> void:
 	field_cleared = false
 	player.unbreak_ready = true
 	player.berehynia_ready = true
+	player.ladanka_ready = true
 	_setup_arena(companions if dl.has("team") else [])
 	set_visible_world(true)
 	active = true
@@ -587,6 +590,7 @@ func enter_ring(dl: Dictionary, companions: Array) -> void:
 	boss_revives = 0
 	player.unbreak_ready = true
 	player.berehynia_ready = true
+	player.ladanka_ready = true
 	_setup_arena(companions)
 	set_visible_world(true)
 	active = true
@@ -754,6 +758,7 @@ func enter_defense(dl: Dictionary, companions: Array) -> void:
 	field_cleared = false
 	player.unbreak_ready = true
 	player.berehynia_ready = true
+	player.ladanka_ready = true
 	_setup_arena(companions)
 	set_visible_world(true)
 	active = true
@@ -966,6 +971,7 @@ func _spawn_companions(companions: Array) -> void:
 			continue
 		var c: Companion = CompanionScript.new()
 		c.combat = self
+		c.boost = 1.0 + float(player.divine_fx.get("party", 0.0))  # Бойовий стяг
 		c.setup(data["type"], int(data.get("level", player.level)), data.get("index", i), data)
 		c.position = player.position + CompanionScript.OFFSETS[c.index % CompanionScript.OFFSETS.size()]
 		entities.add_child(c)
@@ -980,8 +986,8 @@ func _spawn_pet() -> void:
 	if str(player.pet) in Pets.FOLLOWERS:
 		kinds.append(str(player.pet))
 	# божі дари, які видно в бою: Хованець бігає поруч, чумацька мажа котиться за спиною
-	if str(player.divine.get("pet", "")) == "khovanets":
-		kinds.append("khovanets")
+	if str(player.divine.get("pet", "")) in ["khovanets", "skakun"]:
+		kinds.append(str(player.divine["pet"]))
 	if str(player.divine.get("cart", "")) == "mazha":
 		kinds.append("mazha")
 	for i in kinds.size():
@@ -998,6 +1004,7 @@ func _setup_atmosphere(biome: String) -> void:
 		canvas_mod.color = canvas_mod.color * Color(0.3, 0.32, 0.5)  # ніч: синя пітьма, світить лише смолоскип героя
 	torch.enabled = biome in ["cave", "plague"] or night
 	torch_base = 1.15 if biome in ["cave", "plague"] else 0.6
+	torch.texture_scale = 4.5 * float(player.divine_fx.get("light", 1.0))  # Чарівний ліхтар світить далі
 	for c in lights.get_children():
 		c.queue_free()
 	if biome in ["cave", "plague"]:
@@ -1589,6 +1596,19 @@ func objective() -> Dictionary:
 		return {"pos": portal.global_position, "label": str(portal.label)}
 	if is_defense() and gate != null and is_instance_valid(gate) and gate.alive and not defense_over:
 		return {"pos": gate.global_position, "label": str(gate.label_text())}
+	if bool(player.divine_fx.get("sight", false)):
+		# Чарівний ліхтар: коли іншої мети нема, стрілка веде до найближчої еліти
+		var near = null
+		var near_d := 1.0e12
+		for e in get_tree().get_nodes_in_group("enemies"):
+			if e.is_queued_for_deletion() or e.dead or not e.elite:
+				continue
+			var dd: float = player.global_position.distance_squared_to(e.global_position)
+			if dd < near_d:
+				near_d = dd
+				near = e
+		if near != null:
+			return {"pos": near.global_position, "label": "Еліта"}
 	return {}
 
 

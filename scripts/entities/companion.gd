@@ -28,6 +28,7 @@ var anim_moving := false  # для спрайтів: чи рухався цьо�
 var swing := 0.0
 var hero := ""  # id побратима або "" для найманця
 var mult := 1.0  # побратими сильніші за найманців
+var boost := 1.0  # Бойовий стяг героя: множник шкоди й здоров'я загону
 var display_name := ""
 
 
@@ -49,8 +50,8 @@ func setup(t: String, lvl: int, idx: int, data: Dictionary = {}) -> void:
 func set_level(lvl: int) -> void:
 	level = lvl
 	var st := Party.stats(type, lvl, mult)
-	max_hp = st["hp"]
-	damage = st["dmg"]
+	max_hp = st["hp"] * boost
+	damage = st["dmg"] * boost
 	heal_amount = st.get("heal", 0.0)
 	hp = max_hp
 
