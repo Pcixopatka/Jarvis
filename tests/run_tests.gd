@@ -117,6 +117,7 @@ func _run() -> void:
 	await _suite_hero_screen()
 	await _suite_journal()
 	await _suite_skills_tab()
+	await _suite_full_bag_and_scroll()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -3886,7 +3887,14 @@ func _suite_mana_potion_game() -> void:
 	var gold0: int = p.gold
 	game.combat.spawn_pickup(p.global_position, "mana", 1)
 	await _frames(30)
-	check(p.mana_potions == p.mana_potion_max() and p.gold > gold0, "зайве зілля обертається на гривні")
+	var left_mana := 0
+	for ch in game.combat.entities.get_children():
+		if ch.get_script() == game.combat.PickupScript and ch.kind == "mana" and not ch.is_queued_for_deletion():
+			left_mana += 1
+	check(p.mana_potions == p.mana_potion_max() and p.gold == gold0 and left_mana == 1, "зайве зілля не зникає й не продається, а лишається лежати")
+	p.mana_potions = 0
+	await _frames(30)
+	check(p.mana_potions == 1, "звільнилось місце — зілля підібрано")
 	# Провіант як здобич: напис і значок не ламаються
 	game.combat.spawn_pickup(p.global_position, "res", 2, {"res": "meat"})
 	await _frames(30)
@@ -7520,7 +7528,7 @@ func _suite_hero_screen() -> void:
 	var acts := []
 	for b in game.hud.screen_root.find_children("*", "Button", true, false):
 		acts.append(b.text)
-	check("Шабля Сірка +7" in after and "✦ Звитяга" in after and "Вдягнути" in acts and "Викинути" in acts, "дотик до клітинки відкриває картку речі з діями")
+	check("Шабля Сірка +7" in after and "✦ Звитяга" in after and "Вдягнути" in acts and "Знищити" in acts and not "Викинути на землю" in acts, "дотик до клітинки відкриває картку речі з діями (у місті землі нема, тож лише «Знищити»)")
 	game.char_do("equip", gold["uid"])
 	await _frames(2)
 	check(p.is_equipped(gold["uid"]) and game.hud.screen_root.find_children("*", "Button", true, false).any(func(b): return b.text == "Зняти"), "вдягнена річ стала в ляльку, її можна зняти")
@@ -7736,6 +7744,233 @@ func _suite_skills_tab() -> void:
 	await _frames(2)
 	check("Удар вилами" in labels.call() and "Ранг 2/5" in labels.call(), "вивчене раніше вміння теж має картку")
 	game.close_character()
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Повна торба, викинути й знищити, гортання з будь-якої точки =======================
+
+func _suite_full_bag_and_scroll() -> void:
+	suite("Повна торба, викинути й знищити, гортання з будь-якої точки")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "bag_full"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 20
+	p.stats["vit"] = 80
+	p.recalc()
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	c.autosell = false
+	var on_ground := func(kind: String) -> int:
+		var n := 0
+		for ch in c.entities.get_children():
+			if ch.get_script() == c.PickupScript and ch.kind == kind and not ch.is_queued_for_deletion():
+				n += 1
+		return n
+	# Повна торба: річ лишається лежати, гривень за неї не дають
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 1))
+	var size0: int = p.inventory.size()
+	var gold0: int = p.gold
+	var loot: Dictionary = Data.gen_item(20, 2, "weapon", "sabre")
+	c.spawn_pickup(p.global_position, "item", 0, loot)
+	for i in 40:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	check(p.inventory.size() == size0 and p.gold == gold0 and on_ground.call("item") == 1 and not c.can_pick_item(loot), "торба повна: річ лишилась лежати, її не продано")
+	# Золота річ і артефакт усе одно підбираються понад місце
+	check(c.can_pick_item(Uniques.make("poias_baidy", 20)) and c.can_pick_item(load("res://scripts/data/artifacts.gd").make("zmiiv_zub")), "золоту річ і артефакт повна торба не спиняє")
+	# Автопродаж мотлоху далі працює, якщо гравець його ввімкнув
+	c.autosell = true
+	check(c.can_pick_item(Data.gen_item(5, 0)) and not c.can_pick_item(loot), "з автопродажем звичайна річ підбирається й продається, краща лежить")
+	c.autosell = false
+	# Знищити: другий дотик підтверджує
+	game.open_character()
+	await _frames(2)
+	var junk: Dictionary = p.inventory[0]
+	game.char_do("select", junk["uid"])
+	await _frames(2)
+	var acts := func() -> Array:
+		var out := []
+		for b in game.hud.screen_root.find_children("*", "Button", true, false):
+			out.append(b.text)
+		return out
+	check("Знищити" in acts.call() and "Викинути на землю" in acts.call() and "Вдягнути" in acts.call(), "у бою на картці речі є «Вдягнути», «Викинути на землю» і «Знищити»")
+	game.char_do("destroy", junk["uid"])
+	await _frames(2)
+	check(not p.find_item(junk["uid"]).is_empty() and "Точно знищити? Ще раз" in acts.call(), "перший дотик лише перепитує")
+	game.char_do("destroy", junk["uid"])
+	await _frames(2)
+	check(p.find_item(junk["uid"]).is_empty() and p.inventory.size() == size0 - 1 and p.gold == gold0, "другий дотик знищує річ назавжди")
+	# Викинути на землю: річ лягає поруч і сама назад не летить; душа з неї вертається в торбинку
+	var spare: Dictionary = p.inventory[0]
+	spare["sock"] = 1
+	spare["soul"] = "vovkulaka"
+	var souls0: int = int(p.souls.get("vovkulaka", 0))
+	game.char_do("select", spare["uid"])
+	game.char_do("drop", spare["uid"])
+	await _frames(2)
+	check(p.find_item(spare["uid"]).is_empty() and on_ground.call("item") == 2, "викинута річ лежить на землі")
+	check(int(p.souls.get("vovkulaka", 0)) == souls0 + 1 and not spare.has("soul"), "душа з викинутої речі вернулась у торбинку")
+	game.close_character()
+	await _frames(2)
+	# Тепер місце є: річ, що лежала, підбирається; викинута лишається, поки на неї не стати
+	for i in 60:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	check(not p.find_item(loot.get("uid", -1)).is_empty() and p.find_item(spare["uid"]).is_empty() and on_ground.call("item") == 1, "звільнилось місце — здобич підібрано, викинута річ сама не повернулась")
+	var dropped = null
+	for ch in c.entities.get_children():
+		if ch.get_script() == c.PickupScript and ch.kind == "item" and not ch.is_queued_for_deletion():
+			dropped = ch
+	p.global_position = dropped.global_position
+	for i in 60:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	check(not p.find_item(spare["uid"]).is_empty() and on_ground.call("item") == 0, "став на викинуту річ — підняв")
+	# Прибирання перед виходом: що не вмістилось, продається з повідомленням
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 1))
+	var extra: Dictionary = Data.gen_item(20, 1, "boots")
+	c.spawn_pickup(p.global_position + Vector2(400, 0), "item", 0, extra)
+	extra["sock"] = 1
+	extra["soul"] = "upyr"
+	var upyr0: int = int(p.souls.get("upyr", 0))
+	var g1: int = p.gold
+	c.collect_all()
+	check(p.gold == g1 + Data.sell_price(extra) and on_ground.call("item") == 0, "перед виходом те, що не вмістилось, продано, а не загублено")
+	check(int(p.souls.get("upyr", 0)) == upyr0 + 1, "душа з проданої при виході речі вернулась у торбинку")
+	# Зілля: при повному запасі лежить, перед виходом іде за півціни; коли місце є, підбирається
+	p.potions = p.potion_max()
+	c.spawn_pickup(p.global_position, "potion", 0)
+	for i in 30:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	check(on_ground.call("potion") == 1 and p.potions == p.potion_max(), "зілля при повному запасі лишається лежати")
+	p.potions -= 1
+	for i in 30:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	check(on_ground.call("potion") == 0 and p.potions == p.potion_max(), "випив зілля — те, що лежало, підібрано")
+	c.spawn_pickup(p.global_position + Vector2(300, 0), "potion", 0)
+	var g2: int = p.gold
+	c.collect_all()
+	check(p.gold == g2 + Data.potion_price(p.level) / 2 and on_ground.call("potion") == 0, "зайве зілля перед виходом іде за півціни")
+	# Підказка про повну торбу не затуляє екран героя
+	game.hud.show_hint("перевірка", false)
+	game.open_character()
+	await _frames(2)
+	check(not game.hud.hint_panel.visible, "підказка ховається, коли відкрито екран героя")
+	game.close_character()
+	await _frames(2)
+	# ---- Гортання з будь-якої точки: палець на кнопці теж гортає, і кнопка не натискається ----
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("sich")
+	await _frames(2)
+	game.open_wiki(game._build_city, "enemies")
+	await _frames(3)
+	var TS = root.get_node("TouchScroll")
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var sc: ScrollContainer = tc.get_current_tab_control() as ScrollContainer
+	var card: Control = sc.find_children("*", "PanelContainer", true, false)[0]
+	var at: Vector2 = card.get_global_rect().get_center()
+	check(sc != null and sc.get_v_scroll_bar().max_value > sc.get_v_scroll_bar().page and TS.scroller_of(TS.control_at(root, at)) == sc and card.mouse_filter == Control.MOUSE_FILTER_STOP, "довідник довший за екран, а картка під пальцем ковтає дотик")
+	var send := func(ev: InputEvent) -> void:
+		root.push_input(ev, true)  # координати вже в одиницях екрана гри
+	var press := func(pos: Vector2, down: bool) -> void:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = down
+		ev.position = pos
+		ev.global_position = pos
+		ev.button_mask = MOUSE_BUTTON_MASK_LEFT if down else 0
+		send.call(ev)
+	var drag := func(from: Vector2, to: Vector2, steps: int) -> void:
+		for i in steps:
+			var ev := InputEventMouseMotion.new()
+			var a: Vector2 = from.lerp(to, float(i) / steps)
+			var b: Vector2 = from.lerp(to, float(i + 1) / steps)
+			ev.position = b
+			ev.global_position = b
+			ev.relative = b - a
+			ev.button_mask = MOUSE_BUTTON_MASK_LEFT
+			send.call(ev)
+	sc.scroll_vertical = 0
+	press.call(at, true)
+	drag.call(at, at + Vector2(0, -160), 8)
+	var moved: int = sc.scroll_vertical
+	press.call(at + Vector2(0, -160), false)
+	await _frames(2)
+	check(moved >= 130 and moved <= 165, "палець на картці посеред екрана гортає список: %d" % moved)
+	# Кнопка під пальцем: гортання не натискає її
+	game.close_wiki()
+	await _frames(2)
+	var tabs: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tabs.get_tab_count():
+		if tabs.get_tab_title(i).begins_with("Крамниця"):
+			game.city_tab = i
+	game._build_city()
+	await _frames(3)
+	var shop: ScrollContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_current_tab_control() as ScrollContainer
+	var filler := VBoxContainer.new()
+	filler.custom_minimum_size = Vector2(10, 1400)
+	shop.get_child(0).get_child(0).add_child(filler)  # щоб сторінці напевно було куди гортатись
+	await _frames(3)
+	var btn: Button = null
+	for b in shop.find_children("*", "Button", true, false):
+		if b.is_visible_in_tree() and not b.disabled and b.get_global_rect().size.y > 30.0 and b.get_global_rect().position.y > 200.0:
+			btn = b
+			break
+	var fired := [0]
+	btn.pressed.connect(func(): fired[0] += 1)
+	var bp: Vector2 = btn.get_global_rect().get_center()
+	shop.scroll_vertical = 0
+	press.call(bp, true)
+	drag.call(bp, bp + Vector2(0, -120), 6)
+	var moved2: int = shop.scroll_vertical
+	press.call(bp + Vector2(0, -120), false)
+	await _frames(3)
+	check(moved2 >= 95 and fired[0] == 0, "палець на кнопці гортає список (%d), а кнопка не спрацьовує" % moved2)
+	# Короткий дотик без руху лишається дотиком
+	shop.scroll_vertical = 0
+	await _frames(2)
+	bp = btn.get_global_rect().get_center()
+	press.call(bp, true)
+	press.call(bp, false)
+	await _frames(2)
+	check(fired[0] == 1, "короткий дотик без руху натискає кнопку, як і раніше")
+	# Довідник знає про нове й називає кнопки так само, як екран
+	var wiki_titles := {}
+	for sx in load("res://scripts/game/wiki_service.gd").sections():
+		for e in sx["entries"]:
+			wiki_titles[str(e["title"])] = str(e["text"])
+	var bag_text: String = str(wiki_titles.get("Повна торба", ""))
+	check("«Знищити»" in bag_text and "«Викинути на землю»" in bag_text and "півціни" in bag_text, "довідник пояснює повну торбу, «Знищити» й «Викинути на землю»")
+	check("будь-якої точки" in str(wiki_titles.get("Гортання списків", "")), "довідник пояснює гортання з будь-якої точки")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

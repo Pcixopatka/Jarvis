@@ -535,6 +535,13 @@ func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
 
 
 ## Підказка. На мапі — внизу ліворуч (праворуч бічна панель), в інших режимах — угорі по центру.
+## Сховати підказку одразу: вона не має затуляти екран, який щойно відкрили.
+func hide_hint() -> void:
+	if _hint_tween:
+		_hint_tween.kill()
+	hint_panel.visible = false
+
+
 func show_hint(text: String, on_map: bool) -> void:
 	hint_label.text = text
 	var shift := -205.0 if on_map else 0.0

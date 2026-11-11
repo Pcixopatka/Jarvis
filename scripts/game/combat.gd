@@ -94,6 +94,9 @@ var ring_time := 0.0  # скільки секунд тривали самі бо
 var ring_break := 0.0  # перепочинок до наступного чудовиська
 var ring_done := false
 var _ring_boss = null
+var _bag_note_at := 0.0  # коли знову можна нагадати про повну торбу
+var _sweep_sold := 0  # скільки речей продано при прибиранні перед виходом, бо не вмістились
+var _sweep_gold := 0
 const FIELD_PAIR_CHANCE := 0.5  # шанс, що в далекому полі замість одного ворога вийдуть двоє
 var drop_boost := 1.0  # ×2 здобичі за рекламу (виставляє Game щокадру)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
@@ -1152,12 +1155,24 @@ func collect_all() -> void:
 					player.add_xp(c.value)
 					player.add_gold(Data.coin_gold(c.value))
 				"item":
-					pick_item(c.item)
+					pick_item(c.item, true)
 				"res":
 					add_resource(c.item["res"], c.value)
+				"potion":
+					# зілля, якому не знайшлося місця, перед виходом іде за півціни
+					if not player.add_potion():
+						player.add_gold(Data.potion_price(player.level) / 2)
+				"mana":
+					if not player.add_mana_potion():
+						player.add_gold(Data.mana_potion_price(player.level) / 2)
 				"token":
 					Events.holiday_token.emit(c.value, c.global_position)  # жетони свята не лишаються на полі
 			c.queue_free()
+	if _sweep_sold > 0:
+		# що не вмістилось у торбу, перед виходом продано: інакше воно просто зникло б
+		Events.banner.emit("Торба повна: речей продано %d\n+%d грн" % [_sweep_sold, _sweep_gold], Color(1.0, 0.8, 0.5))
+		_sweep_sold = 0
+		_sweep_gold = 0
 
 
 # ======================= Нечисть і здобич =======================
@@ -1304,22 +1319,57 @@ func add_resource(r: String, amount: int) -> void:
 	player.resources[r] = int(player.resources.get(r, 0)) + amount
 
 
-func pick_item(item: Dictionary) -> void:
+## Чи підніме герой цю річ: є місце в торбі, або це золота річ чи артефакт (вони лягають понад місце,
+## щоб не загубитись), або ввімкнено автопродаж мотлоху і річ звичайна. Інакше річ лишається лежати.
+func can_pick_item(item: Dictionary) -> bool:
+	if not player.bag_full() or int(item["rarity"]) > Data.RARITY_MAX_RANDOM:
+		return true
+	return autosell and int(item["rarity"]) == 0
+
+
+## Герой стоїть біля речі, яку нема куди покласти: нагадати, але не частіше ніж раз на кілька секунд.
+func note_bag_full() -> void:
+	if _time < _bag_note_at:
+		return
+	_bag_note_at = _time + 5.0
+	float_text(player.global_position + Vector2(0, -80), "Торба повна: звільни місце", Color(1.0, 0.6, 0.5))
+	Events.hint.emit("bag_full", "Торба повна, тому річ лишилась лежати. Відкрий «Персонаж», торкнись непотрібної речі й натисни «Знищити» або «Викинути на землю». Тоді підбери здобич.")
+
+
+## Підібрати річ. Повертає true, якщо вона пішла в торбу (або продана автопродажем).
+## sweep — прибирання перед виходом: що не вмістилось, продається, бо на землі воно зникло б.
+func pick_item(item: Dictionary, sweep: bool = false) -> bool:
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	if autosell and int(item["rarity"]) == 0 and player.bag_full():
 		var g0 := Data.sell_price(item)
 		player.gold += g0
 		float_text(player.global_position + Vector2(0, -70), "Мотлох продано: +%d грн" % g0, col)
-		return
-	# золоту річ ніколи не продаємо за повну торбу: вона лягає понад місце
+		return true
+	# золоту річ ніколи не лишаємо за повну торбу: вона лягає понад місце
 	if player.add_item(item, int(item["rarity"]) > Data.RARITY_MAX_RANDOM):
 		float_text(player.global_position + Vector2(0, -70), item["name"], col)
 		Audio.play("item", 0.0)
 		Events.item_found.emit(item)
-	else:
+		return true
+	if sweep:
+		SoulService.strip(player, item)  # душа з проданої речі вертається в торбинку
 		var g := Data.sell_price(item)
 		player.gold += g
-		float_text(player.global_position + Vector2(0, -70), "Торба повна: +%d грн" % g, col)
+		_sweep_sold += 1
+		_sweep_gold += g
+	return false
+
+
+## Викинути річ із торби на землю поруч із героєм: сама назад не прилетить, підняти можна, ставши на неї.
+func drop_item(item: Dictionary) -> void:
+	var p = PickupScript.new()
+	p.combat = self
+	p.kind = "item"
+	p.item = item
+	p.manual = true
+	p.hold = 1.5
+	p.position = _clamp_in(player.global_position + Vector2.from_angle(randf() * TAU) * 110.0, 60.0)
+	entities.add_child(p)
 
 
 ## Супутник підріс просто в бою: оновлюємо показники й радіємо разом.

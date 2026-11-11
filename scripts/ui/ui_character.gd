@@ -172,19 +172,29 @@ static func _hero(game) -> Control:
 		return h
 	var equipped: bool = p.is_equipped(sel)
 	var cmp: Dictionary = {} if equipped else p.equipment.get(item["slot"], {})
-	det.add_child(UI.item_card(item, cmp))
-	if item.has("artifact"):
-		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
-		return h
-	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, item, func(a: String, b): return _do(game, a, b), false))
+	# Дії з річчю стоять над карткою, щоб їх не треба було шукати гортанням
+	var acts := HFlowContainer.new()
+	acts.add_theme_constant_override("h_separation", 8)
+	acts.add_theme_constant_override("v_separation", 6)
+	det.add_child(acts)
 	if equipped:
-		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
+		acts.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(150, 50), 19, not p.bag_full()))
 	else:
-		var usable: bool = p.can_use(item)
-		if not usable:
-			det.add_child(UI.label("Не для класу «%s»" % p.class_name_ua(), 18, UI.BAD, false))
-		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24, usable))
-		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
+		if not item.has("artifact"):
+			var usable: bool = p.can_use(item)
+			acts.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(150, 50), 19, usable))
+			if not usable:
+				det.add_child(UI.label("Не для класу «%s»" % p.class_name_ua(), 16, UI.BAD, false))
+		if game.char_return == game.State.PLAYING:
+			acts.add_child(UI.button("Викинути на землю", _do(game, "drop", sel), Vector2(190, 50), 16))
+		var sure: bool = game.confirm_action == "destroy:%d" % sel
+		var db := UI.button("Точно знищити? Ще раз" if sure else "Знищити", _do(game, "destroy", sel), Vector2(190 if sure else 130, 50), 16)
+		if sure:
+			db.add_theme_stylebox_override("normal", UI.style(Color(0.45, 0.1, 0.08), Color(1.0, 0.5, 0.4), 10, 6))
+		acts.add_child(db)
+	det.add_child(UI.item_card(item, cmp))
+	if not item.has("artifact"):
+		det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, item, func(a: String, b): return _do(game, a, b), false))
 	return h
 
 

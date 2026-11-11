@@ -12,6 +12,8 @@ var value := 1
 var phase := randf() * TAU
 var pull_speed := 0.0
 var spawn_vel := Vector2.ZERO
+var manual := false  # викинута з торби річ: сама до героя не летить, підбирається лише впритул
+var hold := 0.0  # скільки секунд викинуту річ ще не можна підібрати
 
 
 func _process(delta: float) -> void:
@@ -24,10 +26,22 @@ func _process(delta: float) -> void:
 		return
 	var to: Vector2 = p.global_position - global_position
 	var dist := to.length()
-	if dist < p.pickup_radius:
+	hold = maxf(0.0, hold - delta)
+	if not _wanted(p):
+		# нема куди покласти: здобич лежить далі, а не зникає
+		pull_speed = 0.0
+		if kind == "item" and dist < 70.0:
+			combat.note_bag_full()
+		queue_redraw()
+		return
+	if manual:
+		if hold > 0.0 or dist > 30.0:
+			queue_redraw()
+			return
+	elif dist < p.pickup_radius:
 		pull_speed = minf(pull_speed + 1600.0 * delta, 900.0)
 		position += to.normalized() * minf(pull_speed * delta, dist)
-	if dist < 22.0:
+	if dist < (30.0 if manual else 22.0):
 		if kind == "coin":
 			p.add_xp(value)
 			p.add_gold(Data.coin_gold(value))
@@ -42,8 +56,6 @@ func _process(delta: float) -> void:
 			if p.add_potion():
 				combat.float_text(global_position + Vector2(0, -30), "+1 зілля", Color(1.0, 0.45, 0.45))
 				Audio.play("item", 0.05, -6.0)
-			else:
-				p.add_gold(Data.potion_price(p.level) / 2)
 		elif kind == "token":
 			Events.holiday_token.emit(value, global_position)
 			Audio.play("coin", 0.25, 0.0)
@@ -52,13 +64,23 @@ func _process(delta: float) -> void:
 				combat.float_text(global_position + Vector2(0, -30), "+1 зілля наснаги", Color(0.5, 0.75, 1.0))
 				Audio.play("item", 0.05, -6.0)
 				Events.hint.emit("mana_potion", "Зілля наснаги! Синя кнопка «Наснага» повертає більшу частину наснаги посеред бою.")
-			else:
-				p.add_gold(Data.mana_potion_price(p.level) / 2)
 		else:
 			p.heal(value)
 		queue_free()
 		return
 	queue_redraw()
+
+
+## Чи є куди це покласти. Річ при повній торбі й зілля при повному запасі лишаються лежати.
+func _wanted(p) -> bool:
+	match kind:
+		"item":
+			return combat.can_pick_item(item)
+		"potion":
+			return p.potions < p.potion_max()
+		"mana":
+			return p.mana_potions < p.mana_potion_max()
+	return true
 
 
 func _draw() -> void:

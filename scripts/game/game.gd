@@ -189,7 +189,7 @@ func _ready() -> void:
 			hud.show_banner("Майстерність %d!" % jl, UI.GOLD))
 	Events.charged_hit.connect(func(): _record("charged"))
 	Events.defense_lost.connect(_on_defense_lost)
-	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка героя (угорі праворуч) → вкладка «Спорядження»."))
+	Events.item_found.connect(func(_i): hint("item", "Знайдено річ! Вдягни її: кнопка «Персонаж» (угорі праворуч), торкнись речі в торбі й натисни «Вдягнути»."))
 	Events.boss_spawned.connect(func(_e): hint("boss", "Бос! Червоні зони на землі — місця його удару. Виходь із них, поки вони не заповнились!"))
 	Events.hint.connect(hint)
 	Events.player_hurt.connect(func():
@@ -452,7 +452,7 @@ func _continue_game() -> void:
 		enter_city(world.last_city)
 		if meta.get("notice", "") == "classes":
 			meta.erase("notice")
-			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка героя)", UI.GOLD)
+			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка «Персонаж»)", UI.GOLD)
 	else:
 		new_game()
 
@@ -1805,6 +1805,7 @@ func open_character() -> void:
 	confirm_action = ""
 	state = State.CHARACTER
 	get_tree().paused = true
+	hud.hide_hint()  # підказка «відкрий Персонаж» не має затуляти кнопки на самому екрані
 	hud.show_map(false)
 	hud.set_mode(false, false)
 	char_sel_uid = -1
@@ -1818,7 +1819,7 @@ func _build_character() -> void:
 
 
 func char_do(action: String, arg) -> void:
-	if not action.begins_with("stone_"):
+	if not (action.begins_with("stone_") or action == "destroy"):
 		confirm_action = ""
 	match action:
 		"stat":
@@ -1833,9 +1834,22 @@ func char_do(action: String, arg) -> void:
 			player.equip(arg)
 		"unequip":
 			player.unequip(arg)
+		"destroy":
+			# знищити річ назавжди: другий дотик підтверджує
+			if confirm_action != "destroy:%d" % arg:
+				confirm_action = "destroy:%d" % arg
+			else:
+				confirm_action = ""
+				SoulService.strip(player, player.remove_from_bag(arg))  # душа зі знищеної речі вертається в торбинку
+				char_sel_uid = -1
 		"drop":
-			SoulService.strip(player, player.remove_from_bag(arg))  # душа з викинутої речі вертається в торбинку
-			char_sel_uid = -1
+			# викинути на землю: лише в бою, де є земля; річ можна підняти знову
+			if char_return == State.PLAYING:
+				var gone: Dictionary = player.remove_from_bag(arg)
+				if not gone.is_empty():
+					SoulService.strip(player, gone)  # душа з викинутої речі вертається в торбинку
+					combat.drop_item(gone)
+					char_sel_uid = -1
 		"socket", "soul_in", "soul_out":
 			_soul_action(action, arg, 1.0)
 		"stone_reset":
