@@ -15,7 +15,7 @@ static func build(game) -> Control:
 	var p = game.player
 	var pages := [
 		["Герой" + _pts(p.stat_points), _hero(game)],
-		["Журнал" + _pts(load("res://scripts/game/journal_service.gd").ready_count(game.world, p)), _journal(game)],
+		["Журнал" + _pts(load("res://scripts/game/journal_service.gd").ready_count(game.world, p) + (1 if game.WayService.ready(game.world, p) else 0)), _journal(game)],
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Загартування" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
@@ -150,9 +150,19 @@ static func _hero(game) -> Control:
 	var arts: Array = p.Artifacts.active_ids(p.inventory)
 	if not arts.is_empty():
 		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 15, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
+	# Кращі за вдягнене речі позначено зеленою стрілкою; одна кнопка вдягає найкраще в кожну клітинку
+	var gains := {}
+	var up_slots := {}  # клітинки, для яких у торбі є щось сильніше (рахуємо з тих самих примірок)
+	for it in p.inventory:
+		gains[it["uid"]] = p.gain_from(it)
+		if float(gains[it["uid"]]) > p.Power.MIN_GAIN:
+			up_slots[it["slot"]] = true
+	var ups: int = up_slots.size()
+	if ups > 0:
+		bag.add_child(UI.button("Вдягнути найкраще: %d" % ups, _do(game, "equip_best", 0), Vector2(300, 46), 17))
 	var bg := UI.grid(6)
 	for it in p.inventory:
-		bg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, CELL))
+		bg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, CELL, float(gains[it["uid"]]) > p.Power.MIN_GAIN))
 	for i in maxi(0, p.bag_size() - p.inventory.size()):
 		bg.add_child(UI.empty_cell(CELL))
 	bag.add_child(bg)
@@ -192,6 +202,11 @@ static func _hero(game) -> Control:
 		if sure:
 			db.add_theme_stylebox_override("normal", UI.style(Color(0.45, 0.1, 0.08), Color(1.0, 0.5, 0.4), 10, 6))
 		acts.add_child(db)
+	if not equipped and p.can_use(item) and Data.SLOTS.has(item.get("slot", "")):
+		# що дасть ця річ герою загалом: одне число замість порівняння рядок за рядком
+		var gain: float = p.gain_from(item)
+		var gt := "Сила героя з цією річчю: %s%d%%" % ["+" if gain >= 0.0 else "−", absi(roundi(gain * 100.0))]
+		det.add_child(UI.label(gt, 16, UI.GOOD if gain > p.Power.MIN_GAIN else (UI.BAD if gain < -p.Power.MIN_GAIN else UI.MUTED), false))
 	det.add_child(UI.item_card(item, cmp))
 	if not item.has("artifact"):
 		det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, item, func(a: String, b): return _do(game, a, b), false))
@@ -211,6 +226,7 @@ static func _journal(game) -> Control:
 	if ready > 0:
 		head += "   •   можна здати: %d" % ready
 	v.add_child(UI.label(head, 17, UI.GOOD if ready > 0 else UI.MUTED, false))
+	_way_card(game, v)
 	# Порадник: що зробити просто зараз, від найважливішого. Дотик веде на мапу чи на потрібну вкладку
 	v.add_child(UI.label("Що робити зараз", 22, UI.GOLD, false))
 	var tips: Array = game.GuideService.top(game.world, p, game.map_here)
@@ -285,6 +301,43 @@ static func _journal(game) -> Control:
 	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». На мапі зірка веде за історією, «!» позначає мету завдання, а зелена галочка стоїть на місті, де здати виконане.", 15, UI.MUTED, false))
 	v.get_child(v.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return v
+
+
+## «Шлях козака»: нинішній крок ланцюжка цілей. Що зробити, як, яка нагорода; готове забирається кнопкою.
+static func _way_card(game, v: VBoxContainer) -> void:
+	var Way = game.WayService
+	var w = game.world
+	var p = game.player
+	if Way.finished(w):
+		return
+	var step: Dictionary = Way.current(w)
+	var ready: int = Way.ready_count(w, p)
+	v.add_child(UI.label("Шлях козака  •  крок %d із %d" % [Way.index(w) + 1, Way.total()], 22, UI.GOLD, false))
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", UI.style(Color(0.13, 0.15, 0.1), Color(0.5, 0.9, 0.4) if ready > 0 else Color(0.75, 0.6, 0.3), 10, 10))
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 10)
+	card.add_child(line)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 2)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(box)
+	box.add_child(UI.label(str(step["title"]), 20, UI.GOOD if ready > 0 else UI.TEXT, false))
+	var how := UI.label(str(step["how"]), 15, UI.MUTED, false)
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(how)
+	box.add_child(UI.label("Нагорода: %s" % Way.reward_text(step), 15, UI.GOLD, false))
+	if ready > 0:
+		var cb := UI.button("Забрати нагороду" if ready == 1 else "Забрати все готове: %d" % ready, _do(game, "way_claim", 0), Vector2(250, 56), 18)
+		cb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.add_child(cb)
+	else:
+		var g: Dictionary = Way.go(step, w, p, game.map_here)
+		if str(g["place"]) != "":
+			_tap_card(card, line, "на мапі ›", _do(game, "place_show", [g["place"], step["title"]]))
+		elif int(g["tab"]) >= 0 and int(g["tab"]) != Way.TAB_JOURNAL:
+			_tap_card(card, line, "відкрити ›", _do(game, "tab_show", g["tab"]))
+	v.add_child(card)
 
 
 # ---------------- Виклики й досягнення ----------------

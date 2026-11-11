@@ -120,6 +120,9 @@ func _run() -> void:
 	await _suite_full_bag_and_scroll()
 	await _suite_event_lift()
 	await _suite_guide()
+	await _suite_way()
+	await _suite_objective_arrow()
+	await _suite_gear_best()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7034,7 +7037,7 @@ func _suite_artifacts() -> void:
 		if not a.is_empty():
 			got += 1
 			kinds[a["artifact"]] = true
-	check(got >= 4 and got <= 40 and kinds.keys() == ["perlyna_tsaria"], "Морський цар лишає свою Перлину приблизно в 4% перемог (%d із 400)" % got)
+	check(got >= 4 and got <= 40 and kinds.keys() == ["perlyna_tsaria"], "Морський цар лишає свою Перлину приблизно в 4%% перемог (%d із 400)" % got)
 	gp.add_item(Arts.make("perlyna_tsaria"))
 	var again := 0
 	for i in 200:
@@ -7911,6 +7914,403 @@ func _suite_skills_tab() -> void:
 
 # ======================= Повна торба, викинути й знищити, гортання з будь-якої точки =======================
 
+func _suite_gear_best() -> void:
+	suite("Кращі речі в торбі й «Вдягнути найкраще»")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Power = load("res://scripts/game/power.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var GS = load("res://scripts/game/guide_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 20
+	p.recalc()
+	check(is_equal_approx(Power.score(p), Power.dps(p) * p.max_hp / maxf(1.0 - Data.ARMOR_CAP, 1.0 - p.armor)) and is_equal_approx(p.gear_score(), Power.score(p)), "сила героя одним числом: шкода за секунду на запас живучості")
+	# Примірка нічого не міняє
+	var strong: Dictionary = Data.gen_item(40, 3, "weapon", "sabre")
+	var weak: Dictionary = Data.gen_item(1, 0, "weapon", "sabre")
+	var staff: Dictionary = Data.gen_item(40, 3, "weapon", "staff")
+	var hat: Dictionary = Data.gen_item(20, 2, "head")
+	for it in [strong, weak, staff, hat]:
+		p.add_item(it, true)
+	p.hp = p.max_hp * 0.5
+	p.mana = p.max_mana * 0.4
+	var snap := [p.hp, p.mana, p.max_hp, p.damage, p.armor, p.equipment.duplicate(true), p.inventory.size()]
+	var g_strong: float = p.gain_from(strong)
+	var g_weak: float = p.gain_from(weak)
+	var g_hat: float = p.gain_from(hat)
+	check(is_equal_approx(p.hp, snap[0]) and is_equal_approx(p.mana, snap[1]) and is_equal_approx(p.max_hp, snap[2]) and is_equal_approx(p.damage, snap[3]) and is_equal_approx(p.armor, snap[4]) and p.equipment == snap[5] and p.inventory.size() == snap[6], "примірка не міняє ні героя, ні спорядження, не лікує й не ранить")
+	check(g_strong > 0.2 and g_weak < g_strong and g_hat > Power.MIN_GAIN, "краща зброя піднімає силу (+%d%%), шапка в порожню клітинку теж (+%d%%)" % [roundi(g_strong * 100), roundi(g_hat * 100)])
+	check(is_equal_approx(p.gain_from(staff), 0.0) and is_equal_approx(p.gain_from(Arts.make("zmiiv_zub")), 0.0) and is_equal_approx(p.gain_from(p.equipment["weapon"]), 0.0) and is_equal_approx(p.gain_from({}), 0.0), "чужа зброя, артефакт і вже вдягнене покращенням не рахуються")
+	# Найкраще в кожну клітинку
+	var better_hat: Dictionary = Data.gen_item(40, 3, "head")
+	p.add_item(better_hat, true)
+	var ups: Dictionary = p.best_upgrades()
+	check(ups.size() == 2 and ups["weapon"]["uid"] == strong["uid"] and ups["head"]["uid"] == (better_hat["uid"] if p.gain_from(better_hat) >= p.gain_from(hat) else hat["uid"]), "для кожної клітинки обрано найсильнішу річ із торби")
+	check(GS.items(load("res://scripts/game/world_state.gd").new(), p, "sich").any(func(it): return it["kind"] == "gear" and int(it["tab"]) == GS.TAB_HERO), "порадник каже, що в торбі є кращі речі")
+	var score0: float = p.gear_score()
+	var worn: int = p.equip_best()
+	check(worn >= 2 and p.equipment["weapon"]["uid"] == strong["uid"] and p.equipment.has("head") and p.gear_score() > score0 * 1.2 and p.best_upgrades().is_empty() and p.equip_best() == 0, "«Вдягнути найкраще» вдягає все сильніше й більше нічого не пропонує (вдягнено %d)" % worn)
+	check(p.find_item(weak["uid"]).size() > 0 and not p.is_equipped(weak["uid"]) and p.gain_from(weak) < -0.2, "слабка зброя лишилась у торбі й тепер опускає силу (%d%%)" % roundi(p.gain_from(weak) * 100))
+	# Золоту річ звичайна ледь сильніша не витісняє: її сила теж чогось варта
+	var gold: Dictionary = Uniques.make("poias_baidy", 20)
+	p.add_item(gold, true)
+	p.equip(gold["uid"])
+	var with_gold: float = p.gear_score()
+	check(is_equal_approx(with_gold, Power.score(p) * (1.0 + Power.UNIQUE_WORTH)), "золота річ додає до оцінки %d%% за свою силу" % roundi(Power.UNIQUE_WORTH * 100.0))
+	p.free()
+	# ---- Екран героя ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var h = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "way"]:
+		game.world.hints[k] = true
+	h.change_class("cossack")
+	h.level = 20
+	h.recalc()
+	var mid: Dictionary = Data.gen_item(20, 2, "weapon", "sabre")
+	h.add_item(mid, true)
+	h.equip(mid["uid"])
+	for it in h.inventory.duplicate():
+		h.remove_from_bag(it["uid"])  # стартова шабля не має плутати рахунок
+	var up1: Dictionary = Data.gen_item(40, 3, "weapon", "sabre")
+	var junk: Dictionary = Data.gen_item(1, 0, "weapon", "sabre")
+	h.add_item(up1, true)
+	h.add_item(junk, true)
+	game.enter_map()
+	await _frames(2)
+	game.open_character()
+	game.char_tab = 0
+	game._build_character()
+	await _frames(2)
+	var page := func() -> Control:
+		return game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(0)
+	var marks := 0
+	for l in page.call().find_children("*", "Label", true, false):
+		if l.text == "▲":
+			marks += 1
+	var best_btn: Button = null
+	for b in page.call().find_children("*", "Button", true, false):
+		if b.text.begins_with("Вдягнути найкраще"):
+			best_btn = b
+	check(marks == 1 and best_btn != null and best_btn.text == "Вдягнути найкраще: 1", "у торбі зелена стрілка лише на кращій речі, і є кнопка «Вдягнути найкраще: 1»")
+	game.char_do("select", up1["uid"])
+	await _frames(2)
+	var card := ""
+	for l in page.call().find_children("*", "Label", true, false):
+		card += l.text + "\n"
+	check("Сила героя з цією річчю: +" in card, "картка речі каже, на скільки герой стане сильнішим")
+	game.char_do("select", junk["uid"])
+	await _frames(2)
+	card = ""
+	for l in page.call().find_children("*", "Label", true, false):
+		card += l.text + "\n"
+	check("Сила героя з цією річчю: −" in card, "а для гіршої речі, на скільки слабшим")
+	best_btn = null
+	for b in page.call().find_children("*", "Button", true, false):
+		if b.text.begins_with("Вдягнути найкраще"):
+			best_btn = b
+	best_btn.pressed.emit()
+	await _frames(2)
+	marks = 0
+	var still_btn := false
+	for l in page.call().find_children("*", "Label", true, false):
+		if l.text == "▲":
+			marks += 1
+	for b in page.call().find_children("*", "Button", true, false):
+		still_btn = still_btn or b.text.begins_with("Вдягнути найкраще")
+	check(h.equipment["weapon"]["uid"] == up1["uid"] and marks == 0 and not still_btn and "Вдягнено кращих речей: 1" in game.hud.banner.text, "кнопка вдягла кращу річ, стрілок і кнопки більше нема")
+	game.close_character()
+	await _frames(2)
+	var hero_wiki := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Екран героя й журнал":
+				hero_wiki = str(e["text"])
+	check("Зелена стрілка" in hero_wiki and "«Вдягнути найкраще»" in hero_wiki and ("%d%%" % roundi(Power.UNIQUE_WORTH * 100.0)) in hero_wiki, "довідник пояснює зелену стрілку й кнопку")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_objective_arrow() -> void:
+	suite("Стрілка до мети в бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Bounty = load("res://scripts/game/bounty_service.gd")
+	var EvS = load("res://scripts/game/event_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	var arrow = game.hud.objective_arrow
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "defense", "bounty", "way"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 20
+	p.stats["vit"] = 80
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	check(c.objective().is_empty() and not arrow.visible, "поза боєм мети й стрілки нема")
+	# Розшук і сторож скарбу
+	Bounty.state(game.world)["active"].append({"id": 7, "city": "kyiv", "kind": "upyr", "name": "Упир Кривий", "loc": "wild_field", "affixes": ["fiery"], "gold": 300, "glory": 6, "killed": false})
+	EvS.state(game.world)["treasure"]["wild_field"] = true
+	game.enter_location("wild_field")
+	await _frames(3)
+	c._drop_trail()
+	var bounty = null
+	var guard = null
+	for e in get_nodes_in_group("enemies"):
+		if e.bounty_id > 0:
+			bounty = e
+		elif e.treasure_guard:
+			guard = e
+	var o: Dictionary = c.objective()
+	check(bounty != null and guard != null and str(o["label"]) == "Розшук" and o["pos"] == bounty.global_position, "перша мета: розшукувана нечисть")
+	bounty.global_position = p.global_position + Vector2(900, 0)
+	await _frames(2)
+	check(arrow.visible and arrow.label == "Розшук" and arrow.dir.is_equal_approx(Vector2.RIGHT), "стрілка показує на далеку мету й підписана")
+	bounty.global_position = p.global_position + Vector2(arrow.NEAR - 40.0, 0)
+	await _frames(2)
+	check(not arrow.visible, "коли мета поруч, стрілка ховається")
+	bounty.queue_free()
+	await _frames(2)
+	o = c.objective()
+	check(str(o["label"]) == "Сторож скарбу" and o["pos"] == guard.global_position, "далі мета: сторож скарбу")
+	guard.queue_free()
+	await _frames(2)
+	check(c.objective().is_empty(), "цілей нема: стрілка мовчить")
+	# Сліди
+	c.spawn_trail("cache", 3)
+	o = c.objective()
+	check(str(o["label"]) == "Сліди" and o["pos"] == c.trail.target(), "стежка слідів: стрілка веде до наступного сліду")
+	c.trail.found = true
+	check(c.objective().is_empty(), "знайдену стежку стрілка не показує")
+	# Вихід
+	c._spawn_portal("Вихід", p.global_position + Vector2(-700, 300))
+	o = c.objective()
+	check(str(o["label"]) == "Вихід" and o["pos"] == c.portal.global_position, "відкрився вихід: стрілка веде до нього")
+	await _frames(2)
+	check(arrow.visible and arrow.label == "Вихід" and arrow.dir.x < 0.0 and arrow.dir.y > 0.0, "стрілка до виходу дивиться в його бік")
+	# На екрані героя й у паузі стрілки нема
+	game.open_character()
+	await _frames(2)
+	check(not arrow.visible, "на екрані героя стрілки нема")
+	game.close_character()
+	await _frames(2)
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	check(not arrow.visible and c.objective().is_empty(), "на мапі стрілки нема")
+	# Оборона: стрілка веде до того, що боронимо
+	Bounty.state(game.world)["active"].clear()
+	EvS.state(game.world)["treasure"].clear()
+	game.start_defense("chyhyryn")
+	await _frames(3)
+	o = c.objective()
+	check(c.is_defense() and not o.is_empty() and str(o["label"]) == str(c.gate.label_text()) and o["pos"] == c.gate.global_position, "в обороні мета: %s" % str(o.get("label", "")))
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	var at := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Стрілка до мети":
+				at = str(e["text"])
+	check("розшукуваної" in at and "сліду" in at and "виходу" in at and "борониш" in at, "довідник пояснює стрілку до мети")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_way() -> void:
+	suite("Шлях козака: ланцюжок перших цілей")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Way = load("res://scripts/game/way_service.gd")
+	var GS = load("res://scripts/game/guide_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var ActsD = load("res://scripts/data/activities.gd")
+	var STEPS: Array = Way.Path.STEPS
+	# Дані: кожен крок має все потрібне, id не повторюються, нагорода читається словами
+	var ids := {}
+	var bad := []
+	for st in STEPS:
+		if ids.has(st["id"]):
+			bad.append("повтор " + str(st["id"]))
+		ids[st["id"]] = true
+		for k in ["title", "how", "check", "reward", "go"]:
+			if not st.has(k):
+				bad.append("%s без %s" % [st["id"], k])
+		if int(st["reward"].get("gold", 0)) <= 0 or Way.reward_text(st) == "":
+			bad.append("%s без нагороди" % st["id"])
+		if str(st["title"]).ends_with(".") or not str(st["how"]).ends_with("."):
+			bad.append("%s: крапки" % st["id"])
+	check(STEPS.size() >= 15 and bad.is_empty(), "кроків %d, кожен повний: %s" % [STEPS.size(), ", ".join(bad)])
+	var golds := []
+	for st in STEPS:
+		golds.append(int(st["reward"]["gold"]))
+	var rising := true
+	for i in range(1, golds.size()):
+		rising = rising and golds[i] >= golds[i - 1] - 200
+	check(rising and golds[-1] > golds[0] * 10, "нагороди ростуть уздовж шляху: від %d до %d грн" % [golds[0], golds[-1]])
+	# Свіжий герой: перший крок не виконано, далі по одному
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "way"]:
+		w.hints[k] = true
+	check(Way.index(w) == 0 and not Way.finished(w) and not Way.ready(w, p) and Way.ready_count(w, p) == 0 and Way.claim(w, p).is_empty(), "новий герой на першому кроці, нагороди ще нема")
+	# кожен крок веде на справжнє місце чи вкладку
+	var lost := []
+	for st in STEPS:
+		var g: Dictionary = Way.go(st, w, p, "sich")
+		var pl: String = str(g["place"])
+		if pl == "" and int(g["tab"]) < 0:
+			lost.append(str(st["id"]) + ": нікуди")
+		if pl != "" and not (Data.CITIES.has(pl) or Data.LOCATIONS.has(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+			lost.append("%s→%s" % [st["id"], pl])
+	check(lost.is_empty(), "кожен крок кудись веде: %s" % ", ".join(lost))
+	# порадник показує нинішній крок
+	var tips: Array = GS.items(w, p, "sich").filter(func(it): return it["kind"] == "way")
+	check(tips.size() == 1 and str(tips[0]["text"]) == "Шлях козака: " + str(STEPS[0]["title"]) and "Нагорода" in str(tips[0]["sub"]), "порадник веде до нинішнього кроку")
+	# Перший бій виконано: нагорода, наступний крок
+	var gold0: int = p.gold
+	var potions0: int = p.potions
+	w.stats["field"] = 1
+	check(Way.ready(w, p) and Way.ready_count(w, p) == 1 and GS.items(w, p, "sich").any(func(it): return it["kind"] == "way_claim"), "крок виконано: порадник кличе по нагороду")
+	var msgs: Array = Way.claim(w, p)
+	check(msgs.size() == 3 and str(STEPS[0]["title"]) in str(msgs[0]) and Way.index(w) == 1 and p.gold == gold0 + int(STEPS[0]["reward"]["gold"]) and p.potions >= mini(potions0 + 2, p.potion_max()), "нагороду видано, шлях іде далі: %s" % " / ".join(msgs))
+	check(not Way.ready(w, p), "другий крок чекає своєї умови")
+	# Умови кроків
+	var step_of := func(id: String) -> Dictionary:
+		for st in STEPS:
+			if st["id"] == id:
+				return st
+		return {}
+	check(not Way.is_done(step_of.call("stats"), w, p) and not Way.is_done(step_of.call("skill"), w, p) and not Way.is_done(step_of.call("perk"), w, p) and not Way.is_done(step_of.call("class"), w, p), "очки ще не вкладено, дороги не обрано")
+	p.stat_points = 1
+	p.add_stat("str")
+	p.perks["tough"] = 1
+	p.change_class("cossack")
+	p.skill_points = 1
+	p.learn_skill("whirl")
+	check(Way.is_done(step_of.call("stats"), w, p) and Way.is_done(step_of.call("skill"), w, p) and Way.is_done(step_of.call("perk"), w, p) and Way.is_done(step_of.call("class"), w, p) and not Way.is_done(step_of.call("spec"), w, p), "вкладені очки й обрана дорога зараховано")
+	check(not Way.is_done(step_of.call("quest"), w, p) and not Way.is_done(step_of.call("turn_in"), w, p), "завдань ще не брав")
+	w.quests.append({"id": 950, "city": "sich", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 5, "count": 5, "text": "Знищ 5 мавок", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
+	check(Way.is_done(step_of.call("quest"), w, p) and not Way.is_done(step_of.call("turn_in"), w, p), "узяте завдання зараховано, здане ще ні")
+	load("res://scripts/game/city_service.gd").turn_in(w, p, 950)
+	check(Way.is_done(step_of.call("turn_in"), w, p) and Way.is_done(step_of.call("quest"), w, p), "здане завдання зараховано")
+	w.stats["defense"] = 1
+	check(Way.is_done(step_of.call("event"), w, p) and not Way.is_done(step_of.call("tower"), w, p), "оборона міста теж рахується як подія світу")
+	w.cleared["zmii_cave"] = 1
+	check(Way.is_done(step_of.call("dungeon"), w, p), "печеру, пройдену до появи лічильника, зараховано")
+	# Бувалий герой забирає все готове одним дотиком
+	var hat: Dictionary = Data.gen_item(5, 1, "head")
+	p.add_item(hat, true)
+	p.equip(hat["uid"])
+	var before: int = Way.index(w)
+	var ready_n: int = Way.ready_count(w, p)
+	var gold1: int = p.gold
+	var all_msgs: Array = Way.claim_all(w, p)
+	check(ready_n >= 5 and Way.index(w) == before + ready_n and p.gold > gold1 and ("забрано нагород %d" % ready_n) in str(all_msgs[0]) and not Way.ready(w, p), "забрано все готове поспіль: %d кроків" % ready_n)
+	# Нагороди всіх видів справді видаються
+	var rp = _new_player()
+	rp.level = 30
+	rp.potions = rp.potion_max()
+	var g2: int = rp.gold
+	var inv0: int = rp.inventory.size()
+	Way._grant({"reward": {"gold": 10, "potions": 1, "mana": 1, "res": {"wood": 5}, "trophy": 2, "item": 2, "stone": "zabuttia"}}, rp)
+	check(rp.gold == g2 + 10 + Data.potion_price(30) / 2 and int(rp.resources.get("wood", 0)) == 5 and int(rp.resources.get("trophy", 0)) == 2 and rp.inventory.size() == inv0 + 1 and int(rp.inventory[-1]["rarity"]) == 2 and int(rp.stones.get("zabuttia", 0)) == 1, "гривні, зілля понад запас гривнями, ресурси, трофеї, річ і камінь")
+	rp.free()
+	# ---- Екран: картка вгорі журналу ----
+	game.enter_map()
+	await _frames(2)
+	game.open_character()
+	game.char_tab = 1
+	game._build_character()
+	await _frames(2)
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var jt := ""
+	for n in tc.get_tab_control(1).find_children("*", "Label", true, false):
+		jt += n.text + "\n"
+	var cur: Dictionary = Way.current(w)
+	check(("Шлях козака  •  крок %d із %d" % [Way.index(w) + 1, Way.total()]) in jt and str(cur["title"]) in jt and str(cur["how"]) in jt and ("Нагорода: " + Way.reward_text(cur)) in jt and jt.find("Шлях козака") < jt.find("Що робити зараз"), "журнал починається з нинішнього кроку шляху")
+	# виконуємо нинішній крок і забираємо кнопкою
+	w.way["step"] = STEPS.find(step_of.call("companion"))
+	w.companions.append({"type": "dzhura", "downed": false})
+	game._build_character()
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var claim_btn: Button = null
+	for b in tc.get_tab_control(1).find_children("*", "Button", true, false):
+		if b.text.begins_with("Забрати"):
+			claim_btn = b
+	check(claim_btn != null and tc.get_tab_title(1).begins_with("Журнал  (+"), "готовий крок: кнопка «Забрати» й лічильник на вкладці")
+	var idx0: int = Way.index(w)
+	claim_btn.pressed.emit()
+	await _frames(2)
+	check(Way.index(w) > idx0 and "Шлях козака" in game.hud.banner.text, "кнопка забирає нагороду й веде далі")
+	game.close_character()
+	await _frames(2)
+	# Збереження пам'ятає крок
+	var saved: Dictionary = w.to_dict()
+	var w2 = load("res://scripts/game/world_state.gd").new()
+	w2.from_dict(saved)
+	check(Way.index(w2) == Way.index(w) and Way.index(load("res://scripts/game/world_state.gd").new()) == 0, "крок шляху зберігається, старе збереження починає з першого")
+	# Кінець шляху
+	w.way["step"] = Way.total()
+	check(Way.finished(w) and Way.current(w).is_empty() and Way.claim_all(w, p).is_empty() and not GS.items(w, p, "sich").any(func(it): return str(it["kind"]).begins_with("way")), "пройдений шлях зникає з порад")
+	game.open_character()
+	game.char_tab = 1
+	game._build_character()
+	await _frames(2)
+	jt = ""
+	for n in game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(1).find_children("*", "Label", true, false):
+		jt += n.text + "\n"
+	check(not "Шлях козака  •" in jt, "пройдений шлях зникає з журналу")
+	game.close_character()
+	# Довідник перелічує всі кроки з нагородами
+	var wt := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Шлях козака":
+				wt = str(e["text"])
+	var all_in := true
+	for st in STEPS:
+		all_in = all_in and str(st["title"]) in wt and Way.reward_text(st) in wt
+	check(all_in and ("із %d цілей" % Way.total()) in wt, "довідник перелічує всі кроки шляху з нагородами")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
 func _suite_guide() -> void:
 	suite("Порадник: що робити далі")
 	SaveSystem.delete(TEST_SAVE)
@@ -7938,6 +8338,7 @@ func _suite_guide() -> void:
 	p.perk_points = 0
 	p.recalc()
 	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	w.way = {"step": load("res://scripts/game/way_service.gd").total()}  # «Шлях козака» перевіряє окремий набір
 	var kinds := func() -> Array:
 		var out := []
 		for it in GS.items(w, p, "sich"):

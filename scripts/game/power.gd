@@ -12,6 +12,18 @@ static func dps(player) -> float:
 	return player.damage / maxf(player.attack_cooldown, 0.1) * crit * maxf(1.6, 1.3 + 0.15 * minf(float(player.skill_power), 4.0))
 
 
+## Скільки варта сила золотої речі в порівнянні спорядження: шкода й здоров'я її не показують.
+const UNIQUE_WORTH := 0.1
+## На скільки річ має підняти силу героя, щоб вважатись кращою (менше — шум, а не покращення).
+const MIN_GAIN := 0.01
+
+
+## Одне число сили героя для порівняння спорядження: шкода за секунду на запас живучості
+## (здоров'я з поправкою на захист). Що більше, то сильніший герой загалом.
+static func score(player) -> float:
+	return dps(player) * player.max_hp / maxf(1.0 - Data.ARMOR_CAP, 1.0 - player.armor)
+
+
 ## Удар, що забирає в героя частку frac здоров'я вже після його захисту.
 static func hit(player, frac: float) -> float:
 	return player.max_hp * frac / maxf(1.0 - Data.ARMOR_CAP, 1.0 - player.armor)

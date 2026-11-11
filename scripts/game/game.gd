@@ -31,6 +31,7 @@ const MusterService := preload("res://scripts/game/muster_service.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
 const EventsBoard := preload("res://scripts/game/events_board.gd")
 const GuideService := preload("res://scripts/game/guide_service.gd")
+const WayService := preload("res://scripts/game/way_service.gd")
 const WikiService := preload("res://scripts/game/wiki_service.gd")
 const UiWiki := preload("res://scripts/ui/ui_wiki.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
@@ -215,6 +216,12 @@ func _process(delta: float) -> void:
 		_travel_tick(delta)
 	player.xp_boost = AdRewards.xp_mult(world)
 	combat.drop_boost = AdRewards.drop_mult(world)
+	# стрілка до мети в бою: розшук, сторож скарбу, сліди, вихід, те, що боронимо
+	var goal: Dictionary = combat.objective() if state == State.PLAYING else {}
+	if goal.is_empty():
+		hud.objective_arrow.show_target(Vector2.ZERO, "")
+	else:
+		hud.objective_arrow.show_target(goal["pos"] - player.global_position, str(goal["label"]))
 	var top := StoryService.objective_line(world)
 	for l in HeroService.objective_lines(world):
 		top += "\n" + l
@@ -540,6 +547,8 @@ func enter_map() -> void:
 	_refresh_guide()
 	_announce_unlocks()
 	save_game()
+	if not WayService.finished(world):
+		hint("way", "Шлях козака: ланцюжок цілей із нагородами, що по черзі вчить усьому в грі. Він угорі вкладки «Журнал», а кнопка «Далі» внизу мапи веде до наступного кроку.")
 	hint("map", "Торкнись місця на мапі. «!» позначає мету завдання, зелена галочка — місто, де здати виконане. Почни з Дикого Поля поруч із Січчю.")
 
 
@@ -1950,6 +1959,19 @@ func char_do(action: String, arg) -> void:
 				return
 		"tab_show":
 			char_tab = int(arg)  # порада веде на іншу вкладку екрана героя
+		"equip_best":
+			var worn: int = player.equip_best()
+			if worn > 0:
+				char_sel_uid = -1
+				Audio.play("item", 0.0)
+				hud.show_banner("Вдягнено кращих речей: %d" % worn, UI.GOLD)
+		"way_claim":
+			# «Шлях козака»: забрати все, що вже виконано
+			var wm := WayService.claim_all(world, player)
+			if not wm.is_empty():
+				hud.show_banner("\n".join(wm), UI.GOLD)
+				Audio.play("quest", 0.0)
+				save_game()
 		"panel_set":
 			# arg: [kind, index, id]
 			player.set_panel(arg[0], arg[1], arg[2])

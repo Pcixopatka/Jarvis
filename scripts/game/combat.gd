@@ -1436,6 +1436,30 @@ func lift_to_hero(e) -> void:
 	e.hp = e.max_hp
 
 
+## Куди зараз іти в бою: {"pos": точка у світі, "label": підпис} або порожньо, коли мети нема.
+## Порядок: розшукувана нечисть, сторож скарбу, стежка слідів, вихід чи прохід далі, те, що боронимо.
+func objective() -> Dictionary:
+	if not active or player == null or not player.alive:
+		return {}
+	var guard = null
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e.is_queued_for_deletion() or e.dead:
+			continue
+		if e.bounty_id > 0:
+			return {"pos": e.global_position, "label": "Розшук"}
+		if e.treasure_guard:
+			guard = e
+	if guard != null:
+		return {"pos": guard.global_position, "label": "Сторож скарбу"}
+	if trail != null and is_instance_valid(trail) and not trail.found:
+		return {"pos": trail.target(), "label": "Сліди"}
+	if portal != null and is_instance_valid(portal):
+		return {"pos": portal.global_position, "label": str(portal.label)}
+	if is_defense() and gate != null and is_instance_valid(gate) and gate.alive and not defense_over:
+		return {"pos": gate.global_position, "label": str(gate.label_text())}
+	return {}
+
+
 func alive_enemy_count() -> int:
 	return get_tree().get_nodes_in_group("enemies").size()
 

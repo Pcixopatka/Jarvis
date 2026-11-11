@@ -10,6 +10,7 @@ const Data := preload("res://scripts/data/data.gd")
 
 const MAX := 5  # скільки порад показує журнал
 const TAB_HERO := 0
+const TAB_JOURNAL := 1
 const TAB_SKILLS := 2
 const TAB_PERKS := 3
 const TAB_CHALLENGES := 8
@@ -56,12 +57,22 @@ static func items(world, player, here: String = "") -> Array:
 	var a: Dictionary = ES.active(world)
 	if not a.is_empty():
 		out.append(_it("event", "%s: %s" % [ES.name_of(str(a["kind"])), Data.place_name(str(a["target"]))], "Чекає ще походів: %d" % int(a["left"]), str(a["target"])))
-	# 3. Історія
+	# 3. «Шлях козака»: виконаний крок чекає нагороди
+	var Way = _svc("way_service")
+	var way_ready: int = int(Way.ready_count(world, player))
+	if way_ready > 0:
+		out.append(_it("way_claim", "Шлях козака: забери нагороду", "Виконано кроків: %d" % way_ready, "", TAB_JOURNAL))
+	# 4. Історія
 	var line: String = Story.objective_line(world)
 	if line != "":
 		var target: String = Story.target(world)
 		out.append(_it("story", "Історія: %s" % _clean(line), ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
-	# 4. Вільні очки: герой сильнішає за хвилину
+	# 5. «Шлях козака»: нинішній крок, якщо він ще не виконаний
+	if way_ready == 0 and not Way.finished(world):
+		var step: Dictionary = Way.current(world)
+		var g: Dictionary = Way.go(step, world, player, here)
+		out.append(_it("way", "Шлях козака: %s" % str(step["title"]), "Нагорода: %s" % Way.reward_text(step), str(g["place"]), int(g["tab"])))
+	# 6. Вільні очки: герой сильнішає за хвилину
 	var pts := []
 	var tab := -1
 	if int(player.perk_points) > 0:
@@ -75,19 +86,23 @@ static func items(world, player, here: String = "") -> Array:
 		tab = TAB_HERO
 	if not pts.is_empty():
 		out.append(_it("points", "Розподіли вільні очки", "Є очки " + ", ".join(pts), "", tab))
-	# 5. Нагороди за виклики
+	# 6а. У торбі лежить річ, сильніша за вдягнену
+	var ups: int = player.best_upgrades().size()
+	if ups > 0:
+		out.append(_it("gear", "Вдягни кращі речі з торби", "Сильніших за вдягнене: %d. Кнопка «Вдягнути найкраще»" % ups, "", TAB_HERO))
+	# 7. Нагороди за виклики
 	var claims: int = int(_svc("challenge_service").ready_count(world, player))
 	if claims > 0:
 		out.append(_it("claim", "Забери нагороду за виклики", "Готових викликів: %d" % claims, "", TAB_CHALLENGES))
-	# 6. Розшук: ціль ще жива
+	# 8. Розшук: ціль ще жива
 	for b in _svc("bounty_service").state(world)["active"]:
 		if not bool(b["killed"]):
 			out.append(_it("bounty", "Розшук: %s" % str(b["name"]), "Де: %s. Нагорода: %d грн" % [Data.place_name(str(b["loc"])), int(b["gold"])], str(b["loc"])))
-	# 7. Завдання міст у роботі
+	# 9. Завдання міст у роботі
 	for q in world.quests:
 		if not world.is_done(q):
 			out.append(_it("quest", "%s  %d/%d" % [str(q["text"]), int(q.get("progress", 0)), int(q.get("count", 1))], "Завдання від міста %s" % Data.place_name(str(q["city"])), str(q.get("loc", ""))))
-	# 8. Справи тижня й дня, де ще є що взяти
+	# 10. Справи тижня й дня, де ще є що взяти
 	var acts := 0
 	for r in _svc("events_board").rows(world, player, here):
 		if acts >= MAX_ACTIVITIES:
@@ -95,7 +110,7 @@ static func items(world, player, here: String = "") -> Array:
 		if r["kind"] in ["weekly", "daily"] and r["ready"] and str(r["place"]) != "" and str(r["id"]) != "challenges":
 			out.append(_it("activity", str(r["name"]), str(r["status"]), str(r["place"])))
 			acts += 1
-	# 9. Запасні поради, щоб список ніколи не був порожній: похід за досвідом і нові завдання
+	# 11. Запасні поради, щоб список ніколи не був порожній: похід за досвідом і нові завдання
 	var spot := best_place(world, player, here)
 	if spot != "":
 		out.append(_it("explore", "Вирушай: %s" % Data.place_name(spot), "Місце твого рівня: досвід і здобич", spot))

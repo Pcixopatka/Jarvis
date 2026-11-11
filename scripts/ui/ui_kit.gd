@@ -91,7 +91,8 @@ static func _cell_mark(text: String, col: Color, size: int, anchor: int, off: Ve
 
 ## Клітинка речі для сітки торби й вдягненого: значок на тлі кольору рідкості,
 ## заточка в кутку, позначки золотої речі, артефакта й душі в гнізді.
-static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px: int = 72) -> Button:
+## better — річ сильніша за вдягнену в ту саму клітинку: зелена стрілка в нижньому правому куті.
+static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px: int = 72, better: bool = false) -> Button:
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(px, px)
@@ -114,6 +115,8 @@ static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px
 		var sid: String = str(item.get("soul", ""))
 		var scol: Color = load("res://scripts/game/soul_service.gd").color(sid) if sid != "" else MUTED
 		b.add_child(_cell_mark("◈" if sid != "" else "◇", scol, 15, Control.PRESET_BOTTOM_LEFT, Vector2(5, -22)))
+	if better:
+		b.add_child(_cell_mark("▲", GOOD, 16, Control.PRESET_BOTTOM_RIGHT, Vector2(-22, -24)))
 	b.pressed.connect(cb)
 	return b
 

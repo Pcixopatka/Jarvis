@@ -263,6 +263,66 @@ func equip(uid: int) -> bool:
 	return false
 
 
+## Сила героя з нинішнім спорядженням (для порівняння речей): Power.score і надбавка за золоті речі.
+func gear_score() -> float:
+	var s: float = Power.score(self)
+	for slot in equipment:
+		if Uniques.is_unique(equipment[slot]):
+			s *= 1.0 + Power.UNIQUE_WORTH
+	return s
+
+
+## На скільки зміниться сила героя, якщо вдягнути цю річ замість тієї, що зараз у її клітинці.
+## Частка: 0.05 — на 5% сильніший, від'ємна — слабший. Нічого не міняє: приміряє й повертає як було.
+func gain_from(item: Dictionary) -> float:
+	if item.is_empty() or not can_use(item) or not Data.SLOTS.has(item.get("slot", "")):
+		return 0.0
+	var slot: String = item["slot"]
+	if equipment.has(slot) and equipment[slot].get("uid", -1) == item.get("uid", -2):
+		return 0.0
+	var hp0 := hp
+	var mana0 := mana
+	var before := gear_score()
+	var had: bool = equipment.has(slot)
+	var old: Dictionary = equipment.get(slot, {})
+	equipment[slot] = item
+	recalc()
+	var after := gear_score()
+	if had:
+		equipment[slot] = old
+	else:
+		equipment.erase(slot)
+	recalc()
+	hp = hp0  # примірка не лікує й не ранить
+	mana = mana0
+	return after / maxf(before, 0.001) - 1.0
+
+
+## Найкращі речі з торби для кожної клітинки, якщо вони сильніші за вдягнене: {клітинка: річ}.
+func best_upgrades() -> Dictionary:
+	var best := {}
+	var best_gain := {}
+	for it in inventory:
+		var g := gain_from(it)
+		if g > Power.MIN_GAIN and g > float(best_gain.get(it["slot"], 0.0)):
+			best_gain[it["slot"]] = g
+			best[it["slot"]] = it
+	return best
+
+
+## Вдягнути найкраще з торби в кожну клітинку. Повертає, скільки речей вдягнено.
+func equip_best() -> int:
+	var n := 0
+	for pass_i in 3:  # речі впливають одна на одну, тож після заміни перевіряємо ще раз
+		var ups := best_upgrades()
+		if ups.is_empty():
+			break
+		for slot in ups:
+			if equip(int(ups[slot]["uid"])):
+				n += 1
+	return n
+
+
 func unequip(uid: int) -> bool:
 	if bag_full():
 		return false

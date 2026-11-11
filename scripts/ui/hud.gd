@@ -44,6 +44,7 @@ var quest_label: Label
 var loc_label: Label
 var sub_label: Label
 var banner: Label
+var objective_arrow  # стрілка до мети в бою (ObjectiveArrow)
 var pause_btn: Button
 var corner_box: HBoxContainer  # рядок кнопок у правому верхньому куті: «Мапа», герой, меню
 var char_btn: Button
@@ -204,6 +205,10 @@ func _build() -> void:
 	char_btn = _corner_button("Козак", 180, func(): character_pressed.emit())
 	char_btn.add_theme_font_size_override("font_size", 24)
 	pause_btn = _corner_button("II", 76, func(): pause_pressed.emit())
+
+	objective_arrow = load("res://scripts/ui/objective_arrow.gd").new()
+	objective_arrow.visible = false
+	ui_root.add_child(objective_arrow)
 
 	banner = Label.new()
 	banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
