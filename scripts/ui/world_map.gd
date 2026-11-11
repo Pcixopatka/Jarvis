@@ -4,6 +4,8 @@ extends Control
 
 signal location_selected(id: String)
 signal travel_tapped  # дотик під час подорожі — прискорити
+signal guide_pressed  # дотик до кнопки «Далі: …» (головна порада порадника)
+signal legend_pressed  # дотик до «?»: що означають позначки
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
@@ -194,6 +196,7 @@ var _pinch_dist := 0.0
 var _dragging := false
 var _press_pos := Vector2.ZERO
 var _zoom_box: VBoxContainer
+var guide_btn: Button  # «Далі: …» унизу мапи: головна порада, дотик веде до неї
 
 
 func _ready() -> void:
@@ -207,6 +210,25 @@ func _ready() -> void:
 		b.custom_minimum_size = Vector2(64, 64)
 		b.pressed.connect(_zoom_button.bind(1.35 if t == "+" else 1.0 / 1.35))
 		_zoom_box.add_child(b)
+	var lb := Button.new()
+	lb.text = "?"
+	lb.custom_minimum_size = Vector2(64, 64)
+	lb.pressed.connect(func(): legend_pressed.emit())
+	_zoom_box.add_child(lb)
+	guide_btn = Button.new()
+	guide_btn.visible = false
+	guide_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	guide_btn.clip_text = true
+	guide_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	guide_btn.add_theme_font_size_override("font_size", 20)
+	guide_btn.pressed.connect(func(): guide_pressed.emit())
+	add_child(guide_btn)
+
+
+## Головна порада на кнопці внизу мапи ("" — кнопки нема).
+func set_guide(text: String) -> void:
+	guide_btn.text = text
+	guide_btn.visible = text != ""
 
 
 func _zoom_button(f: float) -> void:
@@ -218,7 +240,13 @@ func _process(delta: float) -> void:
 		return
 	_pulse += delta * 4.0
 	if _zoom_box:
-		_zoom_box.position = Vector2(map_rect.position.x + 8, map_rect.end.y - 144)
+		_zoom_box.position = Vector2(map_rect.position.x + 8, map_rect.end.y - 216)
+	if guide_btn and guide_btn.visible:
+		# праворуч від кнопок масштабу, не ширша за вільне місце на мапі
+		var fs: int = guide_btn.get_theme_font_size("font_size")
+		var want: float = guide_btn.get_theme_font("font").get_string_size(guide_btn.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 36.0
+		guide_btn.size = Vector2(clampf(want, 160.0, maxf(160.0, map_rect.size.x - 100.0)), 60.0)
+		guide_btn.position = Vector2(map_rect.position.x + 84, map_rect.end.y - 68)
 	if not travel.is_empty():
 		# Камера м'яко слідує за фігуркою
 		var want := _unit(_travel_ll(travel["t"]))

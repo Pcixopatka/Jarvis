@@ -211,6 +211,32 @@ static func _journal(game) -> Control:
 	if ready > 0:
 		head += "   •   можна здати: %d" % ready
 	v.add_child(UI.label(head, 17, UI.GOOD if ready > 0 else UI.MUTED, false))
+	# Порадник: що зробити просто зараз, від найважливішого. Дотик веде на мапу чи на потрібну вкладку
+	v.add_child(UI.label("Що робити зараз", 22, UI.GOLD, false))
+	var tips: Array = game.GuideService.top(game.world, p, game.map_here)
+	for i in tips.size():
+		var tip: Dictionary = tips[i]
+		var tc := PanelContainer.new()
+		tc.add_theme_stylebox_override("panel", UI.style(Color(0.16, 0.13, 0.08), Color(1.0, 0.8, 0.3) if i == 0 else Color(0.55, 0.45, 0.28), 10, 10))
+		var tl := HBoxContainer.new()
+		tl.add_theme_constant_override("separation", 10)
+		tc.add_child(tl)
+		var tb := VBoxContainer.new()
+		tb.add_theme_constant_override("separation", 2)
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tl.add_child(tb)
+		var tt := UI.label("%d. %s" % [i + 1, str(tip["text"])], 19, UI.GOLD if i == 0 else UI.TEXT, false)
+		tt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tb.add_child(tt)
+		if str(tip["sub"]) != "":
+			var ts := UI.label(str(tip["sub"]), 15, UI.MUTED, false)
+			ts.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tb.add_child(ts)
+		if str(tip["place"]) != "":
+			_tap_card(tc, tl, "на мапі ›", _do(game, "place_show", [tip["place"], tip["text"]]))
+		elif int(tip["tab"]) >= 0:
+			_tap_card(tc, tl, "відкрити ›", _do(game, "tab_show", tip["tab"]))
+		v.add_child(tc)
 	for sec in secs:
 		v.add_child(UI.label(sec["title"], 22, UI.GOLD, false))
 		if sec.has("chapters"):

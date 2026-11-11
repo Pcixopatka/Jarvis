@@ -8,6 +8,49 @@ const CampService := preload("res://scripts/game/camp_service.gd")
 
 
 ## Панель Глибин зарази: вибір глибини й спуск.
+## Що означають позначки на мапі. Рядок: [значок мапи або "", позначка текстом, колір, пояснення].
+const LEGEND := [
+	["", "★", Color(1.0, 0.85, 0.2), "Зірка: куди веде історія."],
+	["", "!", Color(1.0, 0.8, 0.1), "Знак оклику: мета завдання, розшуку чи посвяти."],
+	["", "✓", Color(0.3, 0.8, 0.3), "Зелена галочка: місто, де здати виконане завдання чи взяти нагороду за розшук. Число поруч каже, скільки."],
+	["flag", "", Color.WHITE, "Прапорець: тут ти зараз."],
+	["", "(4)", Color(0.9, 0.85, 0.75), "Число в дужках: рівень місця. «16+» означає край, що росте разом із героєм."],
+	["", "◯", Color(0.75, 0.2, 0.15), "Червона рамка й назва: місце надто сильне для тебе."],
+	["", "◯", Color(1.0, 0.3, 0.2), "Червоне кільце, що пульсує, і напис «Облога!»: місто чи хутір треба боронити. Число каже, скільки походів воно ще протримається."],
+	["raid", "", Color.WHITE, "Великий значок із числом: подія світу. Набіг, валка, полон чи поранений чекають стільки походів."],
+	["moon", "", Color.WHITE, "Місяць: нічний похід. Нечисть лютіша, здобич щедріша."],
+	["chest", "", Color.WHITE, "Скриня: чутка про скарб і його сторожа."],
+	["tent", "", Color.WHITE, "Намет: ярмарок. Продаж удвічі дорожчий."],
+	["", "●", Color(0.5, 0.85, 0.2), "Зелена хмара: зараза. Нечисть там сильніша, а нагорода більша."],
+]
+
+
+## Панель «Позначки на мапі».
+static func build_legend(on_close: Callable) -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(UI.label("Позначки на мапі", 26, UI.GOLD, false))
+	for row in LEGEND:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		var mark: Control
+		if str(row[0]) != "":
+			mark = UI.map_icon(str(row[0]), 34)
+		else:
+			mark = UI.label(str(row[1]), 22, row[2])
+		mark.custom_minimum_size = Vector2(44, 34)
+		mark.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		h.add_child(mark)
+		var t := _wrapped(str(row[3]), 16, UI.TEXT)
+		t.custom_minimum_size = Vector2(250, 0)
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(t)
+		v.add_child(h)
+	v.add_child(_wrapped("Кнопка «Далі» внизу мапи веде до головної поради. Усі поради є на вкладці «Журнал».", 15, UI.MUTED))
+	v.add_child(UI.button("Закрити", on_close, Vector2(350, 60), 22))
+	return v
+
+
 static func build_depths(world, player, sel: int, on_change: Callable, on_go: Callable) -> Control:
 	var DS = load("res://scripts/game/depth_service.gd")
 	var v := VBoxContainer.new()

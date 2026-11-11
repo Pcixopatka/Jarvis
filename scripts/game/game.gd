@@ -30,6 +30,7 @@ const RingService := preload("res://scripts/game/ring_service.gd")
 const MusterService := preload("res://scripts/game/muster_service.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
 const EventsBoard := preload("res://scripts/game/events_board.gd")
+const GuideService := preload("res://scripts/game/guide_service.gd")
 const WikiService := preload("res://scripts/game/wiki_service.gd")
 const UiWiki := preload("res://scripts/ui/ui_wiki.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
@@ -149,6 +150,10 @@ func _ready() -> void:
 	hud.character_pressed.connect(open_character)
 	hud.map_pressed.connect(func(): if state == State.PLAYING: _try_leave())
 	hud.map_location_selected.connect(_on_map_select)
+	hud.map_view.guide_pressed.connect(_guide_go)
+	hud.map_view.legend_pressed.connect(func():
+		map_legend = not map_legend
+		_build_map_panel())
 	hud.map_view.travel_tapped.connect(_travel_speed_up)
 
 	Events.enemy_killed.connect(_on_enemy_killed)
@@ -530,7 +535,10 @@ func enter_map() -> void:
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
 	mv.sieges = DefenseService.state(world)["sieges"]
+	map_legend = false
 	_build_map_panel()
+	_refresh_guide()
+	_announce_unlocks()
 	save_game()
 	hint("map", "Торкнись місця на мапі. «!» позначає мету завдання, зелена галочка — місто, де здати виконане. Почни з Дикого Поля поруч із Січчю.")
 
@@ -914,11 +922,59 @@ func hint(id: String, text: String) -> void:
 
 func _on_map_select(id: String) -> void:
 	map_sel = id
+	map_legend = false
 	hud.map_view.selected = id
 	_build_map_panel()
 
 
+# ---------- Порадник ----------
+
+var map_legend := false  # на панелі мапи показано пояснення позначок
+
+
+## Оновити кнопку «Далі: …» на мапі: головна порада порадника.
+func _refresh_guide() -> void:
+	var g: Dictionary = GuideService.first(world, player, map_here)
+	hud.map_view.set_guide(("Далі: %s  ›" % str(g["text"])) if not g.is_empty() else "")
+
+
+## Дотик до кнопки «Далі: …»: показати місце поради на мапі або відкрити потрібну вкладку.
+func _guide_go() -> void:
+	if state != State.MAP or travel_to != "":
+		return
+	var g: Dictionary = GuideService.first(world, player, map_here)
+	if g.is_empty():
+		return
+	if str(g["place"]) != "":
+		_on_map_select(str(g["place"]))
+		hud.map_view.focus_on(str(g["place"]))
+	else:
+		char_tab = int(g["tab"]) if int(g["tab"]) >= 0 else 1
+		open_character()
+
+
+## Сказати про заняття, яке щойно відкрилось героєві (по одному за вихід на мапу).
+## Давнім героям про вже відкрите не нагадуємо: перший раз лише запам'ятовуємо, що вони мають.
+func _announce_unlocks() -> void:
+	var first_time: bool = not world.hints.has("unlocks_seen")
+	world.hints["unlocks_seen"] = true
+	for e in EventsBoard.Wiki.EVENTS:
+		var key := "open:" + str(e["id"])
+		if e["kind"] == "world" or world.hints.has(key) or EventsBoard.locked_reason(str(e["id"]), world, player) != "":
+			continue
+		world.hints[key] = true
+		if first_time or int(e["level"]) <= 0:
+			continue
+		hud.show_hint("Відкрито нове заняття: %s. Де: %s. Торкнись його на вкладці «Події», щоб побачити на мапі." % [e["name"], e["where"]], true)
+		return
+
+
 func _build_map_panel() -> void:
+	if map_legend and travel_to == "":
+		hud.set_map_panel(MapPanel.build_legend(func():
+			map_legend = false
+			_build_map_panel()), _sponsor_block())
+		return
 	if travel_to != "":
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 8)
@@ -1892,6 +1948,8 @@ func char_do(action: String, arg) -> void:
 			# arg: [місце, назва завдання]
 			if _show_place(str(arg[0]), str(arg[1])):
 				return
+		"tab_show":
+			char_tab = int(arg)  # порада веде на іншу вкладку екрана героя
 		"panel_set":
 			# arg: [kind, index, id]
 			player.set_panel(arg[0], arg[1], arg[2])

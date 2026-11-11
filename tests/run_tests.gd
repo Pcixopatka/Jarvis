@@ -119,6 +119,7 @@ func _run() -> void:
 	await _suite_skills_tab()
 	await _suite_full_bag_and_scroll()
 	await _suite_event_lift()
+	await _suite_guide()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7909,6 +7910,163 @@ func _suite_skills_tab() -> void:
 
 
 # ======================= Повна торба, викинути й знищити, гортання з будь-якої точки =======================
+
+func _suite_guide() -> void:
+	suite("Порадник: що робити далі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var GS = load("res://scripts/game/guide_service.gd")
+	var Bounty = load("res://scripts/game/bounty_service.gd")
+	var DS = load("res://scripts/game/defense_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "defense", "bounty"]:
+		w.hints[k] = true
+	p.change_class("cossack")
+	p.level = 20
+	p.stat_points = 0
+	p.skill_points = 0
+	p.perk_points = 0
+	p.recalc()
+	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	var kinds := func() -> Array:
+		var out := []
+		for it in GS.items(w, p, "sich"):
+			out.append(str(it["kind"]))
+		return out
+	# Порад завжди вистачає: навіть коли справ нема, є куди піти й де взяти завдання
+	var k0: Array = kinds.call()
+	check(not k0.is_empty() and "explore" in k0 and "board" in k0 and not "story" in k0 and not "turn_in" in k0, "без справ порадник шле в похід і до дошки завдань: %s" % ", ".join(k0))
+	var spot: String = GS.best_place(w, p, "sich")
+	check(Data.LOCATIONS.has(spot) and abs(Data.loc_level(Data.LOCATIONS[spot], p.level) - p.level) <= 6, "запасна порада веде в місцевість по силі: %s" % spot)
+	# Порядок важливості: здати виконане, облога, історія, очки, розшук, завдання
+	w.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	w.quests.append({"id": 950, "city": "kyiv", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 5, "count": 5, "text": "Знищ 5 мавок (Дике Поле)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
+	w.quests.append({"id": 951, "city": "sich", "loc": "black_forest", "type": "kill", "target": "mavka", "progress": 1, "count": 5, "text": "Знищ 5 мавок (Чорний ліс)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
+	Bounty.state(w)["active"].append({"id": 7, "city": "poltava", "kind": "upyr", "name": "Упир Кривий", "loc": "crypt", "affixes": ["fiery"], "gold": 300, "glory": 6, "killed": false})
+	DS.state(w)["sieges"]["chyhyryn"] = 2
+	p.stat_points = 3
+	var k1: Array = kinds.call()
+	var order_ok: bool = k1.find("turn_in") < k1.find("siege") and k1.find("siege") < k1.find("story") and k1.find("story") < k1.find("points") and k1.find("points") < k1.find("bounty") and k1.find("bounty") < k1.find("quest") and k1.find("quest") < k1.find("explore")
+	check(k1[0] == "turn_in" and order_ok, "поради йдуть від найважливішої: %s" % ", ".join(k1))
+	var first: Dictionary = GS.first(w, p, "sich")
+	check(str(first["place"]) == "kyiv" and "Київ" in str(first["text"]) and "завдань: 1" in str(first["sub"]), "головна порада: здати виконане в Києві")
+	var by_kind := {}
+	for it in GS.items(w, p, "sich"):
+		by_kind[str(it["kind"])] = it
+	check(str(by_kind["siege"]["place"]) == "chyhyryn" and "2" in str(by_kind["siege"]["sub"]) and str(by_kind["bounty"]["place"]) == "crypt" and str(by_kind["quest"]["place"]) == "black_forest" and str(by_kind["story"]["place"]) == str(game.StoryService.target(w)), "кожна порада знає своє місце на мапі")
+	check(int(by_kind["points"]["tab"]) == GS.TAB_HERO and str(by_kind["points"]["place"]) == "" and "характеристик: 3" in str(by_kind["points"]["sub"]), "порада про очки веде на вкладку героя")
+	check(GS.top(w, p, "sich").size() == GS.MAX, "журнал показує перші %d порад" % GS.MAX)
+	# кожна порада веде або на справжнє місце мапи, або на вкладку
+	var ActsD = load("res://scripts/data/activities.gd")
+	var broken := []
+	for it in GS.items(w, p, "sich"):
+		var pl: String = str(it["place"])
+		if pl == "" and int(it["tab"]) < 0:
+			broken.append(str(it["kind"]) + ": нікуди")
+		if pl != "" and not (Data.CITIES.has(pl) or Data.LOCATIONS.has(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+			broken.append(str(it["kind"]) + "→" + pl)
+	check(broken.is_empty(), "кожна порада кудись веде: %s" % ", ".join(broken))
+	# Очки вмінь радимо вкладати, лише коли є куди
+	p.stat_points = 0
+	p.skill_points = 4
+	check(int(GS.items(w, p, "sich").filter(func(it): return it["kind"] == "points")[0]["tab"]) == GS.TAB_SKILLS, "очки вмінь ведуть на вкладку «Вміння»")
+	for c in p.Classes.lineage(p.job):
+		for br in p.Classes.TREES[c]:
+			for n in br["nodes"]:
+				p.skills[n["id"]] = int(n["max"])
+	check(not "points" in kinds.call(), "коли вчити більше нічого, порадник про очки вмінь мовчить")
+	p.skill_points = 0
+	# ---- На мапі: кнопка «Далі» ----
+	game.enter_map()
+	await _frames(3)
+	var mv = game.hud.map_view
+	check(mv.guide_btn.visible and mv.guide_btn.text.begins_with("Далі: Здай виконане") and "Київ" in mv.guide_btn.text, "на мапі кнопка з головною порадою: «%s»" % mv.guide_btn.text)
+	check(mv.guide_btn.position.x >= mv.map_rect.position.x and mv.guide_btn.position.x + mv.guide_btn.size.x <= mv.map_rect.end.x and mv.guide_btn.position.y + mv.guide_btn.size.y <= mv.map_rect.end.y, "кнопка «Далі» вміщається на мапі й не лізе під панель")
+	mv.guide_pressed.emit()
+	await _frames(2)
+	check(game.state == game.State.MAP and game.map_sel == "kyiv" and mv.selected == "kyiv", "дотик до «Далі» вибирає місце поради на мапі")
+	# здав завдання: порада змінюється
+	load("res://scripts/game/city_service.gd").turn_in(w, p, 950)
+	game.enter_map()
+	await _frames(2)
+	check(mv.guide_btn.text.begins_with("Далі: Облога") and "Чигирин" in mv.guide_btn.text, "після здачі головною стає облога: «%s»" % mv.guide_btn.text)
+	# порада без місця відкриває вкладку
+	DS.state(w)["sieges"].clear()
+	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	p.stat_points = 2
+	game.enter_map()
+	await _frames(2)
+	check(mv.guide_btn.text.begins_with("Далі: Розподіли вільні очки"), "порада про вільні очки на кнопці: «%s»" % mv.guide_btn.text)
+	mv.guide_pressed.emit()
+	await _frames(2)
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(game.state == game.State.CHARACTER and tc.current_tab == GS.TAB_HERO, "дотик відкриває екран героя на потрібній вкладці")
+	# ---- Журнал: розділ «Що робити зараз» ----
+	game.char_tab = 1
+	game._build_character()
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var jt := ""
+	for n in tc.get_tab_control(1).find_children("*", "Label", true, false):
+		jt += n.text + "\n"
+	check("Що робити зараз" in jt and "1. Розподіли вільні очки" in jt and "відкрити ›" in jt and "на мапі ›" in jt, "журнал починається з порад")
+	game.char_do("tab_show", GS.TAB_HERO)
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(tc.current_tab == GS.TAB_HERO, "порада з журналу перемикає вкладку")
+	game.close_character()
+	await _frames(2)
+	# номери вкладок у порадника збігаються зі справжніми
+	game.open_character()
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(tc.get_tab_title(GS.TAB_HERO).begins_with("Герой") and tc.get_tab_title(GS.TAB_SKILLS).begins_with("Вміння") and tc.get_tab_title(GS.TAB_PERKS).begins_with("Загартування") and tc.get_tab_title(GS.TAB_CHALLENGES).begins_with("Виклики") and GS.TAB_CHALLENGES == game.UiCharacter.TAB_CHALLENGES, "порадник знає справжні номери вкладок")
+	game.close_character()
+	await _frames(2)
+	# ---- Позначки на мапі ----
+	mv.legend_pressed.emit()
+	await _frames(2)
+	var lt := ""
+	for n in game.hud.map_panel.find_children("*", "Label", true, false):
+		lt += n.text + "\n"
+	check(game.map_legend and "Позначки на мапі" in lt and "Зелена галочка" in lt and "Зірка" in lt and "Облога" in lt, "кнопка «?» показує пояснення позначок")
+	game._on_map_select("sich")
+	await _frames(2)
+	check(not game.map_legend, "вибір місця закриває пояснення")
+	# ---- Нові заняття ----
+	check(w.hints.has("unlocks_seen"), "гра запам'ятала, що героєві вже відкрито")
+	var VS = load("res://scripts/game/vigil_service.gd")
+	w.hints.erase("open:vigil")
+	game.hud.hide_hint()
+	game.enter_map()
+	await _frames(2)
+	check(VS.unlocked(p) and w.hints.has("open:vigil") and game.hud.hint_panel.visible and "Козацька варта" in game.hud.hint_label.text, "про нововідкрите заняття гра каже на мапі")
+	game.hud.hide_hint()
+	game.enter_map()
+	await _frames(2)
+	check(not game.hud.hint_panel.visible, "удруге про те саме не нагадує")
+	# ---- Довідник ----
+	var guide_wiki := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Порадник: що робити далі":
+				guide_wiki = str(e["text"])
+	check("«Далі»" in guide_wiki and "Що робити зараз" in guide_wiki and ("до %d порад" % GS.MAX) in guide_wiki and "«?»" in guide_wiki, "довідник пояснює порадник")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
 
 func _suite_event_lift() -> void:
 	suite("Події: нечисть міряється силою з героєм")
