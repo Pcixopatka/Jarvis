@@ -140,6 +140,9 @@ func _run() -> void:
 	await _suite_boss_hunt()
 	await _suite_costumes()
 	await _suite_pets()
+	await _suite_enchant_fair()
+	await _suite_auto()
+	await _suite_saga()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7920,9 +7923,11 @@ func _suite_journal() -> void:
 	w.story = {"chapter": game.StoryService.Story.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
 	var done_sec: Dictionary = Journal.sections(w, p)[0]
 	var all_done := true
-	for ch in done_sec["chapters"]:
-		all_done = all_done and str(ch["state"]) == "done"
-	check(str(done_sec["title"]) == "Історія" and done_sec["rows"].is_empty() and all_done and "Історію пройдено" in str(done_sec["empty"]) and "Глибини" in str(done_sec["empty"]), "після фіналу розділ «Історія» лишається: усе пройдено й сказано, що далі")
+	var main_n: int = game.StoryService.Story.CHAPTERS.size()
+	for ci in done_sec["chapters"].size():
+		# розділи головної історії пройдено; кроки «Попелу за вітром» ще попереду
+		all_done = all_done and str(done_sec["chapters"][ci]["state"]) == ("done" if ci < main_n else "ahead")
+	check(str(done_sec["title"]) == "Історія" and done_sec["rows"].is_empty() and all_done and done_sec["chapters"].size() > main_n and "Попіл за вітром" in str(done_sec["empty"]) and "Історію пройдено" in str(done_sec["empty"]) and "Глибини" in str(done_sec["empty"]), "після фіналу розділ «Історія» лишається: усе пройдено й сказано, що далі")
 	game.open_character()
 	game.char_tab = 1
 	game._build_character()
@@ -12421,6 +12426,426 @@ func _suite_pets() -> void:
 	for n in game.combat.entities.get_children():
 		horse = horse or n.get_script() == game.combat.PetScript
 	check(not horse, "кінь у бій не йде")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_enchant_fair() -> void:
+	suite("Зачарування речей і трофейний ярмарок")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Ench = load("res://scripts/data/enchants.gd")
+	var ES = load("res://scripts/game/enchant_service.gd")
+	var Fair = load("res://scripts/game/fair_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var Uniq = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	# ---- Дані зачарувань ----
+	var data_ok := true
+	var by_slot := {}
+	for id in Ench.ORDER:
+		var D: Dictionary = Ench.DEFS[id]
+		data_ok = data_ok and str(D["name"]) != "" and not D["fx"].is_empty()
+		for k in D["fx"]:
+			data_ok = data_ok and Classes.FX_TEXT.has(k) and float(D["fx"][k]) > 0.0
+		for sl in D["slots"]:
+			data_ok = data_ok and sl in Data.SLOTS
+			by_slot[sl] = int(by_slot.get(sl, 0)) + 1
+	var every_slot := true
+	for sl in Data.SLOTS:
+		every_slot = every_slot and int(by_slot.get(sl, 0)) >= 3
+	check(data_ok and every_slot and Ench.ORDER.size() == Ench.DEFS.size(), "кожне зачарування має назву й відомий хист, на кожну річ є щонайменше три")
+	# ---- Накласти ----
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 60
+	var plain: Dictionary = Data.gen_item(60, 2, "weapon", "sabre")
+	var leg: Dictionary = Data.gen_item(60, 3, "weapon", "sabre")
+	var body: Dictionary = Data.gen_item(60, 3, "body")
+	for it in [plain, leg, body]:
+		p.add_item(it, true)
+	p.equip(leg["uid"])
+	p.equip(body["uid"])
+	p.recalc()
+	check(not ES.can_enchant(plain) and ES.can_enchant(leg) and "лише легендарні" in ES.block_reason(p, plain, "zviroboi"), "зачаровують лише легендарне й краще")
+	check("zviroboi" in Ench.options(leg) and not "obereh" in Ench.options(leg) and "obereh" in Ench.options(body) and "не лягає" in ES.block_reason(p, leg, "obereh"), "зброя й обладунок мають свої зачарування")
+	check("бракує" in ES.block_reason(p, leg, "zviroboi") and not ES.enchant(p, leg["uid"], "zviroboi"), "без гривень і трофеїв коваль не зачарує")
+	p.gold = 10000000
+	p.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	var cost: Dictionary = Ench.cost(leg)
+	var big0: float = p.fx("big_dmg")
+	check(ES.enchant(p, leg["uid"], "zviroboi") and ES.of(leg) == "zviroboi" and p.gold == 10000000 - int(cost["gold"]) and int(p.resources["trophy"]) == 100000 - int(cost["trophy"]) and int(p.resources["iron"]) == 100000 - int(cost["iron"]), "зачаровано: гривні, трофеї й залізо списано")
+	check(is_equal_approx(p.fx("big_dmg"), big0 + float(Ench.DEFS["zviroboi"]["fx"]["big_dmg"])) and "Звіробій" in ES.text(leg) and "елітам і босам" in ES.text(leg), "властивість діє на героя й видна на картці: %s" % ES.text(leg))
+	check(ES.block_reason(p, leg, "zviroboi") == "уже лежить на речі" and ES.enchant(p, leg["uid"], "dobyvach") and ES.of(leg) == "dobyvach" and is_equal_approx(p.fx("big_dmg"), big0) and p.fx("execute") > 0.0, "нове зачарування замінює старе")
+	var ward0: float = p.fx("ward")
+	check(ES.enchant(p, body["uid"], "obereh") and is_equal_approx(p.fx("ward"), ward0 + float(Ench.DEFS["obereh"]["fx"]["ward"])), "зачарування з різних речей складаються")
+	p.unequip(body["uid"])
+	p.recalc()
+	check(is_equal_approx(p.fx("ward"), ward0), "знята річ свого зачарування не дає")
+	var peril_item: Dictionary = Data.gen_item(Ench.STRONG_LEVEL, 3, "weapon", "sabre")
+	check(is_equal_approx(float(Ench.fx_of(peril_item, "zviroboi")["big_dmg"]), float(Ench.DEFS["zviroboi"]["fx"]["big_dmg"]) * Ench.STRONG_MULT) and int(Ench.cost(peril_item)["gold"]) > int(cost["gold"]), "на речах %d-го рівня зачарування сильніше й дорожче" % Ench.STRONG_LEVEL)
+	var copy = _new_player()
+	copy.from_dict(p.to_dict())
+	check(ES.of(copy.find_item(leg["uid"])) == "dobyvach", "зачарування зберігається з річчю")
+	# ---- Ярмарок ----
+	var day0 := 1800000000 - 1800000000 % 86400 + 3600
+	CS.now_override = day0
+	var w = WorldState.new()
+	var low = _new_player()
+	low.change_class("cossack")
+	low.level = Fair.MIN_LEVEL - 1
+	check(not Fair.unlocked(low) and Fair.unlocked(p), "ярмарок відкривається з %d-го рівня" % Fair.MIN_LEVEL)
+	var stock: Array = Fair.stock(p)
+	var golds := stock.filter(func(e): return e["kind"] == "unique")
+	var arts := stock.filter(func(e): return e["kind"] == "artifact")
+	var goods := stock.filter(func(e): return e["kind"] == "good")
+	var fits := true
+	var top: int = Fair.top_tier(60)
+	for e in golds:
+		var D: Dictionary = Uniq.DEFS[e["id"]]
+		fits = fits and int(D["tier"]) <= top and int(D["tier"]) >= top - 1 and (D["slot"] != "weapon" or D["type"] in Classes.CLASSES["cossack"]["weapons"]) and int(e["trophy"]) == int(Fair.UNIQUE_TROPHY[int(D["tier"])])
+	check(golds.size() == Fair.GOLD_ITEMS and fits and arts.size() == 1 and goods.size() == Fair.GOODS_ORDER.size(), "товар тижня: три золоті речі під клас і рівень, артефакт і дрібний товар")
+	check(Fair.stock(p) == stock, "протягом тижня товар той самий")
+	var seen := {}
+	for i in 12:
+		CS.now_override = day0 + i * 7 * 86400
+		for e in Fair.stock(p):
+			if e["kind"] == "unique":
+				seen[e["id"]] = true
+	check(seen.size() > Fair.GOLD_ITEMS + 2, "щотижня золоті речі інші (%d різних за дванадцять тижнів)" % seen.size())
+	CS.now_override = day0
+	var g: Dictionary = golds[0]
+	p.gold = 0
+	check("бракує гривень" in Fair.block_reason(w, p, g["key"]) and not Fair.buy(w, p, g["key"])["ok"], "без гривень не виміняти")
+	p.gold = 10000000
+	var tr0: int = int(p.resources["trophy"])
+	var bag0: int = p.inventory.size()
+	var res: Dictionary = Fair.buy(w, p, g["key"])
+	var got: Dictionary = p.inventory[p.inventory.size() - 1]
+	check(res["ok"] and p.inventory.size() == bag0 + 1 and got.get("unique", "") == g["id"] and int(got["ilvl"]) == 60 and int(p.resources["trophy"]) == tr0 - int(g["trophy"]) and p.gold == 10000000 - int(g["gold"]), "золоту річ виміняно: вона рівня героя, трофеї й гривні списано")
+	check("уже взято" in Fair.block_reason(w, p, g["key"]) and not Fair.buy(w, p, g["key"])["ok"], "ту саму річ цього тижня вдруге не взяти")
+	var a: Dictionary = arts[0]
+	check(Fair.buy(w, p, a["key"])["ok"] and Arts.has(p.inventory, a["id"]), "артефакт виміняно")
+	var st0: int = load("res://scripts/game/stone_service.gd").count(p, "alatyr")
+	check(Fair.buy(w, p, "g:alatyr")["ok"] and load("res://scripts/game/stone_service.gd").count(p, "alatyr") == st0 + 1, "камінь долі виміняно")
+	var safe_n := 0
+	for i in int(Fair.GOODS["safe"]["limit"]) + 2:
+		if Fair.buy(w, p, "g:safe")["ok"]:
+			safe_n += 1
+	check(safe_n == int(Fair.GOODS["safe"]["limit"]) and int(w.boosts.get("safe_sharpen", 0)) == safe_n, "жетонів безпечної заточки на тиждень %d" % safe_n)
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(Fair.bought(w2, g["key"]) == 1, "взяте на ярмарку зберігається з героєм")
+	CS.now_override = day0 + 8 * 86400
+	check(Fair.bought(w, g["key"]) == 0 and Fair.bought(w, "g:safe") == 0, "нового тижня ярмарок знову повний")
+	CS.now_override = 0
+	# ---- Довідник ----
+	var arts_ok := 0
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Зачарування речей":
+			var all := true
+			for id in Ench.ORDER:
+				all = all and str(Ench.DEFS[id]["name"]) in str(e["text"])
+			arts_ok += 1 if all else 0
+		if str(e["title"]) == "Трофейний ярмарок" and str(int(Fair.UNIQUE_TROPHY[5])) in str(e["text"]) and str(Fair.ARTIFACT_TROPHY) in str(e["text"]):
+			arts_ok += 1
+	check(arts_ok == 2, "довідник описує зачарування й ярмарок із числами")
+	# ---- У грі: кузня й ярмарок на хуторі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	gp.level = 60
+	gp.gold = 10000000
+	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	gw.camp["buildings"] = {"kuznia": 3}
+	var sw: Dictionary = Data.gen_item(60, 3, "weapon", "sabre")
+	gp.add_item(sw, true)
+	gp.equip(sw["uid"])
+	gp.recalc()
+	game.enter_camp()
+	await _frames(2)
+	var tabs := []
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		tabs.append(tc.get_tab_title(i))
+	check("Ярмарок" in tabs and "Кузня" in tabs, "на хуторі є кузня й ярмарок")
+	game.camp_tab = tabs.find("Кузня")
+	game.camp_do("select", sw["uid"])
+	await _frames(2)
+	var ench_btn := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		ench_btn = ench_btn or b.text.begins_with("Звіробій")
+	check(ench_btn, "у кузні під річчю є список зачарувань")
+	game.camp_do("enchant", [sw["uid"], "zviroboi"])
+	await _frames(2)
+	check(ES.of(gp.equipment["weapon"]) == "zviroboi" and "Зачаровано" in game.smith_msg and int(gw.stats.get("enchant", 0)) == 1, "зачаровано в кузні: %s" % game.smith_msg)
+	CS.now_override = day0
+	var fk: String = Fair.stock(gp)[0]["key"]
+	game.camp_do("fair_buy", fk)
+	await _frames(2)
+	check(Fair.bought(gw, fk) == 1 and int(gw.stats.get("fair", 0)) == 1, "на ярмарку виміняно золоту річ")
+	CS.now_override = 0
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_auto() -> void:
+	suite("Автобій")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var AS = load("res://scripts/game/auto_service.gd")
+	var PR = load("res://scripts/game/premium_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "dungeon", "boss_hunt", "potion", "mana_potion", "varenyk", "res"]:
+		w.hints[k] = true
+	p.change_class("cossack")
+	game._sync_class()
+	while p.level < 30:
+		p.add_xp(p.xp_next - p.xp)
+	p.stats["str"] = 300
+	p.stats["vit"] = 300
+	p.recalc()
+	p.hp = p.max_hp
+	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	# ---- Де можна ----
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(game.hud.auto_btn.visible and AS.applies(c, "wild_field") and "відкриється" in AS.block_reason(w, c, "wild_field"), "у непройденому місці кнопка є, але автобій ще закритий")
+	game.toggle_auto()
+	check(not game.auto_on, "закритий автобій не вмикається")
+	w.cleared["wild_field"] = 1
+	check(AS.block_reason(w, c, "wild_field") != "" and AS.need_clears(w) == AS.MIN_CLEARS, "одного проходження мало: треба %d" % AS.MIN_CLEARS)
+	PR.now_override = 1800000000.0
+	SH.state(w)["coins"] = PR.PRICE
+	PR.buy(w)
+	check(AS.block_reason(w, c, "wild_field") == "" and AS.need_clears(w) == 1, "з універсалом досить одного проходження")
+	w.shop["premium_until"] = 0.0
+	PR.now_override = -1.0
+	w.cleared["wild_field"] = AS.MIN_CLEARS
+	check(AS.block_reason(w, c, "wild_field") == "", "пройдене тричі місце відкрите для автобою")
+	# ---- Герой б'ється сам ----
+	game.toggle_auto()
+	await _frames(2)
+	check(game.auto_on and game.hud.auto_btn.text == "Авто: йде", "автобій увімкнено")
+	var kills0: int = c.field_kills
+	var start: Vector2 = p.global_position
+	await _frames(600)
+	check(c.field_kills > kills0 + 3 and p.global_position.distance_to(start) > 50.0 and p.alive, "за десять секунд герой сам пішов до нечисті й бив її (вбито %d)" % (c.field_kills - kills0))
+	# дотик до джойстика забирає керування
+	game.hud.joystick._touch_index = 0
+	game.hud.joystick.vector = Vector2(0, -1)
+	check(game.hud.move_vector() == Vector2(0, -1), "палець на джойстику веде героя сам")
+	game.hud.joystick.release()
+	# пауза й повернення
+	game._show_pause()
+	await _frames(2)
+	game._resume_play()
+	await _frames(2)
+	check(game.auto_on and game.hud.auto_btn.visible, "після паузи автобій триває")
+	# до кінця зачистки й у портал
+	var guard := 0
+	while game.state == game.State.PLAYING and guard < 150:
+		for e in get_nodes_in_group("enemies"):
+			if is_instance_valid(e) and not e.dead:
+				e.take_damage(e.max_hp * 100.0, Vector2.ZERO)
+		c.field_kills = maxi(c.field_kills, c.field_goal - 1)
+		await _frames(20)
+		guard += 1
+	check(game.state == game.State.MAP and int(w.cleared.get("wild_field", 0)) == AS.MIN_CLEARS + 1, "після зачистки герой сам вийшов крізь портал на мапу")
+	check(game.hud.auto_vector == Vector2.ZERO and not game.hud.btn_attack.held and not game.hud.auto_btn.visible, "на мапі автобій нічого не тисне")
+	# ---- Де не можна ----
+	var BS = load("res://scripts/game/boss_service.gd")
+	game.start_boss("day")
+	await _frames(4)
+	check(game.state == game.State.PLAYING and not game.hud.auto_btn.visible and AS.block_reason(w, c, c.loc_id) != "", "на босі дня автобою нема")
+	var hp_boss := 0.0
+	for e in get_nodes_in_group("enemies"):
+		if e.is_boss:
+			hp_boss = e.hp
+	await _frames(60)
+	var touched := false
+	for e in get_nodes_in_group("enemies"):
+		if e.is_boss and e.hp < hp_boss:
+			touched = true
+	check(not touched and not game.hud.btn_attack.held, "увімкнений раніше автобій боса сам не б'є")
+	game.enter_map()
+	await _frames(2)
+	var peril_id: String = load("res://scripts/game/peril_service.gd").ids()[0]
+	c.loc = Data.LOCATIONS[peril_id]
+	check(not AS.applies(c, peril_id) and not AS.applies(c, "hlybyny") and not AS.applies(c, "duel"), "у надважкій печері, Глибинах і особливих боях автобою нема")
+	# ---- Довідник ----
+	var art := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Автобій":
+			art = str(e["text"])
+	check("%d рази" % AS.MIN_CLEARS in art and "%d%%" % roundi(AS.POTION_AT * 100.0) in art, "довідник описує автобій")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_saga() -> void:
+	suite("«Попіл за вітром»: продовження сюжету")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Saga = load("res://scripts/data/saga.gd")
+	var SS = load("res://scripts/game/saga_service.gd")
+	var Story = load("res://scripts/data/story.gd")
+	var Peril = load("res://scripts/game/peril_service.gd")
+	var JS = load("res://scripts/game/journal_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	# ---- Дані ----
+	var data_ok := true
+	var locs := []
+	for st in Saga.STEPS:
+		data_ok = data_ok and Story.NPCS.has(st["giver"]) and Data.CITIES.has(st["city"]) and Data.LOCATIONS.has(st["objective"]["loc"]) and not st["start"].is_empty() and not st["end"].is_empty() and int(st["reward"]["gold"]) > 0
+		locs.append(st["objective"]["loc"])
+		for ln in st["start"] + st["end"]:
+			data_ok = data_ok and Story.NPCS.has(ln[0]) and str(ln[1]).length() > 10
+		data_ok = data_ok and str(int(Data.LOCATIONS[st["objective"]["loc"]]["level"])) in str(st["objective"]["text"])
+	check(data_ok and locs == Peril.ids() and Saga.STEPS.size() == 5, "п'ять кроків: кожен веде до свого надважкого боса, оповідачі й міста існують")
+	var top := 0
+	for a in Ach.ACHIEVEMENTS:
+		if str(a["stat"]) == "saga":
+			top = maxi(top, int(a["goal"]))
+	check(top == Saga.STEPS.size(), "останнє досягнення просить усі кроки")
+	# ---- Поки триває головний сюжет ----
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	w.hero_level = 99
+	check(StoryService.state(w)["stage"] != "done" and not StoryService.objective_line(w).contains(Saga.TITLE) and not str(StoryService.city_dialogue(w, "sich").get("kind", "")).begins_with("saga") and StoryService.on_event(w, p, "dungeon", locs[0]).is_empty() and w.saga.is_empty(), "поки головну історію не пройдено, продовження мовчить")
+	# ---- Відкриття ----
+	w.story = {"chapter": Story.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
+	w.hero_level = Saga.MIN_LEVEL - 1
+	check(StoryService.objective_line(w) == "" and str(Saga.MIN_LEVEL) in SS.teaser(w) and StoryService.target(w) == "" and StoryService.city_dialogue(w, "sich").is_empty() and StoryService.chapter_title(w) == "", "до %d-го рівня лише обіцянка продовження в журналі" % Saga.MIN_LEVEL)
+	w.hero_level = Saga.MIN_LEVEL
+	var first: Dictionary = Saga.STEPS[0]
+	check("Остап" in StoryService.objective_line(w) and StoryService.target(w) == first["city"] and Saga.TITLE in StoryService.chapter_title(w), "з %d-го рівня зірка веде до оповідача: %s" % [Saga.MIN_LEVEL, StoryService.objective_line(w)])
+	var d: Dictionary = StoryService.city_dialogue(w, first["city"])
+	check(d.get("kind", "") == "saga_start" and d["lines"].size() == first["start"].size() and StoryService.city_dialogue(w, "kyiv").is_empty(), "оповідач говорить лише у своєму місті")
+	StoryService.hero_class = "strilets"
+	var addr: Array = StoryService.city_dialogue(w, first["city"])["lines"]
+	var said := ""
+	for ln in addr:
+		said += str(ln[1])
+	check("стрільче" in said and not "козаче" in said, "до стрільця й тут звертаються «стрільче»")
+	StoryService.hero_class = "cossack"
+	var msgs: Array = StoryService.on_dialogue_done(w, p, "saga_start")
+	check(SS.state(w)["stage"] == "active" and StoryService.target(w) == first["objective"]["loc"] and str(first["objective"]["text"]) in StoryService.objective_line(w) and not msgs.is_empty(), "після розмови мета: надважка печера")
+	# ---- Бос і нагорода ----
+	check(StoryService.on_event(w, p, "dungeon", "kremlin").is_empty() and SS.state(w)["stage"] == "active", "чужа печера кроку не зараховує")
+	var done: Array = StoryService.on_event(w, p, "dungeon", first["objective"]["loc"])
+	check(SS.state(w)["stage"] == "turnin" and StoryService.target(w) == first["city"] and "Повертайся" in StoryService.objective_line(w) and not done.is_empty(), "боса здолано: повертайся до оповідача")
+	var d2: Dictionary = StoryService.city_dialogue(w, first["city"])
+	var gold0: int = p.gold
+	var tr0: int = int(p.resources.get("trophy", 0))
+	check(d2.get("kind", "") == "saga_end", "оповідач чекає з кінцевою розмовою")
+	var fin: Array = StoryService.on_dialogue_done(w, p, "saga_end")
+	check(p.gold == gold0 + int(first["reward"]["gold"]) and int(p.resources["trophy"]) == tr0 + int(first["reward"]["trophy"]) and SS.done_count(w) == 1 and SS.state(w)["stage"] == "offer" and not fin.is_empty(), "крок завершено: гривні й трофеї видано, відкрито наступний")
+	check(StoryService.target(w) == Saga.STEPS[1]["city"], "далі зірка веде до наступного оповідача")
+	# ---- Бос, якого вже здолано раніше ----
+	w.cleared[Saga.STEPS[1]["objective"]["loc"]] = 2
+	StoryService.on_dialogue_done(w, p, "saga_start")
+	check(SS.state(w)["stage"] == "turnin", "давно здоланого боса зараховано одразу після розмови")
+	StoryService.on_dialogue_done(w, p, "saga_end")
+	# ---- Збереження ----
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	w2.hero_level = 99
+	check(SS.done_count(w2) == 2 and StoryService.target(w2) == Saga.STEPS[2]["city"], "поступ продовження зберігається")
+	w.hero_level = 10
+	check(SS.unlocked(w) and StoryService.target(w) == Saga.STEPS[2]["city"], "почату історію не закриває навіть нижчий рівень")
+	w.hero_level = 99
+	# ---- До кінця ----
+	var bag0: int = p.inventory.size()
+	for i in range(2, Saga.STEPS.size()):
+		StoryService.on_dialogue_done(w, p, "saga_start")
+		StoryService.on_event(w, p, "dungeon", Saga.STEPS[i]["objective"]["loc"])
+		StoryService.on_dialogue_done(w, p, "saga_end")
+	var prize: Dictionary = p.inventory[p.inventory.size() - 1] if p.inventory.size() > bag0 else {}
+	check(SS.finished(w) and SS.done_count(w) == Saga.STEPS.size() and StoryService.objective_line(w) == "" and StoryService.target(w) == "" and prize.get("name", "") == Saga.STEPS[Saga.STEPS.size() - 1]["reward"]["item"]["name"], "історію завершено: останній дар у торбі, зірка зникла")
+	check(StoryService.city_dialogue(w, "sich").is_empty() and StoryService.on_event(w, p, "dungeon", locs[0]).is_empty(), "після кінця оповідачі мовчать")
+	# ---- Журнал і довідник ----
+	var w3 = WorldState.new()
+	w3.story = {"chapter": Story.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
+	w3.hero_level = 95
+	var jr: Array = JS.sections(w3, p)
+	var story_sec: Dictionary = {}
+	for sec in jr:
+		if str(sec.get("title", "")).begins_with("Історія"):
+			story_sec = sec
+	var now_titles := []
+	for ch in story_sec.get("chapters", []):
+		if ch["state"] == "now":
+			now_titles.append(ch["title"])
+	check(story_sec.get("chapters", []).size() == Story.CHAPTERS.size() + Saga.STEPS.size() and now_titles.size() == 1 and Saga.TITLE in str(now_titles[0]) and story_sec["rows"].size() == 1, "журнал показує кроки продовження поруч із розділами")
+	var art := ""
+	for e in WS._entries("basics"):
+		if Saga.TITLE in str(e["title"]):
+			art = str(e["text"])
+	var art_ok := art != "" and str(Saga.MIN_LEVEL) in art
+	for st in Saga.STEPS:
+		art_ok = art_ok and str(st["title"]) in art
+	check(art_ok, "довідник описує продовження й усі кроки")
+	# ---- У грі: розмова на Січі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "depths_open"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.level = 92
+	gp.recalc()
+	gw.story = {"chapter": Story.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
+	game.enter_map()
+	await _frames(2)
+	check(game.hud.map_view.story_target == "sich", "зірка на мапі стоїть над Січчю")
+	game.enter_city("sich")
+	await _frames(3)
+	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "на Січі починається розмова з кобзарем")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

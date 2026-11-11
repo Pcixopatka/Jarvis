@@ -12,6 +12,7 @@ signal mana_pressed
 signal pause_pressed
 signal character_pressed
 signal map_pressed
+signal auto_pressed
 signal map_location_selected(id: String)
 
 const Classes := preload("res://scripts/data/classes.gd")
@@ -50,6 +51,8 @@ var pause_btn: Button
 var corner_box: HBoxContainer  # рядок кнопок у правому верхньому куті: «Мапа», герой, меню
 var char_btn: Button
 var map_btn: Button
+var auto_btn: Button  # автобій: видно лише там, де він буває (виставляє Game)
+var auto_vector := Vector2.ZERO  # куди веде героя автобій; дотик до джойстика важить більше
 var map_view
 var map_panel: PanelContainer
 var screen_root: Control = null
@@ -202,6 +205,8 @@ func _build() -> void:
 	corner_box.add_theme_constant_override("separation", 14)
 	corner_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_root.add_child(corner_box)
+	auto_btn = _corner_button("Авто", 110, func(): auto_pressed.emit())
+	auto_btn.add_theme_font_size_override("font_size", 22)
 	map_btn = _corner_button("Мапа", 115, func(): map_pressed.emit())
 	map_btn.add_theme_font_size_override("font_size", 24)
 	char_btn = _corner_button("Козак", 180, func(): character_pressed.emit())
@@ -425,6 +430,9 @@ func set_mode(show_stats: bool, combat: bool) -> void:
 	stats_box.visible = show_stats
 	pause_btn.visible = combat
 	map_btn.visible = combat
+	if not combat:
+		auto_btn.visible = false
+		auto_vector = Vector2.ZERO
 	char_btn.visible = show_stats
 	controls.visible = combat
 	if not combat:
@@ -454,7 +462,9 @@ func set_map_panel(content: Control, footer: Control = null) -> void:
 
 
 func move_vector() -> Vector2:
-	return joystick.vector.limit_length(1.0)
+	if joystick.touched() or auto_vector == Vector2.ZERO:
+		return joystick.vector.limit_length(1.0)
+	return auto_vector.limit_length(1.0)
 
 
 # ======================= Оновлення =======================

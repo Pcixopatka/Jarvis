@@ -7,6 +7,7 @@ extends RefCounted
 const Story := preload("res://scripts/data/story.gd")
 const Data := preload("res://scripts/data/data.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
+const SagaService := preload("res://scripts/game/saga_service.gd")
 
 ## Клас героя — для звертань у розмовах («козаче» / «волхве»). Виставляє гра.
 static var hero_class := "cossack"
@@ -30,7 +31,7 @@ static func current(world) -> Dictionary:
 static func chapter_title(world) -> String:
 	var s := state(world)
 	if s["stage"] == "done":
-		return ""
+		return SagaService.title(world) if SagaService.unlocked(world) else ""  # після Кремля — «Попіл за вітром»
 	return Story.CHAPTERS[s["chapter"]]["title"]
 
 
@@ -141,7 +142,11 @@ static func city_dialogue(world, city: String) -> Dictionary:
 	var s := state(world)
 	var st := current(world)
 	if st.is_empty():
-		return {}
+		# головний сюжет завершено: далі говорить «Попіл за вітром»
+		var sd: Dictionary = SagaService.city_dialogue(world, city)
+		if sd.is_empty():
+			return {}
+		return {"kind": sd["kind"], "lines": lines(world, sd["lines"]), "choices": []}
 	if s["stage"] == "offer" and st["city"] == city:
 		return {"kind": "start", "lines": lines(world, st["start"]), "choices": []}
 	if s["stage"] == "turnin" and st["turn_in"] == city:
@@ -151,6 +156,8 @@ static func city_dialogue(world, city: String) -> Dictionary:
 
 ## Викликається, коли гравець дочитав діалог. Повертає повідомлення для гравця.
 static func on_dialogue_done(world, player, kind: String, choice: int = -1) -> Array:
+	if kind.begins_with("saga_"):
+		return SagaService.on_dialogue_done(world, player, kind)
 	var s := state(world)
 	if kind == "start":
 		s["stage"] = "active"
@@ -166,6 +173,8 @@ static func on_dialogue_done(world, player, kind: String, choice: int = -1) -> A
 ## type: clear / dungeon / visit (arg = id місця) або kill (arg = вид ворога).
 static func on_event(world, player, type: String, arg: String) -> Array:
 	var s := state(world)
+	if s["stage"] == "done":
+		return SagaService.on_event(world, type, arg)
 	if s["stage"] != "active":
 		return []
 	var st := current(world)
@@ -287,7 +296,7 @@ static func objective_line(world) -> String:
 	var s := state(world)
 	var st := current(world)
 	if st.is_empty():
-		return ""
+		return SagaService.objective_line(world)
 	match s["stage"]:
 		"offer":
 			return "★ Поговори: %s (%s)" % [Story.NPCS[st["giver"]]["name"], Data.place_name(st["city"])]
@@ -305,7 +314,7 @@ static func target(world) -> String:
 	var s := state(world)
 	var st := current(world)
 	if st.is_empty():
-		return ""
+		return SagaService.target(world)
 	match s["stage"]:
 		"offer":
 			return st["city"]

@@ -68,6 +68,7 @@ const AdRewards := preload("res://scripts/game/ad_rewards.gd")
 const PremiumService := preload("res://scripts/game/premium_service.gd")
 const CostumeService := preload("res://scripts/game/costume_service.gd")
 const PetService := preload("res://scripts/game/pet_service.gd")
+const AutoService := preload("res://scripts/game/auto_service.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
@@ -161,6 +162,7 @@ func _ready() -> void:
 			_show_map_menu())
 	hud.character_pressed.connect(open_character)
 	hud.map_pressed.connect(func(): if state == State.PLAYING: _try_leave())
+	hud.auto_pressed.connect(toggle_auto)
 	hud.map_location_selected.connect(_on_map_select)
 	hud.map_view.guide_pressed.connect(_guide_go)
 	hud.map_view.legend_pressed.connect(func():
@@ -220,6 +222,8 @@ func _process(delta: float) -> void:
 		return
 	if state == State.PLAYING:
 		meta["playtime"] = float(meta.get("playtime", 0.0)) + delta
+		if auto_on and combat.active and AutoService.block_reason(world, combat, combat.loc_id) == "":
+			AutoService.drive(self)
 		AdRewards.tick(world, delta)
 		for gone in player.tick_buffs(delta):  # страви й зілля сили діють за часом бою
 			_buff_gone(gone)
@@ -484,6 +488,7 @@ func _continue_game() -> void:
 
 func _leave_combat() -> void:
 	hud.close_dialogue()
+	AutoService.stop(self)
 	if combat.active:
 		if combat.is_vigil():
 			leave_notice = "\n".join(VigilService.finish(world, player, combat.vigil_time, combat.vigil_kills))
@@ -680,7 +685,41 @@ func enter_location(id: String) -> void:
 	Audio.play_music("boss" if combat.is_duel() else "battle")
 	Audio.play_ambient(Sounds.ambient_for(str(combat.loc.get("biome", "")), combat.is_vigil() or bool(combat.loc.get("night", false))))
 	Audio.play("unsheathe", 0.05)
+	_refresh_auto_button()
 	hint("combat", "Ліва частина екрана — рух. Тримай «Удар» — козак сам б'є найближчу нечисть. Коли ворог червоніє — він замахується: тисни «Перекид»!")
+
+
+# ======================= Автобій =======================
+
+var auto_on := false  # гравець увімкнув автобій; діє лише там, де він дозволений (AutoService)
+
+
+## Кнопка «Авто» в бою: увімкнути чи вимкнути. Де автобій ще закритий, каже чому.
+func toggle_auto() -> void:
+	if state != State.PLAYING:
+		return
+	if auto_on:
+		auto_on = false
+		AutoService.stop(self)
+		hud.show_banner("Автобій вимкнено", UI.TEXT)
+	else:
+		var why: String = AutoService.block_reason(world, combat, combat.loc_id)
+		if why != "":
+			hud.show_banner("Автобій: %s" % why, UI.BAD)
+			return
+		auto_on = true
+		hud.show_banner("Автобій увімкнено.\nТоркнись лівої частини екрана, щоб вести героя самому", UI.GOOD)
+	_refresh_auto_button()
+
+
+func _refresh_auto_button() -> void:
+	var shown: bool = state == State.PLAYING and combat.active and AutoService.applies(combat, combat.loc_id)
+	hud.auto_btn.visible = shown
+	var on: bool = auto_on and shown and AutoService.block_reason(world, combat, combat.loc_id) == ""
+	hud.auto_btn.text = "Авто: йде" if on else "Авто"
+	hud.auto_btn.modulate = Color(0.75, 1.0, 0.75) if on else Color.WHITE
+	if not on:
+		AutoService.stop(self)
 
 
 func _try_leave() -> void:
@@ -699,6 +738,7 @@ func _resume_play() -> void:
 	state = State.PLAYING
 	get_tree().paused = false
 	hud.set_mode(true, true)
+	_refresh_auto_button()
 
 
 # ======================= Події =======================
@@ -884,6 +924,8 @@ func _story_dialogue(city: String) -> void:
 	dlg.finished.connect(func(choice: int):
 		hud.close_dialogue()
 		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice)
+		if str(d["kind"]) == "saga_end":
+			_record("saga", StoryService.SagaService.done_count(world))
 		CampService.apply_effects(world, player)  # вибір міг дати постійний наслідок
 		_after_class_change()
 		_story_event("job", str(player.job_level))  # мета «майстерність» могла вже бути досягнута
@@ -2934,6 +2976,18 @@ func camp_do(action: String, arg) -> void:
 			if g > 0:
 				Audio.play("coin", 0.0)
 				hud.show_banner("Мед продано: +%d грн" % g, UI.GOLD)
+		"enchant":
+			if player.EnchantService.enchant(player, int(arg[0]), str(arg[1])):
+				Audio.play("spell", 0.05)
+				smith_msg = "Зачаровано: %s" % player.EnchantService.text(player.find_item(int(arg[0])))
+				smith_msg_color = Color(0.75, 0.6, 1.0)
+				_record("enchant")
+		"fair_buy":
+			var fr: Dictionary = load("res://scripts/game/fair_service.gd").buy(world, player, str(arg))
+			if bool(fr["ok"]):
+				Audio.play("coins", 0.05)
+				_record("fair")
+			hud.show_banner(str(fr["msg"]), UI.GOLD if bool(fr["ok"]) else UI.BAD)
 		"pet_up":
 			var was: int = PetService.level(world, str(arg))
 			if PetService.upgrade(world, player, str(arg)):

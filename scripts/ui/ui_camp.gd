@@ -14,6 +14,9 @@ const KleinodService := preload("res://scripts/game/kleinod_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
 const Pets := preload("res://scripts/data/pets.gd")
 const PetService := preload("res://scripts/game/pet_service.gd")
+const Enchants := preload("res://scripts/data/enchants.gd")
+const EnchantService := preload("res://scripts/game/enchant_service.gd")
+const FairService := preload("res://scripts/game/fair_service.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -40,6 +43,8 @@ static func build(game) -> Control:
 	pages.append(["Казан", _kazan(game)])
 	pages.append(["Клейноди", _kleinody(game)])
 	pages.append(["Стайня", _pets(game)])
+	if FairService.unlocked(game.player):
+		pages.append(["Ярмарок", _fair(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,
@@ -274,6 +279,7 @@ static func _forge(game) -> Control:
 	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
 		det.add_child(UI.button("Переплавити на залізо (+%d)" % CampService.salvage_value(it), _do(game, "salvage", sel), Vector2(370, 56), 18))
 	_craft_item_actions(game, det, it)
+	_enchant_block(game, det, it)
 	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, it, func(a: String, b): return _do(game, a, b), true, CampService.forge_cost_mult(w)))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 20, game.smith_msg_color, false))
@@ -484,6 +490,89 @@ static func buff_time(secs: float) -> String:
 
 
 # ---------- Пасіка ----------
+
+## Зачарування вибраної речі: одна особлива властивість на вибір, нове замінює старе.
+static func _enchant_block(game, det: VBoxContainer, it: Dictionary) -> void:
+	if not EnchantService.can_enchant(it):
+		return
+	var p = game.player
+	var cost: Dictionary = Enchants.cost(it)
+	var strong := ", на цій речі в %s сильніше" % "півтора раза" if Enchants.mult(it) > 1.0 else ""
+	var hl := UI.label("Зачарувати (%s)%s. Нове замінює старе:" % [EnchantService.cost_text(cost), strong], 16, UI.MUTED, false)
+	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hl.custom_minimum_size = Vector2(360, 0)
+	det.add_child(hl)
+	for id in Enchants.options(it):
+		var on: bool = EnchantService.of(it) == id
+		var txt := "%s%s\n%s" % ["✧ " if on else "", Enchants.DEFS[id]["name"], game.player.Classes.fx_text(Enchants.fx_of(it, id))]
+		var b := UI.button(txt, _do(game, "enchant", [it["uid"], id]), Vector2(370, 58), 15, EnchantService.block_reason(p, it, id) == "")
+		if on:
+			b.modulate = Color(0.85, 0.75, 1.0)
+		det.add_child(b)
+
+
+## Трофейний ярмарок: тижневий товар скупника за трофеї й гривні.
+static func _fair(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var hl := UI.label("Раз на тиждень скупник привозить рідкісне й міняє на трофеї та гривні. Золоті речі дібрано під твій клас і рівень. Кожну річ можна взяти раз на тиждень, у понеділок товар новий. Твої трофеї: %d." % int(p.resources.get("trophy", 0)), 17, UI.MUTED, false)
+	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(hl)
+	var grid := UI.grid(2)
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 10)
+	v.add_child(grid)
+	var Uniq = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	for e in FairService.stock(p):
+		var panel := PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), Color(0.45, 0.36, 0.22), 10, 10))
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		panel.add_child(h)
+		var left := VBoxContainer.new()
+		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		left.add_theme_constant_override("separation", 2)
+		h.add_child(left)
+		var sub := ""
+		var text := ""
+		var col: Color = UI.GOLD
+		match str(e["kind"]):
+			"unique":
+				var D: Dictionary = Uniq.DEFS[e["id"]]
+				col = Data.RARITY_COLORS[Uniq.RARITY]
+				sub = "Золота річ «%s» • %s • рівень %d" % [Uniq.TIER_NAMES[int(e["tier"])], Data.SLOT_NAMES[D["slot"]], int(p.level)]
+				text = "%s: %s" % [Uniq.power_name(str(e["id"])), Uniq.power_text(str(e["id"]))]
+			"artifact":
+				col = Data.RARITY_COLORS[Arts.RARITY]
+				sub = "Артефакт • діє з торби"
+				text = str(Arts.DEFS[e["id"]]["text"])
+			_:
+				sub = "можна взяти на тиждень: %d" % int(e["limit"])
+		left.add_child(UI.label(str(e["name"]), 20, col, false))
+		left.add_child(UI.label(sub, 14, UI.MUTED, false))
+		if text != "":
+			var tl := UI.label(text, 15, UI.TEXT, false)
+			tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tl.custom_minimum_size = Vector2(200, 0)
+			left.add_child(tl)
+		var why: String = FairService.block_reason(w, p, str(e["key"]))
+		var right := VBoxContainer.new()
+		right.custom_minimum_size = Vector2(190, 0)
+		right.alignment = BoxContainer.ALIGNMENT_CENTER
+		h.add_child(right)
+		right.add_child(UI.button("Виміняти\n%d трофеїв\n%s грн" % [int(e["trophy"]), UI.num(int(e["gold"]))], _do(game, "fair_buy", str(e["key"])), Vector2(190, 84), 15, why == ""))
+		if why != "":
+			var wl := UI.label(why, 13, UI.GOOD if FairService.bought(w, str(e["key"])) >= int(e["limit"]) else UI.BAD, false)
+			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			wl.custom_minimum_size = Vector2(180, 0)
+			right.add_child(wl)
+		grid.add_child(panel)
+	return v
+
 
 ## Стайня: улюбленці роду. Купити, нагодувати до наступного ступеня, узяти з собою.
 static func _pets(game) -> Control:

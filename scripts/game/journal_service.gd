@@ -36,14 +36,22 @@ static func sections(world, player) -> Array:
 	for i in Story.CHAPTERS.size():
 		chapters.append({"title": str(Story.CHAPTERS[i]["title"]),
 			"state": "done" if finished or i < int(ss["chapter"]) else ("now" if i == int(ss["chapter"]) else "ahead")})
+	# Після Кремля історія триває: кроки «Попелу за вітром» ідуть у тому самому списку розділів
+	var SagaS = StoryService.SagaService
+	if finished:
+		var saga_done: int = SagaS.done_count(world)
+		for i in SagaS.Saga.STEPS.size():
+			chapters.append({"title": "%s. %s" % [SagaS.Saga.TITLE, SagaS.Saga.STEPS[i]["title"]],
+				"state": "done" if i < saga_done else ("now" if i == saga_done and SagaS.unlocked(world) else "ahead")})
 	var story: String = StoryService.objective_line(world)
 	var story_rows := []
 	if story != "":
 		var target: String = StoryService.target(world)
-		var back: bool = str(ss["stage"]) == "turnin"
+		var back: bool = str(ss["stage"]) == "turnin" or (finished and str(SagaS.state(world)["stage"]) == "turnin")
 		story_rows.append(_row(_clean(story), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
-	out.append({"title": "Історія" + ("" if finished else ". " + str(StoryService.chapter_title(world))), "rows": story_rows, "chapters": chapters,
-		"empty": DONE_TEXT if finished else ""})
+	var ch_title: String = str(StoryService.chapter_title(world))
+	out.append({"title": "Історія" + ("" if ch_title == "" else ". " + ch_title), "rows": story_rows, "chapters": chapters,
+		"empty": (DONE_TEXT if finished and (SagaS.finished(world) or not SagaS.unlocked(world)) else "") + ((" " + SagaS.teaser(world)) if finished and SagaS.teaser(world) != "" else "")})
 	# Побратими й посвята в спеціалізацію
 	var rows := []
 	for line in HeroService.objective_lines(world):

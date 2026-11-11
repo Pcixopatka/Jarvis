@@ -171,7 +171,7 @@ static func pending(world, stat: String) -> bool:
 static func record(world, player, stat: String, amount: int = 1) -> Array:
 	var c := state(world, player)
 	var msgs := []
-	if stat in ["level", "depth", "tower", "vigil", "glory", "duel_streak", "peril_bosses", "valor", "set_full"]:  # найвище досягнуте, а не сума
+	if stat in ["level", "depth", "tower", "vigil", "glory", "duel_streak", "peril_bosses", "valor", "set_full", "saga"]:  # найвище досягнуте, а не сума
 		world.stats[stat] = maxi(int(world.stats.get(stat, 0)), amount)
 	else:
 		world.stats[stat] = int(world.stats.get(stat, 0)) + amount

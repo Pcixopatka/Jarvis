@@ -199,6 +199,12 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		v.add_child(label("Зараз вдягнуто: " + Data.item_title(compare), 15, MUTED, false))
 	if item["up"] > 0:
 		v.add_child(label("Заточка +%d: усі бонуси +%d%%" % [item["up"], roundi(item["up"] * Data.UPGRADE_BONUS * 100)], 15, GOLD, false))
+	var ench_text: String = load("res://scripts/game/enchant_service.gd").text(item)
+	if ench_text != "":
+		var el := label("✧ " + ench_text, 16, Color(0.75, 0.6, 1.0), false)
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		el.custom_minimum_size = Vector2(290, 0)
+		v.add_child(el)
 	if int(item.get("sock", 0)) > 0:
 		# гніздо для душі
 		var SS = load("res://scripts/game/soul_service.gd")

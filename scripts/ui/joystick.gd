@@ -34,6 +34,11 @@ func _input(event: InputEvent) -> void:
 		queue_redraw()
 
 
+## Чи тримає гравець палець на джойстику (тоді автобій героя не веде).
+func touched() -> bool:
+	return _touch_index != -1
+
+
 func release() -> void:
 	_touch_index = -1
 	vector = Vector2.ZERO

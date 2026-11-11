@@ -14,6 +14,7 @@ const Uniques := preload("res://scripts/data/uniques.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
 const Costumes := preload("res://scripts/data/costumes.gd")
 const Pets := preload("res://scripts/data/pets.gd")
+const EnchantService := preload("res://scripts/game/enchant_service.gd")
 const Sets := preload("res://scripts/data/sets.gd")
 const Valor := preload("res://scripts/data/valor.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
@@ -636,6 +637,9 @@ func recalc() -> void:
 	valor_fx = Valor.fx(valor_spent, title_fx)
 	skill_fx = Classes.passive_fx(job, skills, weapon_type)
 	_fx = skill_fx.duplicate()
+	var ench: Dictionary = EnchantService.fx_of_equipment(equipment)  # зачарування вдягнених речей
+	for k in ench:
+		_fx[k] = float(_fx.get(k, 0.0)) + float(ench[k])
 	for bid in buffs:
 		for k in buffs[bid]["fx"]:
 			_fx[k] = float(_fx.get(k, 0.0)) + float(buffs[bid]["fx"][k])
