@@ -17,13 +17,14 @@ const HIT_STATUS := {"zarazhenyi": "plague", "pishchalnyk": "plague", "bolotiany
 	"pushkar": "burn", "lisovyi_did": "bleed", "idolyshche": "weak", "karachun": "chill",
 	"almasty": "bleed", "kadzhi": "burn", "dev": "weak", "karakondzhul": "bleed", "samodiva": "chill",
 	"mertvyi_lytsar": "bleed", "lauma": "weak", "aitvaras": "burn", "velnias": "burn", "menkv": "weak", "shurale": "bleed", "chud": "weak",
-	"zolota_baba": "weak", "stallo": "bleed", "khiisi": "chill", "chornoboh": "plague"}
+	"zolota_baba": "weak", "stallo": "bleed", "khiisi": "chill", "chornoboh": "plague",
+	"strygoi": "bleed", "moroi": "weak", "drakula": "bleed"}
 ## Нечисть далеких країв зі своїм прийомом (див. _minion_ability)
 const MINION_ABILITIES := ["pesyholovets", "kamiana_baba", "mara", "vedmid", "kikimora", "mertvyi_strilets", "kromeshnyk", "boyaryn", "lisovyk",
 	"almasty", "kadzhi", "karakondzhul", "samodiva", "mertvyi_lytsar", "lauma", "aitvaras", "menkv", "shurale", "chud", "stallo", "khiisi"]
 ## Боси, що лютішають на половині здоров'я (другий етап бою)
 const PHASE2_BOSSES := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani", "pushkar",
-	"lisovyi_did", "idolyshche", "karachun", "dev", "khala", "velnias", "zolota_baba", "chornoboh"]
+	"lisovyi_did", "idolyshche", "karachun", "dev", "khala", "velnias", "zolota_baba", "chornoboh", "drakula"]
 ## Боси, що лікуються, поки їх не перебити шкодою: [почала, наїлась, вдавилась]
 const FEAST_TEXT := {
 	"idolyshche": ["Ідолище сіло бенкетувати!\nЗавдай шкоди, поки не вдавиться", "Ідолище наїлося й набралося сил.", "Ідолище вдавилося! Бий!"],
@@ -283,6 +284,17 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			color = Color(0.23, 0.31, 0.41)
 			base_scale = 0.85
 			scale = Vector2.ONE * base_scale
+		# ---- Семигород: край Дракули ----
+		"strygoi":
+			radius = 20.0; max_hp = 105.0; speed = 112.0; damage = 16.0; xp_value = 9
+			color = Color(0.45, 0.42, 0.5)
+		"moroi":
+			radius = 17.0; max_hp = 55.0; speed = 105.0; damage = 13.0; xp_value = 9
+			color = Color(0.75, 0.82, 0.95)
+			ranged = true; keep_distance = 300.0; shoot_cd = 2.6
+		"drakula":
+			radius = 24.0; max_hp = 320.0; speed = 125.0; damage = 29.0; xp_value = 13
+			color = Color(0.2, 0.05, 0.08)
 		"dev":
 			radius = 30.0; max_hp = 380.0; speed = 75.0; damage = 34.0; xp_value = 13
 			color = Color(0.35, 0.39, 0.44)
@@ -751,6 +763,31 @@ func _boss_ability(target) -> void:
 			else:
 				Audio.play("roar", 0.05, -4.0)
 				_summon(["upyr", "mavka"], 3)
+		"drakula":
+			ability_timer = 5.5
+			match ability_step % 3:
+				1:
+					# Обертається кажаном і падає на ціль
+					var bat = _telegraph("circle", target.global_position, 0.9, damage * 1.4)
+					bat.radius = 125.0
+					bat.color = Color(0.6, 0.05, 0.1)
+					bat.on_fire = func():
+						if not dead:
+							global_position = bat.global_position
+				2:
+					# Кривавий туман: три смуги віялом
+					for a in [-0.35, 0.0, 0.35]:
+						var mist = _telegraph("line", global_position, 0.8, damage * 1.1)
+						mist.dir = to_t.rotated(a)
+						mist.length = 460.0
+						mist.width = 60.0
+						mist.color = Color(0.7, 0.1, 0.15)
+					Audio.play("roar", 0.05, -4.0)
+				_:
+					# П'є кров слуг: кличе стригоїв і загоює рани
+					Audio.play("roar", 0.05, -4.0)
+					_summon(["strygoi", "moroi"], 2)
+					hp = minf(max_hp, hp + max_hp * 0.04)
 		"vovkulaka":
 			ability_timer = 5.0
 			if ability_step % 2 == 1:
@@ -1966,7 +2003,8 @@ func _enter_phase2() -> void:
 		"pushkar": "Пушкар засипає подвійний заряд!", "lisovyi_did": "Лісовий Дід кличе весь ліс!",
 		"idolyshche": "Ідолище реве: «Ще їсти!»", "karachun": "Карачун кличе найдовшу ніч!",
 		"dev": "Дев рве ланцюг!", "khala": "Хала затуляє небо!", "velnias": "Велняс скидає людську личину!",
-		"zolota_baba": "Золота Баба розплющує очі!", "chornoboh": "Чорнобог гасить світло!"}.get(kind, "Бос лютує!")
+		"zolota_baba": "Золота Баба розплющує очі!", "chornoboh": "Чорнобог гасить світло!",
+		"drakula": "Дракула розгортає плащ: ніч густішає!"}.get(kind, "Бос лютує!")
 	Events.banner.emit(text, Color(1.0, 0.4, 0.3))
 	var kinds: Array = ["zarazhenyi", "pishchalnyk", "chort"]
 	match kind:
@@ -1989,6 +2027,7 @@ func _enter_phase2() -> void:
 		"velnias": kinds = ["mertvyi_lytsar", "lauma"]
 		"zolota_baba": kinds = ["menkv", "chud"]
 		"chornoboh": kinds = ["stallo", "khiisi", "mara"]
+		"drakula": kinds = ["strygoi", "moroi", "vovkulaka"]
 	if _feast > 0.0:
 		_feast = 0.0
 		cast_time = 0.0

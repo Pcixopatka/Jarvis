@@ -61,6 +61,15 @@ static func sections(world, player) -> Array:
 		rows.append(_row(_clean(trial), "", "", "", trial.contains("Повертайся"), "Повертайся на посвяту", str(SpecService.target(world))))
 	if not rows.is_empty():
 		out.append({"title": "Побратими й посвята", "rows": rows, "empty": ""})
+	# Перекази: квестові лінійки за легендами земель
+	var LegendS = load("res://scripts/game/legend_service.gd")
+	rows = []
+	for lr in LegendS.rows(world):
+		var lplace: String = str(lr["target"])
+		rows.append(_row("%s: %s" % [lr["title"], lr["text"]], Data.place_name(lplace) if lplace != "" else "", "", str(lr["reward"]),
+			bool(lr["back"]), "Оповідач чекає з нагородою", lplace))
+	if not rows.is_empty():
+		out.append({"title": "Перекази (%d із %d розказано)" % [LegendS.done_count(world), LegendS.Legends.ORDER.size()], "rows": rows, "empty": ""})
 	# Завдання міст
 	rows = []
 	for q in world.quests:

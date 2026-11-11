@@ -70,6 +70,7 @@ const CostumeService := preload("res://scripts/game/costume_service.gd")
 const PetService := preload("res://scripts/game/pet_service.gd")
 const AutoService := preload("res://scripts/game/auto_service.gd")
 const DivineService := preload("res://scripts/game/divine_service.gd")
+const LegendService := preload("res://scripts/game/legend_service.gd")
 const UiDivine := preload("res://scripts/ui/ui_divine.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
@@ -527,6 +528,8 @@ func enter_map() -> void:
 		mv.targets[stg] = true
 	for loc in BountyService.targets(world):
 		mv.targets[loc] = true
+	for loc in LegendService.targets(world):
+		mv.targets[loc] = true
 	mv.turn_ins = {}
 	var places: Dictionary = load("res://scripts/game/journal_service.gd").turn_in_places(world)
 	for place in places:
@@ -678,6 +681,7 @@ func enter_location(id: String) -> void:
 			extra.merge(FarService.night_mods(Data.LOCATIONS[id], player))  # нічний похід підтягується до героя
 		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї ростуть із рівнем героя
 		extra.merge(PerilService.combat_mods(id))  # надважка печера: міцніший бос і його лють
+		extra.merge(LegendService.mods_for(world, player, id), true)  # місце переказу міряється рівнем із героєм
 		if PerilService.is_peril(id):
 			extra["peril_first"] = PerilService.cleared(world, id) == 0  # перша перемога дає річ набору напевно
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
@@ -834,7 +838,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 
 ## Передає подію сюжету й показує гравцеві, що змінилося.
 func _story_event(type: String, arg: String) -> void:
-	for m in StoryService.on_event(world, player, type, arg):
+	for m in StoryService.on_event(world, player, type, arg) + LegendService.on_event(world, player, type, arg):
 		if m["big"]:
 			hud.show_banner(m["text"], UI.GOLD)
 			Audio.play("quest", 0.0)
@@ -884,6 +888,7 @@ func _path_choose(cls: String) -> void:
 func _spec_dialogue(city: String) -> void:
 	var d := SpecService.city_dialogue(world, city)
 	if d.is_empty():
+		_legend_dialogue(city)  # наставник мовчить — може, хтось хоче розказати переказ
 		return
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], [])
@@ -899,6 +904,33 @@ func _spec_dialogue(city: String) -> void:
 		save_game()
 		if state == State.CITY and city_id == city:
 			_build_city())
+	hud.show_dialogue(dlg)
+
+
+## Перекази: оповідач у місті починає крок лінійки або дякує за виконаний (див. LegendService).
+func _legend_dialogue(city: String, offers := true) -> void:
+	world.hero_level = player.level
+	var d: Dictionary = LegendService.city_dialogue(world, city, offers)
+	if d.is_empty():
+		return
+	var dlg = DialogueScript.new()
+	dlg.setup(StoryService.lines(world, d["lines"]), [])
+	dlg.finished.connect(func(_c):
+		hud.close_dialogue()
+		var texts := []
+		for m in LegendService.on_dialogue_done(world, player, str(d["kind"]), str(d["line"])):
+			texts.append(str(m["text"]))
+		if str(d["kind"]) == "legend_end":
+			_record("legend_step")
+			_record("legend", LegendService.done_count(world))
+		if not texts.is_empty():
+			hud.show_banner("\n".join(texts.slice(0, 3)), UI.GOLD)
+			Audio.play("quest", 0.0)
+		save_game()
+		if state == State.CITY and city_id == city:
+			_build_city()
+			# подякували за крок — можна одразу почути наступний; щойно почали новий — інші зачекають
+			_legend_dialogue(city, str(d["kind"]) == "legend_end"))
 	hud.show_dialogue(dlg)
 
 
@@ -2237,7 +2269,11 @@ func char_do(action: String, arg) -> void:
 		"divine_shop":
 			# некуплений дар: веде в крамницю на вкладку «Божі дари»
 			shop_tab = _shop_tab_index("Божі дари")
-			open_shop(open_character)
+			open_shop(_build_character)
+			return
+		"trader":
+			# крамниця Хованця просто з екрана героя: на мапі, в місті, на хуторі й посеред бою
+			open_trader(_build_character)
 			return
 		"equip":
 			player.equip(arg)

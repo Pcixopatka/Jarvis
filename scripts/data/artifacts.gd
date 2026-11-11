@@ -74,6 +74,9 @@ const DEFS := {
 	"zoria_karachuna": {"name": "Зоря найдовшої ночі", "boss": "karachun", "bonus": {"xp": 0.06},
 		"text": "+6% досвіду",
 		"lore": "Єдина зоря, що світила в Карачунову ніч. За довгу ніч багато чого навчишся."},
+	"persten_drakona": {"name": "Перстень дракона", "boss": "drakula", "bonus": {"st_bleed": 0.35},
+		"text": "Кровотеча на герої триває на 35% менше",
+		"lore": "Перстень ордену Дракона, який упир зняв із чужої руки разом з іменем. Справжній власник крові не боявся."},
 	"lanka_lantsiuha": {"name": "Ланка велетового ланцюга", "boss": "dev", "bonus": {"death_xp": 0.5},
 		"text": "Смерть забирає вдвічі менше досвіду",
 		"lore": "Ланцюг, яким велета прикували до кавказької скелі. Хто носить ланку, того й смерть тримає не так міцно."},
@@ -92,7 +95,7 @@ const DEFS := {
 }
 
 const ORDER := ["zmiiv_zub", "iklo_upyria", "vovcha_lapa", "chorna_knyha", "vidmyn_hlechyk", "mitla_yahy", "svystok_soloveia", "koshchieva_skrynka", "kliuchi_kremlia", "rozbyti_kaidany", "kreidiane_kolo", "persten_biloi_pani", "lampa_shubina", "oko_lykha", "perlyna_tsaria", "yadro_tsar_harmaty", "lisovykova_sopilka", "kivsh_idolyshcha", "zoria_karachuna",
-	"lanka_lantsiuha", "hromovyi_kamin", "velniasova_torba", "zolota_lychyna", "ulamok_chornoho_sontsia"]
+	"persten_drakona", "lanka_lantsiuha", "hromovyi_kamin", "velniasova_torba", "zolota_lychyna", "ulamok_chornoho_sontsia"]
 
 
 static func is_artifact(item: Dictionary) -> bool:

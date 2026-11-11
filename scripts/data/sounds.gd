@@ -29,6 +29,7 @@ const DEATH := {
 	"mertvyi_lytsar": "die_undead", "lauma": "die_spirit", "aitvaras": "die_spirit", "velnias": "die_beast",
 	"menkv": "die_beast", "shurale": "die_beast", "chud": "die_human", "zolota_baba": "die_undead",
 	"stallo": "die_beast", "khiisi": "die_spirit", "chornoboh": "die_spirit",
+	"strygoi": "die_undead", "moroi": "die_spirit", "drakula": "die_undead",
 }
 
 ## Фоновий шум за ландшафтом ("" — тиша).

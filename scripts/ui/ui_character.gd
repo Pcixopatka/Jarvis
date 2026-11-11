@@ -36,6 +36,7 @@ static func _do(game, action: String, arg = null) -> Callable:
 # ---------------- Герой: вдягнене, показники й торба на одному екрані ----------------
 
 const CELL := 70  # сторона клітинки торби
+const TRADER_BTN := "Хованець: крамниця"  # кнопка над торбою, коли вдягнено Хованця
 const DOLL_SLOTS := ["weapon", "head", "amulet", "belt", "body", "boots"]  # вдягнене: два ряди по три
 
 
@@ -154,6 +155,9 @@ static func _hero(game) -> Control:
 	var bl := UI.label("Торба %d/%d" % [p.inventory.size(), p.bag_size()], 20, UI.GOLD, false)
 	bl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bag_head.add_child(bl)
+	if game.DivineService.remote_shop(p):
+		# Хованець вдягнений: його крамниця відкривається просто з торби, будь-де й будь-коли
+		bag_head.add_child(UI.button(TRADER_BTN, _do(game, "trader"), Vector2(200, 40), 16))
 	bag_head.add_child(UI.button("Душі: %d" % p.SoulService.pouch_count(p), _do(game, "select", -2), Vector2(130, 40), 16))
 	bag.add_child(bag_head)
 	var arts: Array = p.Artifacts.active_ids(p.inventory)

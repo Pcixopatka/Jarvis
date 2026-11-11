@@ -1,10 +1,15 @@
 extends Node2D
 ## Улюбленець, що ходить за героєм у бою: пес, кіт або ворон (див. Pets.FOLLOWERS). Лише для ока:
 ## у бійку не лізе, шкоди не завдає й не отримує. Пес ще й бігає до здобичі, що лежить поруч.
+## Чумацька мажа не йде сама: герой тягне її за голоблі (_pull_cart).
 ## Малюється кодом із дрібних прямокутників, як піксельний спрайт.
 
 const OUTLINE := Color(0.106, 0.078, 0.125)
 const SPEED := 420.0
+const CART_LEN := 46.0  # довжина голобель: на стільки мажа позаду героя
+const CART_RISE := 26.0  # коли мажа «вище» за героя на екрані, вона стоїть далі, щоб не лізти йому на голову
+const CART_TURN := 5.0  # рад/с: як швидко мажа розвертається, коли герой суне просто на неї
+const HITCH := Vector2(0, 8)  # де герой тримає голоблі (від його середини)
 
 var combat
 var player
@@ -15,6 +20,8 @@ var _moving := false
 var _fetch_t := 0.0
 var _goal := Vector2.ZERO
 var _t := 0.0
+var _hero_was := Vector2.ZERO  # де герой був минулого кадру (для мажі)
+var _hitch := Vector2.ZERO  # кінець голобель у місцевих координатах мажі
 
 
 func setup(combat_node, hero, pet_kind: String) -> void:
@@ -28,13 +35,17 @@ func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	_t += delta
-	var home: Vector2 = player.position - player.facing * 46.0 + Vector2(0, 22)
+	if kind == "mazha":
+		_pull_cart(delta)
+		queue_redraw()
+		return
+	# З мажею за спиною улюбленці тримаються збоку й нижче, щоб не лізти під голоблі
+	var carted: bool = str(player.divine.get("cart", "")) == "mazha"
+	var home: Vector2 = player.position - player.facing * (22.0 if carted else 46.0) + Vector2(0, 42 if carted else 22)
 	if kind == "voron":
 		home = player.position + Vector2(-player.facing.x * 30.0, -8.0)
-	elif kind == "mazha":
-		home = player.position - player.facing * 62.0 + Vector2(0, 6)  # мажа котиться просто за спиною
 	elif kind == "khovanets":
-		home = player.position - player.facing * 30.0 + Vector2(34.0, 26.0)
+		home = player.position + Vector2((1.0 if player.facing.x >= 0.0 else -1.0) * 34.0, 30.0) if carted else player.position - player.facing * 30.0 + Vector2(34.0, 26.0)
 	elif kind == "skakun":
 		home = player.position - player.facing * 44.0 + Vector2(-40.0, 18.0)
 	_goal = home
@@ -60,6 +71,39 @@ func _process(delta: float) -> void:
 
 
 var _fetch = null
+
+
+## Довжина голобель у напрямку dir (від героя до мажі). Спрайт героя високий, тож угору треба більше місця.
+static func cart_len(dir: Vector2) -> float:
+	return CART_LEN + CART_RISE * maxf(0.0, -dir.y)
+
+
+## Мажу тягне герой: вона причеплена голоблями до його пояса й сама не їде. Стоїть герой, стоїть і мажа.
+## Рушив, і мажа котиться слідом рівно на довжину голобель та повертає за ним, як справжній причіп.
+func _pull_cart(delta: float) -> void:
+	var hitch: Vector2 = player.position + HITCH
+	var back: Vector2 = position - hitch
+	var dist := back.length()
+	var step: Vector2 = player.position - _hero_was
+	_hero_was = player.position
+	if dist < 0.01 or dist > 400.0 or step.length() > 300.0:
+		back = -player.facing if player.facing.length() > 0.01 else Vector2.LEFT  # герой перейшов далеко: мажа одразу за спиною
+		dist = back.length()
+	var dir := back / dist
+	if step.length() > 0.05:
+		# Герой суне просто на мажу: вона об'їжджає його збоку й стає позаду, а не їде задом наперед
+		var want: Vector2 = -step.normalized()
+		var ang := dir.angle_to(want)
+		if absf(ang) > PI * 0.55:
+			dir = dir.rotated((signf(ang) if absf(ang) < PI - 0.02 else 1.0) * minf(absf(ang), CART_TURN * delta))
+	var old := position
+	position = hitch + dir * cart_len(dir)
+	var rolled := position.distance_to(old)
+	_moving = rolled > 0.15
+	_step += rolled * 0.16
+	_hitch = hitch - position
+	if absf(_hitch.x) > 6.0:
+		_face = signf(_hitch.x)
 
 
 func _nearest_pickup():
@@ -157,9 +201,17 @@ func _draw_cart() -> void:
 	var wood := Color(0.6, 0.4, 0.22)
 	var dark := Color(0.38, 0.25, 0.14)
 	draw_circle(Vector2(0, 9), 13.0, Color(0, 0, 0, 0.22))
+	# Голоблі від передка мажі до рук героя й поперечка, за яку він тягне
+	var front := Vector2(11.0 * _face, -3.0)
+	var side := Vector2(0, 3) if absf(_hitch.x) >= absf(_hitch.y) else Vector2(3, 0)
+	for off in [-side, side]:
+		draw_line(front + off, _hitch + off, OUTLINE, 4.0)
+	draw_line(_hitch - side * 1.8, _hitch + side * 1.8, OUTLINE, 5.0)
+	for off in [-side, side]:
+		draw_line(front + off, _hitch + off, dark, 2.0)
+	draw_line(_hitch - side * 1.6, _hitch + side * 1.6, wood, 3.0)
 	_px(-13, -8, 24, 10, wood)  # кузов
 	_px(-13, -8, 24, 2, Color(0.75, 0.55, 0.32))
-	_px(11, -4, 9, 2, dark)  # дишель
 	_px(-9, -15, 9, 7, Color(0.92, 0.88, 0.78))  # клунок
 	_px(-1, -13, 8, 5, Color(0.8, 0.74, 0.6))
 	var spin := int(_step) % 2 if _moving else 0

@@ -145,6 +145,7 @@ func _run() -> void:
 	await _suite_saga()
 	await _suite_loot_rates()
 	await _suite_divine()
+	await _suite_legends()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -6174,7 +6175,7 @@ func _suite_far_lands() -> void:
 	var Sounds = load("res://scripts/data/sounds.gd")
 	var Camp = load("res://scripts/data/camp_data.gd")
 	var Ground = load("res://scripts/world/ground.gd")
-	check(Data.REGION_ORDER.size() == 7 and Data.REGIONS.size() == 7, "сім далеких країв: чотири українські й три в Московії")
+	check(Data.REGION_ORDER.size() == 8 and Data.REGIONS.size() == 8, "вісім далеких країв: чотири українські, три в Московії й Семигород")
 	var all_regions_ok := true
 	for r in Data.REGION_ORDER:
 		var pl: Dictionary = Far.places(r)
@@ -6193,7 +6194,7 @@ func _suite_far_lands() -> void:
 			data_ok = data_ok and Data.ENEMY_NAMES.has(e) and Data.ENEMY_PLURAL.has(e) and Data.QUEST_ITEMS.has(e) and GfxS.has(e)
 		if L["type"] == "dungeon":
 			data_ok = data_ok and Data.BOSS_NAMES.has(L["boss"]) and GfxS.has(L["boss"]) and int(L["rooms"]) >= 4
-	check(far_n == 36 and data_ok, "тридцять шість далеких місць: назви, нечисть зі спрайтами, боси (%d)" % far_n)
+	check(far_n == 40 and data_ok, "сорок далеких місць: назви, нечисть зі спрайтами, боси (%d)" % far_n)
 	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden", "morskyi_tsar", "shubin", "bila_pani"]:
 		check(Data.ENEMY_NAMES.has(kind) and GfxS.has(kind) and Sounds.DEATH.has(kind), "%s: ім'я, спрайт і голос смерті" % kind)
 	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden"]:
@@ -6441,7 +6442,7 @@ func _suite_muscovy() -> void:
 	var Wiki = load("res://scripts/data/wiki_data.gd")
 	var WM = load("res://scripts/ui/world_map.gd")
 	var EnemyS = load("res://scripts/entities/enemy.gd")
-	check(Data.REGION_ORDER.slice(4) == ["oka", "tvershchyna", "zalissia"], "три краї Московії йдуть після українських")
+	check(Data.REGION_ORDER.slice(4, 7) == ["oka", "tvershchyna", "zalissia"], "три краї Московії йдуть після українських")
 	# Краї йдуть кільцями без прогалин у рівнях
 	var bands := {}
 	for r in ["oka", "tvershchyna", "zalissia"]:
@@ -13099,6 +13100,7 @@ func _suite_divine() -> void:
 	for id in Div.ORDER:
 		art_ok = art_ok and str(Div.DEFS[id]["name"]) in art and str(int(Div.DEFS[id]["price"])) in art
 	check(art_ok, "довідник описує всі дари з цінами")
+	check(load("res://scripts/ui/ui_character.gd").TRADER_BTN in art and "над торбою" in art and "голоблі" in art, "довідник каже про кнопку крамниці над торбою й про мажу на голоблях")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -13149,6 +13151,31 @@ func _suite_divine() -> void:
 	check(gp.divine.size() == 4 and bool(game.account.shop.get("divine", {}).get("molot", false)), "усі чотири дари куплено й вдягнено")
 	game.close_shop()
 	await _frames(2)
+	var UChar = load("res://scripts/ui/ui_character.gd")
+	var hero_back := false
+	var inv_trader := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		if b.is_queued_for_deletion():
+			continue
+		hero_back = hero_back or b.text.begins_with("Душі")
+		inv_trader = inv_trader or b.text == UChar.TRADER_BTN
+	check(hero_back and game.state == game.State.CHARACTER and not game.shop_open, "із крамниці «Назад» вертає на екран героя, а не на порожній екран")
+	check(inv_trader, "Хованця вдягнено: над торбою є кнопка його крамниці")
+	game.char_do("trader", null)
+	await _frames(2)
+	check(game.trader_open and game.state == game.State.CHARACTER and game.city_id == game.trader_city, "крамниця Хованця відкривається просто з торби")
+	game.close_trader()
+	await _frames(2)
+	hero_back = false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		hero_back = hero_back or (not b.is_queued_for_deletion() and b.text.begins_with("Душі"))
+	check(not game.trader_open and hero_back and game.state == game.State.CHARACTER, "«Назад» із крамниці Хованця вертає до торби")
+	game.char_do("select", UD.sel_of("pet"))
+	await _frames(2)
+	var open_here := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		open_here = open_here or (not b.is_queued_for_deletion() and b.text == "Відкрити крамницю")
+	check(open_here, "у гнізді Хованця теж є кнопка «Відкрити крамницю»")
 	game.char_do("select", UD.sel_of("relic"))
 	game.char_do("divine_toggle", "molot")
 	check(not DS.wears(gp, "molot"), "на екрані героя дар знімається")
@@ -13226,6 +13253,40 @@ func _suite_divine() -> void:
 		if n.get_script() == game.combat.PetScript:
 			kinds.append(n.kind)
 	check("khovanets" in kinds and "mazha" in kinds, "Хованець і мажа йдуть за героєм у бою: %s" % str(kinds))
+	# мажу тягне герой: вона на голоблях, сама не їде
+	var PetS = game.combat.PetScript
+	var cart = null
+	for n in game.combat.entities.get_children():
+		if n.get_script() == PetS and n.kind == "mazha":
+			cart = n
+	_clear_enemies(game)
+	await _frames(3)
+	var stood: Vector2 = cart.position
+	await _frames(12)
+	check(cart.position.distance_to(stood) < 0.5 and not cart._moving and absf(cart.position.distance_to(gp.position + PetS.HITCH) - PetS.cart_len((cart.position - gp.position - PetS.HITCH).normalized())) < 0.5, "герой стоїть, і мажа стоїть на довжину голобель від нього")
+	for i in 40:
+		gp.position += Vector2(5, 0)
+		await _frames(1)
+	check(cart.position.x < gp.position.x - PetS.CART_LEN * 0.9 and absf(cart.position.distance_to(gp.position + PetS.HITCH) - PetS.cart_len((cart.position - gp.position - PetS.HITCH).normalized())) < 0.5 and cart._moving and cart._face > 0.0, "герой іде праворуч і тягне мажу: вона позаду на голоблях, передком до нього")
+	for i in 60:
+		gp.position += Vector2(-5, 0)
+		await _frames(1)
+	check(cart.position.x > gp.position.x + PetS.CART_LEN * 0.9 and absf(cart.position.distance_to(gp.position + PetS.HITCH) - PetS.cart_len((cart.position - gp.position - PetS.HITCH).normalized())) < 0.5 and cart._face < 0.0, "герой розвернувся: мажа об'їхала його й знову позаду")
+	for i in 30:
+		gp.position += Vector2(0, 5)
+		await _frames(1)
+	check(cart.position.y < gp.position.y - PetS.CART_LEN and PetS.cart_len(Vector2.UP) > PetS.CART_LEN and absf(cart.position.distance_to(gp.position + PetS.HITCH) - PetS.cart_len((cart.position - gp.position - PetS.HITCH).normalized())) < 0.5, "герой звернув униз, і мажа повернула за ним")
+	# крамниця Хованця з торби посеред бою
+	game.open_character()
+	await _frames(2)
+	game.char_do("trader", null)
+	await _frames(2)
+	check(game.trader_open and game.state == game.State.CHARACTER, "посеред бою крамниця Хованця відкривається з торби")
+	game.close_trader()
+	await _frames(2)
+	game.close_character()
+	await _frames(2)
+	check(game.state == game.State.PLAYING and not get_root().get_tree().paused, "із торби бій триває далі")
 	game._show_pause()
 	await _frames(2)
 	var pause_trader := false
@@ -13242,6 +13303,14 @@ func _suite_divine() -> void:
 		game.shop_do("divine", nid)
 		game.shop_do("divine", nid)
 	check(gp.divine.size() == 7 and DS.worn(gp, "relic") == "ladanka" and DS.worn(gp, "pet") == "skakun", "усі сім гнізд зайнято")
+	game.open_character()
+	await _frames(2)
+	var no_trader := true
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		no_trader = no_trader and not (not b.is_queued_for_deletion() and b.text == load("res://scripts/ui/ui_character.gd").TRADER_BTN)
+	check(no_trader, "Хованця знято заради скакуна: кнопки крамниці над торбою нема")
+	game.close_character()
+	await _frames(2)
 	gw.companions = [{"type": "dzhura", "downed": false, "level": 20, "xp": 0}]
 	game.enter_location("wild_field")
 	await _frames(4)
@@ -13267,6 +13336,247 @@ func _suite_divine() -> void:
 	gp.hp = -5.0
 	gp._check_death()
 	check(gp.alive and gp.hp >= gp.max_hp * 0.49 and not gp.ladanka_ready, "ладанка підняла героя з половиною здоров'я (%d із %d)" % [int(gp.hp), int(gp.max_hp)])
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_legends() -> void:
+	suite("Перекази: Дракула й лінійки за легендами земель")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Leg = load("res://scripts/data/legends.gd")
+	var LS = load("res://scripts/game/legend_service.gd")
+	var Story = load("res://scripts/data/story.gd")
+	var JS = load("res://scripts/game/journal_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Wiki = load("res://scripts/data/wiki_data.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	var Sounds = load("res://scripts/data/sounds.gd")
+	var Souls = load("res://scripts/data/souls.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var Uniq = load("res://scripts/data/uniques.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var EnemyS = load("res://scripts/entities/enemy.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	# ---- Семигород: земля, нечисть, бос ----
+	var land_ok: bool = Data.REGIONS.has("semyhorod") and "semyhorod" in Data.REGION_ORDER
+	for id in ["tihutsa", "hoia", "tyrhovyshte", "zamok_drakuly"]:
+		var L: Dictionary = Data.LOCATIONS[id]
+		land_ok = land_ok and L.get("scale", false) and L["region"] == "semyhorod" and int(L["level"]) >= 30 and str(L["desc"]) != ""
+	var brashov: Dictionary = Data.CITIES.get("brashov", {})
+	check(land_ok and Data.LOCATIONS["zamok_drakuly"]["boss"] == "drakula" and Data.LOCATIONS["zamok_drakuly"]["type"] == "dungeon", "Семигород на мапі: три місцевості й Замок Дракули")
+	check(str(brashov.get("region", "")) == "semyhorod" and Acts.TRADE_CITIES.get("brashov", {}).size() == Acts.TRADE_ORDER.size() and Data.REGION_ORDER[-1] == "semyhorod", "Брашов: місто Семигороду з торгом, край стоїть у списку останнім")
+	for kind in ["strygoi", "moroi"]:
+		check(Data.ENEMY_NAMES.has(kind) and Data.ENEMY_PLURAL.has(kind) and Data.QUEST_ITEMS.has(kind) and GfxS.has(kind) and Sounds.DEATH.has(kind) and Wiki.ENEMIES.has(kind) and kind in Wiki.ENEMY_ORDER and Souls.SOULS.has(kind) and kind in Souls.ORDER and EnemyS.HIT_STATUS.has(kind) and Acts.BOUNTY_NAMES.has(kind), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % Data.ENEMY_NAMES.get(kind, kind))
+	check(Data.BOSS_NAMES.has("drakula") and Data.ENEMY_NAMES.has("drakula") and GfxS.has("drakula") and Sounds.DEATH.has("drakula") and Wiki.BOSSES.has("drakula") and "drakula" in Wiki.BOSS_ORDER and Souls.SOULS.has("b_drakula") and Arts.by_boss("drakula") != "" and int(Uniq.BOSS_TIER["drakula"]) == Uniq.TOP_COMMON_TIER and "drakula" in EnemyS.PHASE2_BOSSES, "Дракула: ім'я, спрайт, голос, душа, артефакт, довідник, другий етап бою")
+	check("Влад" in str(Wiki.BOSSES["drakula"]["text"]) and "украв" in str(Wiki.BOSSES["drakula"]["text"]), "довідник відділяє упиря від справжнього воєводи Влада")
+	# ---- Дані лінійок ----
+	var data_ok := true
+	var bad := ""
+	for line in Leg.ORDER:
+		var LL: Dictionary = Leg.LINES[line]
+		var ok: bool = str(LL["title"]) != "" and str(LL["land"]) != "" and str(LL["source"]) != "" and int(LL["min_level"]) >= 1 and LL["steps"].size() >= 2
+		for i in LL["steps"].size():
+			var st: Dictionary = LL["steps"][i]
+			var obj: Dictionary = st["objective"]
+			ok = ok and Story.NPCS.has(st["giver"]) and Data.CITIES.has(st["city"]) and not st["start"].is_empty() and not st["end"].is_empty() and str(obj["text"]) != "" and int(st["reward"]["gold_lvl"]) > 0
+			for ln in st["start"] + st["end"]:
+				ok = ok and Story.NPCS.has(ln[0]) and str(ln[1]).length() > 8
+			var loc: String = str(obj.get("loc", ""))
+			ok = ok and Data.LOCATIONS.has(loc)
+			match str(obj["type"]):
+				"clear":
+					ok = ok and Data.LOCATIONS[loc]["type"] == "field"
+				"dungeon":
+					ok = ok and Data.LOCATIONS[loc]["type"] == "dungeon"
+				"kill", "fetch":
+					ok = ok and Data.ENEMY_NAMES.has(obj["enemy"]) and obj["enemy"] in Data.LOCATIONS[loc]["enemies"] and int(obj["count"]) > 1
+					if obj["type"] == "fetch":
+						ok = ok and str(obj["item"]) != "" and float(obj["chance"]) > 0.0
+				_:
+					ok = false
+			if i == LL["steps"].size() - 1:
+				ok = ok and st["reward"].has("item") and st["reward"]["item"]["slot"] in Data.SLOTS and obj["type"] == "dungeon"
+		if not ok:
+			bad += line + " "
+		data_ok = data_ok and ok
+	check(data_ok and Leg.ORDER.size() == Leg.LINES.size() and Leg.ORDER.size() == 12, "дванадцять лінійок: оповідачі, міста, мети й нагороди існують %s" % bad)
+	var top := 0
+	for a in Ach.ACHIEVEMENTS:
+		if str(a["stat"]) == "legend":
+			top = maxi(top, int(a["goal"]))
+	check(top == Leg.ORDER.size(), "останнє досягнення просить усі лінійки")
+	# ---- Лінійка Дракули: від розмови до нагороди ----
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 50
+	var DL: Dictionary = Leg.LINES["drakula"]
+	w.hero_level = int(DL["min_level"]) - 1
+	check(not LS.unlocked(w, "drakula") and LS.city_dialogue(w, "verkhovyna").is_empty() and LS.target(w, "drakula") == "", "до %d-го рівня про Дракулу мовчать" % int(DL["min_level"]))
+	w.hero_level = 50
+	var d: Dictionary = LS.city_dialogue(w, "verkhovyna")
+	check(d.get("kind", "") == "legend_start" and d["line"] == "drakula" and d["lines"].size() == DL["steps"][0]["start"].size() and LS.target(w, "drakula") == "verkhovyna", "у Верховині оповідач починає переказ")
+	var said := ""
+	for ln in d["lines"]:
+		said += str(ln[1])
+	check("Влад" in said and "украв" in said, "перша ж розмова каже, що упир лише вкрав ім'я воєводи")
+	LS.on_dialogue_done(w, p, "legend_start", "drakula")
+	check(LS.state(w, "drakula")["stage"] == "active" and LS.target(w, "drakula") == "tihutsa" and "tihutsa" in LS.targets(w), "мета: Перевал Тігуца, він позначений на мапі")
+	check(LS.on_event(w, p, "clear", "hoia").is_empty() and LS.state(w, "drakula")["stage"] == "active", "чуже місце кроку не зараховує")
+	check(not LS.on_event(w, p, "clear", "tihutsa").is_empty() and LS.state(w, "drakula")["stage"] == "turnin" and LS.target(w, "drakula") == "verkhovyna", "перевал очищено: повертайся до оповідача")
+	var gold0: int = p.gold
+	var tr0: int = int(p.resources.get("trophy", 0))
+	check(LS.city_dialogue(w, "verkhovyna").get("kind", "") == "legend_end", "оповідач чекає з кінцевою розмовою")
+	LS.on_dialogue_done(w, p, "legend_end", "drakula")
+	check(p.gold == gold0 + int(DL["steps"][0]["reward"]["gold_lvl"]) * 50 and int(p.resources["trophy"]) == tr0 + int(DL["steps"][0]["reward"]["trophy"]) and int(LS.state(w, "drakula")["step"]) == 1, "нагорода: гривні за рівень героя й трофеї")
+	# здобути ікла
+	LS.on_dialogue_done(w, p, "legend_start", "drakula")
+	seed(99)
+	var kills := 0
+	LS.on_event(w, p, "kill", "moroi")
+	check(int(LS.state(w, "drakula")["progress"]) == 0, "ікла падають лише зі стригоїв")
+	while LS.state(w, "drakula")["stage"] == "active" and kills < 200:
+		LS.on_event(w, p, "kill", "strygoi")
+		kills += 1
+	check(LS.state(w, "drakula")["stage"] == "turnin" and kills >= 10 and kills < 60, "десять ікол здобуто за %d стригоїв" % kills)
+	LS.on_dialogue_done(w, p, "legend_end", "drakula")
+	# замок
+	LS.on_dialogue_done(w, p, "legend_start", "drakula")
+	check(LS.target(w, "drakula") == "zamok_drakuly", "останній крок веде в Замок Дракули")
+	LS.on_event(w, p, "dungeon", "zamok_drakuly")
+	var bag0: int = p.inventory.size()
+	var fin: Array = LS.on_dialogue_done(w, p, "legend_end", "drakula")
+	var prize: Dictionary = p.inventory[p.inventory.size() - 1] if p.inventory.size() > bag0 else {}
+	check(LS.finished(w, "drakula") and LS.done_count(w) == 1 and prize.get("name", "") == DL["steps"][2]["reward"]["item"]["name"] and int(prize.get("ilvl", 0)) == 50 and int(prize.get("rarity", 0)) == 3 and not fin.is_empty(), "переказ розказано: іменна легендарна річ рівня героя в торбі")
+	check(LS.city_dialogue(w, "verkhovyna").is_empty() and LS.target(w, "drakula") == "", "після кінця оповідач мовчить")
+	check(LS.city_dialogue(w, "cherkaskyi_stan").get("line", "") == "idolyshche" and LS.city_dialogue(w, "cherkaskyi_stan", false).is_empty(), "нових переказів за один прихід у місто починають один: другий оповідач зачекає")
+	# ---- Вбити N і дві лінійки разом ----
+	LS.on_dialogue_done(w, p, "legend_start", "bila_pani")
+	LS.on_dialogue_done(w, p, "legend_start", "shubin")
+	for i in 14:
+		LS.on_event(w, p, "kill", "mara")
+	check(int(LS.state(w, "bila_pani")["progress"]) == 14 and LS.state(w, "bila_pani")["stage"] == "active" and int(LS.state(w, "shubin")["progress"]) == 0, "кожна мара рахується, чужа лінійка не рухається")
+	LS.on_event(w, p, "kill", "mara")
+	for i in 12:
+		LS.on_event(w, p, "kill", "kamiana_baba")
+	check(LS.state(w, "bila_pani")["stage"] == "turnin" and LS.state(w, "shubin")["stage"] == "turnin" and LS.targets(w).has("lviv") and LS.targets(w).has("izium"), "дві лінійки йдуть одразу й кожна веде у своє місто")
+	# ---- Місце переказу міряється з героєм ----
+	LS.on_dialogue_done(w, p, "legend_start", "vii")
+	var m: Dictionary = LS.mods_for(w, p, "lysa_hora")
+	check(int(m.get("level", 0)) == 50 and int(m["base_level"]) == int(Data.LOCATIONS["lysa_hora"]["level"]) and LS.mods_for(w, p, "crypt").is_empty(), "Лиса гора під час переказу має рівень героя, інші печери ні")
+	var low = _new_player()
+	low.level = 5
+	check(LS.mods_for(w, low, "lysa_hora").is_empty(), "слабшого за печеру героя переказ не підтягує")
+	# ---- Збереження ----
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	w2.hero_level = 50
+	check(LS.finished(w2, "drakula") and LS.state(w2, "bila_pani")["stage"] == "turnin" and LS.state(w2, "vii")["stage"] == "active", "поступ переказів зберігається з героєм")
+	# ---- Журнал і довідник ----
+	var sec: Dictionary = {}
+	for s0 in JS.sections(w, p):
+		if str(s0.get("title", "")).begins_with("Перекази"):
+			sec = s0
+	var ready := 0
+	for r in sec.get("rows", []):
+		if r["ready"]:
+			ready += 1
+	check(not sec.is_empty() and sec["rows"].size() == Leg.ORDER.size() - 1 and ready == 2 and "1 із" in str(sec["title"]), "журнал: розділ «Перекази» з нинішніми кроками, два можна здати")
+	var titles := {}
+	for e in WS._entries("basics"):
+		titles[str(e["title"])] = str(e["text"])
+	var wiki_ok: bool = titles.has("Перекази")
+	for line in Leg.ORDER:
+		var key := "Переказ «%s»" % Leg.LINES[line]["title"]
+		wiki_ok = wiki_ok and titles.has(key) and str(Leg.LINES[line]["source"]) in titles[key] and str(Leg.LINES[line]["title"]) in titles.get("Перекази", "")
+	check(wiki_ok, "довідник описує кожен переказ і його джерело")
+	# ---- У грі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "depths_open", "dungeon", "potion", "mana_potion", "varenyk", "res"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.level = 40
+	gp.stats["str"] = 3000
+	gp.stats["vit"] = 3000
+	gp.recalc()
+	gp.hp = gp.max_hp
+	gw.story = {"chapter": Story.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
+	gw.saga = {"step": Leg.ORDER.size(), "stage": "done"}
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("kyiv")
+	await _frames(3)
+	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "у Києві кобзар сам починає переказ про Кожум'яку")
+	var guard0 := 0
+	while game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root) and guard0 < 6:
+		game.hud.dialogue_root.finished.emit(-1)
+		await _frames(2)
+		guard0 += 1
+	check(LS.state(gw, "kozhumiaka")["stage"] == "active" and not LS.started(gw, "vii") and guard0 == 1, "за один прихід починається один переказ: про Вія полковник розкаже наступного разу")
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("kyiv")
+	await _frames(3)
+	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "наступного разу полковник починає розмову про Вія")
+	var guard := 0
+	while game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root) and guard < 6:
+		game.hud.dialogue_root.finished.emit(-1)
+		await _frames(2)
+		guard += 1
+	check(LS.state(gw, "vii")["stage"] == "active", "після розмови крок активний")
+	game.enter_map()
+	await _frames(2)
+	check(bool(game.hud.map_view.targets.get("lysa_hora", false)), "Лиса гора позначена на мапі як мета")
+	game.enter_location("lysa_hora")
+	await _frames(4)
+	var lvl_ok := true
+	for e in get_nodes_in_group("enemies"):
+		lvl_ok = lvl_ok and int(e.level) >= 40
+	check(int(c.loc["level"]) == 40 and lvl_ok and str(c.loc.get("legend", "")) == "vii", "на Лисій горі нечисть рівня героя: переказ не прогулянка")
+	game.enter_map()
+	await _frames(2)
+	# Дракула в бою
+	game.enter_location("tihutsa")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(2)
+	c.spawn_timer = 9999.0
+	gp.invuln = 999.0
+	c.spawn_enemy("drakula", 40, true, gp.global_position + Vector2(260, 0))
+	var boss = c._last_enemy()
+	check(boss.is_boss and boss.kind == "drakula" and boss.sprite_id() == "drakula" and boss.max_hp > 0.0, "Дракула виходить на бій")
+	var zones0: int = c.effects.get_child_count()
+	boss._boss_ability(gp)
+	await _frames(1)
+	var zones1: int = c.effects.get_child_count()
+	boss._boss_ability(gp)
+	await _frames(1)
+	var zones2: int = c.effects.get_child_count()
+	var foes0: int = c.alive_enemy_count()
+	boss.hp = boss.max_hp * 0.8
+	var hp_before: float = boss.hp
+	boss._boss_ability(gp)
+	await _frames(1)
+	check(zones1 == zones0 + 1 and zones2 >= zones1 + 3 and c.alive_enemy_count() == foes0 + 2 and boss.hp > hp_before, "три прийоми: падає кажаном, пускає три смуги туману, кличе слуг і лікується")
+	var kinds := {}
+	for e in get_nodes_in_group("enemies"):
+		kinds[e.kind] = true
+	check(kinds.has("strygoi") or kinds.has("moroi"), "слуги Дракули — стригої й морої")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

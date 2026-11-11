@@ -100,7 +100,12 @@ static func detail(game, slot: String) -> Control:
 		for line in D["lines"]:
 			box.add_child(_wrap("•  " + str(line), 16, UI.GOOD if on else UI.TEXT))
 		if have:
-			box.add_child(UI.button("Зняти" if on else "Вдягнути", game.char_do.bind("divine_toggle", id), Vector2(170, 46), 18))
+			var acts := HBoxContainer.new()
+			acts.add_theme_constant_override("separation", 8)
+			acts.add_child(UI.button("Зняти" if on else "Вдягнути", game.char_do.bind("divine_toggle", id), Vector2(150, 46), 18))
+			if on and D.get("shop", false):
+				acts.add_child(UI.button("Відкрити крамницю", game.char_do.bind("trader", null), Vector2(210, 46), 16))
+			box.add_child(acts)
 			box.add_child(_wrap("Вдягнено" if on else "Куплено для всього роду, зараз знято", 14, UI.GOOD if on else UI.MUTED))
 		else:
 			box.add_child(UI.button("До крамниці • %d %s" % [int(D["price"]), Shop.COIN_SHORT], game.char_do.bind("divine_shop", id), Vector2(260, 46), 16))

@@ -148,6 +148,12 @@ const SOULS := {
 		"lore": "Голова як пивний котел, черево як діжа. Гребе все до себе, тепер для тебе."},
 	"b_vii": {"name": "Душа Вія", "tier": 6, "fx": {"stun_hit": 6, "crit_dmg": 12},
 		"lore": "«Підніміть мені повіки!» Тепер його погляд спиняє твоїх ворогів."},
+	"strygoi": {"name": "Душа стригоя", "tier": 3, "fx": {"weak_hit": 5, "hp": 4},
+		"lore": "Мрець, що вставав із могили по свою рідню. Тепер він голодний лише до твоїх ворогів."},
+	"moroi": {"name": "Душа мороя", "tier": 3, "fx": {"chill_hit": 6, "cd": 3},
+		"lore": "Привид нехрещеної дитини, від якого холоне кров. Тепер холоне вона в нечисті."},
+	"b_drakula": {"name": "Душа Дракули", "tier": 6, "fx": {"crit_dmg": 12, "execute": 10},
+		"lore": "Він пив чужу кров чотири століття й завжди добивав ослаблих. Тепер добиваєш ти."},
 	"b_dev": {"name": "Душа Дева", "tier": 7, "fx": {"dmg": 7, "hp": 8},
 		"lore": "Кам'яний велет Кавказу. Його сила й досі важить як гора."},
 	"b_khala": {"name": "Душа Хали", "tier": 7, "fx": {"aspd": 7, "chill_hit": 12},
@@ -160,4 +166,4 @@ const SOULS := {
 		"lore": "Володар кінця світу. Свій кінець він знайшов від твоєї руки, і тепер кінчає інших."},
 }
 
-const ORDER := ["zlyden", "mavka", "bolotianyk", "kikimora", "mara", "chort", "vovkulaka", "pishchalnyk", "zarazhenyi", "kromeshnyk", "mertvyi_strilets", "pesyholovets", "upyr", "potopelnyk", "lisovyk", "chaklun", "vedmid", "boyaryn", "kamiana_baba", "almasty", "kadzhi", "karakondzhul", "samodiva", "mertvyi_lytsar", "lauma", "aitvaras", "menkv", "shurale", "chud", "stallo", "khiisi", "b_vovkulaka", "b_zmii", "b_upyr", "b_chaklun", "b_vidma", "b_bila_pani", "b_baba_yaha", "b_solovei", "b_koshchii", "b_oprychnyk", "b_morskyi_tsar", "b_lisovyi_did", "b_putinoid", "b_lykho", "b_pushkar", "b_karachun", "b_shubin", "b_idolyshche", "b_vii", "b_dev", "b_khala", "b_velnias", "b_zolota_baba", "b_chornoboh"]
+const ORDER := ["zlyden", "mavka", "bolotianyk", "kikimora", "mara", "chort", "vovkulaka", "pishchalnyk", "zarazhenyi", "kromeshnyk", "mertvyi_strilets", "pesyholovets", "upyr", "potopelnyk", "lisovyk", "chaklun", "vedmid", "boyaryn", "kamiana_baba", "almasty", "kadzhi", "karakondzhul", "samodiva", "mertvyi_lytsar", "lauma", "aitvaras", "menkv", "shurale", "chud", "stallo", "khiisi", "strygoi", "moroi", "b_vovkulaka", "b_zmii", "b_upyr", "b_chaklun", "b_vidma", "b_bila_pani", "b_baba_yaha", "b_solovei", "b_koshchii", "b_oprychnyk", "b_morskyi_tsar", "b_lisovyi_did", "b_putinoid", "b_lykho", "b_pushkar", "b_karachun", "b_shubin", "b_idolyshche", "b_vii", "b_drakula", "b_dev", "b_khala", "b_velnias", "b_zolota_baba", "b_chornoboh"]

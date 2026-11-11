@@ -18,7 +18,7 @@ const LEVEL_GAP := 8  # бос має бути не нижчий за героя
 ## Власний ступінь боса. Нового боса без запису оцінюють за рівнем його лігва (див. LootService.boss_tier).
 const BOSS_TIER := {"zmii": 1, "upyr": 1, "vovkulaka": 1, "chaklun": 2, "vidma": 2, "baba_yaha": 2, "solovei": 2,
 	"koshchii": 3, "bila_pani": 3, "pushkar": 3, "vii": 4, "shubin": 4, "lykho": 4, "morskyi_tsar": 4, "putinoid": 4,
-	"oprychnyk": 4, "lisovyi_did": 4, "idolyshche": 4, "karachun": 5,
+	"oprychnyk": 4, "lisovyi_did": 4, "idolyshche": 4, "karachun": 5, "drakula": 5,
 	"dev": 6, "khala": 6, "velnias": 6, "zolota_baba": 6, "chornoboh": 6}
 
 ## Середина кидка властивості легендарної речі: [стала, приріст за рівень] (див. Data._roll_value).
