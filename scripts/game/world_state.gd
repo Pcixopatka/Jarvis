@@ -215,19 +215,24 @@ func on_kill(kind: String) -> Array:
 			continue
 		if q["type"] == "kill":
 			q["progress"] += 1
-			if is_done(q):
-				msgs.append("Завдання виконано!")
 		elif q["type"] == "fetch" and randf() < 0.4:
 			q["progress"] += 1
-			msgs.append("%s %d/%d" % [Data.QUEST_ITEMS[kind], q["progress"], q["count"]])
+			if not is_done(q):
+				msgs.append("%s %d/%d" % [Data.QUEST_ITEMS[kind], q["progress"], q["count"]])
+		if is_done(q):
+			msgs.append("Завдання виконано! Здай: %s" % Data.place_name(str(q["city"])))
 	return msgs
 
 
-func on_dungeon(loc_id: String) -> void:
+## Печеру пройдено. Повертає повідомлення про завдання, які цим виконано.
+func on_dungeon(loc_id: String) -> Array:
+	var msgs := []
 	cleared[loc_id] = cleared.get(loc_id, 0) + 1
 	for q in quests:
-		if q["type"] == "dungeon" and q["target"] == loc_id:
+		if q["type"] == "dungeon" and q["target"] == loc_id and not is_done(q):
 			q["progress"] = q["count"]
+			msgs.append("Завдання виконано! Здай: %s" % Data.place_name(str(q["city"])))
+	return msgs
 
 
 func quest_targets() -> Dictionary:

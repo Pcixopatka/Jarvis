@@ -173,6 +173,7 @@ const MAX_ZOOM := 4.0
 var selected := ""
 var current := ""  # де зараз козак
 var targets := {}  # місцевості з активними завданнями
+var turn_ins := {}  # місто -> скільки виконаного там можна здати (зелена позначка з галочкою)
 var story_target := ""  # куди веде сюжет (зірка)
 var plague := {}  # id місцевості -> рівень зарази (0..3)
 var sieges := {}  # місто/хутір -> походів до падіння (облога)
@@ -288,6 +289,10 @@ func _zoom_at(screen_pt: Vector2, factor: float) -> void:
 
 func focus_on(id: String) -> void:
 	center = _unit(_place_ll(id))
+	# подія, що рухається мапою (конвой із бранцями), стоїть не там, де її мета
+	for ev in events:
+		if ev["id"] == id and ev["kind"] == "captives":
+			center = _unit(ev["ll"])
 
 
 # ---------- Керування: тап, перетягування, щипок, коліщатко ----------
@@ -489,6 +494,16 @@ func _draw() -> void:
 			var c: Vector2 = _markers[id] + Vector2(16, -22) * k
 			draw_circle(c, 10 * k, Color(1.0, 0.8, 0.1))
 			_text(font, c + Vector2(0, 6 * k), "!", int(18 * k), Color(0.2, 0.1, 0.0), false)
+	# Виконане: зелена позначка з галочкою на місті, де це здають
+	for id in turn_ins:
+		if _markers.has(id):
+			var tc: Vector2 = _markers[id] + Vector2(20, -24) * k
+			var tr := (12.0 + sin(_pulse * 1.5) * 1.5) * k
+			draw_circle(tc, tr + 2.0 * k, Color(0.08, 0.25, 0.08))
+			draw_circle(tc, tr, Color(0.3, 0.8, 0.3))
+			draw_polyline(PackedVector2Array([tc + Vector2(-5.5, 0.5) * k, tc + Vector2(-1.5, 4.5) * k, tc + Vector2(6, -4.5) * k]), Color.WHITE, 3.0 * k, true)
+			if int(turn_ins[id]) > 1:
+				_text(font, tc + Vector2(tr + 8.0 * k, 7.0 * k), str(int(turn_ins[id])), int(clampf(17.0 * k, 13, 28)), Color(0.1, 0.4, 0.1))
 	# Облоги: червоне пульсуюче кільце й напис
 	for id in sieges:
 		if _markers.has(id):
@@ -576,7 +591,7 @@ func _draw_labels(font: Font, labels: Array) -> void:
 	for l in labels:
 		if l[1] == selected:
 			l[0] = 100
-		elif l[1] == story_target or targets.has(l[1]):
+		elif l[1] == story_target or targets.has(l[1]) or turn_ins.has(l[1]):
 			l[0] += 30
 		elif l[1] == current:
 			l[0] += 20

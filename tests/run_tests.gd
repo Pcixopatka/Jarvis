@@ -7650,11 +7650,78 @@ func _suite_journal() -> void:
 		text += n.text + "\n"
 	check("можна здати: 2" in text and "Знищ 5 мавок (Дике Поле)  5/5" in text and "Від міста: Запорозька Січ" in text and "Нагорода: 100 грн" in text and "Готово: здай у місті Запорозька Січ" in text and "Розшук: Упир Кривий" in text and "Голова твоя" in text, "у журналі на екрані все: завдання, нагороди, що здати")
 	game.close_character()
+	# Мапа: виконане завдання позначає місто, де його здають
+	var places: Dictionary = Journal.turn_in_places(w)
+	check(places.size() == 2 and int(places["sich"]["quests"]) == 1 and int(places["sich"]["heads"]) == 0 and int(places["kyiv"]["heads"]) == 1, "служба знає, де здавати виконане: %s" % str(places))
+	w.quests.append({"id": 951, "city": "sich", "loc": "black_forest", "type": "kill", "target": "mavka", "progress": 1, "count": 5, "text": "Знищ 5 мавок (Чорний ліс)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
+	game.enter_map()
+	await _frames(3)
+	var mv = game.hud.map_view
+	check(mv.turn_ins == {"sich": 1, "kyiv": 1}, "мапа позначає міста, де здавати: %s" % str(mv.turn_ins))
+	check(mv.targets.has("black_forest") and not mv.targets.has("wild_field"), "знак оклику лишається лише на меті невиконаного завдання")
+	check("5/5  ✓ здай: Запорозька Січ" in game.hud.quest_label.text and not "1/5  ✓" in game.hud.quest_label.text, "рядок виконаного завдання називає місто, де здати")
+	var panel_text := func() -> String:
+		var out := ""
+		for n in game.hud.map_panel.find_children("*", "Label", true, false):
+			out += n.text + "\n"
+		return out
+	game.map_sel = "sich"
+	game._build_map_panel()
+	await _frames(2)
+	check("Можна здати завдань: 1" in panel_text.call(), "панель міста каже, скільки завдань можна здати")
+	game.map_sel = "kyiv"
+	game._build_map_panel()
+	await _frames(2)
+	check("Чекає нагорода за розшук: 1" in panel_text.call() and not "Можна здати завдань" in panel_text.call(), "панель міста каже про голову з розшуку")
+	# Повідомлення в бою одразу називає місто
+	w.quests[1]["progress"] = 4
+	var kill_msgs: Array = w.on_kill("mavka")
+	check(kill_msgs == ["Завдання виконано! Здай: Запорозька Січ"], "останнє вбивство: «%s»" % str(kill_msgs))
+	check(w.on_kill("mavka").is_empty(), "виконане завдання більше не рахує вбивств")
+	w.quests.append({"id": 952, "city": "kyiv", "loc": "serpent_cave", "type": "dungeon", "target": "serpent_cave", "progress": 0, "count": 1, "text": "Очисти: Змієва печера", "lvl": 3, "gold": 100, "xp": 50, "loyalty": 20})
+	var dun_msgs: Array = w.on_dungeon("serpent_cave")
+	check(dun_msgs == ["Завдання виконано! Здай: Київ"] and w.on_dungeon("serpent_cave").is_empty(), "пройдена печера: «%s», удруге не повторюється" % str(dun_msgs))
+	w.quests.append({"id": 953, "city": "kyiv", "loc": "wild_field", "type": "fetch", "target": "mavka", "progress": 0, "count": 2, "text": "Принеси 2", "lvl": 1, "gold": 10, "xp": 5, "loyalty": 5})
+	var last := []
+	for i in 400:
+		var mm: Array = w.on_kill("mavka")
+		if not mm.is_empty():
+			last = mm
+		if w.is_done(w.quests[3]):
+			break
+	check(w.is_done(w.quests[3]) and last == ["Завдання виконано! Здай: Київ"], "принесене до кінця: «%s»" % str(last))
+	# Журнал: дотик до завдання показує на мапі мету, а для виконаного — місто, де здати
+	var jrows: Array = find.call("Завдання міст")["rows"]
+	check(jrows[0]["place"] == "sich" and jrows[2]["place"] == "kyiv" and find.call("Розшук")["rows"][0]["place"] == "kyiv" and str(Journal.sections(w, p)[0]["rows"][0]["place"]) == str(game.StoryService.target(w)), "журнал знає місце кожного завдання")
+	w.quests.append({"id": 954, "city": "kyiv", "loc": "black_forest", "type": "kill", "target": "chort", "progress": 0, "count": 5, "text": "Знищ 5 чортів (Чорний ліс)", "lvl": 1, "gold": 10, "xp": 5, "loyalty": 5})
+	check(find.call("Завдання міст")["rows"][4]["place"] == "black_forest", "невиконане завдання веде до своєї мети")
+	game.open_character()
+	game.char_tab = 1
+	game._build_character()
+	await _frames(2)
+	var jtaps := 0
+	for pc in game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(1).find_children("*", "PanelContainer", true, false):
+		var has_cue := false
+		for n in pc.find_children("*", "Label", true, false):
+			has_cue = has_cue or n.text == "на мапі ›"
+		if has_cue and not pc.find_children("*", "Button", true, false).is_empty():
+			jtaps += 1
+	check(jtaps >= 6, "картки журналу з місцем стали кнопками «на мапі»: %d" % jtaps)
+	game.char_do("place_show", ["black_forest", "Знищ 5 чортів"])
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_sel == "black_forest" and game.hud.map_view.selected == "black_forest", "дотик до завдання відкриває мапу на його місці")
+	# Здав завдання: позначка з міста зникає
+	var CityS = load("res://scripts/game/city_service.gd")
+	CityS.turn_in(w, p, 950)
+	CityS.turn_in(w, p, 951)
+	check(not Journal.turn_in_places(w).has("sich") and int(Journal.turn_in_places(w)["kyiv"]["quests"]) == 2, "здане завдання знімає позначку з міста")
 	# Довідник
 	var titles := {}
 	for sx in WS.sections():
 		for e in sx["entries"]:
 			titles[str(e["title"])] = str(e["text"])
+	check("зелена позначка" in str(titles.get("Мапа й дорога", "")) and "розшук" in str(titles.get("Мапа й дорога", "")), "довідник пояснює позначку міста, де здавати")
+	check("мапа покаже це місце" in str(titles.get("Екран героя й журнал", "")), "довідник каже, що дотик до події чи завдання показує місце на мапі")
 	check(titles.has("Екран героя й журнал") and "Журнал" in str(titles.get("Екран героя й журнал", "")), "довідник пояснює екран героя й журнал")
 	check("пройдені дерева" in str(titles.get("Дерева вмінь", "")) and "Камінь забуття" in str(titles.get("Дерева вмінь", "")), "довідник каже, що очки можна вкладати й у пройдені дерева")
 	game.queue_free()
@@ -8307,6 +8374,95 @@ func _suite_events_wiki_game() -> void:
 		if "довіднику" in b.text:
 			wb = b
 	check(wb != null, "з вкладки можна перейти в довідник")
+	# Дотик до події показує її місце на мапі
+	var EBs = game.EventsBoard
+	var raid_place: String = str(game.EventService.active(game.world)["target"])
+	check(EBs.place("village_raid", game.world, "sich") == raid_place and EBs.place("caravan", game.world, "sich") == "", "подія світу має місце, лише поки діє: %s" % raid_place)
+	check(EBs.place("vigil", game.world) == "varta" and EBs.place("ring", game.world) == "kolo" and EBs.place("hunt", game.world) == "hunt" and EBs.place("fish", game.world) == "fish", "заняття на мапі ведуть до своїх місць")
+	check(EBs.place("duel", game.world) == "sich" and EBs.place("muster", game.world) == "chyhyryn" and EBs.place("garden", game.world) == "hutir" and EBs.place("tower", game.world) == "bashta" and EBs.place("depths", game.world) == "hlybyny", "події міст, хутора, Башти й Глибин мають свої місця")
+	var near_ok := true
+	for from in ["wild_field", "black_forest", "hutir", "varta"]:
+		var got: String = EBs.place("trade", game.world, from)
+		for c in Data.CITIES:
+			if EBs._ll(from).distance_to(Data.CITIES[c]["pos"]) < EBs._ll(from).distance_to(Data.CITIES[got]["pos"]) - 0.0001:
+				near_ok = false
+	check(EBs.place("dice", game.world, "kyiv") == "kyiv" and near_ok and EBs.place("trade", game.world, "black_forest") == "chyhyryn", "«у будь-якому місті» веде до міста, де герой стоїть, або до найближчого")
+	check(EBs.place("trail", game.world, "sich") == "" and EBs.place("holidays", game.world, "sich") == "" and EBs.place("challenges", game.world, "sich") == "", "події без місця на мапі місця не вигадують")
+	var far_place: String = EBs.place("far", game.world, "sich")
+	check(Data.LOCATIONS.has(far_place) and Data.LOCATIONS[far_place].get("scale", false), "далекі краї ведуть до найближчого далекого краю: %s" % far_place)
+	# кожна подія або має місце, або чесно його не має: жодна не веде в неіснуюче місце
+	var bad_places := []
+	var ActsD = load("res://scripts/data/activities.gd")
+	for e in EBs.Wiki.EVENTS:
+		var pl: String = EBs.place(e["id"], game.world, "sich")
+		if pl != "" and not (Data.CITIES.has(pl) or Data.LOCATIONS.has(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+			bad_places.append("%s→%s" % [e["id"], pl])
+	check(bad_places.is_empty(), "місця всіх подій є на мапі: %s" % ", ".join(bad_places))
+	var cue_n := 0
+	var vigil_tap: Button = null
+	var now_tap: Button = null
+	for b in tc.get_child(ev_i).find_children("*", "Button", true, false):
+		if b.text.begins_with("• Набіг на село"):
+			now_tap = b
+	for pc in tc.get_child(ev_i).find_children("*", "PanelContainer", true, false):
+		var lab := ""
+		for n in pc.find_children("*", "Label", true, false):
+			lab += n.text + "|"
+		var taps: Array = pc.find_children("*", "Button", true, false)
+		if "на мапі ›" in lab:
+			cue_n += 1
+			if taps.is_empty():
+				cue_n = -100
+		if lab.begins_with("Козацька варта|") and not taps.is_empty():
+			vigil_tap = taps[0]
+	check(cue_n >= 10 and vigil_tap != null and now_tap != null and "Торкнись події" in et, "картки подій із місцем стали кнопками з підказкою «на мапі» (%d)" % cue_n)
+	now_tap.pressed.emit()
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_sel == raid_place and game.hud.map_view.selected == raid_place, "дотик до події, що діє зараз, відкриває мапу на її місці")
+	var mvw = game.hud.map_view
+	mvw._layout()
+	var vis: Rect2 = mvw.map_rect if mvw.map_rect.size.x > 10 else Rect2(Vector2.ZERO, mvw.size)
+	check(vis.grow(-20.0).has_point(mvw._proj(Data.LOCATIONS[raid_place]["pos"])), "місце події видно на мапі")
+	game.open_character()
+	game.char_tab = ev_i
+	game._build_character()
+	await _frames(2)
+	game.char_do("event_show", "vigil")
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_sel == "varta" and game.hud.map_view.selected == "varta", "дотик до Козацької варти показує Сторожову могилу")
+	# Подія без місця: екран героя лишається, гра пояснює
+	game.open_character()
+	await _frames(2)
+	game.char_do("event_show", "trail")
+	await _frames(2)
+	check(game.state == game.State.CHARACTER and "Окремого місця на мапі зараз нема" in game.hud.banner.text, "подія без місця: мапа не відкривається, є пояснення")
+	game.char_do("event_show", "challenges")
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(game.state == game.State.CHARACTER and tc.get_tab_title(tc.current_tab).begins_with("Виклики") and game.UiCharacter.TAB_CHALLENGES == tc.current_tab, "«Виклики дня й тижня» відкривають вкладку «Виклики»")
+	# У бою мапа не відкривається: похід не урвати випадковим дотиком
+	game.close_character()
+	await _frames(2)
+	game.enter_location("wild_field")
+	await _frames(3)
+	game.open_character()
+	await _frames(2)
+	game.char_do("event_show", "vigil")
+	await _frames(2)
+	check(game.state == game.State.CHARACTER and game.char_return == game.State.PLAYING and game.combat.active and "Сторожова могила" in game.hud.banner.text, "у бою дотик до події лише називає місце")
+	game.close_character()
+	await _frames(2)
+	game.enter_map()
+	await _frames(2)
+	game.open_character()
+	game.char_tab = ev_i
+	game._build_character()
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	wb = null
+	for b in tc.get_child(ev_i).find_children("*", "Button", true, false):
+		if "довіднику" in b.text:
+			wb = b
 	wb.pressed.emit()
 	await _frames(2)
 	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]

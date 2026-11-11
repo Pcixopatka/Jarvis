@@ -218,9 +218,13 @@ static func _journal(game) -> Control:
 		for r in sec["rows"]:
 			var card := PanelContainer.new()
 			card.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.1), Color(0.5, 0.9, 0.4) if r["ready"] else Color(0.42, 0.33, 0.2), 10, 10))
+			var line := HBoxContainer.new()
+			line.add_theme_constant_override("separation", 10)
+			card.add_child(line)
 			var box := VBoxContainer.new()
 			box.add_theme_constant_override("separation", 2)
-			card.add_child(box)
+			box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			line.add_child(box)
 			var t := UI.label(r["text"], 19, UI.TEXT, false)
 			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			box.add_child(t)
@@ -237,6 +241,9 @@ static func _journal(game) -> Control:
 				box.add_child(sub)
 			if r["ready"]:
 				box.add_child(UI.label(r["ready_text"], 16, UI.GOOD, false))
+			if str(r.get("place", "")) != "":
+				# завдання з місцем: дотик показує на мапі мету, а для виконаного — місто, де здати
+				_tap_card(card, line, "на мапі ›", _do(game, "place_show", [r["place"], r["text"]]))
 			v.add_child(card)
 	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». На мапі зірка веде за історією, а «!» позначає місце завдання.", 15, UI.MUTED, false))
 	v.get_child(v.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -399,14 +406,23 @@ static func _events(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	v.add_child(UI.label("Зараз на мапі", 26, UI.GOLD, false))
-	var now: Array = EB.now_lines(w, p)
+	var now: Array = EB.now_items(w, p, game.map_here)
 	if now.is_empty():
 		v.add_child(UI.label("Спокійно: подій на мапі зараз нема. Вони трапляються після походів.", 18, UI.MUTED, false))
-	for line in now:
-		var l := UI.label("• " + line, 19, UI.GOOD, false)
+	for it in now:
+		if str(it["place"]) != "":
+			# подія має місце: дотик показує його на мапі
+			var nb := UI.button("• %s   ›  на мапі" % str(it["text"]), _do(game, "event_show", it["id"]), Vector2(0, 46), 18)
+			nb.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			nb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(nb)
+			continue
+		var l := UI.label("• " + str(it["text"]), 19, UI.GOOD, false)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(l)
-	var rows: Array = EB.rows(w, p)
+	var hint := UI.label("Торкнись події, щоб побачити її місце на мапі.", 15, UI.MUTED, false)
+	v.add_child(hint)
+	var rows: Array = EB.rows(w, p, game.map_here)
 	for k in EB.Wiki.EVENT_KINDS:
 		v.add_child(UI.label(k[1], 24, UI.GOLD, false))
 		var grid := UI.grid(2)
@@ -414,13 +430,13 @@ static func _events(game) -> Control:
 		grid.add_theme_constant_override("v_separation", 8)
 		for r in rows:
 			if r["kind"] == k[0]:
-				grid.add_child(_event_card(r))
+				grid.add_child(_event_card(r, game))
 		v.add_child(grid)
 	v.add_child(UI.button("Докладно про кожну подію — у довіднику", func(): game.open_wiki(game._build_character, "events"), Vector2(620, 60), 20))
 	return v
 
 
-static func _event_card(r: Dictionary) -> Control:
+static func _event_card(r: Dictionary, game = null) -> Control:
 	var ready: bool = r["ready"]
 	var locked: bool = r["locked"]
 	var panel := PanelContainer.new()
@@ -446,7 +462,27 @@ static func _event_card(r: Dictionary) -> Control:
 		var st := UI.label(str(r["status"]), 16, UI.GOOD if ready else (UI.MUTED if locked else UI.TEXT), false)
 		st.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		col.add_child(st)
+	# Подія з місцем на мапі: уся картка стає кнопкою, праворуч підказка
+	var opens: String = "вкладка ›" if str(r["id"]) == "challenges" else ("на мапі ›" if str(r.get("place", "")) != "" else "")
+	if game != null and opens != "" and not locked:
+		_tap_card(panel, h, opens, _do(game, "event_show", r["id"]))
 	return panel
+
+
+## Робить картку кнопкою: праворуч у рядку row підказка cue, а дотик до будь-якої точки картки викликає cb.
+static func _tap_card(panel: PanelContainer, row: HBoxContainer, cue: String, cb: Callable) -> void:
+	var cl := UI.label(cue, 14, UI.GOLD, false)
+	cl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(cl)
+	var tap := Button.new()
+	tap.flat = true
+	tap.focus_mode = Control.FOCUS_NONE
+	for sb in ["normal", "focus", "disabled"]:
+		tap.add_theme_stylebox_override(sb, StyleBoxEmpty.new())
+	tap.add_theme_stylebox_override("hover", UI.style(Color(1, 1, 1, 0.04), Color(1, 1, 1, 0.0), 10, 0))
+	tap.add_theme_stylebox_override("pressed", UI.style(Color(1, 1, 1, 0.1), Color(1, 1, 1, 0.0), 10, 0))
+	tap.pressed.connect(cb)
+	panel.add_child(tap)
 
 
 # ---------------- Слава й рекорди роду ----------------
@@ -513,6 +549,7 @@ static func _tree_button(text: String, rank: int, max_rank: int, can: bool, lock
 
 
 const SK_CELL := 68  # значок вміння в дереві
+const TAB_CHALLENGES := 8  # номер вкладки «Виклики» (подія «Виклики дня й тижня» відкриває її)
 const SK_STEP_X := 124  # крок між гілками
 const SK_STEP_ONE := 200  # ширина дерева з однією гілкою: щоб довга назва не налазила на сусідню колонку
 const SK_STEP_Y := 102  # крок між рядами

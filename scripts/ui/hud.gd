@@ -460,7 +460,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	if story_line != "":
 		ql.append(story_line)
 	for q in world.quests:
-		ql.append("• %s %d/%d" % [q["text"], q["progress"], q["count"]] + ("  ✓" if world.is_done(q) else ""))
+		ql.append("• %s %d/%d" % [q["text"], q["progress"], q["count"]] + (("  ✓ здай: %s" % Data.place_name(str(q["city"]))) if world.is_done(q) else ""))
 	quest_label.text = "\n".join(ql)
 	loc_label.text = combat_info.get("name", "")
 	sub_label.text = combat_info.get("sub", "")

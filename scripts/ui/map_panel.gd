@@ -226,6 +226,9 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 				done += 1
 		if done > 0:
 			v.add_child(UI.label("Можна здати завдань: %d" % done, 18, UI.GOOD, false))
+		var heads: int = int(load("res://scripts/game/journal_service.gd").turn_in_places(world).get(sel, {}).get("heads", 0))
+		if heads > 0:
+			v.add_child(UI.label("Чекає нагорода за розшук: %d" % heads, 18, UI.GOOD, false))
 		if _event_note(v, world, sel, on_go):
 			return v
 		if _siege_note(v, world, sel):

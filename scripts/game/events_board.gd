@@ -248,7 +248,7 @@ static func _st(text: String, ready: bool) -> Dictionary:
 
 
 ## Усі події з описом і станом: [{"id", "name", "kind", "icon", "where", "level", "text", "reward", "status", "ready", "locked"}].
-static func rows(world, player) -> Array:
+static func rows(world, player, here: String = "") -> Array:
 	var out := []
 	for e in Wiki.EVENTS:
 		var r: Dictionary = e.duplicate()
@@ -256,8 +256,90 @@ static func rows(world, player) -> Array:
 		r["status"] = st["text"]
 		r["ready"] = st["ready"]
 		r["locked"] = st["locked"]
+		r["place"] = "" if st["locked"] else place(e["id"], world, here)
 		out.append(r)
 	return out
+
+
+static func _ll(id: String) -> Vector2:
+	if Data.CITIES.has(id):
+		return Data.CITIES[id]["pos"]
+	if Data.LOCATIONS.has(id):
+		return Data.LOCATIONS[id]["pos"]
+	if Acts.SPOTS.has(id):
+		return Acts.SPOTS[id]["pos"]
+	return Camp.CAMP["pos"] if id == Camp.CAMP_ID else Data.CITIES["sich"]["pos"]
+
+
+## Найближче до героя місто (саме місто, якщо він у ньому).
+static func _near_city(here: String) -> String:
+	if Data.CITIES.has(here):
+		return here
+	var best := "sich"
+	var best_d := INF
+	for c in Data.CITIES:
+		var d: float = _ll(here).distance_to(Data.CITIES[c]["pos"])
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
+
+## Місце події на мапі: id міста, місцевості, хутора чи місця занять. "" — показати нема чого:
+## подія не має свого місця або зараз не діє. here — де герой: для «у будь-якому місті» береться найближче.
+static func place(id: String, world, here: String = "") -> String:
+	var ES = _svc("event_service")
+	if id in ES.BATTLE_KINDS:
+		var a: Dictionary = ES.active(world)
+		return str(a["target"]) if not a.is_empty() and str(a["kind"]) == id else ""
+	match id:
+		"duel", "duel_free":
+			return "sich"
+		"muster":
+			return "chyhyryn"
+		"garden", "theft":
+			return Camp.CAMP_ID
+		"tower":
+			return str(_svc("tower_service").LOC_ID)
+		"depths":
+			return str(_svc("depth_service").LOC_ID)
+		"siege":
+			for c in _svc("defense_service").state(world)["sieges"]:
+				return str(c)
+			return ""
+		"night", "treasure":
+			for loc in ES.state(world)[id]:
+				return str(loc)
+			return ""
+		"fair":
+			var fair: Dictionary = ES.state(world)["fair"]
+			return str(fair["city"]) if not fair.is_empty() else ""
+		"bounty":
+			# узята ціль веде до свого лігва, вбита — до міста з нагородою
+			for b in _svc("bounty_service").state(world)["active"]:
+				return str(b["city"]) if bool(b["killed"]) else str(b["loc"])
+			return _near_city(here)
+		"escort":
+			for q in world.quests:
+				if str(q.get("type", "")) == "escort":
+					return str(q["city"]) if world.is_done(q) else str(q["loc"])
+			return _near_city(here)
+		"dice", "rumor", "trade", "expedition":
+			return _near_city(here)
+		"far":
+			var best := ""
+			var best_d := INF
+			for loc in Data.LOCATIONS:
+				if Data.LOCATIONS[loc].get("scale", false):
+					var d: float = _ll(here).distance_to(Data.LOCATIONS[loc]["pos"])
+					if d < best_d:
+						best_d = d
+						best = loc
+			return best
+	for sid in Acts.SPOTS:
+		if str(Acts.SPOTS[sid]["kind"]) == id:
+			return sid
+	return ""
 
 
 ## Скільки занять можна взяти просто зараз (для позначки на вкладці).
@@ -269,15 +351,23 @@ static func ready_count(world, player) -> int:
 	return n
 
 
-## Що діє на мапі просто зараз (рядки для верху вкладки).
-static func now_lines(world, player) -> Array:
+## Що діє на мапі просто зараз: [{"id", "text", "place"}] (place — де це на мапі, "" — ніде).
+static func now_items(world, player, here: String = "") -> Array:
 	var out := []
 	for e in Wiki.EVENTS:
 		if e["kind"] != "world":
 			continue
 		var st := status(e["id"], world, player)
 		if st["ready"]:
-			out.append("%s: %s" % [e["name"], st["text"]])
+			out.append({"id": e["id"], "text": "%s: %s" % [e["name"], st["text"]], "place": place(e["id"], world, here)})
 	if _svc("event_service").free_hire(world):
-		out.append("Наступний найм у корчмі безкоштовний")
+		out.append({"id": "", "text": "Наступний найм у корчмі безкоштовний", "place": ""})
+	return out
+
+
+## Те саме рядками (для журналу).
+static func now_lines(world, player) -> Array:
+	var out := []
+	for it in now_items(world, player):
+		out.append(it["text"])
 	return out

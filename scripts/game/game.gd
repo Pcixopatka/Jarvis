@@ -495,6 +495,10 @@ func enter_map() -> void:
 		mv.targets[stg] = true
 	for loc in BountyService.targets(world):
 		mv.targets[loc] = true
+	mv.turn_ins = {}
+	var places: Dictionary = load("res://scripts/game/journal_service.gd").turn_in_places(world)
+	for place in places:
+		mv.turn_ins[place] = int(places[place]["quests"]) + int(places[place]["heads"])
 	mv.story_target = StoryService.target(world)
 	mv.plague = PlagueService.state(world)["levels"]
 	mv.events = EventService.map_marks(world)
@@ -528,7 +532,7 @@ func enter_map() -> void:
 	mv.sieges = DefenseService.state(world)["sieges"]
 	_build_map_panel()
 	save_game()
-	hint("map", "Торкнись місця на мапі. «!» позначає твоє завдання. Почни з Дикого Поля поруч із Січчю.")
+	hint("map", "Торкнись місця на мапі. «!» позначає мету завдання, зелена галочка — місто, де здати виконане. Почни з Дикого Поля поруч із Січчю.")
 
 
 func enter_city(id: String) -> void:
@@ -827,7 +831,8 @@ func _on_location_cleared(loc_id: String) -> void:
 
 
 func _on_dungeon_cleared(loc_id: String) -> void:
-	world.on_dungeon(loc_id)
+	for m in world.on_dungeon(loc_id):
+		combat.float_text(player.global_position + Vector2(0, -110), m, UI.GOLD)
 	if loc_id == DepthService.LOC_ID and combat.loc.has("depth"):
 		var d: int = combat.loc["depth"]
 		hud.show_banner(DepthService.on_clear(world, d), UI.GOLD)
@@ -1878,6 +1883,13 @@ func char_do(action: String, arg) -> void:
 		"skill_tree":
 			skill_tree = arg
 			skill_sel = ""
+		"event_show":
+			if _show_event_place(str(arg)):
+				return  # екран героя закрито, відкрито мапу
+		"place_show":
+			# arg: [місце, назва завдання]
+			if _show_place(str(arg[0]), str(arg[1])):
+				return
 		"panel_set":
 			# arg: [kind, index, id]
 			player.set_panel(arg[0], arg[1], arg[2])
@@ -1899,6 +1911,32 @@ func char_do(action: String, arg) -> void:
 				Audio.play("quest", 0.0)
 				save_game()
 	_build_character()
+
+
+## Дотик до події на вкладці «Події»: показати її місце на мапі. Повертає true, якщо мапу відкрито.
+func _show_event_place(id: String) -> bool:
+	var E: Dictionary = EventsBoard.info(id)
+	if id == "challenges":
+		char_tab = UiCharacter.TAB_CHALLENGES
+		return false
+	var place: String = EventsBoard.place(id, world, map_here)
+	if place == "":
+		hud.show_banner("%s\nОкремого місця на мапі зараз нема: %s" % [E.get("name", ""), str(E.get("where", "")).to_lower()], UI.MUTED)
+		return false
+	return _show_place(place, str(E.get("name", "")))
+
+
+## Закрити екран героя й показати місце на мапі: навести на нього й вибрати. title — про що йдеться.
+## У бою мапа не відкривається (похід урвався б): гра лише називає місце. Повертає true, якщо мапу відкрито.
+func _show_place(place: String, title: String) -> bool:
+	if char_return == State.PLAYING:
+		hud.show_banner("%s: %s\nМапа покаже це місце після бою" % [title, Data.place_name(place)], UI.GOLD)
+		return false
+	hud.clear_screen()
+	map_sel = place
+	enter_map()
+	hud.map_view.focus_on(place)
+	return true
 
 
 func close_character() -> void:
