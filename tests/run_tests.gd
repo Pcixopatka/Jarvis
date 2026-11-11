@@ -13613,6 +13613,7 @@ func _suite_grid_shops() -> void:
 	var UCamp = load("res://scripts/ui/ui_camp.gd")
 	var UChar = load("res://scripts/ui/ui_character.gd")
 	var UKit = load("res://scripts/ui/ui_kit.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
 	var Arts = load("res://scripts/data/artifacts.gd")
 	var WS = load("res://scripts/game/wiki_service.gd")
 	# ---- Клітинка з ціною й позначкою ----
@@ -13754,11 +13755,100 @@ func _suite_grid_shops() -> void:
 	put_btn.pressed.emit()
 	await _frames(2)
 	check(game.account.chest["items"].size() == 1 and gp.find_item(put_uid).is_empty(), "кнопка картки кладе річ до скрині")
+	# ---- Донатна крамниця сіткою ----
+	var UShop = load("res://scripts/ui/ui_shop.gd")
+	var SHs = load("res://scripts/game/shop_service.gd")
+	var SetsD = load("res://scripts/data/sets.gd")
+	var DivD = load("res://scripts/data/divine.gd")
+	var CostD = load("res://scripts/data/costumes.gd")
+	var FairS = load("res://scripts/game/fair_service.gd")
+	game.enter_map()
+	await _frames(2)
+	SHs.state(gw)["coins"] = 100000
+	game.open_shop(game.enter_map)
+	await _frames(2)
+	check(UShop.CELL == UChar.CELL, "клітинка донатної крамниці така сама, як у торбі героя")
+	var stc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var want := {"Золоті речі": SHs.ids("unique").size(), "Артефакти": SHs.ids("artifact").size(), "Душі": SHs.ids("soul").size(),
+		"Набори": SetsD.ORDER.size() * (Data.SLOTS.size() + 1), "Божі дари": DivD.ORDER.size(), "Вбрання": CostD.ORDER.size()}
+	var grid_ok := true
+	var got := {}
+	for i in stc.get_tab_count():
+		var tt: String = stc.get_tab_title(i)
+		if want.has(tt):
+			got[tt] = _cells(stc.get_tab_control(i), UShop.CELL).size()
+			grid_ok = grid_ok and int(got[tt]) == int(want[tt])
+	check(grid_ok and got.size() == want.size(), "золоті речі, артефакти, душі, набори, дари й вбрання стоять клітинками: %s" % str(got))
+	# дотик до клітинки показує картку, покупка лишається за кнопкою картки
+	var uid0: String = SHs.ids("unique")[0]
+	game.shop_tab = game._shop_tab_index("Золоті речі")
+	var bag_s: int = gp.inventory.size()
+	var coins_s: int = SHs.coins(gw)
+	_cells(stc.get_tab_control(game.shop_tab), UShop.CELL)[0].pressed.emit()
+	await _frames(2)
+	var spage: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.shop_tab)
+	var sbuy = null
+	for b in spage.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text.begins_with("Купити •"):
+			sbuy = b
+	check(game.shop_sel == "unique:" + uid0 and sbuy != null and gp.inventory.size() == bag_s and SHs.coins(gw) == coins_s, "дотик до золотої речі лише відкриває її картку з кнопкою «Купити»")
+	sbuy.pressed.emit()
+	await _frames(2)
+	spage = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.shop_tab)
+	var sconf = null
+	for b in spage.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text.begins_with("Підтвердити •"):
+			sconf = b
+	check(sconf != null and game.shop_confirm == "unique:" + uid0 and gp.inventory.size() == bag_s, "перший дотик кнопки просить підтвердити")
+	sconf.pressed.emit()
+	await _frames(2)
+	spage = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.shop_tab)
+	var tick := false
+	for l in _cells(spage, UShop.CELL)[0].find_children("*", "Label", true, false):
+		tick = tick or l.text == "✓"
+	check(gp.inventory.size() == bag_s + 1 and SHs.coins(gw) == coins_s - SHs.price("unique", uid0) and tick and SHs.bought(gw, "unique", uid0) == 1, "другий дотик купує: річ у торбі, на клітинці галочка")
+	game.shop_do("select", "divine:mazha")
+	await _frames(2)
+	check(game.shop_sel == "divine:mazha" and game.shop_confirm == "", "вибір іншого товару скидає підтвердження")
+	game.close_shop()
+	await _frames(2)
+	# ---- Ярмарок сіткою ----
+	gp.level = maxi(gp.level, 30)
+	gp.resources[Camp.TROPHY] = 5000
+	gp.gold = 5000000
+	game.enter_camp()
+	await _frames(2)
+	var ftc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var fair_i := -1
+	for i in ftc.get_tab_count():
+		if ftc.get_tab_title(i) == "Ярмарок":
+			fair_i = i
+	check(fair_i >= 0, "на хуторі є вкладка «Ярмарок»")
+	game.camp_tab = fair_i
+	game._build_camp()
+	await _frames(2)
+	var fpage: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(fair_i)
+	var fstock: Array = FairS.stock(gp)
+	var fcells: Array = _cells(fpage, UShop.CELL)
+	check(fcells.size() == fstock.size() and fstock.size() >= 4 and game.fair_sel == "", "товари ярмарку стоять клітинками (%d)" % fcells.size())
+	fcells[fstock.size() - 1].pressed.emit()
+	await _frames(2)
+	fpage = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(fair_i)
+	var fbuy = null
+	for b in fpage.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text.begins_with(UCamp.FAIR_BUY):
+			fbuy = b
+	var fkey: String = str(fstock[fstock.size() - 1]["key"])
+	check(game.fair_sel == fkey and fbuy != null and not fbuy.disabled and FairS.bought(gw, fkey) == 0, "дотик до товару ярмарку показує картку з кнопкою «%s»" % UCamp.FAIR_BUY)
+	fbuy.pressed.emit()
+	await _frames(2)
+	check(FairS.bought(gw, fkey) == 1 and int(gp.resources[Camp.TROPHY]) == 5000 - int(fstock[fstock.size() - 1]["trophy"]), "кнопка картки вимінює товар за трофеї")
 	# ---- Довідник ----
 	var arts := {}
 	for e in WS._entries("basics") + WS._entries("camp"):
 		arts[str(e["title"])] = str(e["text"])
 	check("клітинками зі значками" in arts.get("Крамниця міста", "") and "«Вибрати кілька»" in arts.get("Крамниця міста", "") and UCamp.CHEST_TAKE in arts.get("Скриня", "") and "Другий дотик" in arts.get("Скриня", ""), "довідник описує крамницю й скриню сіткою значків")
+	check("сіткою значків" in arts.get("Крамниця", "") and "намальований його бос" in arts.get("Крамниця", "") and "сіткою значків" in arts.get("Трофейний ярмарок", "") and "«Виміняти»" in arts.get("Трофейний ярмарок", ""), "довідник описує донатну крамницю й ярмарок сіткою значків")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

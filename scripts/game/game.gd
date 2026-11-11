@@ -2981,6 +2981,8 @@ func close_wiki() -> void:
 
 var shop_open := false
 var shop_tab := 0
+var shop_sel := ""  # вибраний у крамниці товар: ключ "вид:id" (картка праворуч від сітки)
+var fair_sel := ""  # вибраний товар ярмарку на хуторі (ключ із FairService.stock)
 var shop_confirm := ""  # товар, що чекає другого дотику: покупку за червінці треба підтвердити
 var _shop_back := Callable()
 
@@ -3012,9 +3014,14 @@ func close_shop() -> void:
 ## "premium" — купити чи продовжити Гетьманський універсал.
 func shop_do(action: String, arg) -> void:
 	match action:
+		"select":
+			# дотик до клітинки товару: показати його картку; покупка лишається за кнопкою картки
+			shop_sel = str(arg)
+			shop_confirm = ""
 		"divine":
 			# куплений дар вдягається й знімається одним дотиком, купівля просить підтвердження
 			var did: String = str(arg)
+			shop_sel = "divine:" + did
 			if DivineService.owned(world, did):
 				if DivineService.wears(player, did):
 					DivineService.unequip(world, player, str(DivineService.Divine.DEFS[did]["slot"]))
@@ -3036,6 +3043,7 @@ func shop_do(action: String, arg) -> void:
 		"costume":
 			# куплене вбрання вдягається й знімається одним дотиком, купівля просить підтвердження
 			var cid: String = str(arg)
+			shop_sel = "costume:" + cid
 			if CostumeService.owned(world, cid):
 				CostumeService.wear(world, player, "" if player.costume == cid else cid)
 				shop_confirm = ""
@@ -3081,6 +3089,7 @@ func shop_do(action: String, arg) -> void:
 			var kind: String = str(arg[0])
 			var id: String = str(arg[1])
 			var key: String = ShopService.key(kind, id)
+			shop_sel = key
 			if ShopService.block_reason(world, player, kind, id) != "":
 				shop_confirm = ""
 			elif shop_confirm != key:
@@ -3298,6 +3307,8 @@ func camp_do(action: String, arg) -> void:
 				smith_msg = "Зачаровано: %s" % player.EnchantService.text(player.find_item(int(arg[0])))
 				smith_msg_color = Color(0.75, 0.6, 1.0)
 				_record("enchant")
+		"fair_select":
+			fair_sel = str(arg)
 		"fair_buy":
 			var fr: Dictionary = load("res://scripts/game/fair_service.gd").buy(world, player, str(arg))
 			if bool(fr["ok"]):

@@ -539,66 +539,80 @@ static func _enchant_block(game, det: VBoxContainer, it: Dictionary) -> void:
 
 
 ## Трофейний ярмарок: тижневий товар скупника за трофеї й гривні.
+const FAIR_BUY := "Виміняти"
+const FAIR_ICONS := {"safe": "kl_pechatka", "zabuttia": "stone_zabuttia", "alatyr": "stone_alatyr"}
+
+## Ярмарок: товари скупника сіткою значків, як торба героя. Під значком ціна в трофеях,
+## дотик показує картку товару праворуч із кнопкою «Виміняти».
 static func _fair(game) -> Control:
 	var w = game.world
 	var p = game.player
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	var hl := UI.label("Раз на тиждень скупник привозить рідкісне й міняє на трофеї та гривні. Золоті речі дібрано під твій клас і рівень. Кожну річ можна взяти раз на тиждень, у понеділок товар новий. Твої трофеї: %d." % int(p.resources.get("trophy", 0)), 17, UI.MUTED, false)
-	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	v.add_child(hl)
-	var grid := UI.grid(2)
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 10)
-	v.add_child(grid)
+	var UShop = load("res://scripts/ui/ui_shop.gd")
 	var Uniq = load("res://scripts/data/uniques.gd")
 	var Arts = load("res://scripts/data/artifacts.gd")
+	var Gfx = load("res://scripts/world/gfx.gd")
+	var grid := UI.grid(UShop.COLS)
+	var picked: Dictionary = {}
 	for e in FairService.stock(p):
-		var panel := PanelContainer.new()
-		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), Color(0.45, 0.36, 0.22), 10, 10))
-		var h := HBoxContainer.new()
-		h.add_theme_constant_override("separation", 12)
-		panel.add_child(h)
-		var left := VBoxContainer.new()
-		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		left.add_theme_constant_override("separation", 2)
-		h.add_child(left)
-		var sub := ""
-		var text := ""
+		var key: String = str(e["key"])
 		var col: Color = UI.GOLD
+		var mark := ""
+		var icon: Control = null
 		match str(e["kind"]):
 			"unique":
 				var D: Dictionary = Uniq.DEFS[e["id"]]
 				col = Data.RARITY_COLORS[Uniq.RARITY]
-				sub = "Золота річ «%s» • %s • рівень %d" % [Uniq.TIER_NAMES[int(e["tier"])], Data.SLOT_NAMES[D["slot"]], int(p.level)]
-				text = "%s: %s" % [Uniq.power_name(str(e["id"])), Uniq.power_text(str(e["id"]))]
+				mark = "★"
+				icon = UI.icon(UI.item_icon_id({"slot": D["slot"], "type": D["type"]}), UShop.CELL)
+			"artifact":
+				col = Data.RARITY_COLORS[Arts.RARITY]
+				mark = "◆"
+				var boss: String = str(Arts.DEFS[e["id"]].get("boss", ""))
+				icon = UI.sprite_icon(boss, UShop.CELL) if Gfx.has(boss) else UI.icon("it_artifact", UShop.CELL)
+			_:
+				icon = UI.icon(str(FAIR_ICONS.get(str(e["id"]), "trophy")), UShop.CELL)
+		if key == game.fair_sel:
+			picked = e
+		grid.add_child(UI.goods_cell(icon, col, _do(game, "fair_select", key), key == game.fair_sel, UShop.CELL, str(int(e["trophy"])), mark,
+			FairService.bought(w, key) >= int(e["limit"])))
+	var det := VBoxContainer.new()
+	det.add_theme_constant_override("separation", 6)
+	if picked.is_empty():
+		det.add_child(UI.label("Торкнись товару,\nщоб побачити,\nщо він дає.", 20, UI.MUTED, false))
+		det.add_child(UI.label("Число під значком: ціна\nв трофеях. Галочка:\nцього тижня вже взято.", 15, UI.MUTED, false))
+	else:
+		var sub := ""
+		var text := ""
+		var col: Color = UI.GOLD
+		match str(picked["kind"]):
+			"unique":
+				var D: Dictionary = Uniq.DEFS[picked["id"]]
+				col = Data.RARITY_COLORS[Uniq.RARITY]
+				sub = "Золота річ «%s» • %s • рівень %d" % [Uniq.TIER_NAMES[int(picked["tier"])], Data.SLOT_NAMES[D["slot"]], int(p.level)]
+				text = "%s: %s" % [Uniq.power_name(str(picked["id"])), Uniq.power_text(str(picked["id"]))]
 			"artifact":
 				col = Data.RARITY_COLORS[Arts.RARITY]
 				sub = "Артефакт • діє з торби"
-				text = str(Arts.DEFS[e["id"]]["text"])
+				text = str(Arts.DEFS[picked["id"]]["text"])
 			_:
-				sub = "можна взяти на тиждень: %d" % int(e["limit"])
-		left.add_child(UI.label(str(e["name"]), 20, col, false))
-		left.add_child(UI.label(sub, 14, UI.MUTED, false))
+				sub = "можна взяти на тиждень: %d" % int(picked["limit"])
+		var nl := UI.label(str(picked["name"]), 22, col, false)
+		nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		det.add_child(nl)
+		det.add_child(UI.label(sub, 14, UI.MUTED, false))
 		if text != "":
-			var tl := UI.label(text, 15, UI.TEXT, false)
+			var tl := UI.label(text, 16, UI.TEXT, false)
 			tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			tl.custom_minimum_size = Vector2(200, 0)
-			left.add_child(tl)
-		var why: String = FairService.block_reason(w, p, str(e["key"]))
-		var right := VBoxContainer.new()
-		right.custom_minimum_size = Vector2(190, 0)
-		right.alignment = BoxContainer.ALIGNMENT_CENTER
-		h.add_child(right)
-		right.add_child(UI.button("Виміняти\n%d трофеїв\n%s грн" % [int(e["trophy"]), UI.num(int(e["gold"]))], _do(game, "fair_buy", str(e["key"])), Vector2(190, 84), 15, why == ""))
+			tl.custom_minimum_size = Vector2(280, 0)
+			det.add_child(tl)
+		var why: String = FairService.block_reason(w, p, str(picked["key"]))
+		det.add_child(UI.button("%s • %d трофеїв і %s грн" % [FAIR_BUY, int(picked["trophy"]), UI.num(int(picked["gold"]))], _do(game, "fair_buy", str(picked["key"])), Vector2(UShop.BTN_W + 40, 60), 17, why == ""))
 		if why != "":
-			var wl := UI.label(why, 13, UI.GOOD if FairService.bought(w, str(e["key"])) >= int(e["limit"]) else UI.BAD, false)
+			var wl := UI.label(why, 14, UI.GOOD if FairService.bought(w, str(picked["key"])) >= int(picked["limit"]) else UI.BAD, false)
 			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			wl.custom_minimum_size = Vector2(180, 0)
-			right.add_child(wl)
-		grid.add_child(panel)
-	return v
+			wl.custom_minimum_size = Vector2(280, 0)
+			det.add_child(wl)
+	return UShop._page("Раз на тиждень скупник привозить рідкісне й міняє на трофеї та гривні. Золоті речі дібрано під твій клас і рівень. Кожну річ можна взяти раз на тиждень, у понеділок товар новий. Твої трофеї: %d." % int(p.resources.get(Camp.TROPHY, 0)), grid, det)
 
 
 ## Стайня: улюбленці роду. Купити, нагодувати до наступного ступеня, узяти з собою.

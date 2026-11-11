@@ -144,6 +144,49 @@ static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px
 	return b
 
 
+## Клітинка товару крамниці в стилі клітинки речі: готовий значок (UI.icon чи UI.sprite_icon) на тлі
+## кольору товару й підпис унизу (ціна). mark — позначка в лівому верхньому куті (★ золота річ,
+## ◆ артефакт, ✦ набір); owned — уже куплено (зелена галочка); dim — товар не для цього героя (тьмяний).
+static func goods_cell(icon_node: Control, col: Color, cb: Callable, selected: bool = false, px: int = 72, note: String = "", mark: String = "", owned: bool = false, dim: bool = false) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(px, px)
+	b.clip_contents = true
+	var bg := col.darkened(0.5) if selected else col.darkened(0.74)
+	var edge := Color(1.0, 0.95, 0.75) if selected else col.darkened(0.2)
+	b.add_theme_stylebox_override("normal", style(bg, edge, 8, 2))
+	b.add_theme_stylebox_override("hover", style(bg.lightened(0.08), edge, 8, 2))
+	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.15), edge, 8, 2))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var isz: int = px - 20 - (8 if note != "" else 0)
+	icon_node.custom_minimum_size = Vector2(isz, isz)
+	icon_node.size = Vector2(isz, isz)
+	icon_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon_node.set_anchors_preset(Control.PRESET_CENTER)
+	icon_node.position = Vector2(-isz / 2.0, -isz / 2.0 - (6.0 if note != "" else 0.0))
+	if dim:
+		icon_node.modulate = Color(1, 1, 1, 0.4)
+	b.add_child(icon_node)
+	if note != "":
+		var nl := label(note, 12, TEXT, true)
+		nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		nl.add_theme_constant_override("outline_size", 4)
+		nl.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
+		nl.anchor_left = 0.0
+		nl.anchor_right = 1.0
+		nl.anchor_top = 1.0
+		nl.anchor_bottom = 1.0
+		nl.offset_top = -19.0
+		nl.offset_bottom = -1.0
+		nl.clip_text = true
+		b.add_child(nl)
+	if mark != "":
+		b.add_child(_cell_mark(mark, col.lightened(0.35), 15, Control.PRESET_TOP_LEFT, Vector2(5, 1)))
+	if owned:
+		b.add_child(_cell_mark("✓", GOOD, 17, Control.PRESET_TOP_RIGHT, Vector2(-20, 0)))
+	b.pressed.connect(cb)
+	return b
+
+
 ## Порожня клітинка сітки; із блідим значком слота, якщо це місце для вдягненого.
 static func empty_cell(px: int = 72, icon_id: String = "") -> Panel:
 	var c := Panel.new()

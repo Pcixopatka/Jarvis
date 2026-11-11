@@ -117,52 +117,43 @@ static func detail(game, slot: String) -> Control:
 static func shop_page(game) -> Control:
 	var w = game.world
 	var p = game.player
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	v.add_child(_wrap("Божі дари вдягаються у власні гнізда на екрані героя, поруч зі спорядженням, і місця в торбі не займають. Купуються раз на весь рід: кожен герой вдягає їх окремо. У гнізді лежить один дар: де їх два, герой обирає. На відміну від вбрання, дари дають силу й зручність.", 16, UI.TEXT))
-	var grid := UI.grid(2)
-	grid.add_theme_constant_override("h_separation", 12)
-	grid.add_theme_constant_override("v_separation", 10)
-	v.add_child(grid)
+	var UShop = load("res://scripts/ui/ui_shop.gd")
+	var grid := UI.grid(UShop.COLS)
+	var picked := ""
 	for id in Divine.ORDER:
 		var D: Dictionary = Divine.DEFS[id]
+		var key := "divine:" + str(id)
+		if key == game.shop_sel:
+			picked = id
 		var have: bool = DivineService.owned(w, id)
-		var on: bool = DivineService.wears(p, id)
-		var panel := PanelContainer.new()
-		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		panel.add_theme_stylebox_override("panel", UI.style(CARD_BG, DIVINE_COLOR if on else CARD_LINE, 10, 10))
-		var h := HBoxContainer.new()
-		h.add_theme_constant_override("separation", 12)
-		panel.add_child(h)
-		h.add_child(UI.icon(str(D["icon"]), 80))
-		var left := VBoxContainer.new()
-		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		left.add_theme_constant_override("separation", 2)
-		h.add_child(left)
-		left.add_child(_wrap(str(D["name"]), 20, DIVINE_COLOR))
-		left.add_child(_wrap("Гніздо «%s»" % Divine.SLOT_NAMES[D["slot"]], 14, UI.MUTED))
-		left.add_child(_wrap(str(D["desc"]), 15, UI.TEXT))
+		grid.add_child(UI.goods_cell(UI.icon(str(D["icon"]), UShop.CELL), DIVINE_COLOR if DivineService.wears(p, id) else CARD_LINE.lightened(0.2),
+			game.shop_do.bind("select", key), key == game.shop_sel, UShop.CELL, "" if have else UI.num(DivineService.price(id)), "", have))
+	var det := VBoxContainer.new()
+	det.add_theme_constant_override("separation", 6)
+	if picked == "":
+		det.add_child(UShop._hint("Торкнись дару,\nщоб побачити,\nщо він дає."))
+	else:
+		var D: Dictionary = Divine.DEFS[picked]
+		var have: bool = DivineService.owned(w, picked)
+		var on: bool = DivineService.wears(p, picked)
+		var head := HBoxContainer.new()
+		head.add_theme_constant_override("separation", 10)
+		head.add_child(UI.icon(str(D["icon"]), 64))
+		head.add_child(_wrap(str(D["name"]), 22, DIVINE_COLOR))
+		det.add_child(head)
+		det.add_child(_wrap("Гніздо «%s»" % Divine.SLOT_NAMES[D["slot"]], 14, UI.MUTED))
+		det.add_child(_wrap(str(D["desc"]), 16, UI.TEXT))
 		for line in D["lines"]:
-			left.add_child(_wrap("•  " + str(line), 15, UI.GOOD))
-		var right := VBoxContainer.new()
-		right.custom_minimum_size = Vector2(170, 0)
-		right.alignment = BoxContainer.ALIGNMENT_CENTER
-		right.add_theme_constant_override("separation", 2)
-		h.add_child(right)
+			det.add_child(_wrap("•  " + str(line), 15, UI.GOOD))
 		if have:
-			right.add_child(UI.button("Зняти" if on else "Вдягнути", game.shop_do.bind("divine", id), Vector2(170, 64), 19))
-			right.add_child(_wrap("Куплено для роду", 13, UI.MUTED))
+			det.add_child(UI.button("Зняти" if on else "Вдягнути", game.shop_do.bind("divine", picked), Vector2(UShop.BTN_W, 60), 20))
+			det.add_child(_wrap("Вдягнено" if on else "Куплено для роду, зараз знято", 14, UI.GOOD if on else UI.MUTED))
 		else:
-			var why: String = DivineService.block_reason(w, id)
-			var confirm: bool = game.shop_confirm == "divine:" + id and why == ""
-			var b := UI.button(("Підтвердити\n%d %s" if confirm else "Купити\n%d %s") % [DivineService.price(id), Shop.COIN_SHORT], game.shop_do.bind("divine", id), Vector2(170, 64), 18, why == "")
-			if confirm:
-				b.modulate = Color(1.0, 1.0, 0.6)
-			right.add_child(b)
+			var why: String = DivineService.block_reason(w, picked)
+			det.add_child(UShop._buy_button(game, "divine:" + picked, DivineService.price(picked), why, game.shop_do.bind("divine", picked)))
 			if why != "":
-				right.add_child(_wrap(why, 13, UI.BAD))
-		grid.add_child(panel)
-	return v
+				det.add_child(_wrap(why, 14, UI.BAD))
+	return UShop._page("Божі дари вдягаються у власні гнізда на екрані героя, поруч зі спорядженням, і місця в торбі не займають. Купуються раз на весь рід, а вдягає їх кожен герой окремо. Галочка означає, що дар уже куплено.", grid, det)
 
 
 ## Крамниця Хованця: та сама крамниця, що й у місті (товари, зілля, продаж поодинці, гуртом і
