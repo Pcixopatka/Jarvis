@@ -9,6 +9,8 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 
 const MAX := 5  # скільки порад показує журнал
+const WEAK_FROM := 10  # з якого рівня героя порадник стежить, чи під силу йому нечисть свого рівня
+const WEAK_GRADE := 3  # оцінка Power.threat, з якої радить зміцнити спорядження (3 — смертельно)
 const TAB_HERO := 0
 const TAB_JOURNAL := 1
 const TAB_SKILLS := 2
@@ -90,6 +92,11 @@ static func items(world, player, here: String = "") -> Array:
 	var ups: int = player.best_upgrades().size()
 	if ups > 0:
 		out.append(_it("gear", "Вдягни кращі речі з торби", "Сильніших за вдягнене: %d. Кнопка «Вдягнути найкраще»" % ups, "", TAB_HERO))
+	# 6б. Нечисть свого рівня смертельна для героя: час зміцнити спорядження
+	if int(player.level) >= WEAK_FROM:
+		var th: Dictionary = _svc("power").threat(player, int(player.level))
+		if int(th["grade"]) >= WEAK_GRADE:
+			out.append(_it("weak", "Зміцни спорядження", "Нечисть твого рівня тобі зараз: %s. Заточи й онови речі в коваля, вклади очки, встав душі" % str(th["name"]), "", TAB_HERO))
 	# 7. Нагороди за виклики
 	var claims: int = int(_svc("challenge_service").ready_count(world, player))
 	if claims > 0:

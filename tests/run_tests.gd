@@ -6251,6 +6251,26 @@ func _suite_far_lands_game() -> void:
 			e0 = e
 			break
 	check(e0 != null and e0.level >= 40, "нечисть краю на рівні героя")
+	# Сила нечисті — звичайна мірка її рівня; юрба мала й не росте з рівнем героя
+	var std_foe = null
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if not e.elite and not e.is_boss and e.level == 40:
+			std_foe = e
+			break
+	var plain_foe = load("res://scripts/entities/enemy.gd").new()
+	if std_foe != null:
+		plain_foe.setup(std_foe.kind, 40, false)
+	var pl_hp: float = float(c.plague_mods["hp"]) if c.plague > 0 else 1.0
+	check(std_foe != null and is_equal_approx(std_foe.raw_hp, plain_foe.max_hp) and is_equal_approx(std_foe.max_hp, plain_foe.max_hp * pl_hp), "нечисть краю має звичайну силу свого рівня, без окремої мірки")
+	plain_foe.free()
+	check(c.loc.has("hero_level") and c._field_cap() == c.FIELD_ALIVE_BASE + 16 / c.FIELD_ALIVE_STEP and c._field_cap() <= 8, "юрба в полі мала (%d водночас) і рахується від рівня краю, а не героя" % c._field_cap())
+	var crowd_max := 0
+	for i in 400:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		crowd_max = maxi(crowd_max, c.alive_enemy_count())
+		await process_frame
+	check(crowd_max <= c._field_cap() + 1 and crowd_max >= 3, "на арені не більше нечисті, ніж дозволяє межа (%d)" % crowd_max)
 	# Злидень краде гривні й повертає, коли його здолати
 	_clear_enemies(game)
 	await _frames(1)
@@ -7427,6 +7447,13 @@ func _suite_difficulty() -> void:
 	var t_floor: Dictionary = Power.threat(th, 1, 1.0, 1.0, 1.0)
 	check(is_equal_approx(float(t_floor["ttk"]), float(t_own["ttk"])) and is_equal_approx(float(t_floor["hits"]), float(t_own["hits"])), "підлога сили від рівня героя входить в оцінку")
 	check(float(Power.threat(th, 30, 2.0, 2.0)["ttk"]) > float(Power.threat(th, 30)["ttk"]) * 1.9 and float(Power.threat(th, 30, 2.0, 2.0)["hits"]) < float(Power.threat(th, 30)["hits"]) * 0.6, "надбавки місця роблять оцінку гіршою")
+	# Порадник радить зміцнити спорядження, коли нечисть свого рівня смертельна (новачка не чіпає)
+	var GSv = load("res://scripts/game/guide_service.gd")
+	var w_g = load("res://scripts/game/world_state.gd").new()
+	check(GSv.items(w_g, th, "sich").any(func(it): return it["kind"] == "weak" and int(it["tab"]) == GSv.TAB_HERO and "смертельно" in str(it["sub"])), "порадник: нечисть свого рівня смертельна — зміцни спорядження")
+	th.level = GSv.WEAK_FROM - 1
+	check(not GSv.items(w_g, th, "sich").any(func(it): return it["kind"] == "weak"), "новачкові до %d-го рівня порадник цього не каже" % GSv.WEAK_FROM)
+	th.level = 60
 	_fit(th, 1.0)
 	check(float(Power.threat(th, 60)["ttk"]) <= Data.enemy_ttk(60) * 1.01, "герой з еталонною шкодою рубає нечисть свого рівня за еталонний час")
 	check(is_equal_approx(Power.score(th), Power.dps(th) * Power.ehp(th)), "сила героя — шкода на запас живучості")
@@ -9019,7 +9046,7 @@ func _suite_event_lift() -> void:
 	strong.level = 60
 	var sl: Dictionary = DS.battle_loc(w0, "chyhyryn", strong)
 	var g: float = Far.guard_mult(int(sl["level"]), sl)
-	check(int(sl["level"]) == 59 and g > 1.5 and is_equal_approx(g, float(base_dmg.call(59)) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * 58.0))) and is_equal_approx(float(sl["gate_hp"]), (600.0 + 120.0 * 59) * g) and sl.has("min_std_hp"), "облога: мірка героя й міцніша брама (×%.1f)" % g)
+	check(int(sl["level"]) == 59 and g > 1.5 and is_equal_approx(g, 1.0 + (float(base_dmg.call(59)) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * 58.0)) - 1.0) * Far.GUARD_EXTRA) and is_equal_approx(float(sl["gate_hp"]), (600.0 + 120.0 * 59) * g) and sl.has("min_std_hp"), "облога: мірка героя й міцніша брама (×%.1f)" % g)
 	EvS.start(w0, strong, "village_raid", "black_forest")
 	var el: Dictionary = EvS.battle_loc(w0, EvS.active(w0), strong)
 	check(el.has("min_std_hp") and int(el["level"]) == 59 and is_equal_approx(float(el["gate_hp"]), (500.0 + 100.0 * 59) * Far.guard_mult(59, el)), "набіг на село: мірка героя й міцніші хати")

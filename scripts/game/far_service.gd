@@ -65,10 +65,13 @@ static func event_mods(player, mult: float = 1.0) -> Dictionary:
 	return floor_mods(player, EVENT_FLOOR * event_share(int(player.level)) * mult)
 
 
-## У скільки разів удар нечисті рівня level сильніший за стару лінійну шкоду, під яку зроблені формули
-## здоров'я брам, хат, возів і мандрівників. На стільки ж вони міцнішають, інакше падали б за кілька ударів.
+## У скільки разів міцніші брама, хати, вози й мандрівник на рівні level. Формули їхнього здоров'я зроблені
+## під стару лінійну шкоду нечисті, тож міцність росте разом з ударом нечисті, і ще на GUARD_EXTRA понад те:
+## нечисть тепер живе довше й устигає вдарити більше разів. Новачкам (удар не сильніший за старий) без змін.
+const GUARD_EXTRA := 1.25
 static func guard_mult(level: int, _mods: Dictionary = {}) -> float:
-	return maxf(1.0, Data.enemy_std_dmg(level) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * (level - 1))))
+	var harder: float = Data.enemy_std_dmg(level) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * (level - 1)))
+	return 1.0 + maxf(0.0, harder - 1.0) * GUARD_EXTRA
 
 
 ## Нічний похід: нечисть лютіша за мірку події, а в полі її рівень підтягується до героя

@@ -1054,8 +1054,8 @@ func _update_field(delta: float) -> void:
 				kind = "zarazhenyi"  # зараза жене своїх солдатів
 			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
 			_maybe_elite(_last_enemy())
-			# Далекий край рівня героя: нечисть часто суне парами
-			if loc.has("std_hp") and randf() < FIELD_PAIR_CHANCE and alive_enemy_count() < _field_cap():
+			# Далекий край рівня героя: нечисть часто суне парами, щоб добре вдягнений герой не чекав на неї
+			if loc.has("hero_level") and randf() < FIELD_PAIR_CHANCE and alive_enemy_count() < _field_cap():
 				spawn_enemy(en[randi() % en.size()], loc["level"])
 				_maybe_elite(_last_enemy())
 

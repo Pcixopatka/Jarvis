@@ -8,7 +8,6 @@ const Acts := preload("res://scripts/data/activities.gd")
 const Data := preload("res://scripts/data/data.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
-const Power := preload("res://scripts/game/power.gd")
 
 const SPOT_ID := "varta"
 
@@ -29,12 +28,13 @@ static func unlocked(player) -> bool:
 	return not player.is_peasant() and player.level >= int(Acts.SPOTS[SPOT_ID]["level"])
 
 
-## Сила нечисті на конкретній хвилині варти (0 — перша). Мірка — еталонний герой цього рівня:
-## std_hp — здоров'я звичайного зараженого (стільки секунд шкоди еталонного героя він тримає),
-## std_dmg — його удар (частка здоров'я героя після захисту). Досвіду з юрби менше — нагорода тут за хвилини.
+## Сила нечисті на конкретній хвилині варти (0 — перша): частка звичайної мірки рівня героя.
+## std_hp — здоров'я звичайного зараженого, std_dmg — його удар. Від спорядження не залежить.
+## Досвіду з юрби менше — нагорода тут за хвилини.
 static func targets_at(player, minute: int) -> Dictionary:
-	return {"std_hp": Power.ref_dps(int(player.level)) * (Acts.VIGIL_TTK + Acts.VIGIL_TTK_STEP * minute),
-		"std_dmg": Power.ref_hit(int(player.level), Acts.VIGIL_HIT + Acts.VIGIL_HIT_STEP * minute),
+	var lvl := int(player.level)
+	return {"std_hp": Data.enemy_std_hp(lvl) * (Acts.VIGIL_HP + Acts.VIGIL_HP_STEP * minute),
+		"std_dmg": Data.enemy_std_dmg(lvl) * (Acts.VIGIL_HIT + Acts.VIGIL_HIT_STEP * minute),
 		"xp_mult": Acts.VIGIL_XP}
 
 
