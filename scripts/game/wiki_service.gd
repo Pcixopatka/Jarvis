@@ -54,7 +54,8 @@ static func _entries(id: String) -> Array:
 	match id:
 		"basics": return _basics()
 		"events": return _events()
-		"classes": return _classes()
+		"classes": return _classes() + _party()
+		"skills": return _skills()
 		"enemies": return _enemies()
 		"bosses": return _bosses()
 		"map": return _map()
@@ -456,6 +457,100 @@ static func _items() -> Array:
 	return out + _uniques() + _artifacts()
 
 
+## Одним рядком: опис із таблиць часто розбито на рядки для вузьких карток.
+static func _line(text: String) -> String:
+	return " ".join(str(text).split("\n"))
+
+
+## Назва вміння для довідника: якщо така сама є в іншому дереві чи в Загартуванні, додаємо, чиє воно.
+static func skill_title(owner: String, name: String, counts: Dictionary) -> String:
+	return "%s (%s)" % [name, owner] if int(counts.get(name, 0)) > 1 else name
+
+
+## Вміння всіх класів за деревами й Загартування за гілками.
+static func _skills() -> Array:
+	var SkillInfo = load("res://scripts/data/skill_info.gd")
+	var out := []
+	var counts := {}
+	for cls in Classes.TREES:
+		for br in Classes.TREES[cls]:
+			for node in br["nodes"]:
+				counts[node["name"]] = int(counts.get(node["name"], 0)) + 1
+	for br in Data.PERK_BRANCHES:
+		for tier in br["tiers"]:
+			for perk in tier:
+				counts[perk["name"]] = int(counts.get(perk["name"], 0)) + 1
+	out.append(_e("Дерева вмінь", "у кожного класу своє", "У кожного класу своє дерево з кількох гілок. Деякі вміння вимагають уже вивченого попереднього. Активні вміння коштують наснагу й мають перезарядку, пасивні діють завжди. У бою на панелі до трьох атак і до п'яти підсилень: набір обирають у вкладці «Вміння» на екрані героя. Вивчені вміння селянина лишаються й після вибору дороги.", {}, "Як це працює"))
+	out.append(_e("Загартування", "спільне для всіх класів", "Дерево пасивних вмінь, однакове для всіх: очко за кожні %d рівні героя. Гілок три: %s. У гілці кілька ярусів, і щоб відкрити наступний, треба вкласти в гілку по %d очка за кожен попередній ярус." % [Classes.HARDEN_EVERY, ", ".join(Data.PERK_BRANCHES.map(func(b): return b["name"])), Data.PERK_TIER_STEP]))
+	for cls in Classes.TREES:
+		var cname: String = str(Classes.CLASSES[cls]["name"])
+		for br in Classes.TREES[cls]:
+			var first := true
+			for node in br["nodes"]:
+				var id: String = node["id"]
+				var sub := "пасивне • рангів %d" % int(node["max"])
+				var text := _line(node["desc"]) + "."
+				if node.get("active", false):
+					sub = "%s • наснага %d • перезарядка %s с • рангів %d" % ["підсилення" if SkillInfo.KIND.get(id, "attack") == "buff" else "атака", int(node.get("cost", 0)), _num(float(Classes.COOLDOWNS.get(id, 0.0))), int(node["max"])]
+					text = str(SkillInfo.WHAT.get(id, "")) + " " + text
+					if str(SkillInfo.SCALES.get(id, "—")) != "—":
+						text += " Росте від: %s." % str(SkillInfo.SCALES[id]).to_lower()
+				var need := []
+				for r in node.get("req", {}):
+					for other in br["nodes"]:
+						if other["id"] == r:
+							need.append("%s %d" % [other["name"], int(node["req"][r])])
+				if not need.is_empty():
+					text += " Потрібно: %s." % ", ".join(need)
+				out.append(_e(skill_title(cname, node["name"], counts), sub, text.strip_edges(), {}, "%s • %s" % [cname, br["name"]] if first else ""))
+				first = false
+	for br in Data.PERK_BRANCHES:
+		var first2 := true
+		for ti in br["tiers"].size():
+			for perk in br["tiers"][ti]:
+				var sub2 := "ярус %d • рангів %d • %s" % [ti + 1, int(perk["max"]), "відкритий одразу" if ti == 0 else "потрібно %d очок у гілці" % (ti * Data.PERK_TIER_STEP)]
+				out.append(_e(skill_title("Загартування", perk["name"], counts), sub2, _line(perk["desc"]) + "." + (" Це за один ранг." if int(perk["max"]) > 1 else ""), {}, "Загартування • %s" % br["name"] if first2 else ""))
+				first2 = false
+	return out
+
+
+## Найманці з корчми й побратими з історіями.
+static func _party() -> Array:
+	var Heroes = load("res://scripts/data/heroes.gd")
+	var Gfx = load("res://scripts/world/gfx.gd")
+	var out := []
+	var first := true
+	for id in Data.COMPANIONS:
+		var C: Dictionary = Data.COMPANIONS[id]
+		var icon := {"sprite": "comp_" + id} if Gfx.has("comp_" + id) else {}
+		out.append(_e(str(C["name"]), "найманець • %d грн • лояльність від «%s»" % [int(C["cost"]), Data.LOYALTY_NAMES[int(C["loyalty"])]], _line(C["desc"]) + " Наймають у корчмі міста. Ціна росте з рівнем героя, знижка міста діє. Одного виду можна мати лише одного.", icon, "Найманці" if first else ""))
+		first = false
+	first = true
+	for id in Heroes.HEROES:
+		var H: Dictionary = Heroes.HEROES[id]
+		var icon2 := {"sprite": "comp_" + id} if Gfx.has("comp_" + id) else {}
+		var text := str(H["bio"]) + " Де зустріти: %s. Іде в загін безкоштовно. Дружба росте за кожного ворога, здоланого разом; від %d дружби дає особисте завдання: «%s». Після нього стає сильнішим." % [str(Data.CITIES.get(str(H["join"]["city"]), {}).get("name", "у місті")), int(H["quest_bond"]), str(H["quest"]["objective"]["text"])]
+		out.append(_e(str(H["name"]), "побратим • б'ється як %s • сила ×%s" % [str(Data.COMPANIONS[H["base"]]["name"]).to_lower(), _num(float(H["mult"]))], text, icon2, "Побратими" if first else ""))
+		first = false
+	return out
+
+
+## Усі досягнення з нагородами.
+static func _achievements() -> Array:
+	var Ach = load("res://scripts/data/achievements.gd")
+	var out := []
+	var first := true
+	for a in Ach.ACHIEVEMENTS:
+		var reward := []
+		if int(a.get("gold", 0)) > 0:
+			reward.append("%d грн" % int(a["gold"]))
+		if int(a.get("glory", 0)) > 0:
+			reward.append("слави %d" % int(a["glory"]))
+		out.append(_e(str(a["name"]), "досягнення" + (" • " + ", ".join(reward) if not reward.is_empty() else ""), _line(a["desc"]) + ".", {}, "Досягнення: усі %d" % Ach.ACHIEVEMENTS.size() if first else ""))
+		first = false
+	return out
+
+
 ## Душі: правила, гнізда й усі душі за ступенями.
 static func _souls() -> Array:
 	var Souls = load("res://scripts/data/souls.gd")
@@ -553,7 +648,7 @@ static func _rules() -> Array:
 	var A = load("res://scripts/data/achievements.gd")
 	out.append(_e("Виклики", "екран героя, вкладка «Виклики»", "Щодня %d виклики, щотижня %d, по %d з них про події й заняття. Нагорода дня — гривні й ресурси, тижня — гривні, рідкісна річ і безпечна заточка." % [int(A.DAILY_COUNT), int(A.WEEKLY_COUNT), int(A.DAILY_EVENTS)]))
 	out.append(_e("Досягнення", "спільні для всіх героїв", "Досягнень %d: за бої, босів, заняття, свята й клейноди. Кожне відкривається раз і дає гривні." % A.ACHIEVEMENTS.size()))
-	return out
+	return out + _achievements()
 
 
 ## Увесь довідник одним документом Markdown (для docs/wiki.md, див. tools/wiki_export.gd).

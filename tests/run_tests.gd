@@ -7571,6 +7571,38 @@ func _suite_events_wiki() -> void:
 	for sl in Data.SLOTS:
 		rules_ok = rules_ok and WS.SLOT_MAIN.has(Data.SLOT_PRIMARY[sl])
 	check(rules_ok, "стани, властивості еліт і речей — усі з назвами")
+	# Вміння, Загартування, найманці, побратими й досягнення: усе з таблиць гри є в довіднику
+	var Heroes = load("res://scripts/data/heroes.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	var has_title := func(name: String) -> bool:
+		if titles.has(name):
+			return true
+		for t in titles:
+			if str(t).begins_with(name + " ("):
+				return true
+		return false
+	var lost := []
+	for cls in Classes.TREES:
+		for br in Classes.TREES[cls]:
+			for node in br["nodes"]:
+				if not has_title.call(str(node["name"])):
+					lost.append(node["name"])
+	for br in Data.PERK_BRANCHES:
+		for tier in br["tiers"]:
+			for perk in tier:
+				if not has_title.call(str(perk["name"])):
+					lost.append(perk["name"])
+	for id in Data.COMPANIONS:
+		if not has_title.call(str(Data.COMPANIONS[id]["name"])):
+			lost.append(Data.COMPANIONS[id]["name"])
+	for id in Heroes.HEROES:
+		if not has_title.call(str(Heroes.HEROES[id]["name"])):
+			lost.append(Heroes.HEROES[id]["name"])
+	for a in Ach.ACHIEVEMENTS:
+		if not has_title.call(str(a["name"])):
+			lost.append(a["name"])
+	check(lost.is_empty() and titles.has("Дерева вмінь") and titles.has("Загартування") and titles.has("Запас сил"), "кожне вміння, очко Загартування, найманець, побратим і досягнення є в довіднику: %s" % str(lost))
+	check(WS.sections()[WS.index_of("skills")]["title"] == "Вміння" and WS.sections()[WS.index_of("skills")]["entries"].size() >= 100, "окремий розділ «Вміння»: %d статей" % WS.sections()[WS.index_of("skills")]["entries"].size())
 	for e in Wiki.EVENTS:
 		if not titles.has(e["name"]):
 			check(false, "подія «%s» є в довіднику" % e["name"])
