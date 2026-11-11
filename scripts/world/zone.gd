@@ -10,6 +10,11 @@ var kind := "grad"
 var radius := 140.0
 var duration := 3.0
 var damage := 10.0  # за удар (grad, spirit) або за секунду (otruta)
+## Зона вміння за даними (kind == "skill"): як часто б'є, який стан накладає, якого кольору
+var tick := 0.5
+var status := ""
+var status_dur := 1.5
+var color := Color(1.0, 0.8, 0.3)
 var _t := 0.0
 var _tick := 0.0
 
@@ -32,7 +37,7 @@ func _process(delta: float) -> void:
 					combat.spawn_spark(global_position, (e.global_position - global_position).normalized(), damage, false)
 		_:
 			if _tick <= 0.0:
-				_tick = 0.3 if kind == "grad" else 0.5
+				_tick = 0.3 if kind == "grad" else (tick if kind == "skill" else 0.5)
 				for e in get_tree().get_nodes_in_group("enemies"):
 					if e.dead or global_position.distance_to(e.global_position) > radius + e.radius:
 						continue
@@ -46,6 +51,11 @@ func _process(delta: float) -> void:
 							combat.player.Status.apply(e, "weak", 1.0)
 						"otruta":
 							combat.player.Status.apply(e, "plague", 2.0, damage)
+						"skill":
+							if damage > 0.0:
+								combat.player.hit(e, damage, Vector2.ZERO, false)
+							if status != "" and not e.dead:
+								combat.player.Status.apply(e, status, status_dur, damage * 0.2 if status in ["bleed", "burn", "plague"] else 0.0)
 				if kind == "grad":
 					for i in 4:
 						combat.fx.burst(global_position + Vector2.from_angle(randf() * TAU) * randf() * radius, Color(0.85, 0.95, 1.0), 3, 120, 3, 0.25)
@@ -68,6 +78,9 @@ func _draw() -> void:
 				var a := _t * 0.4 + i * TAU / 7.0
 				draw_circle(Vector2.from_angle(a) * radius * 0.5, radius * 0.55, Color(0.75, 0.78, 0.82, 0.08 * fade))
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(0.8, 0.82, 0.85, 0.35 * fade), 2.0)
+		"skill":
+			draw_circle(Vector2.ZERO, radius, Color(color, 0.14 * fade))
+			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.55 * fade), 2.0)
 		"otruta":
 			for i in 5:
 				var a := _t * 0.8 + i * TAU / 5.0

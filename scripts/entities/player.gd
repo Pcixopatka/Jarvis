@@ -107,6 +107,11 @@ var soul_fx := {}
 var leech_pool := 0.0  # скільки здоров'я вампіризм ще може повернути просто зараз
 var art := {}  # бонуси артефактів, що лежать у торбі (ключ -> значення; рахує recalc)
 var set_fx := {}  # бонуси наборів за вдягненим (ключ -> відсотки; рахує recalc, див. Sets)
+## Вміння за даними (див. Classes.passive_fx і _act)
+var skill_fx := {}  # пасивні вміння з "fx" у вузлі дерева: {ключ: відсотки} (рахує recalc)
+var buffs := {}  # підсилення від умінь на час: id -> {"t": секунд, "fx": {ключ: відсотки}, "group": ""} (у збереження не йде)
+var _fx := {}  # skill_fx разом із чинними підсиленнями
+var _after_dodge_t := 0.0  # скільки ще діє бонус після перекиду (fx "dodge_dmg")
 ## Звитяги: поступ після стелі рівня (див. Valor)
 var valor := 0  # скільки смуг звитяги заповнено: кожна дала очко (зберігається)
 var valor_xp := 0  # досвід у поточній смузі (зберігається)
@@ -503,6 +508,9 @@ func tick_buffs(delta: float) -> Array:
 
 func revive() -> void:
 	statuses.clear()
+	if not buffs.is_empty():
+		buffs.clear()
+		recalc()
 	mana = max_mana
 	cry_timer = 0.0
 	ward_hp = 0.0
@@ -590,6 +598,11 @@ func recalc() -> void:
 	set_fx = Sets.fx(equipment)
 	Sets.worn = Sets.count(equipment)
 	valor_fx = Valor.fx(valor_spent, title_fx)
+	skill_fx = Classes.passive_fx(job, skills, weapon_type)
+	_fx = skill_fx.duplicate()
+	for bid in buffs:
+		for k in buffs[bid]["fx"]:
+			_fx[k] = float(_fx.get(k, 0.0)) + float(buffs[bid]["fx"][k])
 	var s_str := _bonus("str")
 	var s_agi := _bonus("agi")
 	var s_vit := _bonus("vit")
@@ -617,39 +630,43 @@ func recalc() -> void:
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
 	if weapon_type == "pishchal":
 		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
-	attack_cooldown /= (1.0 + float(soul_fx.get("aspd", 0.0))) * (1.0 + float(set_fx.get("aspd", 0.0)) / 100.0)
-	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0)
-	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0)) + float(set_fx.get("crit_dmg", 0.0)) / 100.0
-	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0
+	attack_cooldown /= (1.0 + float(soul_fx.get("aspd", 0.0))) * (1.0 + float(set_fx.get("aspd", 0.0)) / 100.0) * (1.0 + fx("aspd") / 100.0)
+	if not weapon_type in ["staff", "pishchal"]:
+		attack_range *= 1.0 + fx("range") / 100.0
+	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0 + fx("crit") / 100.0)
+	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0)) + float(set_fx.get("crit_dmg", 0.0)) / 100.0 + fx("crit_dmg") / 100.0
+	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0 + fx("lifesteal") / 100.0
 
 	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist") + 0.04 * pk("h_body")) * float(class_info().get("hp_mult", 1.0))
 	damage *= float(class_info().get("dmg_mult", 1.0)) * (1.0 + float(festive.get("dmg", 0.0))) * (1.0 + float(klein.get("dmg", 0.0))) * (1.0 + float(soul_fx.get("dmg", 0.0)))
-	damage *= (1.0 + float(set_fx.get("dmg", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("dmg", 0.0)) / 100.0)
+	damage *= (1.0 + float(set_fx.get("dmg", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("dmg", 0.0)) / 100.0) * (1.0 + fx("dmg") / 100.0)
 	if meal == "kulish":
 		max_hp *= 1.15
 	elif meal == "borshch":
 		max_hp *= 1.1
-	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0))) * (1.0 + float(soul_fx.get("hp", 0.0))) * (1.0 + float(set_fx.get("hp", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("hp", 0.0)) / 100.0)
-	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)) + float(set_fx.get("armor", 0.0)) / 100.0, 0.0, Data.ARMOR_CAP)
+	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0))) * (1.0 + float(soul_fx.get("hp", 0.0))) * (1.0 + float(set_fx.get("hp", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("hp", 0.0)) / 100.0) * (1.0 + fx("hp") / 100.0)
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)) + float(set_fx.get("armor", 0.0)) / 100.0 + fx("armor") / 100.0, 0.0, Data.ARMOR_CAP)
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0) + max_hp * float(festive.get("regen", 0.0))
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0))) * (1.0 - float(soul_fx.get("dodge_cd", 0.0)))
-	thorns = 0.25 * pk("thorns")
+	regen += max_hp * fx("regen_pct") / 100.0
+	dodge_cooldown *= maxf(0.4, 1.0 - fx("dodge_cd") / 100.0)
+	thorns = 0.25 * pk("thorns") + fx("thorns") / 100.0
 	varenyk_bonus = pk("varenyk")
 
-	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0)
-	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0)))
+	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0) * (1.0 + fx("speed") / 100.0)
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0)
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0))
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
-	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0))
-	skill_power = (1.0 + 0.05 * Data.soft_spi(s_spi) + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0))) * (1.0 + float(set_fx.get("skill", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("skill", 0.0)) / 100.0)
+	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0) * (1.0 - fx("cd") / 100.0))
+	skill_power = (1.0 + 0.05 * Data.soft_spi(s_spi) + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0))) * (1.0 + float(set_fx.get("skill", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("skill", 0.0)) / 100.0) * (1.0 + fx("skill") / 100.0)
 	var ci := class_info()
 	# Грозові й карпатські чари б'ють по кілька цілей і частіше за інші, тож сила вмінь у цих класів менша:
 	# так справжня шкода за секунду виходить як у решти (tools/dps_probe.gd).
 	skill_power *= float(ci.get("skill_mult", 1.0))
 	var old_mana := max_mana
-	max_mana = (40.0 + 5.0 * s_spi) * float(ci["mana_mult"]) * (1.0 + 0.2 * pk("deep_well") + 0.1 * pk("steel_will"))
-	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow") + 0.1 * pk("h_breath")) * (1.3 if meal == "yushka" else 1.0) * (1.0 + float(festive.get("mana", 0.0)))
+	max_mana = (40.0 + 5.0 * s_spi) * float(ci["mana_mult"]) * (1.0 + 0.2 * pk("deep_well") + 0.1 * pk("steel_will")) * (1.0 + fx("mana") / 100.0)
+	mana_regen = (2.0 + 0.25 * s_spi) * float(ci["regen_mult"]) * (1.0 + 0.25 * pk("mana_flow") + 0.1 * pk("h_breath")) * (1.3 if meal == "yushka" else 1.0) * (1.0 + float(festive.get("mana", 0.0))) * (1.0 + fx("mana_regen") / 100.0)
 	if max_mana > old_mana:
 		mana += max_mana - old_mana
 	mana = minf(mana, max_mana)
@@ -657,6 +674,11 @@ func recalc() -> void:
 	if max_hp > old_max:
 		hp += max_hp - old_max
 	hp = minf(hp, max_hp)
+
+
+## Бонус умінь за даними: пасивні вузли дерева разом із чинними підсиленнями (відсотки).
+func fx(key: String) -> float:
+	return float(_fx.get(key, 0.0))
 
 
 func unspent_points() -> int:
@@ -868,6 +890,9 @@ func _process(delta: float) -> void:
 	petrify_guard = maxf(0.0, petrify_guard - delta)
 	for id in skill_timers:
 		skill_timers[id] = maxf(0.0, skill_timers[id] - delta)
+	_after_dodge_t = maxf(0.0, _after_dodge_t - delta)
+	if not buffs.is_empty():
+		_tick_buffs(delta)
 	invuln = maxf(0.0, invuln - delta)
 	swing_time = maxf(0.0, swing_time - delta)
 	hurt_flash = maxf(0.0, hurt_flash - delta)
@@ -999,11 +1024,13 @@ func _parry(source) -> void:
 	Events.parried.emit()
 	if pk("h_parry") > 0:
 		heal(max_hp * 0.04 * pk("h_parry"), false)
+	if fx("parry_heal") > 0.0:
+		heal(max_hp * fx("parry_heal") / 100.0, false)
 	if source != null and is_instance_valid(source) and not source.dead:
 		source.windup = 0.0
 		source.stun = maxf(source.stun, 0.6 if source.is_boss else 1.5)
 		var to: Vector2 = source.global_position - global_position
-		hit(source, damage * 1.5 * crit_mult, to.normalized() * 400.0, true)
+		hit(source, damage * 1.5 * crit_mult * (1.0 + fx("parry_dmg") / 100.0), to.normalized() * 400.0, true)
 
 
 # ================= Бій =================
@@ -1049,6 +1076,8 @@ func _roll(mult: float) -> Array:
 		dmg *= 1.0 + u_stacks * float(u_pow.get("zvytiaha", {}).get("dmg", 0.0))  # Звитяга
 	if wolf_timer > 0.0:
 		dmg *= 1.25
+	if _after_dodge_t > 0.0:
+		dmg *= 1.0 + fx("dodge_dmg") / 100.0
 	if pk("nevhamovnyi") > 0:
 		dmg *= 1.0 + 0.15 * pk("nevhamovnyi") * clampf(1.0 - hp / maxf(max_hp, 1.0), 0.0, 1.0)
 	return [dmg, crit]
@@ -1074,9 +1103,22 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 			dmg *= 1.0 + float(soul_fx.get("big_dmg", 0.0))
 	if not set_fx.is_empty() and (e.is_boss or e.elite):
 		dmg *= 1.0 + float(set_fx.get("big_dmg", 0.0)) / 100.0
+	if not _fx.is_empty():
+		if e.is_boss or e.elite:
+			dmg *= 1.0 + fx("big_dmg") / 100.0
+		if e.hp < e.max_hp * 0.3:
+			dmg *= 1.0 + fx("execute") / 100.0
+		elif e.hp > e.max_hp * 0.9:
+			dmg *= 1.0 + fx("opener") / 100.0
+		if not e.statuses.is_empty():
+			dmg *= 1.0 + fx("status_dmg") / 100.0
+		if e.stun > 0.0:
+			dmg *= 1.0 + fx("stun_dmg") / 100.0
 	e.take_damage(dmg, kb, crit)
 	if not soul_fx.is_empty():
 		_soul_on_hit(e, dmg)
+	if not _fx.is_empty():
+		_skill_on_hit(e, dmg)
 	if not _u_proc:
 		_unique_on_hit(e, dmg, crit)
 	if zamova_timer > 0.0 and not _chaining:
@@ -1089,6 +1131,44 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		Status.apply(e, "bleed", 3.0, dmg * 0.1)  # критичний удар лишає кровотечу
 	if lifesteal > 0.0:
 		_leech(dealt * lifesteal)
+
+
+## Вміння за даними: стани від удару (не частіше ніж раз на 4 с на ворога) й нагорода за вбивство.
+func _skill_on_hit(e, dmg: float) -> void:
+	if e.dead:
+		if fx("kill_heal") > 0.0:
+			heal(max_hp * fx("kill_heal") / 100.0, false)
+		if fx("kill_mana") > 0.0:
+			mana = minf(max_mana, mana + fx("kill_mana"))
+		return
+	var now: float = combat._time
+	for pair in [["bleed_hit", "bleed", 3.0], ["burn_hit", "burn", 3.0], ["chill_hit", "chill", 2.0], ["weak_hit", "weak", 3.0], ["curse_hit", "curse", 2.0], ["stun_hit", "", 0.6]]:
+		var key: String = pair[0]
+		var chance: float = fx(key) / 100.0
+		if chance <= 0.0 or randf() >= chance or now < float(e.get_meta("sk_" + key, -100.0)):
+			continue
+		e.set_meta("sk_" + key, now + 4.0)
+		if key == "stun_hit":
+			if not e.is_boss:
+				e.stun = maxf(e.stun, float(pair[2]))
+		else:
+			Status.apply(e, pair[1], pair[2], dmg * 0.1 if key in ["bleed_hit", "burn_hit"] else 0.0)
+
+
+func _tick_buffs(delta: float) -> void:
+	var ended := false
+	for bid in buffs.keys():
+		buffs[bid]["t"] = float(buffs[bid]["t"]) - delta
+		if float(buffs[bid]["t"]) <= 0.0:
+			buffs.erase(bid)
+			ended = true
+	if ended:
+		recalc()
+
+
+## Чи діє зараз підсилення від уміння.
+func buff_on(id: String) -> bool:
+	return buffs.has(id)
 
 
 ## Лікування вампіризмом із запасу, що поповнюється з часом (див. _process): не більш як Data.LIFESTEAL_MAX_HPS за секунду.
@@ -1357,6 +1437,7 @@ func dodge() -> void:
 	invuln = maxf(invuln, 0.32)
 	if u_pow.has("vypad"):
 		u_vypad_t = float(u_pow["vypad"]["window"])
+	_after_dodge_t = 2.0
 	Audio.play("dodge", 0.1)
 	combat.fx.burst(global_position + Vector2(0, 16), Color(0.75, 0.7, 0.55, 0.7), 10, 160, 7, 0.45, 0, (-dodge_dir).angle(), 1.4)
 
@@ -1375,7 +1456,7 @@ func _dash_strike() -> void:
 # ================= Активні вміння =================
 
 func skill_cooldown(id: String) -> float:
-	var base: float = Classes.COOLDOWNS.get(id, 6.0)
+	var base: float = Classes.cooldown(id)
 	if id in ["lightning", "molot", "burya"]:
 		base *= 1.0 - 0.1 * pk("storm_soul")
 	match id:
@@ -1469,12 +1550,166 @@ func use_skill(id: String) -> void:
 			used = _proklin()
 		"dukh":
 			used = _dukh()
+		_:
+			used = _act(id)
 	if used:
 		mana -= skill_cost(id)
 		skill_timers[id] = skill_cooldown(id)
 		if u_pow.has("vidlunnia") and randf() < float(u_pow["vidlunnia"]["chance"]):
 			skill_timers[id] *= 0.5  # Відлуння золотої речі
 			combat.float_text(global_position + Vector2(0, -80), "Відлуння", Color(1.0, 0.85, 0.3))
+
+
+# ---------- Вміння за даними ----------
+
+## Виконує активне вміння, описане у вузлі дерева полем "act". Шаблони:
+##   nova  — удар довкола героя;            leap — стрибок до ворога й удар довкола місця приземлення;
+##   cone  — удар перед собою;              shots — снаряди в найближчого ворога;
+##   zone  — зона, що б'є й накладає стан;  buff — підсилення на час (fx), лікування, очищення.
+## Спільні поля: pct (множник шкоди зброї), radius, stun, status [стан, секунд], kb, color, sound, text.
+## Число можна задати як [основа, приріст за ранг].
+func _act(id: String) -> bool:
+	var n: Dictionary = Classes.find_node(id)
+	var A: Dictionary = n.get("act", {})
+	if A.is_empty():
+		return false
+	var r := sk(id)
+	var col := Color(str(A.get("color", "ffd24a")))
+	var m: float = Classes.val(A.get("pct", 0.0), r) * skill_power
+	var done := false
+	var snd: String = str(A["sound"]) if A.has("sound") else ""
+	match str(A.get("type", "")):
+		"nova":
+			var center := global_position
+			if str(A.get("at", "self")) == "enemy":
+				var tn: Node2D = combat.nearest_enemy(global_position, Classes.val(A.get("range", 520.0), r))
+				if tn == null:
+					return false
+				center = tn.global_position
+			done = _act_area(A, r, m, col, center)
+		"leap":
+			var t: Node2D = combat.nearest_enemy(global_position, Classes.val(A.get("range", 420.0), r))
+			if t == null:
+				return false
+			facing = (t.global_position - global_position).normalized()
+			combat.fx.burst(global_position, col, 12, 200, 6, 0.3)
+			global_position = combat._clamp_in(t.global_position - facing * (float(t.radius) + radius + 6.0), 30.0)
+			invuln = maxf(invuln, 0.3)
+			done = _act_area(A, r, m, col, global_position)
+		"cone":
+			var reach: float = maxf(Classes.val(A.get("reach", 0.0), r), attack_range * 1.4)
+			var tc: Node2D = combat.nearest_enemy(global_position, reach + 80.0)
+			if tc:
+				facing = (tc.global_position - global_position).normalized()
+			var half: float = deg_to_rad(Classes.val(A.get("arc", 120.0), r)) * 0.5
+			for e in _alive_enemies():
+				var to: Vector2 = e.global_position - global_position
+				if to.length() <= reach + float(e.radius) and absf(facing.angle_to(to)) <= half:
+					_act_strike(A, r, m, e, to.normalized())
+			swing_time = 0.3
+			swing_duration = 0.3
+			swing_full = false
+			swing_reach = reach
+			combat.shake(6.0)
+			Audio.play(snd if snd != "" else "swing", 0.05, 0.0)
+			combat.fx.burst(global_position + facing * reach * 0.5, col, 16, 260, 6, 0.35, 0, facing.angle(), 1.2)
+			done = true
+		"shots":
+			var ts: Node2D = combat.nearest_enemy(global_position, Classes.val(A.get("range", 700.0), r))
+			var dir := facing
+			if ts:
+				dir = (ts.global_position - global_position).normalized()
+				facing = dir
+			var count: int = int(Classes.val(A.get("count", 1), r))
+			var spread: float = Classes.val(A.get("spread", 0.0), r)
+			for i in count:
+				var a: float = 0.0 if count <= 1 else lerpf(-spread * 0.5, spread * 0.5, float(i) / float(count - 1))
+				var roll := _roll(m)
+				combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 30.0, dir.rotated(a), roll[0], roll[1])
+				var pr = combat.last_projectile()
+				pr.color = col
+				pr.pierce = int(A.get("pierce", 999))
+				if A.has("status"):
+					pr.status = str(A["status"][0])
+					pr.status_dur = float(A["status"][1])
+				if A.has("explode"):
+					pr.explode_radius = Classes.val(A["explode"], r)
+			Audio.play(snd if snd != "" else "musket", 0.05, 0.0)
+			combat.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, col, 10, 240, 5, 0.25, 0, dir.angle(), 0.8)
+			done = true
+		"zone":
+			var pos := global_position
+			if str(A.get("at", "enemy")) == "enemy":
+				var tz: Node2D = combat.nearest_enemy(global_position, Classes.val(A.get("range", 550.0), r))
+				if tz == null:
+					return false
+				pos = tz.global_position
+			var z = combat.spawn_zone("skill", pos, Classes.val(A.get("radius", 150.0), r), Classes.val(A.get("dur", 4.0), r), damage * m)
+			z.tick = float(A.get("tick", 0.5))
+			z.color = col
+			if A.has("status"):
+				z.status = str(A["status"][0])
+				z.status_dur = float(A["status"][1])
+			Audio.play(snd if snd != "" else "spell", 0.15, -2.0)
+			combat.fx.ring(pos, col, 20, Classes.val(A.get("radius", 150.0), r) * 2.0, 5, 0.4)
+			done = true
+		"buff":
+			var group: String = str(A.get("group", ""))
+			if group != "":
+				for bid in buffs.keys():
+					if str(buffs[bid].get("group", "")) == group:
+						buffs.erase(bid)
+			var bfx := {}
+			for k in A.get("fx", {}):
+				bfx[k] = Classes.val(A["fx"][k], r)
+			buffs[id] = {"t": Classes.val(A.get("dur", 10.0), r), "fx": bfx, "group": group}
+			recalc()
+			if A.has("heal"):
+				heal(max_hp * Classes.val(A["heal"], r) / 100.0 * heal_power())
+			if A.has("invuln"):
+				invuln = maxf(invuln, Classes.val(A["invuln"], r))
+			if A.get("cleanse", false):
+				statuses.clear()
+			Audio.play(snd if snd != "" else "roar", 0.05, -3.0)
+			combat.float_text(global_position + Vector2(0, -70), str(A.get("text", n["name"])), col)
+			combat.fx.ring(global_position, col, 24, 300, 5, 0.4)
+			done = true
+	return done
+
+
+## Удар уміння за даними по одному ворогу: шкода, відкидання, приголомшення, стан.
+func _act_strike(A: Dictionary, r: int, m: float, e, dir: Vector2) -> void:
+	var kb: float = float(A.get("kb", 250.0))
+	if m > 0.0:
+		var roll := _roll(m)
+		hit(e, roll[0], dir * kb, roll[1])
+	if e.dead:
+		return
+	if A.has("stun") and not e.is_boss:
+		e.stun = maxf(e.stun, Classes.val(A["stun"], r))
+	if A.has("status"):
+		var st: String = str(A["status"][0])
+		Status.apply(e, st, float(A["status"][1]), damage * maxf(m, 0.5) * 0.1 if st in ["bleed", "burn", "plague"] else 0.0)
+
+
+## Удар уміння за даними по всіх у колі з центром center.
+func _act_area(A: Dictionary, r: int, m: float, col: Color, center: Vector2) -> bool:
+	var reach: float = Classes.val(A.get("radius", 200.0), r)
+	for e in _alive_enemies():
+		var to: Vector2 = e.global_position - center
+		if to.length() <= reach + float(e.radius):
+			_act_strike(A, r, m, e, (-to.normalized() if A.get("pull", false) else to.normalized()))
+	if center.distance_to(global_position) < 1.0:
+		swing_time = 0.35
+		swing_duration = 0.35
+		swing_full = true
+		swing_reach = reach
+	combat.shake(float(A.get("shake", 8.0)))
+	var snd: String = str(A["sound"]) if A.has("sound") else ""
+	Audio.play(snd if snd != "" else "boom", 0.05, -2.0)
+	combat.fx.ring(center + Vector2(0, 16), col, 30, reach * 2.0, 8, 0.4)
+	combat.fx.burst(center + Vector2(0, 16), col, 20, 240, 7, 0.5)
+	return true
 
 
 ## Усі вивчені активні вміння (свого класу і набуті раніше), у порядку дерев.
@@ -2108,7 +2343,7 @@ func take_damage(amount: float, source = null) -> bool:
 		if block_time <= PARRY_WINDOW:
 			_parry(source)
 			return false
-		amount *= BLOCK_MULT * (1.0 - float(soul_fx.get("block", 0.0)))
+		amount *= BLOCK_MULT * (1.0 - float(soul_fx.get("block", 0.0))) * (1.0 - minf(60.0, fx("block")) / 100.0)
 		combat.float_text(global_position + Vector2(0, -70), "Блок", Color(0.75, 0.85, 1.0))
 	if ward_hp > 0.0:
 		var absorbed := minf(ward_hp, amount)
@@ -2128,6 +2363,7 @@ func take_damage(amount: float, source = null) -> bool:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
 	amount *= 1.0 - float(valor_fx.get("ward", 0.0)) / 100.0  # звитяга «Оберіг»
+	amount *= 1.0 - minf(40.0, fx("ward")) / 100.0  # вміння за даними
 	if trip_buffs.has("antiplague"):
 		amount *= 0.8
 	hp -= amount

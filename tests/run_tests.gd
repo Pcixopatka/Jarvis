@@ -132,6 +132,8 @@ func _run() -> void:
 	await _suite_peril_game()
 	_suite_shop()
 	await _suite_shop_game()
+	_suite_skill_trees()
+	await _suite_skill_engine_game()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -190,7 +192,7 @@ func _suite_data() -> void:
 				check(not skill_ids.has(n["id"]), "%s: дубль вміння %s" % [cls, n["id"]])
 				skill_ids[n["id"]] = true
 				if n.get("active", false):
-					check(Data.ACTIVE_SKILLS.has(n["id"]) and Classes.COOLDOWNS.has(n["id"]) and int(n.get("cost", 0)) > 0, "%s: активне %s має кнопку, перезарядку й ціну" % [cls, n["id"]])
+					check(Classes.actives().has(n["id"]) and Classes.cooldown(n["id"]) > 0.0 and Classes.label(n["id"]) != "" and int(n.get("cost", 0)) > 0 and (Data.ACTIVE_SKILLS.has(n["id"]) or n.has("act")), "%s: активне %s має кнопку, перезарядку й ціну" % [cls, n["id"]])
 		for b in Classes.TREES[cls]:
 			for n in b["nodes"]:
 				for r in n["req"]:
@@ -1191,7 +1193,7 @@ func _suite_classes() -> void:
 		for b in Classes.TREES[cls]:
 			for node in b["nodes"]:
 				if node.get("active", false):
-					check(SI.KIND.has(node["id"]), "активне %s є в довіднику панелі" % node["id"])
+					check(SI.KIND.has(node["id"]) or node.has("act"), "активне %s є в довіднику панелі" % node["id"])
 	var sabre = Data.gen_item(3, 1, "weapon", "sabre")
 	var staff = Data.gen_item(3, 1, "weapon", "staff")
 	p.add_item(sabre)
@@ -1433,9 +1435,8 @@ func _suite_specs() -> void:
 	var whirl0: int = p.sk("whirl")
 	check(p.learn_skill("kydok") and p.learn_skill("whirl") and p.sk("whirl") == whirl0 + 1, "пластун вчить свої вміння, а вільні очки вкладає й у козацькі")
 	check(not p.learn_skill("fireball") and not p.learn_skill(Classes.TREES["zaporozhets"][0]["nodes"][0]["id"]), "чужої дороги й сусідньої спеціалізації пластун не вчить")
-	# Очки понад дерево останнього класу не зависають: у пройдених деревах є куди їх вкласти.
-	# Самого дерева спеціалізації на її очки не вистачає, а всієї дороги вистачає майже до останнього:
-	# зайве лишається хіба тоді, коли вивчено геть усе.
+	# Очки ніколи не зависають: рангів на дорозі більше, ніж очок, тож усе вивчити не вийде
+	# і вільне очко завжди є куди вкласти (див. також «Вміння: дерева більші за запас очок»).
 	var stuck := []
 	for cls3 in Classes.CLASSES:
 		if int(Classes.CLASSES[cls3]["tier"]) != 2:
@@ -1446,9 +1447,9 @@ func _suite_specs() -> void:
 			earned += int(Classes.CLASSES[c3]["job_max"]) - 1
 			ranks += int(_tree_ranks(Classes, c3))
 		var own: int = _tree_ranks(Classes, cls3)
-		if int(Classes.CLASSES[cls3]["job_max"]) - 1 <= own or earned - ranks > 10:
+		if earned > ranks:
 			stuck.append("%s: очок %d, рангів на дорозі %d, у своєму дереві %d" % [cls3, earned, ranks, own])
-	check(stuck.is_empty(), "очки спеціалізації переливаються в пройдені дерева, зайвих лишається не більш як 10: %s" % ", ".join(stuck))
+	check(stuck.is_empty(), "очкам завжди є куди піти: рангів на дорозі не менше, ніж очок: %s" % ", ".join(stuck))
 	p.skill_points = 0
 	check(SS.available(p).is_empty(), "з пластуна далі не обирають (поки)")
 	# Пищаль: лише для самопальника
@@ -10070,7 +10071,7 @@ func _bot_fight(game) -> void:
 	var en = c.nearest_enemy(p.global_position, 5000.0)
 	game.hud.joystick.vector = (en.global_position - p.global_position).normalized() * 0.8 if en else Vector2.ZERO
 	game.hud.btn_attack.held = true
-	for id in Data.ACTIVE_SKILLS:
+	for id in Data.Classes.actives():
 		p.use_skill(id)
 	if c.portal != null and is_instance_valid(c.portal):
 		p.global_position = c.portal.global_position
@@ -11303,6 +11304,284 @@ func _suite_shop_game() -> void:
 			if str(e["title"]) == "Крамниця":
 				found = "червінці" in str(e["text"]) and str(Shop.SET_FULL_PRICE) in str(e["text"])
 	check(found, "довідник пояснює крамницю й ціни")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+
+
+# ======================= Вміння: більше, ніж очок; рушій за даними =======================
+
+func _suite_skill_trees() -> void:
+	suite("Вміння: дерева більші за запас очок")
+	var Classes = load("res://scripts/data/classes.gd")
+	var SI = load("res://scripts/data/skill_info.gd")
+	var Icons = load("res://scripts/data/skill_icon_index.gd")
+	var Status = load("res://scripts/game/status.gd")
+	var ranks_of := func(cls: String) -> int:
+		var n := 0
+		for br in Classes.TREES.get(cls, []):
+			for node in br["nodes"]:
+				n += int(node["max"])
+		return n
+	# Очок на вершині: майстерність Селянина 10, першого класу 40, спеціалізації 50 (по очку за рівень понад перший)
+	var tight := []
+	for cls in Classes.CLASSES:
+		if int(Classes.CLASSES[cls]["tier"]) != 2:
+			continue
+		var points := 0
+		var ranks := 0
+		for c in Classes.lineage(cls):
+			points += int(Classes.CLASSES[c]["job_max"]) - 1
+			ranks += int(ranks_of.call(c))
+		if float(ranks) < float(points) * 1.3:
+			tight.append("%s %d/%d" % [cls, ranks, points])
+	check(tight.is_empty(), "у кожної спеціалізації рангів щонайменше на третину більше, ніж очок: %s" % str(tight))
+	var bad := []
+	var acts := 0
+	var passives := 0
+	for cls in Classes.TREES:
+		for br in Classes.TREES[cls]:
+			for node in br["nodes"]:
+				var id: String = node["id"]
+				var good: bool = Icons.INDEX.has(id) and str(node["desc"]) != ""
+				if node.has("fx") and not node.has("act"):
+					passives += 1
+					for k in node["fx"]:
+						good = good and Classes.FX_TEXT.has(k)
+					for wt in node.get("when", {}).get("weapon", []):
+						good = good and Data.WEAPON_TYPES.has(wt)
+				if node.has("act"):
+					acts += 1
+					var A: Dictionary = node["act"]
+					good = good and str(A["type"]) in ["nova", "leap", "cone", "shots", "zone", "buff"] and float(A["cd"]) > 0.0 and str(A["label"]) != "" and str(A["label"]).length() <= 10 and node.get("active", false)
+					good = good and Classes.cooldown(id) == float(A["cd"]) and Classes.label(id) == str(A["label"]) and SI.kind(id) == ("buff" if A["type"] == "buff" else "attack")
+					for k in A.get("fx", {}):
+						good = good and Classes.FX_TEXT.has(k)
+					if A.has("status"):
+						good = good and Status.INFO.has(str(A["status"][0]))
+					good = good and load("res://scripts/data/sound_index.gd").SFX.has(str(A.get("sound", "boom")))
+				if not good:
+					bad.append(id)
+	check(bad.is_empty() and acts >= 30 and passives >= 30, "вміння за даними: значок, опис, відомі ключі, шаблон і перезарядка (активних %d, пасивних %d): %s" % [acts, passives, str(bad)])
+	check(is_equal_approx(Classes.val([10, 3], 1), 10.0) and is_equal_approx(Classes.val([10, 3], 3), 16.0) and is_equal_approx(Classes.val(7, 5), 7.0), "значення за рангом: основа й приріст")
+	check(Classes.fx_text({"dmg": [10, 3], "ward": -5}, 2) == "+13% шкоди, шкода по тобі більша на 5%" and Classes.fx_text({"regen_pct": 0.6}) == "відновлює 0,6% здоров'я за секунду", "бонуси словами")
+	# Пасивні бонуси: ранг множить, зброя вмикає
+	var p = _new_player()
+	p.change_class("cossack")
+	p.change_class("zaporozhets")
+	p.level = 60
+	p.recalc()
+	var cd0: float = p.attack_cooldown
+	var crit0: float = p.crit_chance
+	p.skills["shablia_master"] = 5
+	p.skills["dvobii"] = 3
+	p.skills["kremin"] = 4
+	p.recalc()
+	check(str(p.weapon_type) == "sabre" and is_equal_approx(p.fx("aspd"), 15.0) and is_equal_approx(cd0 / p.attack_cooldown, 1.15) and is_equal_approx(p.crit_chance - crit0, 0.075), "«Шабельний бій» із шаблею: +15% швидкості удару й +7,5% криту")
+	check(is_equal_approx(p.fx("big_dmg"), 12.0) and is_equal_approx(p.fx("ward"), 6.0), "бонуси різних умінь складаються")
+	var mace: Dictionary = Data.gen_item(60, 1, "weapon", "mace")
+	p.assign_uid(mace)
+	p.equipment["weapon"] = mace
+	p.recalc()
+	check(is_equal_approx(p.fx("aspd"), 0.0) and is_equal_approx(p.fx("big_dmg"), 12.0), "з булавою шабельна майстерність не діє, решта діє")
+	var stats: Array = SI.stats("taran", 3, p)
+	check(not stats.is_empty() and str(stats[0][0]) == "Шкода" and not SI.stats("navala", 1, p).is_empty() and Classes.actives().has("taran") and Classes.actives().has("zemnyi"), "картка вміння за даними має цифри")
+	# Чужі дерева не діють
+	var v = _new_player()
+	v.change_class("volkhv")
+	v.skills["shablia_master"] = 5
+	v.recalc()
+	check(is_equal_approx(v.fx("aspd"), 0.0), "вміння чужої дороги бонусу не дає")
+	p.free()
+	v.free()
+
+
+func _suite_skill_engine_game() -> void:
+	suite("Вміння за даними: у бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Classes = load("res://scripts/data/classes.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.change_class("zaporozhets")
+	game._sync_class()
+	p.level = 50
+	p.stats["vit"] = 200
+	p.recalc()
+	_fit(p, 2.0)
+	game.world.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	var missing := []
+	for id in Classes.actives():
+		if not game.hud.skill_buttons.has(id):
+			missing.append(id)
+	check(missing.is_empty(), "кожне активне вміння має кнопку бою: %s" % str(missing))
+	game.enter_location("wild_field")
+	await _frames(3)
+	var dummy := func(offset: Vector2, hp_mult: float = 1000.0):
+		c.spawn_enemy("upyr", 50, false, p.global_position + offset)
+		var e = c._last_enemy()
+		e.max_hp *= hp_mult
+		e.hp = e.max_hp
+		e.speed = 0.0
+		e.damage = 0.0
+		return e
+	var ready := func() -> void:
+		p.mana = p.max_mana
+		for id in p.skill_timers.keys():
+			p.skill_timers[id] = 0.0
+		p.invuln = 0.0
+	# ---- Стійки: діє одна, спадає з часом ----
+	for id in ["navala", "mur", "taran", "hrim_zemli", "khoruhva", "pidsichka"]:
+		p.skills[id] = 1
+	p.recalc()
+	_clear_enemies(game)
+	await _frames(2)
+	var dmg0: float = p.damage
+	ready.call()
+	p.use_skill("navala")
+	check(p.buff_on("navala") and is_equal_approx(p.damage / dmg0, 1.1) and is_equal_approx(p.fx("ward"), -5.0) and p.skill_timers["navala"] > 0.0 and p.mana < p.max_mana, "«Навала»: +10% шкоди, по тобі б'ють сильніше, наснагу й перезарядку списано")
+	ready.call()
+	p.use_skill("mur")
+	check(p.buff_on("mur") and not p.buff_on("navala") and is_equal_approx(p.damage / dmg0, 0.95) and is_equal_approx(p.fx("ward"), 8.0), "«Мур» змінює «Навалу»: діє одна стійка")
+	ready.call()
+	p.use_skill("khoruhva")
+	check(p.buff_on("khoruhva") and p.buff_on("mur") and p.regen > 0.0, "підсилення без групи діє разом зі стійкою")
+	p._tick_buffs(13.0)
+	check(not p.buff_on("khoruhva") and p.buff_on("mur"), "коротше підсилення спадає першим")
+	p._tick_buffs(10.0)
+	check(p.buffs.is_empty() and is_equal_approx(p.damage, dmg0) and is_equal_approx(p.fx("ward"), 0.0), "коли стійка спала, показники вертаються")
+	# ---- Оберіг уміння зменшує отриману шкоду ----
+	p.skills["kremin"] = 5
+	p.recalc()
+	p.hp = p.max_hp
+	p.invuln = 0.0
+	var before: float = p.hp
+	p.take_damage(1000.0)
+	var with_ward: float = before - p.hp
+	p.skills.erase("kremin")
+	p.recalc()
+	p.hp = p.max_hp
+	p.invuln = 0.0
+	p.take_damage(1000.0)
+	var plain: float = p.max_hp - p.hp
+	check(plain > 0.0 and is_equal_approx(with_ward / plain, 0.925), "«Кремінь» п'ятого рангу: шкода по тобі менша на 7,5%% (%.1f проти %.1f)" % [with_ward, plain])
+	p.hp = p.max_hp
+	# ---- Стрибок і удар довкола ----
+	_clear_enemies(game)
+	await _frames(2)
+	var far = dummy.call(Vector2(360, 0))
+	await _frames(1)
+	ready.call()
+	var pos0: Vector2 = p.global_position
+	p.use_skill("taran")
+	check(p.global_position.distance_to(far.global_position) < 80.0 and p.global_position.distance_to(pos0) > 200.0 and far.hp < far.max_hp and far.stun > 0.0, "«Таран»: стрибок до ворога, шкода й приголомшення")
+	_clear_enemies(game)
+	await _frames(2)
+	ready.call()
+	p.use_skill("taran")
+	check(is_equal_approx(p.skill_timers["taran"], 0.0) and is_equal_approx(p.mana, p.max_mana), "без ворога поруч «Таран» не витрачається")
+	var near = dummy.call(Vector2(150, 0))
+	var out_of = dummy.call(Vector2(600, 0))
+	await _frames(1)
+	ready.call()
+	p.use_skill("hrim_zemli")
+	check(near.hp < near.max_hp and near.stun >= 1.9 and is_equal_approx(out_of.hp, out_of.max_hp), "«Грім землі» б'є й приголомшує всіх у своєму колі, далі не дістає")
+	# ---- Удар перед собою зі станом ----
+	_clear_enemies(game)
+	await _frames(2)
+	var front = dummy.call(Vector2(120, 0))
+	await _frames(1)
+	var back = dummy.call(Vector2(-140, 0))
+	await _frames(1)
+	p.global_position = (front.global_position + back.global_position) / 2.0 + Vector2(10, 0)
+	ready.call()
+	p.use_skill("pidsichka")
+	check(front.hp < front.max_hp and front.statuses.has("weak") and is_equal_approx(back.hp, back.max_hp), "«Підсічка» б'є й знесилює тих, хто перед тобою, а не за спиною")
+	# ---- Пасивні: стани від удару й нагорода за вбивство ----
+	p.skills["kryvavyi_zamakh"] = 3
+	p.skills["druhe_dykhannia"] = 3
+	p.recalc()
+	var bled := false
+	for i in 60:
+		front.set_meta("sk_bleed_hit", -100.0)
+		front.statuses.erase("bleed")
+		p.hit(front, 1.0, Vector2.ZERO, false)
+		bled = bled or front.statuses.has("bleed")
+	check(bled, "«Кривавий замах»: удар часом пускає кров")
+	var weak_foe = dummy.call(Vector2(200, 100), 1.0)
+	await _frames(1)
+	p.hp = p.max_hp * 0.5
+	var hp1: float = p.hp
+	p.hit(weak_foe, weak_foe.max_hp * 5.0, Vector2.ZERO, false)
+	check(weak_foe.dead and p.hp > hp1 and p.hp < hp1 + p.max_hp * 0.02, "«Друге дихання»: вбивство трохи лікує")
+	game.enter_map()
+	await _frames(2)
+	# ---- Снаряди, зони й лікування волхвів ----
+	p.change_class("volkhv")
+	p.job = "perun_zhrets"
+	game._sync_class()
+	for id in ["lightning", "kulova", "vohniane_kolo", "dukh_predkiv"]:
+		p.skills[id] = 2
+	p.recalc()
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(2)
+	var target = dummy.call(Vector2(300, 0))
+	await _frames(1)
+	ready.call()
+	p.use_skill("kulova")
+	var pr = c.last_projectile()
+	check(pr != null and is_instance_valid(pr) and pr.explode_radius > 100.0 and pr.pierce == 1 and pr.friendly, "«Кульова блискавка»: снаряд, що вибухає")
+	await _frames(40)
+	check(target.hp < target.max_hp, "снаряд долетів і вдарив")
+	ready.call()
+	p.global_position = target.global_position + Vector2(-100, 0)
+	p.use_skill("vohniane_kolo")
+	check(target.statuses.has("burn"), "«Вогняне коло» підпалює")
+	ready.call()
+	var mr0: float = p.mana_regen
+	p.use_skill("dukh_predkiv")
+	check(p.buff_on("dukh_predkiv") and is_equal_approx(p.mana_regen / mr0, 1.4), "«Дух предків»: наснага відновлюється швидше")
+	game.enter_map()
+	await _frames(2)
+	p.job = "znakhar"
+	game._sync_class()
+	for id in ["otruta", "chorna_khvoroba", "tsiliushche_kolo"]:
+		p.skills[id] = 2
+	p.recalc()
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(2)
+	var sick = dummy.call(Vector2(260, 0))
+	await _frames(1)
+	ready.call()
+	p.use_skill("chorna_khvoroba")
+	var zone = null
+	for z in c.effects.get_children():
+		if z.get_script() == c.ZoneScript and z.kind == "skill":
+			zone = z
+	check(zone != null and zone.status == "plague" and zone.global_position.distance_to(sick.global_position) < 5.0, "«Чорна хвороба» кладе зону під ворога")
+	await _frames(45)
+	check(sick.hp < sick.max_hp and sick.statuses.has("plague"), "зона б'є й заражає")
+	p.hp = p.max_hp * 0.5
+	ready.call()
+	p.use_skill("tsiliushche_kolo")
+	check(p.hp > p.max_hp * 0.55 and p.buff_on("tsiliushche_kolo"), "«Цілюще коло» лікує одразу й гоїть далі")
+	p.revive()
+	check(p.buffs.is_empty(), "після відпочинку підсилення не лишаються")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

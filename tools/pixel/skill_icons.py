@@ -180,6 +180,13 @@ def bolt_cloud(g): cloud(g, DARK); bolt(g, GOLD)
 def hourglass(g):
     g.poly([(5, 3), (19, 3), (12, 12), (5, 21), (19, 21), (12, 12)], GOLD); g.rect(5, 2, 19, 3, BROWN); g.rect(5, 21, 19, 22, BROWN)
 
+def banner(g, c=RED):
+    g.line((6, 22), (6, 2), BROWN, 2); g.poly([(7, 3), (20, 5), (17, 9), (20, 13), (7, 13)], c); g.rect(9, 7, 13, 9, GOLD)
+def both(*fns):
+    def run(g):
+        for fn in fns: fn(g)
+    return run
+
 ICONS = {
     # селянин
     "vyly": ("attack", pitchfork), "first_aid": ("buff", cross), "hardy": ("passive", heart), "roll": ("passive", boots),
@@ -191,6 +198,10 @@ ICONS = {
     # запорожець
     "zemnyi": ("attack", crack), "bulava": ("attack", mace), "mace_master": ("passive", mace_star), "stina": ("buff", wall), "iron_skin": ("passive", armor),
     "nevhamovnyi": ("passive", heart_fire), "zaporizka_vytryvalist": ("passive", lambda g: heart(g, hx("8c1418"))),
+    "taran": ("attack", dash_arrow), "hrim_zemli": ("attack", both(crack, bolt)), "kremin": ("passive", lambda g: armor(g, GOLD)),
+    "vidsich": ("passive", lambda g: shield(g, GOLD)), "shablia_master": ("passive", arc_wide), "spys_master": ("passive", spear),
+    "dvobii": ("passive", lambda g: skull(g, GOLD)), "kryvavyi_zamakh": ("passive", both(sabre, drop)), "navala": ("buff", fist_fire),
+    "mur": ("buff", wall), "khoruhva": ("buff", banner), "druhe_dykhannia": ("passive", pulse),
     # пластун
     "pastka": ("attack", trap), "tin": ("buff", shadow), "trapper": ("passive", trap_hunter), "kydok": ("attack", spear), "oko": ("passive", eye), "stryvok": ("passive", dash_arrow),
     # самопальник
@@ -202,6 +213,46 @@ ICONS = {
     "oberih_zahonu": ("buff", ring_people), "otruta": ("attack", flask), "zhyve_slovo": ("passive", pulse),
     # перунів жрець
     "lightning": ("attack", bolt), "chain": ("passive", link), "wrath": ("passive", storm), "grim": ("passive", bolt_cloud), "molot": ("attack", hammer), "burya": ("buff", storm), "storm_soul": ("passive", cloud),
+    # нові вміння: Козак і Волхв
+    "khvatka": ("passive", lambda g: shield(g, STEEL)), "kontrudar": ("passive", both(lambda g: shield(g, STEEL), sabre)), "pidsichka": ("attack", arc_wide),
+    "pobratymstvo": ("passive", ring_people),
+    "vohniane_kolo": ("attack", lambda g: (g.ring(12, 12, 9, ORANGE, 3), fire(g))), "krynytsia_syly": ("passive", lambda g: star(g, ICE)),
+    "shvydke_slovo": ("passive", hourglass), "zamova_vohniu": ("passive", lambda g: fire(g, RED)), "dukh_predkiv": ("buff", ghost),
+    # нові вміння: Пластун
+    "zazubrene_lezo": ("passive", both(sabre, drop)), "udar_u_spynu": ("passive", both(shadow, sabre)), "dvi_shabli": ("passive", lambda g: (sabre(g), g.line((19, 19), (8, 6), STEEL, 2))),
+    "zlyva_udariv": ("attack", lambda g: [g.line((4 + i * 5, 20), (10 + i * 5, 4), STEEL, 2) for i in range(3)]),
+    "perekotypole": ("passive", dash_arrow), "lehka_khoda": ("passive", boots), "dymova_zavisa": ("buff", fog),
+    "stiika_myslyvtsia": ("buff", crosshair), "stiika_tini": ("buff", lambda g: eye(g, PURPLE, True)),
+    "mitka": ("attack", lambda g: (g.ring(12, 12, 8, PURPLE, 2), g.circ(12, 12, 3, RED))), "terpinnia": ("passive", lambda g: skull(g, GOLD)),
+    "dobyvannia": ("passive", both(skull, lambda g: drop(g, RED))), "vovcha_yama": ("attack", lambda g: (g.d.ellipse([3, 9, 21, 21], fill=K), trap(g))),
+    # нові вміння: Самопальник
+    "zapalna_kulia": ("passive", both(bullets, lambda g: fire(g, RED))), "hranata": ("attack", lambda g: (g.circ(12, 14, 6, DARK), g.line((12, 8), (15, 4), BROWN, 2), g.circ(16, 3, 2, ORANGE))),
+    "dymnyi_porokh": ("buff", lambda g: cloud(g, GREY)), "zalp": ("attack", lambda g: [g.line((3, 20), (6 + i * 3, 4), GOLD, 1) for i in range(6)]),
+    "dalekyi_postril": ("passive", both(crosshair, lambda g: star(g, GOLD))), "tverda_ruka": ("passive", hand_up), "na_zvira": ("passive", lambda g: skull(g, ORANGE)),
+    "nabii": ("passive", lambda g: bullets(g, 3)), "stiika_vluchnyka": ("buff", lambda g: (g.ring(12, 12, 8, GOLD, 2), g.circ(12, 12, 2, RED))),
+    "stiika_rukhlyva": ("buff", both(boots, lambda g: wind(g, ICE))),
+    # нові вміння: Характерник
+    "vovche_vyttia": ("attack", both(wolf, lambda g: wind(g, GREY))), "zviryna_syla": ("passive", lambda g: heart(g, hx("8a1020"))), "nichnyi_zir": ("passive", lambda g: eye(g, GOLD)),
+    "stiika_vovka": ("buff", lambda g: (wolf(g), g.px(20, 3, RED), g.px(21, 3, RED))), "zamova_krovi": ("buff", lambda g: drop(g, RED)),
+    "slovo_i_shablia": ("passive", both(sabre, lambda g: star(g, ICE))), "vidvernennia": ("passive", eye_closed), "stiika_slova": ("buff", lambda g: star(g, BLUE)),
+    "morok": ("attack", lambda g: fog(g)), "dvi_dushi": ("passive", lambda g: (g.circ(8, 12, 5, ICE), g.circ(16, 12, 5, PURPLE))), "zahovorenyi": ("buff", lambda g: shield(g, GOLD, RED)),
+    # нові вміння: Знахар
+    "chorna_khvoroba": ("attack", lambda g: cloud(g, GREEN)), "yid": ("passive", lambda g: flask(g, PURPLE)), "blekota": ("attack", lambda g: (leaf(g, PURPLE), sparkle(g, W))),
+    "smertelna_doza": ("passive", lambda g: (flask(g, RED), g.px(12, 8, W))), "tsiliushche_kolo": ("buff", lambda g: (g.ring(12, 12, 9, GREEN, 2), cross(g, GREEN))),
+    "hirka_trava": ("passive", lambda g: leaf(g, hx("8a9a3a"))), "polyn": ("passive", herbs), "syla_zela": ("passive", lambda g: (leaf(g), sparkle(g, GOLD))),
+    "stiika_tsilytelia": ("buff", lambda g: heart(g, GREEN)), "stiika_otruinyka": ("buff", lambda g: flask(g, GREEN)),
+    # нові вміння: Перунів жрець
+    "kulova": ("attack", lambda g: (g.circ(12, 12, 7, GOLD), g.circ(12, 12, 4, W), bolt(g, BLUE))), "naelektryzovanyi": ("passive", lambda g: spark(g, 2)),
+    "blyskavychnyi_krok": ("attack", both(dash_arrow, lambda g: bolt(g, GOLD))), "syla_neba": ("passive", lambda g: (cloud(g, ICE), star(g, GOLD))),
+    "perunovyi_sud": ("attack", both(hammer, bolt)), "hromovyi_shchyt": ("buff", lambda g: (shield(g, BLUE), bolt(g, GOLD))),
+    "zapakh_hrozy": ("passive", lambda g: wind(g, GOLD)), "hromovidvid": ("passive", lambda g: (g.line((12, 22), (12, 4), GREY, 2), bolt(g, GOLD))),
+    "stiika_buri": ("buff", bolt_cloud), "stiika_tyshi": ("buff", lambda g: cloud(g, ICE)),
+    # нові вміння: Мольфар
+    "moroz": ("passive", lambda g: sparkle(g, ICE)), "vykhor_molfara": ("attack", lambda g: tornado(g, ICE)), "kryha": ("passive", lambda g: (g.poly([(12, 2), (19, 12), (12, 22), (5, 12)], ICE), g.line((12, 4), (12, 20), W, 1))),
+    "stiika_nehody": ("buff", storm), "stiika_skeli": ("buff", lambda g: (g.poly([(3, 21), (9, 7), (14, 13), (18, 5), (22, 21)], GREY), g.poly([(9, 7), (11, 11), (7, 12)], W))),
+    "kamenepad": ("attack", lambda g: [g.circ(x, y, r, GREY) for x, y, r in ((7, 7, 3), (15, 5, 2), (12, 13, 4), (18, 16, 3), (6, 18, 2))]),
+    "navrok": ("passive", lambda g: eye(g, PURPLE)), "trembita": ("buff", lambda g: (g.line((3, 19), (20, 5), BROWN, 3), g.circ(20, 5, 2, GOLD))),
+    "hirska_voda": ("passive", lambda g: wave(g, ICE)), "sertse_hir": ("buff", lambda g: (heart(g, GREEN), sparkle(g, W))),
     # мольфар
     "grad": ("attack", hail), "tuman": ("buff", fog), "khmara": ("passive", cloud), "proklin": ("attack", lambda g: skull(g, PURPLE)), "dukh": ("buff", ghost),
     # волхв

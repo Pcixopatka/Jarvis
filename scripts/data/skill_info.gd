@@ -6,6 +6,9 @@ extends RefCounted
 ## scales: від чого росте сила ("damage" — шкода зброї, "hp" — здоров'я героя, "spell" — сила вмінь).
 ## stats(rank, p): словник «назва → значення» для таблиці картки (рядки з %d/%s уже готові).
 
+const Classes := preload("res://scripts/data/classes.gd")
+const Status := preload("res://scripts/game/status.gd")
+
 const KIND := {
 	"vyly": "attack", "first_aid": "buff",
 	"whirl": "attack", "battle_cry": "buff", "musket": "attack",
@@ -71,7 +74,10 @@ const WHAT := {
 
 
 static func kind(id: String) -> String:
-	return KIND.get(id, "attack")
+	if KIND.has(id):
+		return KIND[id]
+	# вміння за даними: підсилення йдуть на нижню панель, решта — до атак
+	return "buff" if str(Classes.act(id).get("type", "")) == "buff" else "attack"
 
 
 ## Таблиця цифр для рангу r (r може бути 0 — «ще не вивчено», тоді показуємо ранг 1).
@@ -191,7 +197,41 @@ static func stats(id: String, r: int, p) -> Array:
 		"dukh":
 			out.append(["Шкода вогника", _dmg(d * 0.8 * (1.0 + 0.2 * (r - 1)) * sp)])
 			out.append(["Тривалість", "15 с (постріл кожні 0.8 с)"])
+		_:
+			out = _act_stats(id, r, p)
 	return out
+
+
+## Цифри вміння за даними ("act" у вузлі дерева).
+static func _act_stats(id: String, r: int, p) -> Array:
+	var A: Dictionary = Classes.act(id)
+	var out := []
+	if A.is_empty():
+		return out
+	var d: float = p.damage
+	var sp: float = p.skill_power
+	if A.has("pct") and Classes.val(A["pct"], r) > 0.0:
+		var tick := " за удар" if str(A.get("type", "")) == "zone" else ""
+		out.append(["Шкода" + tick, _dmg(d * Classes.val(A["pct"], r) * sp)])
+	if A.has("count"):
+		out.append(["Снарядів", "%d" % int(Classes.val(A["count"], r))])
+	if A.has("radius"):
+		out.append(["Радіус", "%d" % int(Classes.val(A["radius"], r))])
+	if A.has("stun"):
+		out.append(["Приголомшення", "%s с" % _sec(Classes.val(A["stun"], r))])
+	if A.has("status"):
+		out.append(["Стан", "%s на %s с" % [str(Status.INFO.get(str(A["status"][0]), {}).get("name", "")).to_lower(), _sec(float(A["status"][1]))]])
+	if A.has("dur"):
+		out.append(["Тривалість", "%s с" % _sec(Classes.val(A["dur"], r))])
+	if A.has("heal"):
+		out.append(["Лікування", "%s%% здоров'я" % _sec(Classes.val(A["heal"], r))])
+	if A.has("fx"):
+		out.append(["Дія", Classes.fx_text(A["fx"], r)])
+	return out
+
+
+static func _sec(v: float) -> String:
+	return str(int(round(v))) if is_equal_approx(v, round(v)) else ("%.1f" % v).replace(".", ",")
 
 
 static func _dmg(v: float) -> String:

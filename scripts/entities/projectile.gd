@@ -17,6 +17,8 @@ var burn_dps := 0.0
 var stun_all := false  # повний заряд волхва / прицільний постріл приголомшує
 var spear := false  # кинутий спис пластуна
 var pierce := 999  # скільки ворогів пробиває куля козака
+var status := ""  # стан, який накладає влучання (вміння за даними)
+var status_dur := 0.0
 var _hit_ids := []
 
 
@@ -35,6 +37,8 @@ func _process(delta: float) -> void:
 				combat.player.hit(e, damage, velocity.normalized() * 160.0, crit)
 				if stun_all and not e.dead and not e.is_boss:
 					e.stun = maxf(e.stun, 1.0)
+				if status != "" and not e.dead:
+					combat.player.Status.apply(e, status, status_dur, damage * 0.1 if status in ["bleed", "burn", "plague"] else 0.0)
 				if _hit_ids.size() >= pierce:
 					queue_free()
 					return

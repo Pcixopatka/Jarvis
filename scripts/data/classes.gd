@@ -103,6 +103,12 @@ const TREES := {
 			{"id": "dash_strike", "name": "Удар з перекиду", "max": 1, "req": {"musket": 1}, "desc": "Перекид ранить ворогів на шляху"},
 			{"id": "buckshot", "name": "Картеч", "max": 1, "req": {"musket": 3, "reload": 1}, "desc": "Постріл випускає 5 куль віялом"},
 		]},
+		{"name": "Гарт", "nodes": [
+			{"id": "khvatka", "name": "Міцна хватка", "max": 5, "req": {}, "fx": {"block": 6}, "desc": "Крізь Блок проходить\nна 6% менше шкоди за ранг"},
+			{"id": "kontrudar", "name": "Контрудар", "max": 3, "req": {"khvatka": 2}, "fx": {"parry_dmg": 30}, "desc": "Удар у відповідь після парирування\nсильніший на 30% за ранг"},
+			{"id": "pidsichka", "name": "Підсічка", "max": 5, "req": {}, "active": true, "cost": 12, "act": {"type": "cone", "cd": 8, "label": "Підсічка", "color": "c8a050", "reach": 170, "arc": 140, "pct": [1.4, 0.2], "stun": 0.5, "status": ["weak", 4.0]}, "desc": "Удар по ногах перед собою: знесилює\nй збиває з ніг. +15% шкоди за ранг"},
+			{"id": "pobratymstvo", "name": "Побратимство", "max": 3, "req": {}, "fx": {"hp": 2, "regen_pct": 0.1}, "desc": "+2% здоров'я й загоєння\n0,1% за секунду за ранг"},
+		]},
 	],
 	"zaporozhets": [
 		{"name": "Земля", "nodes": [
@@ -110,7 +116,12 @@ const TREES := {
 				"desc": "Б'є об землю: шкода довкола й\nприголомшення. +15% шкоди за ранг"},
 			{"id": "bulava", "name": "Булава гніву", "max": 5, "req": {"zemnyi": 1}, "active": true, "cost": 18,
 				"desc": "Страшний удар перед собою.\n+20% шкоди за ранг"},
-			{"id": "mace_master", "name": "Булавник", "max": 3, "req": {}, "desc": "+10% шкоди булавою\nза ранг"},
+			{"id": "taran", "name": "Таран", "max": 5, "req": {"zemnyi": 3}, "active": true, "cost": 16,
+				"act": {"type": "leap", "cd": 9, "label": "Таран", "color": "d08a3a", "range": 420, "radius": 150, "pct": [2.0, 0.3], "stun": [0.6, 0.1]},
+				"desc": "Стрибок до ворога й удар довкола\nмісця приземлення. +15% шкоди за ранг"},
+			{"id": "hrim_zemli", "name": "Грім землі", "max": 1, "req": {"zemnyi": 5, "bulava": 5}, "active": true, "cost": 40,
+				"act": {"type": "nova", "cd": 40, "label": "Грім", "color": "f2c23a", "radius": 340, "pct": 5.0, "stun": 2.0, "shake": 16},
+				"desc": "Вершинне вміння: земля репається\nдалеко довкола, усі ціпеніють на 2 с"},
 		]},
 		{"name": "Стіна", "nodes": [
 			{"id": "stina", "name": "Козацька стіна", "max": 5, "req": {}, "active": true, "cost": 25,
@@ -118,6 +129,34 @@ const TREES := {
 			{"id": "iron_skin", "name": "Залізна шкура", "max": 5, "req": {}, "desc": "+3% захисту за ранг"},
 			{"id": "nevhamovnyi", "name": "Невгамовний", "max": 3, "req": {"iron_skin": 2}, "desc": "Що менше здоров'я — то\nбільша шкода (до +15% за ранг)"},
 			{"id": "zaporizka_vytryvalist", "name": "Січова витривалість", "max": 3, "req": {"stina": 1}, "desc": "+8% здоров'я за ранг"},
+			{"id": "kremin", "name": "Кремінь", "max": 5, "req": {"iron_skin": 3}, "fx": {"ward": 1.5},
+				"desc": "Шкода по тобі менша\nна 1,5% за ранг"},
+			{"id": "vidsich", "name": "Відсіч", "max": 3, "req": {"stina": 2}, "fx": {"parry_dmg": 40, "parry_heal": 1},
+				"desc": "Після парирування удар у відповідь\nсильніший на 40% і лікує 1% за ранг"},
+		]},
+		{"name": "Зброя", "nodes": [
+			{"id": "mace_master", "name": "Булавник", "max": 3, "req": {}, "desc": "+10% шкоди булавою\nза ранг"},
+			{"id": "shablia_master", "name": "Шабельний бій", "max": 5, "req": {}, "fx": {"aspd": 3, "crit": 1.5}, "when": {"weapon": ["sabre"]},
+				"desc": "Із шаблею: +3% швидкості удару\nй +1,5% криту за ранг"},
+			{"id": "spys_master", "name": "Списова наука", "max": 5, "req": {}, "fx": {"dmg": 3, "range": 4}, "when": {"weapon": ["pike"]},
+				"desc": "Зі списом: +3% шкоди\nй +4% дальності за ранг"},
+			{"id": "dvobii", "name": "Двобій", "max": 3, "req": {}, "fx": {"big_dmg": 4},
+				"desc": "+4% шкоди елітам\nі босам за ранг"},
+			{"id": "kryvavyi_zamakh", "name": "Кривавий замах", "max": 3, "req": {"dvobii": 1}, "fx": {"bleed_hit": 6},
+				"desc": "Удар із шансом 6% за ранг\nпускає кров"},
+		]},
+		{"name": "Дух", "nodes": [
+			{"id": "navala", "name": "Стійка: навала", "max": 3, "req": {}, "active": true, "cost": 10,
+				"act": {"type": "buff", "cd": 24, "label": "Навала", "color": "d8402e", "group": "stance", "dur": 20, "fx": {"dmg": [10, 3], "ward": -5}, "text": "Навала!"},
+				"desc": "20 с: +10% шкоди (+3% за ранг), але по тобі\nб'ють на 5% сильніше. Діє одна стійка"},
+			{"id": "mur", "name": "Стійка: мур", "max": 3, "req": {}, "active": true, "cost": 10,
+				"act": {"type": "buff", "cd": 24, "label": "Мур", "color": "4a90e8", "group": "stance", "dur": 20, "fx": {"ward": [8, 2], "dmg": -5}, "text": "Мур!"},
+				"desc": "20 с: шкода по тобі менша на 8% (+2% за ранг),\nале твоя шкода −5%. Діє одна стійка"},
+			{"id": "khoruhva", "name": "Хоругва куреня", "max": 5, "req": {}, "active": true, "cost": 22,
+				"act": {"type": "buff", "cd": 30, "label": "Хоругва", "color": "f2c23a", "dur": 12, "fx": {"dmg": [6, 2], "regen_pct": [0.6, 0.1]}, "text": "За Січ!"},
+				"desc": "12 с: +6% шкоди (+2% за ранг)\nй загоєння 0,6% здоров'я за секунду"},
+			{"id": "druhe_dykhannia", "name": "Друге дихання", "max": 3, "req": {}, "fx": {"kill_heal": 0.3},
+				"desc": "Кожне вбивство лікує\n0,3% здоров'я за ранг"},
 		]},
 	],
 	"plastun": [
@@ -135,6 +174,25 @@ const TREES := {
 			{"id": "stryvok", "name": "Стрімкий ривок", "max": 3, "req": {"oko": 1}, "desc": "−15% перезарядки перекиду"},
 			{"id": "deadly", "name": "Смертельний удар", "max": 1, "req": {"oko": 3}, "desc": "Крит б'є x3 замість x2"},
 		]},
+		{"name": "Леза", "nodes": [
+			{"id": "zazubrene_lezo", "name": "Зазубрене лезо", "max": 5, "req": {}, "fx": {"bleed_hit": 6}, "desc": "Удар із шансом 6% за ранг\nпускає кров"},
+			{"id": "udar_u_spynu", "name": "Удар у спину", "max": 3, "req": {}, "fx": {"opener": 10}, "desc": "+10% шкоди нечисті з повним\nздоров'ям за ранг"},
+			{"id": "dvi_shabli", "name": "Шабельний танець", "max": 5, "req": {}, "fx": {"aspd": 4, "crit_dmg": 4}, "when": {"weapon": ["sabre"]}, "desc": "Із шаблею: +4% швидкості удару\nй +4% шкоди криту за ранг"},
+			{"id": "zlyva_udariv", "name": "Злива ударів", "max": 5, "req": {"zazubrene_lezo": 2}, "active": true, "cost": 14, "act": {"type": "cone", "cd": 7, "label": "Злива", "color": "dfe4ee", "reach": 150, "arc": 100, "pct": [2.4, 0.4], "kb": 100}, "desc": "Серія швидких ударів перед собою.\n+17% шкоди за ранг"},
+		]},
+		{"name": "Рух", "nodes": [
+			{"id": "perekotypole", "name": "Перекотиполе", "max": 3, "req": {}, "fx": {"dodge_cd": 8, "dodge_dmg": 8}, "desc": "Перекид готовий на 8% швидше,\n2 с після нього +8% шкоди за ранг"},
+			{"id": "lehka_khoda", "name": "Легка хода", "max": 3, "req": {}, "fx": {"speed": 4}, "desc": "+4% швидкості бігу за ранг"},
+			{"id": "dymova_zavisa", "name": "Димова завіса", "max": 3, "req": {"lehka_khoda": 1}, "active": true, "cost": 15, "act": {"type": "buff", "cd": 28, "label": "Дим", "color": "b8bcc8", "dur": [4, 1], "fx": {"ward": [30, 5]}, "cleanse": true, "text": "Дим!", "sound": "dodge"}, "desc": "4 с: шкода по тобі менша на 30%,\nзнімає всі стани"},
+			{"id": "stiika_myslyvtsia", "name": "Стійка: мисливець", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Мисливець", "color": "f2c23a", "group": "stance", "dur": 20, "fx": {"crit": [8, 2], "ward": -8}, "text": "На лови!"}, "desc": "20 с: +8% шансу криту (+2% за ранг),\nале по тобі б'ють на 8% сильніше"},
+			{"id": "stiika_tini", "name": "Стійка: тінь", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Тінь", "color": "9a5ad8", "group": "stance", "dur": 20, "fx": {"speed": [10, 3], "dodge_cd": [15, 5], "dmg": -5}, "text": "Як тінь"}, "desc": "20 с: +10% бігу й швидший перекид,\nале шкода −5%. Діє одна стійка"},
+		]},
+		{"name": "Полювання", "nodes": [
+			{"id": "mitka", "name": "Мітка", "max": 3, "req": {}, "active": true, "cost": 14, "act": {"type": "nova", "at": "enemy", "cd": 18, "label": "Мітка", "color": "9a5ad8", "radius": [120, 15], "pct": [0.6, 0.1], "status": ["curse", 6.0], "sound": "spell", "shake": 3}, "desc": "Мітить ворогів у колі: прокляті\nотримують більше шкоди 6 с"},
+			{"id": "terpinnia", "name": "Терпіння мисливця", "max": 3, "req": {}, "fx": {"big_dmg": 4}, "desc": "+4% шкоди елітам\nі босам за ранг"},
+			{"id": "dobyvannia", "name": "Добивання", "max": 5, "req": {"terpinnia": 1}, "fx": {"execute": 5}, "desc": "+5% шкоди нечисті нижче\n30% здоров'я за ранг"},
+			{"id": "vovcha_yama", "name": "Вовча яма", "max": 1, "req": {"pastka": 5, "kydok": 5}, "active": true, "cost": 30, "act": {"type": "zone", "cd": 40, "label": "Яма", "color": "8a5a2a", "radius": 200, "dur": 6, "tick": 0.5, "pct": 0.5, "status": ["bleed", 3.0]}, "desc": "Вершинне вміння: яма під ворогом\n6 с рве всіх, хто в ній, до крові"},
+		]},
 	],
 	"samopalnyk": [
 		{"name": "Пищаль", "nodes": [
@@ -151,6 +209,20 @@ const TREES := {
 			{"id": "vluchnist", "name": "Влучність", "max": 3, "req": {}, "desc": "+5% шансу криту"},
 			{"id": "deadly", "name": "Смертельний постріл", "max": 1, "req": {"vluchnist": 3}, "desc": "Крит б'є x3 замість x2"},
 		]},
+		{"name": "Вогонь", "nodes": [
+			{"id": "zapalna_kulia", "name": "Запальна куля", "max": 5, "req": {}, "fx": {"burn_hit": 6}, "desc": "Постріл із шансом 6% за ранг\nпідпалює"},
+			{"id": "hranata", "name": "Граната", "max": 5, "req": {"bochka": 2}, "active": true, "cost": 18, "act": {"type": "shots", "cd": 9, "label": "Граната", "color": "f08a2a", "count": 1, "pct": [2.0, 0.3], "explode": [130, 10], "pierce": 1}, "desc": "Летить у ворога й вибухає.\n+15% шкоди за ранг"},
+			{"id": "dymnyi_porokh", "name": "Димний порох", "max": 3, "req": {}, "active": true, "cost": 14, "act": {"type": "buff", "cd": 26, "label": "Дим", "color": "b8bcc8", "dur": [4, 1], "fx": {"ward": [25, 5]}, "text": "Дим!", "sound": "musket"}, "desc": "4 с у диму: шкода по тобі\nменша на 25% (+5% за ранг)"},
+			{"id": "zalp", "name": "Залп", "max": 1, "req": {"kartech": 5, "prytsil": 5}, "active": true, "cost": 35, "act": {"type": "shots", "cd": 35, "label": "Залп", "color": "f2c23a", "count": 9, "spread": 1.2, "pct": 1.6}, "desc": "Вершинне вміння: дев'ять важких куль\nвіялом, кожна пробиває навиліт"},
+		]},
+		{"name": "Око", "nodes": [
+			{"id": "dalekyi_postril", "name": "Далекий постріл", "max": 5, "req": {}, "fx": {"opener": 8}, "desc": "+8% шкоди нечисті з повним\nздоров'ям за ранг"},
+			{"id": "tverda_ruka", "name": "Тверда рука стрільця", "max": 5, "req": {}, "fx": {"crit_dmg": 6}, "desc": "+6% шкоди криту за ранг"},
+			{"id": "na_zvira", "name": "Мисливець на звіра", "max": 3, "req": {}, "fx": {"big_dmg": 4}, "desc": "+4% шкоди елітам\nі босам за ранг"},
+			{"id": "nabii", "name": "Набій напоготові", "max": 3, "req": {}, "fx": {"cd": 3}, "desc": "Вміння відновлюються\nна 3% швидше за ранг"},
+			{"id": "stiika_vluchnyka", "name": "Стійка: влучник", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Влучник", "color": "f2c23a", "group": "stance", "dur": 20, "fx": {"crit": [8, 2], "speed": -10}, "text": "Цілюсь"}, "desc": "20 с: +8% шансу криту (+2% за ранг),\nале біг −10%. Діє одна стійка"},
+			{"id": "stiika_rukhlyva", "name": "Стійка: рухливий", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Рухливий", "color": "a8dcff", "group": "stance", "dur": 20, "fx": {"speed": [12, 3], "aspd": [6, 2], "dmg": -5}, "text": "У русі"}, "desc": "20 с: +12% бігу й +6% швидкості пострілу,\nале шкода −5%. Діє одна стійка"},
+		]},
 	],
 	"kharakternyk": [
 		{"name": "Перевертень", "nodes": [
@@ -166,6 +238,23 @@ const TREES := {
 			{"id": "vidvid", "name": "Відвід очей", "max": 5, "req": {"zamova": 1}, "active": true, "cost": 20,
 				"desc": "Вороги довкола 2 с заціпеніли\nй ослабли. +0.3 с за ранг"},
 			{"id": "spirit", "name": "Характерна сила", "max": 3, "req": {}, "desc": "+10% сили вмінь"},
+		]},
+		{"name": "Звір", "nodes": [
+			{"id": "vovche_vyttia", "name": "Вовче виття", "max": 5, "req": {"vovk": 2}, "active": true, "cost": 18, "act": {"type": "nova", "cd": 12, "label": "Виття", "color": "b8bcc8", "radius": [220, 10], "pct": [1.0, 0.15], "stun": 0.5, "status": ["weak", 5.0], "sound": "roar"}, "desc": "Виття довкола: шкода, слабкість\nі заціпеніння. +15% шкоди за ранг"},
+			{"id": "zviryna_syla", "name": "Звірина сила", "max": 5, "req": {}, "fx": {"hp": 2, "lifesteal": 0.4}, "desc": "+2% здоров'я й +0,4%\nвампіризму за ранг"},
+			{"id": "nichnyi_zir", "name": "Нічний зір", "max": 3, "req": {}, "fx": {"crit": 2}, "desc": "+2% шансу криту за ранг"},
+			{"id": "stiika_vovka", "name": "Стійка: вовк", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Вовк", "color": "d8402e", "group": "stance", "dur": 20, "fx": {"aspd": [10, 3], "ward": -6}, "text": "Вовча лють"}, "desc": "20 с: +10% швидкості удару (+3% за ранг),\nале по тобі б'ють на 6% сильніше"},
+		]},
+		{"name": "Слово", "nodes": [
+			{"id": "zamova_krovi", "name": "Замовляння крові", "max": 3, "req": {}, "active": true, "cost": 20, "act": {"type": "buff", "cd": 25, "label": "Кров", "color": "d8402e", "dur": 10, "heal": [8, 3], "fx": {"regen_pct": [0.8, 0.2]}, "text": "Кров, стань!", "sound": "spell"}, "desc": "Лікує 8% здоров'я (+3% за ранг)\nй 10 с гоїть рани"},
+			{"id": "slovo_i_shablia", "name": "Слово й шабля", "max": 5, "req": {}, "fx": {"skill": 2, "dmg": 1.5}, "desc": "+2% сили вмінь і\n+1,5% шкоди за ранг"},
+			{"id": "vidvernennia", "name": "Відвернення", "max": 3, "req": {"vidvid": 2}, "fx": {"status_dmg": 5}, "desc": "+5% шкоди нечисті\nзі станами за ранг"},
+			{"id": "stiika_slova", "name": "Стійка: слово", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Слово", "color": "4a90e8", "group": "stance", "dur": 20, "fx": {"skill": [12, 4], "dmg": -5}, "text": "Слово міцне"}, "desc": "20 с: +12% сили вмінь (+4% за ранг),\nале шкода зброї −5%. Діє одна стійка"},
+		]},
+		{"name": "Химера", "nodes": [
+			{"id": "morok", "name": "Морок", "max": 5, "req": {}, "active": true, "cost": 18, "act": {"type": "zone", "at": "self", "cd": 16, "label": "Морок", "color": "9a5ad8", "radius": [200, 10], "dur": 5, "tick": 0.5, "pct": [0.25, 0.05], "status": ["chill", 1.5]}, "desc": "Туман довкола тебе 5 с: нечисть у ньому\nмерзне й отримує шкоду"},
+			{"id": "dvi_dushi", "name": "Дві душі", "max": 3, "req": {}, "fx": {"mana": 8, "mana_regen": 8}, "desc": "+8% наснаги й +8%\nїї відновлення за ранг"},
+			{"id": "zahovorenyi", "name": "Заговорений", "max": 1, "req": {"kulia": 3, "zamova": 5}, "active": true, "cost": 35, "act": {"type": "buff", "cd": 60, "label": "Заговір", "color": "f2c23a", "dur": 8, "fx": {"ward": 30, "dmg": 15}, "text": "Заговорений!"}, "desc": "Вершинне вміння: 8 с шкода по тобі\nменша на 30%, а твоя більша на 15%"},
 		]},
 	],
 	"znakhar": [
@@ -185,6 +274,20 @@ const TREES := {
 				"desc": "Склянка з отрутою: хмара, що\nз'їдає ворогів. +20% за ранг"},
 			{"id": "zhyve_slovo", "name": "Живе слово", "max": 3, "req": {"travnyk": 1}, "desc": "+1 здоров'я за секунду\nза ранг"},
 		]},
+		{"name": "Отрути", "nodes": [
+			{"id": "chorna_khvoroba", "name": "Чорна хвороба", "max": 5, "req": {"otruta": 2}, "active": true, "cost": 20, "act": {"type": "zone", "cd": 14, "label": "Хвороба", "color": "5fc04a", "radius": [150, 10], "dur": 6, "tick": 0.5, "pct": [0.3, 0.06], "status": ["plague", 3.0]}, "desc": "Хмара зарази під ворогом 6 с.\n+20% шкоди за ранг"},
+			{"id": "yid", "name": "Їдь", "max": 5, "req": {}, "fx": {"status_dmg": 4}, "desc": "+4% шкоди нечисті\nзі станами за ранг"},
+			{"id": "blekota", "name": "Блекота", "max": 3, "req": {}, "active": true, "cost": 16, "act": {"type": "nova", "at": "enemy", "cd": 14, "label": "Блекота", "color": "9a5ad8", "radius": 140, "pct": 0.5, "stun": [1.2, 0.3], "status": ["weak", 4.0], "sound": "spell", "shake": 3}, "desc": "Дурман у колі під ворогом:\nприголомшує й знесилює"},
+			{"id": "smertelna_doza", "name": "Смертельна доза", "max": 1, "req": {"otruta": 5, "chorna_khvoroba": 3}, "fx": {"execute": 25}, "desc": "Вершинне вміння: +25% шкоди\nнечисті нижче 30% здоров'я"},
+		]},
+		{"name": "Зело", "nodes": [
+			{"id": "tsiliushche_kolo", "name": "Цілюще коло", "max": 5, "req": {}, "active": true, "cost": 24, "act": {"type": "buff", "cd": 18, "label": "Коло", "color": "5fc04a", "dur": 8, "heal": [6, 2], "fx": {"regen_pct": [1.2, 0.3]}, "text": "Зело гоїть", "sound": "spell"}, "desc": "Лікує 6% здоров'я (+2% за ранг)\nй 8 с гоїть рани"},
+			{"id": "hirka_trava", "name": "Гірка трава", "max": 5, "req": {}, "fx": {"weak_hit": 5}, "desc": "Удар із шансом 5% за ранг\nзнесилює"},
+			{"id": "polyn", "name": "Полин", "max": 3, "req": {}, "fx": {"ward": 2}, "desc": "Шкода по тобі менша\nна 2% за ранг"},
+			{"id": "syla_zela", "name": "Сила зела", "max": 5, "req": {}, "fx": {"skill": 2, "mana_regen": 4}, "desc": "+2% сили вмінь і +4%\nвідновлення наснаги за ранг"},
+			{"id": "stiika_tsilytelia", "name": "Стійка: цілитель", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Цілитель", "color": "5fc04a", "group": "stance", "dur": 20, "fx": {"regen_pct": [0.6, 0.2], "skill": -8}, "text": "Гою", "sound": "spell"}, "desc": "20 с: загоєння 0,6% за секунду (+0,2% за ранг),\nале сила вмінь −8%. Діє одна стійка"},
+			{"id": "stiika_otruinyka", "name": "Стійка: отруйник", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Отруйник", "color": "9a5ad8", "group": "stance", "dur": 20, "fx": {"skill": [10, 3], "ward": -6}, "text": "Труїти!", "sound": "spell"}, "desc": "20 с: +10% сили вмінь (+3% за ранг),\nале по тобі б'ють на 6% сильніше"},
+		]},
 	],
 	"perun_zhrets": [
 		{"name": "Блискавка", "nodes": [
@@ -201,6 +304,20 @@ const TREES := {
 				"desc": "6 с блискавки б'ють ворогів\nдовкола. +1 с за ранг"},
 			{"id": "storm_soul", "name": "Душа грози", "max": 3, "req": {"molot": 1}, "desc": "−10% перезарядки вмінь\nгрози за ранг"},
 		]},
+		{"name": "Небо", "nodes": [
+			{"id": "kulova", "name": "Кульова блискавка", "max": 5, "req": {"lightning": 2}, "active": true, "cost": 20, "act": {"type": "shots", "cd": 8, "label": "Куля", "color": "f2c23a", "count": 1, "pct": [2.6, 0.4], "explode": [110, 10], "pierce": 1, "sound": "spell"}, "desc": "Куля летить у ворога й вибухає.\n+15% шкоди за ранг"},
+			{"id": "naelektryzovanyi", "name": "Наелектризований", "max": 5, "req": {}, "fx": {"stun_hit": 2}, "desc": "Удар із шансом 2% за ранг\nприголомшує"},
+			{"id": "blyskavychnyi_krok", "name": "Блискавичний крок", "max": 3, "req": {}, "active": true, "cost": 16, "act": {"type": "leap", "cd": 12, "label": "Крок", "color": "a8dcff", "range": 460, "radius": 120, "pct": [1.5, 0.3], "stun": 0.5, "sound": "spell"}, "desc": "Миттю переносить до ворога\nй б'є довкола. +20% шкоди за ранг"},
+			{"id": "syla_neba", "name": "Сила неба", "max": 5, "req": {}, "fx": {"skill": 2.5}, "desc": "+2,5% сили вмінь за ранг"},
+			{"id": "perunovyi_sud", "name": "Перунів суд", "max": 1, "req": {"lightning": 5, "molot": 5}, "active": true, "cost": 45, "act": {"type": "nova", "cd": 45, "label": "Суд", "color": "f2c23a", "radius": 380, "pct": 4.0, "stun": 1.5, "shake": 16}, "desc": "Вершинне вміння: грім б'є далеко\nдовкола, усі ціпеніють на 1,5 с"},
+		]},
+		{"name": "Жрець", "nodes": [
+			{"id": "hromovyi_shchyt", "name": "Громовий щит", "max": 3, "req": {}, "active": true, "cost": 18, "act": {"type": "buff", "cd": 25, "label": "Щит", "color": "4a90e8", "dur": 10, "fx": {"thorns": [40, 15], "ward": [8, 2]}, "text": "Грім береже", "sound": "spell"}, "desc": "10 с: кривдник отримує 40% своєї шкоди\nназад, а по тобі б'ють на 8% слабше"},
+			{"id": "zapakh_hrozy", "name": "Запах грози", "max": 3, "req": {}, "fx": {"cd": 3}, "desc": "Вміння відновлюються\nна 3% швидше за ранг"},
+			{"id": "hromovidvid", "name": "Громовідвід", "max": 3, "req": {}, "fx": {"ward": 2, "mana": 5}, "desc": "Шкода по тобі менша на 2%\nй +5% наснаги за ранг"},
+			{"id": "stiika_buri", "name": "Стійка: буря", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Буря", "color": "f2c23a", "group": "stance", "dur": 20, "fx": {"skill": [12, 4], "mana_regen": -20}, "text": "Буря!", "sound": "spell"}, "desc": "20 с: +12% сили вмінь (+4% за ранг),\nале наснага відновлюється на 20% повільніше"},
+			{"id": "stiika_tyshi", "name": "Стійка: тиша", "max": 3, "req": {}, "active": true, "cost": 5, "act": {"type": "buff", "cd": 24, "label": "Тиша", "color": "a8dcff", "group": "stance", "dur": 20, "fx": {"mana_regen": [40, 10], "skill": -8}, "text": "Тиша перед бурею", "sound": "spell"}, "desc": "20 с: наснага відновлюється на 40% швидше\n(+10% за ранг), але сила вмінь −8%"},
+		]},
 	],
 	"molfar": [
 		{"name": "Погода", "nodes": [
@@ -216,6 +333,20 @@ const TREES := {
 			{"id": "dukh", "name": "Виклик духа", "max": 5, "req": {"proklin": 1}, "active": true, "cost": 35,
 				"desc": "15 с дух-помічник б'є ворогів\nвогниками. +20% за ранг"},
 			{"id": "spirit", "name": "Сила гір", "max": 3, "req": {}, "desc": "+10% сили вмінь"},
+		]},
+		{"name": "Негода", "nodes": [
+			{"id": "moroz", "name": "Мороз", "max": 5, "req": {}, "fx": {"chill_hit": 6}, "desc": "Удар із шансом 6% за ранг\nстудить"},
+			{"id": "vykhor_molfara", "name": "Гірський вихор", "max": 5, "req": {"grad": 2}, "active": true, "cost": 18, "act": {"type": "nova", "cd": 10, "label": "Вихор", "color": "a8dcff", "radius": [190, 10], "pct": [1.1, 0.2], "pull": true, "status": ["chill", 3.0], "sound": "spell"}, "desc": "Вихор стягує нечисть до тебе\nй студить. +18% шкоди за ранг"},
+			{"id": "kryha", "name": "Крига", "max": 3, "req": {}, "fx": {"status_dmg": 4}, "desc": "+4% шкоди нечисті\nзі станами за ранг"},
+			{"id": "stiika_nehody", "name": "Стійка: негода", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Негода", "color": "4a90e8", "group": "stance", "dur": 20, "fx": {"skill": [12, 4], "ward": -6}, "text": "Негода!", "sound": "spell"}, "desc": "20 с: +12% сили вмінь (+4% за ранг),\nале по тобі б'ють на 6% сильніше"},
+			{"id": "stiika_skeli", "name": "Стійка: скеля", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Скеля", "color": "b8bcc8", "group": "stance", "dur": 20, "fx": {"ward": [10, 3], "speed": -10}, "text": "Як скеля", "sound": "spell"}, "desc": "20 с: шкода по тобі менша на 10% (+3% за ранг),\nале біг −10%. Діє одна стійка"},
+		]},
+		{"name": "Гори", "nodes": [
+			{"id": "kamenepad", "name": "Каменепад", "max": 5, "req": {}, "active": true, "cost": 20, "act": {"type": "zone", "cd": 12, "label": "Каміння", "color": "b8bcc8", "radius": 130, "dur": 3, "tick": 0.3, "pct": [0.5, 0.1], "status": ["weak", 2.0]}, "desc": "Каміння сиплеться на ворога 3 с\nй знесилює. +20% шкоди за ранг"},
+			{"id": "navrok", "name": "Наврок", "max": 5, "req": {}, "fx": {"curse_hit": 3}, "desc": "Удар із шансом 3% за ранг\nпроклинає"},
+			{"id": "trembita", "name": "Трембіта", "max": 3, "req": {}, "active": true, "cost": 15, "act": {"type": "buff", "cd": 28, "label": "Трембіта", "color": "f2c23a", "dur": 12, "fx": {"skill": [10, 3], "speed": [8, 2]}, "text": "Трембіта кличе"}, "desc": "12 с: +10% сили вмінь і\n+8% бігу"},
+			{"id": "hirska_voda", "name": "Гірська вода", "max": 3, "req": {}, "fx": {"mana_regen": 8, "regen_pct": 0.1}, "desc": "+8% відновлення наснаги й загоєння\n0,1% за секунду за ранг"},
+			{"id": "sertse_hir", "name": "Серце гір", "max": 1, "req": {"grad": 5, "dukh": 3}, "active": true, "cost": 40, "act": {"type": "buff", "cd": 60, "label": "Серце", "color": "5fc04a", "dur": 10, "fx": {"skill": 30, "cd": 20}, "text": "Гори зі мною", "sound": "spell"}, "desc": "Вершинне вміння: 10 с вміння сильніші\nна 30% і відновлюються на 20% швидше"},
 		]},
 	],
 	"volkhv": [
@@ -240,6 +371,13 @@ const TREES := {
 			{"id": "regen", "name": "Живе коріння", "max": 3, "req": {}, "desc": "+0.6 здоров'я за секунду"},
 			{"id": "tough", "name": "Дубова кора", "max": 3, "req": {"regen": 1}, "desc": "+15 здоров'я за ранг"},
 			{"id": "ward", "name": "Оберіг тіла", "max": 3, "req": {"herb": 2}, "desc": "-5% отриманої шкоди"},
+		]},
+		{"name": "Знання", "nodes": [
+			{"id": "vohniane_kolo", "name": "Вогняне коло", "max": 5, "req": {}, "active": true, "cost": 22, "act": {"type": "nova", "cd": 10, "label": "Коло", "color": "f08a2a", "radius": [170, 10], "pct": [1.2, 0.2], "status": ["burn", 4.0], "sound": "spell"}, "desc": "Вогонь довкола тебе: шкода\nй горіння. +15% шкоди за ранг"},
+			{"id": "krynytsia_syly", "name": "Криниця сили", "max": 3, "req": {}, "fx": {"skill": 3}, "desc": "+3% сили вмінь за ранг"},
+			{"id": "shvydke_slovo", "name": "Швидке слово", "max": 3, "req": {"krynytsia_syly": 1}, "fx": {"cd": 3}, "desc": "Вміння відновлюються\nна 3% швидше за ранг"},
+			{"id": "zamova_vohniu", "name": "Замовляння вогню", "max": 3, "req": {}, "fx": {"burn_hit": 6}, "desc": "Удар із шансом 6% за ранг\nпідпалює"},
+			{"id": "dukh_predkiv", "name": "Дух предків", "max": 3, "req": {}, "active": true, "cost": 5, "act": {"type": "buff", "cd": 30, "label": "Предки", "color": "a8dcff", "dur": 15, "fx": {"mana_regen": [30, 10], "skill": [6, 2]}, "text": "Предки з тобою", "sound": "spell"}, "desc": "15 с: наснага відновлюється на 30%\nшвидше, вміння сильніші на 6%"},
 		]},
 	],
 }
@@ -288,6 +426,112 @@ static func find_node(id: String, cls: String = "") -> Dictionary:
 				if n["id"] == id:
 					return n
 	return {}
+
+
+static var _actives: Array = []
+
+
+## Усі активні вміння гри за порядком дерев (кнопки бою будуються з цього переліку).
+static func actives() -> Array:
+	if _actives.is_empty():
+		for c in TREES:
+			for b in TREES[c]:
+				for n in b["nodes"]:
+					if n.get("active", false) and not n["id"] in _actives:
+						_actives.append(n["id"])
+	return _actives
+
+
+## Опис активного вміння за даними ("act" у вузлі) або порожній словник.
+static func act(id: String) -> Dictionary:
+	return find_node(id).get("act", {})
+
+
+## Підпис на кнопці бою.
+static func label(id: String) -> String:
+	if ACTIVE_LABELS.has(id):
+		return str(ACTIVE_LABELS[id])
+	return str(act(id).get("label", node_name(id)))
+
+
+## Колір кнопки бою.
+static func color(id: String) -> Color:
+	if ACTIVE_COLORS.has(id):
+		return ACTIVE_COLORS[id]
+	return Color(str(act(id).get("color", "8a6a3a"))).darkened(0.25)
+
+
+## Перезарядка вміння в секундах до поправок героя.
+static func cooldown(id: String) -> float:
+	if COOLDOWNS.has(id):
+		return float(COOLDOWNS[id])
+	return float(act(id).get("cd", 6.0))
+
+
+## Значення параметра вміння для рангу: число або [основа, приріст за кожен ранг понад перший].
+static func val(v, rank: int) -> float:
+	if v is Array:
+		return float(v[0]) + float(v[1]) * maxi(0, rank - 1)
+	return float(v)
+
+
+## Пасивні бонуси вмінь за даними: вузли дерева з "fx" (без "act") дають fx[ключ] × ранг.
+## "when": {"weapon": [...]} — бонус діє лише з такою зброєю в руках. Повертає {ключ: сума}.
+static func passive_fx(job: String, skills: Dictionary, weapon_type: String) -> Dictionary:
+	var out := {}
+	if skills.is_empty():
+		return out
+	for c in lineage(job):
+		for b in TREES.get(c, []):
+			for n in b["nodes"]:
+				if not n.has("fx") or n.has("act"):
+					continue
+				var r := int(skills.get(n["id"], 0))
+				if r <= 0:
+					continue
+				var w: Dictionary = n.get("when", {})
+				if w.has("weapon") and not weapon_type in w["weapon"]:
+					continue
+				for k in n["fx"]:
+					out[k] = float(out.get(k, 0.0)) + float(n["fx"][k]) * r
+	return out
+
+
+## Тексти бонусів за даними (число у відсотках, якщо не сказано інше).
+const FX_TEXT := {
+	"dmg": "+%s%% шкоди", "hp": "+%s%% здоров'я", "armor": "+%s%% захисту", "aspd": "+%s%% швидкості удару",
+	"crit": "+%s%% шансу криту", "crit_dmg": "+%s%% шкоди криту", "speed": "+%s%% швидкості бігу",
+	"skill": "+%s%% сили вмінь", "cd": "вміння відновлюються на %s%% швидше", "mana": "+%s%% наснаги",
+	"mana_regen": "+%s%% відновлення наснаги", "regen_pct": "відновлює %s%% здоров'я за секунду",
+	"lifesteal": "+%s%% вампіризму", "dodge_cd": "перекид готовий на %s%% швидше", "range": "+%s%% дальності удару",
+	"thorns": "повертає кривдникові %s%% шкоди", "pickup": "+%s%% радіусу збору",
+	"ward": "шкода по тобі менша на %s%%", "block": "крізь Блок проходить на %s%% менше шкоди",
+	"big_dmg": "+%s%% шкоди елітам і босам", "execute": "+%s%% шкоди нечисті нижче 30%% здоров'я",
+	"opener": "+%s%% шкоди нечисті з повним здоров'ям", "status_dmg": "+%s%% шкоди нечисті зі станами",
+	"stun_dmg": "+%s%% шкоди приголомшеним", "bleed_hit": "%s%% шансу пустити кров ударом",
+	"burn_hit": "%s%% шансу підпалити ударом", "chill_hit": "%s%% шансу застудити ударом",
+	"weak_hit": "%s%% шансу знесилити ударом", "curse_hit": "%s%% шансу проклясти ударом",
+	"stun_hit": "%s%% шансу приголомшити ударом", "kill_heal": "вбивство лікує %s%% здоров'я",
+	"kill_mana": "вбивство вертає %s наснаги", "parry_dmg": "удар у відповідь після парирування сильніший на %s%%",
+	"parry_heal": "парирування лікує %s%% здоров'я", "dodge_dmg": "2 с після перекиду +%s%% шкоди",
+}
+
+
+## Бонуси словами: «+8% шкоди, +4% захисту».
+static func fx_text(fx: Dictionary, rank: int = 1) -> String:
+	var parts := []
+	for k in fx:
+		var v: float = val(fx[k], rank)
+		var num := str(int(round(v))) if is_equal_approx(v, round(v)) else ("%.1f" % v).replace(".", ",")
+		var t: String = str(FX_TEXT.get(k, "%s"))
+		if k == "ward" and v < 0.0:
+			parts.append("шкода по тобі більша на %s%%" % num.trim_prefix("-"))
+			continue
+		if v < 0.0 and t.begins_with("+"):
+			t = t.substr(1)  # «−5% захисту», а не «+−5%»
+			num = "−" + num.trim_prefix("-")
+		parts.append(t % num)
+	return ", ".join(parts)
 
 
 static func node_name(id: String) -> String:

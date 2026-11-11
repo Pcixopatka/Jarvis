@@ -1643,7 +1643,7 @@ func spawn_trap(pos: Vector2, dmg: float, crit: bool, max_count: int) -> void:
 
 
 ## Зона чарів волхва (grad / tuman / otruta) або дух-помічник (spirit).
-func spawn_zone(kind: String, pos: Vector2, r: float, dur: float, dmg: float) -> void:
+func spawn_zone(kind: String, pos: Vector2, r: float, dur: float, dmg: float) -> Node2D:
 	var z = ZoneScript.new()
 	z.combat = self
 	z.kind = kind
@@ -1652,6 +1652,7 @@ func spawn_zone(kind: String, pos: Vector2, r: float, dur: float, dmg: float) ->
 	z.duration = dur
 	z.damage = dmg
 	effects.add_child(z)
+	return z
 
 
 ## Знахар підіймає поранених побратимів просто в бою. Повертає, скількох підняв.

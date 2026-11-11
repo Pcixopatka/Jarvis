@@ -845,7 +845,7 @@ static func _panel_block(game, v: VBoxContainer) -> void:
 				for st in ["normal", "hover", "pressed"]:
 					b.add_theme_stylebox_override(st, UI.style(Color(0.16, 0.3, 0.13), Color(0.5, 0.95, 0.4), 10, 2))
 			slot.add_child(b)
-			var cl := UI.label(str(Data.ACTIVE_LABELS.get(id, "")) if id != "" else "вільно", 12, (UI.GOOD if place and id != sel else UI.TEXT) if id != "" else (UI.GOOD if place else UI.MUTED))
+			var cl := UI.label(p.Classes.label(id) if id != "" else "вільно", 12, (UI.GOOD if place and id != sel else UI.TEXT) if id != "" else (UI.GOOD if place else UI.MUTED))
 			cl.custom_minimum_size = Vector2(58, 0)
 			slot.add_child(cl)
 			row.add_child(slot)

@@ -140,8 +140,8 @@ func _build() -> void:
 	btn_mana = _action_button("Наснага", 40.0, Color(0.18, 0.4, 0.85))
 	btn_mana.triggered.connect(func(): mana_pressed.emit())
 	var SkillInfo = load("res://scripts/data/skill_info.gd")
-	for id in Data.ACTIVE_SKILLS:
-		var b = _action_button(Data.ACTIVE_LABELS[id], 54.0 if SkillInfo.kind(id) == "attack" else 42.0, Data.Classes.ACTIVE_COLORS[id])
+	for id in Data.Classes.actives():
+		var b = _action_button(Data.Classes.label(id), 54.0 if SkillInfo.kind(id) == "attack" else 42.0, Data.Classes.color(id))
 		b.triggered.connect(func(): skill_pressed.emit(id))
 		b.icon = Gfx.skill_icon_tex(id)
 		b.visible = false
