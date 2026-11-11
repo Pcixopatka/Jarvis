@@ -8283,8 +8283,17 @@ func _suite_gear_best() -> void:
 	h.equip(mid["uid"])
 	for it in h.inventory.duplicate():
 		h.remove_from_bag(it["uid"])  # стартова шабля не має плутати рахунок
-	var up1: Dictionary = Data.gen_item(40, 3, "weapon", "sabre")
-	var junk: Dictionary = Data.gen_item(1, 0, "weapon", "sabre")
+	# краща й гірша речі задані явно, а не випадкові: та сама шабля з утричі більшою шкодою
+	# і вона ж без властивостей із п'ятою часткою шкоди. Випадкові властивості робили тест нестійким.
+	var up1: Dictionary = mid.duplicate(true)
+	up1.erase("uid")
+	up1["name"] = "Шабля краща"
+	up1["base"]["flat_dmg"] = float(mid["base"]["flat_dmg"]) * 3.0
+	var junk: Dictionary = mid.duplicate(true)
+	junk.erase("uid")
+	junk["name"] = "Шабля гірша"
+	junk["affixes"] = {}
+	junk["base"]["flat_dmg"] = float(mid["base"]["flat_dmg"]) * 0.2
 	h.add_item(up1, true)
 	h.add_item(junk, true)
 	game.enter_map()
