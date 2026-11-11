@@ -1234,14 +1234,20 @@ func _build_map_panel() -> void:
 		hud.set_map_panel(v)
 		return
 	if map_sel == DepthService.LOC_ID:
+		# «Спуститися» це теж дорога: герой їде до Глибин мапою, бій починається після прибуття (_arrive)
 		hud.set_map_panel(MapPanel.build_depths(world, player, depth_sel, func(d: int):
 			depth_sel = d
-			_build_map_panel(), start_depth), _sponsor_block())
+			_build_map_panel(), func(d: int):
+			depth_sel = d
+			_go_to(DepthService.LOC_ID)), _sponsor_block())
 		return
 	if map_sel == TowerService.LOC_ID:
+		# «Піднятися» так само: спершу дорога до Башти, і лише стоячи під нею герой заходить одразу
 		hud.set_map_panel(MapPanel.build_tower(world, player, tower_sel, func(f: int):
 			tower_sel = f
-			_build_map_panel(), start_tower), _sponsor_block())
+			_build_map_panel(), func(f: int):
+			tower_sel = f
+			_go_to(TowerService.LOC_ID)), _sponsor_block())
 		return
 	if Acts.SPOTS.has(map_sel):
 		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block())

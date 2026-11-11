@@ -5573,6 +5573,82 @@ func _suite_travel_ride() -> void:
 			await process_frame
 			frames += 1
 		check(game.state == game.State.PLAYING and game.combat.loc_id == "black_forest", "доїхали до Чорного лісу — бій")
+	# ---- Кожне місце мапи: кнопка панелі починає поїздку, а не переносить героя миттю ----
+	var ActsT = load("res://scripts/data/activities.gd")
+	var CampT = load("res://scripts/data/camp_data.gd")
+	var StoryT = load("res://scripts/data/story.gd")
+	var TowerT = load("res://scripts/game/tower_service.gd")
+	var DepthT = load("res://scripts/game/depth_service.gd")
+	game.enter_map()
+	await _frames(2)
+	p.level = 99
+	p.invuln = 9999.0
+	game.world.story = {"chapter": StoryT.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
+	game.world.travel = {"cooldown": 99, "seen": {}}
+	var go_texts := ["Вирушити", "Увійти до міста", "Увійти на хутір", "Спуститися", "Піднятися", "Вирушити до табору", "Полювати", "Рибалити", "Стати на варту", "Стати в коло"]
+	var all_places: Array = Data.CITIES.keys() + Data.LOCATIONS.keys() + ActsT.SPOTS.keys() + [CampT.CAMP_ID]
+	var rode := []
+	var jumped := []
+	for id in all_places:
+		if id == "sich":
+			continue
+		game.travel_to = ""
+		game.hud.map_view.travel = {}
+		game.map_here = "sich"
+		game._on_map_select(id)
+		await _frames(1)
+		var go_btn = null
+		for b in game.hud.map_panel.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion() and not b.disabled and b.text in go_texts:
+				go_btn = b
+		if go_btn == null:
+			continue  # місце ще замкнене або там подія зі своєю кнопкою
+		go_btn.pressed.emit()
+		if game.travel_to == id and game.state == game.State.MAP and game.map_here == "sich" and not game.hud.map_view.travel.is_empty():
+			rode.append(id)
+		else:
+			jumped.append(id)
+			game.hud.close_dialogue()
+			game.enter_map()
+			await _frames(2)
+	game.travel_to = ""
+	game.hud.map_view.travel = {}
+	check(jumped.is_empty(), "до жодного місця на мапі герой не переноситься миттю: %s" % str(jumped))
+	var skipped := []
+	for id in all_places:
+		if id != "sich" and not id in rode and not id in jumped:
+			skipped.append(id)
+	check(skipped.is_empty() and rode.size() == all_places.size() - 1 and TowerT.LOC_ID in rode and DepthT.LOC_ID in rode and "kyiv" in rode and "zamok_drakuly" in rode and "devova_ushchelyna" in rode and "kolo" in rode and CampT.CAMP_ID in rode,
+		"поїздкою перевірено %d місць із %d: міста, хутір, поля, печери, Башту, Глибини, табори й заняття (без кнопки: %s)" % [rode.size(), all_places.size() - 1, str(skipped)])
+	# до Башти справді треба доїхати, і лише під нею «Піднятися» заходить одразу
+	game.map_here = "sich"
+	game.tower_sel = 1
+	game._on_map_select(TowerT.LOC_ID)
+	await _frames(1)
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text == "Піднятися":
+			b.pressed.emit()
+	check(game.travel_to == TowerT.LOC_ID and game.state == game.State.MAP, "«Піднятися» з Січі: герой їде до Башти мапою")
+	frames = 0
+	while game.travel_to != "" and frames < 1500:
+		await process_frame
+		frames += 1
+	check(game.state == game.State.PLAYING and game.combat.loc_id == TowerT.LOC_ID and game.map_here == TowerT.LOC_ID and frames > 20, "доїхав за %d кадрів, і лише тоді почався бій у Башті" % frames)
+	game.enter_map()
+	await _frames(2)
+	game._on_map_select(TowerT.LOC_ID)
+	await _frames(1)
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text == "Піднятися":
+			b.pressed.emit()
+	check(game.state == game.State.PLAYING and game.travel_to == "", "стоячи під Баштою, герой заходить одразу")
+	var ride_art := ""
+	for e in load("res://scripts/game/wiki_service.gd")._entries("basics"):
+		if str(e["title"]) == "Подорож мапою":
+			ride_art = str(e["text"])
+	check("Башти Кощія" in ride_art and "Глибин зарази" in ride_art and "«Піднятися»" in ride_art and "де вже стоїть" in ride_art, "довідник має статтю «Подорож мапою»: до кожного місця треба доїхати")
+	game.enter_map()
+	await _frames(2)
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
