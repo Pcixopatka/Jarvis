@@ -88,7 +88,7 @@ var _wind_dir := Vector2.ZERO
 func setup(k: String, lvl: int, boss: bool = false) -> void:
 	kind = k
 	level = lvl
-	var s := Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (lvl - 1))
+	var s := Data.enemy_hp_scale(lvl)  # мірка від еталонного героя цього рівня
 	match k:
 		"mavka":
 			radius = 16.0; max_hp = 30.0; speed = 150.0; damage = 8.0; xp_value = 3
@@ -226,7 +226,7 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			ranged = true; keep_distance = 280.0; shoot_cd = 2.2
 	r_draw = radius
 	max_hp *= s
-	damage *= 1.0 + Data.ENEMY_DMG_PER_LEVEL * (lvl - 1)
+	damage *= Data.enemy_dmg_scale(lvl)
 	xp_value = int(xp_value * (1.0 + Data.ENEMY_XP_PER_LEVEL * (lvl - 1)))
 	speed *= minf(1.3, 1.0 + 0.02 * (lvl - 1))
 	if boss or k == "zmii":
@@ -1370,7 +1370,7 @@ func _watch_gaze() -> void:
 # --- Герць: суперники-козаки ---
 
 ## Перетворює ворога на суперника: стиль бою, лист спрайтів, ім'я; здоров'я й удар задає турнір
-## (вони міряються від сили героя — див. DuelService.loc_for).
+## (їхня сила — від рівня героя, див. DuelService.loc_for).
 func make_rival(info: Dictionary, hp_abs: float, dmg_abs: float, cap: float = 0.0) -> void:
 	dmg_cap = cap
 	style = info["style"]

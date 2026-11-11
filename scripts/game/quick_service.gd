@@ -80,7 +80,6 @@ static func run(world, player, loc_id: String, drop_boost: float = 1.0, festive:
 	var L: Dictionary = Data.LOCATIONS[loc_id]
 	var lvl: int = Data.loc_level(L, int(player.level))
 	var dungeon: bool = L["type"] == "dungeon"
-	var xp_far: float = FarService.xp_mult(int(L["level"]), int(player.level)) if FarService.matched(L, player) else 1.0
 	var out := {"name": str(L["name"]), "kills": 0, "elites": 0, "xp": 0, "gold": 0, "items": [], "sold": 0,
 		"res": {}, "trophy": 0, "potions": 0, "mana": 0, "quests": [], "kinds": {}}
 	var loot := []  # речі, які треба покласти в торбу
@@ -92,7 +91,7 @@ static func run(world, player, loc_id: String, drop_boost: float = 1.0, festive:
 	var enemies: Array = L["enemies"]
 	for i in kills(L):
 		var kind: String = enemies[randi() % enemies.size()]
-		var exp_one: int = maxi(1, roundi(_xp_of(kind, lvl, false) * xp_far))
+		var exp_one: int = maxi(1, _xp_of(kind, lvl, false))
 		out["kills"] += 1
 		out["kinds"][kind] = int(out["kinds"].get(kind, 0)) + 1
 		for m in world.on_kill(kind):
@@ -122,7 +121,7 @@ static func run(world, player, loc_id: String, drop_boost: float = 1.0, festive:
 			loot.append(_item(lvl, Data.roll_rarity(lvl), festive))
 	if dungeon:
 		# господар печери: звичайна здобич боса, без золота, артефактів, каменів і душ
-		var bxp: int = maxi(1, roundi(_xp_of(str(L["boss"]), lvl, true) * xp_far))
+		var bxp: int = maxi(1, _xp_of(str(L["boss"]), lvl, true))
 		var bpart: int = maxi(1, bxp / 10)
 		xp += bpart * 10
 		coin_gold += Data.coin_gold(bpart) * 10

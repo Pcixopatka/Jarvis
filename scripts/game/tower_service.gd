@@ -61,8 +61,8 @@ static func loc_for(floor_: int) -> Dictionary:
 		"mini_title": MINI_TITLES[(floor_ - 1) % MINI_TITLES.size()],
 		"mini_affixes": 2 if floor_ < 20 else 3,
 		"elite_bonus": minf(0.3, 0.05 + 0.01 * floor_),
-		# Вище — нечисть лютіша понад свій рівень
-		"hp_mult": 1.0 + 0.22 * floor_ + 0.005 * floor_ * floor_, "dmg_mult": 1.0 + 0.12 * floor_ + 0.03 * ring, "xp_mult": 1.0 + 0.05 * floor_,
+		# Вище — нечисть лютіша понад свій рівень. Надбавки малі: сама мірка нечисті росте з рівнем поверху.
+		"hp_mult": 1.0 + 0.012 * floor_, "dmg_mult": 1.0 + 0.006 * floor_ + 0.01 * ring, "xp_mult": 1.0 + 0.05 * floor_,
 		"boss_hp_mult": 2.2, "boss_dmg_mult": 1.35,
 		"desc": "Кістяна башта Кощія посеред Москви. Що вище — то лютіше."}
 

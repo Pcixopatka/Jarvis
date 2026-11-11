@@ -29,7 +29,9 @@ func _run() -> void:
 				t += 1.0 / 60.0
 			var ok: bool = p.alive and t < 420.0
 			print("герой %2d поверх %2d (рів. %2d%s) | %s | %3.0f с | мін. здоров'я %3.0f%%" % [lvl, floor_, TS.level_of(floor_), ", СУПЕРБОС" if TS.is_super(floor_) else "", "OK" if ok else ("СМЕРТЬ" if not p.alive else "ЧАС"), t, 100.0 * low / p.max_hp])
-			for i in 60: await process_frame
+			# меню поразки відкривається за півтори секунди й ставить гру на паузу: чекаємо, щоб не зачепити наступний прогін
+			for i in 120: await process_frame
+			paused = false
 			if game.state == game.State.PLAYING: game.enter_map()
 			game.world = load("res://scripts/game/world_state.gd").new()
 			game._attach_account()

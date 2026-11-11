@@ -44,6 +44,9 @@ const DUEL_ARENA := Rect2(-480, -360, 960, 720)  # майдан для герц�
 const MUSTER_ARENA := Rect2(-680, -480, 1360, 960)  # майдан для сутички ватаг
 const VIGIL_ARENA := Rect2(-1000, -800, 2000, 1600)  # сторожова могила
 const RING_ARENA := Rect2(-720, -540, 1440, 1080)  # Коло Кожум'яки на Змієвих валах
+const FIELD_ALIVE_BASE := 4  # нечисті водночас у дикій місцевості: стільки плюс одна за кожні FIELD_ALIVE_STEP рівнів
+const FIELD_ALIVE_STEP := 5
+const FIELD_SPAWN_MIN := 1.0  # найменше секунд між появами нової нечисті
 const PACE_MAX := 22  # більше за 7 + стільки ворогів на арені дикої місцевості разом не буває
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
@@ -563,7 +566,7 @@ func _update_duel(_delta: float) -> void:
 
 # ======================= Коло Кожум'яки =======================
 
-## Три чудовиська поспіль; між ними перепочинок. Сила чудовиськ — від сили героя (RingService.boss_stats).
+## Три чудовиська поспіль; між ними перепочинок. Сила чудовиськ — від рівня героя (RingService.boss_stats).
 func enter_ring(dl: Dictionary, companions: Array) -> void:
 	loc = dl
 	plague = 0
@@ -1043,18 +1046,24 @@ func _update_field(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		var pace := _pace_level()
-		spawn_timer = maxf(0.6, 1.5 - pace * 0.05)
-		if alive_enemy_count() < 7 + pace:
+		spawn_timer = maxf(FIELD_SPAWN_MIN, 1.6 - pace * 0.03)
+		if alive_enemy_count() < _field_cap():
 			var en: Array = loc["enemies"]
 			var kind: String = en[randi() % en.size()]
 			if randf() < plague_mods.get("infected", 0.0):
 				kind = "zarazhenyi"  # зараза жене своїх солдатів
 			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
 			_maybe_elite(_last_enemy())
-			# Далекий край, що міряється з героєм: нечисть часто суне парами, інакше герой косить її по одній
-			if loc.has("std_hp") and randf() < FIELD_PAIR_CHANCE and alive_enemy_count() < 7 + pace:
+			# Далекий край рівня героя: нечисть часто суне парами
+			if loc.has("std_hp") and randf() < FIELD_PAIR_CHANCE and alive_enemy_count() < _field_cap():
 				spawn_enemy(en[randi() % en.size()], loc["level"])
 				_maybe_elite(_last_enemy())
+
+
+## Скільки нечисті водночас на арені дикої місцевості. Тепер кожен ворог тримає удар еталонного героя
+## півтори секунди й сам б'є боляче, тож юрба мала: від FIELD_ALIVE_BASE на початку до восьми на високих рівнях.
+func _field_cap() -> int:
+	return FIELD_ALIVE_BASE + _pace_level() / FIELD_ALIVE_STEP
 
 
 ## Від якого рівня рахувати, скільки нечисті тримати на арені. Далекі краї ростуть із героєм ("base_level" —
@@ -1475,9 +1484,8 @@ func nearest_enemy(from: Vector2, max_dist: float) -> Node2D:
 ## Не дати ворогові бути слабшим за мірку: std_hp і std_dmg — здоров'я й удар «звичайного зараженого»,
 ## решта видів і боси лишаються у своїй пропорції до нього.
 func _floor_enemy(e, std_hp: float, std_dmg: float) -> void:
-	var s: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (e.level - 1))
-	e.max_hp = maxf(e.max_hp, e.raw_hp / (70.0 * s) * std_hp)
-	e.damage = maxf(e.damage, e.raw_dmg / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (e.level - 1))) * std_dmg)
+	e.max_hp = maxf(e.max_hp, e.raw_hp / Data.enemy_std_hp(e.level) * std_hp)
+	e.damage = maxf(e.damage, e.raw_dmg / Data.enemy_std_dmg(e.level) * std_dmg)
 
 
 ## Підтягнути особливого ворога події (розшук, сторож скарбу, лігво на стежці) до сили героя.
@@ -1540,17 +1548,17 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	e.raw_hp = e.max_hp
 	e.raw_dmg = e.damage
 	if loc.has("std_hp"):
-		# Варта: нечисть міряється силою з героєм (std — звичайний заражений; інші види — у своїй пропорції)
-		var s0: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (level - 1))
-		e.max_hp = e.max_hp / (70.0 * s0) * float(loc["std_hp"])
+		# Варта: сила нечисті за еталоном рівня героя (std — звичайний заражений; інші види — у своїй пропорції)
+		e.max_hp = e.max_hp / Data.enemy_std_hp(level) * float(loc["std_hp"])
 		e.hp = e.max_hp
-		e.damage = e.damage / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))) * float(loc["std_dmg"])
+		e.damage = e.damage / Data.enemy_std_dmg(level) * float(loc["std_dmg"])
 		e.xp_value = maxi(1, int(e.xp_value * float(loc.get("xp_mult", 1.0))))
 	else:
 		if loc.has("hp_mult"):
 			e.max_hp *= float(loc["hp_mult"])
 			e.damage *= float(loc["dmg_mult"])
-			e.xp_value = int(e.xp_value * float(loc["xp_mult"]))
+		if loc.has("xp_mult"):
+			e.xp_value = maxi(1, int(e.xp_value * float(loc["xp_mult"])))
 		if loc.has("min_std_hp"):
 			# Глибини, Башта й події: проти героя, що їх переріс, нечисть не слабша за його мірку
 			_floor_enemy(e, float(loc["min_std_hp"]), float(loc["min_std_dmg"]))

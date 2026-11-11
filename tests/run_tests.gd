@@ -4202,7 +4202,9 @@ func _suite_vigil() -> void:
 	strong.stats["str"] = 90
 	strong.stats["vit"] = 90
 	strong.recalc()
-	check(VS.targets_at(strong, 0)["std_hp"] > t0["std_hp"] * 1.5 and VS.targets_at(strong, 0)["std_dmg"] > t0["std_dmg"] * 1.5, "нечисть міряється силою з героєм")
+	check(is_equal_approx(float(VS.targets_at(strong, 0)["std_hp"]), float(t0["std_hp"])) and is_equal_approx(float(VS.targets_at(strong, 0)["std_dmg"]), float(t0["std_dmg"])), "сила нечисті на варті не залежить від спорядження героя")
+	strong.level = 30
+	check(VS.targets_at(strong, 0)["std_hp"] > t0["std_hp"] * 1.5 and VS.targets_at(strong, 0)["std_dmg"] > t0["std_dmg"] * 1.5, "нечисть на варті росте з рівнем героя")
 	var r3: Dictionary = VS.minute_reward(10, 3)
 	var r5: Dictionary = VS.minute_reward(10, 5)
 	var r6: Dictionary = VS.minute_reward(10, 6)
@@ -4486,7 +4488,9 @@ func _suite_duel() -> void:
 	p.stats["str"] = 80
 	p.stats["vit"] = 80
 	p.recalc()
-	check(DS.loc_for(p, "ostap", 0)["rival_hp"] > DS.loc_for(weak, "ostap", 0)["rival_hp"] * 1.5, "суперник міряється силою з героєм")
+	check(is_equal_approx(float(DS.loc_for(p, "ostap", 0)["rival_hp"]), float(DS.loc_for(weak, "ostap", 0)["rival_hp"])), "сила суперника не залежить від спорядження героя")
+	weak.level = 30
+	check(DS.loc_for(weak, "ostap", 0)["rival_hp"] > DS.loc_for(p, "ostap", 0)["rival_hp"] * 1.5, "суперник росте з рівнем героя")
 	# Перемоги
 	var g0: int = p.gold
 	var m1: Array = DS.win(w, p)
@@ -4612,7 +4616,7 @@ func _suite_duel_battle() -> void:
 	var round0: int = int(DS.state(game.world)["round"])
 	var first: Dictionary = DS.free_rival(game.world)
 	var loc0: Dictionary = DS.free_loc(game.world, p)
-	check(loc0["free"] and loc0["type"] == "duel" and loc0["rival"] == first["id"] and is_equal_approx(float(loc0["rival_hp"]), load("res://scripts/game/power.gd").dps(p) * Acts.FREE_DUEL_SECONDS), "перший суперник тримає двадцять секунд шкоди героя")
+	check(loc0["free"] and loc0["type"] == "duel" and loc0["rival"] == first["id"] and is_equal_approx(float(loc0["rival_hp"]), Data.ref_dps(int(p.level)) * Acts.FREE_DUEL_SECONDS), "перший суперник тримає двадцять секунд шкоди еталонного героя")
 	var duels0: int = int(game.world.stats.get("duel", 0))
 	var glory0: int = game.GloryService.glory(game.world)
 	var wins := 0
@@ -5869,7 +5873,7 @@ func _suite_ring_muster() -> void:
 	check(RS.unlocked(p) and not RS.unlocked(young) and not RS.unlocked(peasant) and Acts.SPOTS["kolo"]["kind"] == "ring", "коло відкрите з 10-го рівня тим, хто обрав дорогу")
 	var s1: Dictionary = RS.boss_stats(p, 0)
 	var s3: Dictionary = RS.boss_stats(p, 2)
-	check(is_equal_approx(float(s1["hp"]), Power.dps(p) * Acts.RING_SECONDS[0]) and float(s3["hp"]) > float(s1["hp"]) and float(s3["dmg"]) > float(s1["dmg"]) and float(s1["cap"]) > 0.0, "чудовиська міряються з героєм, кожне коло тяжче")
+	check(is_equal_approx(float(s1["hp"]), Data.ref_dps(int(p.level)) * Acts.RING_SECONDS[0]) and float(s3["hp"]) > float(s1["hp"]) and float(s3["dmg"]) > float(s1["dmg"]) and float(s1["cap"]) > 0.0, "чудовиська міряються з героєм, кожне коло тяжче")
 	var L: Dictionary = RS.battle_loc(p)
 	check(L["type"] == "ring" and L["bosses"] == line and float(L["std_hp"]) > 0.0 and float(L["xp_mult"]) < 1.0, "опис бою кола")
 	var gold0: int = p.gold
@@ -5923,7 +5927,7 @@ func _suite_ring_muster() -> void:
 	check(MS.allies(wm) == 1, "поранений і той, хто в поході, на огляд не стають")
 	wm.companions[1]["downed"] = false
 	var ML: Dictionary = MS.battle_loc(wm, p)
-	check(ML["type"] == "duel" and ML["muster"] and ML["team"].size() == MS.team_size(0, 2) and ML["back"] == "До Чигирина" and float(ML["ally_hit"]) > 0.0 and is_equal_approx(float(ML["rival_hp"]), Power.dps(p) * Acts.MUSTER_SECONDS[0]), "опис сутички: гурт на гурт")
+	check(ML["type"] == "duel" and ML["muster"] and ML["team"].size() == MS.team_size(0, 2) and ML["back"] == "До Чигирина" and float(ML["ally_hit"]) > 0.0 and is_equal_approx(float(ML["rival_hp"]), Data.ref_dps(int(p.level)) * Acts.MUSTER_SECONDS[0]), "опис сутички: гурт на гурт")
 	var g1: int = p.gold
 	var loy0: int = wm.loyalty_points("chyhyryn")
 	var m1: Array = MS.win(wm, p)
@@ -6188,8 +6192,8 @@ func _suite_far_lands() -> void:
 	hero.level = 60
 	hero.recalc()
 	var m_hi: Dictionary = Far.mods(L16, hero)
-	check(Far.matched(L16, hero) and int(m_hi["level"]) == 60 and float(m_hi["std_hp"]) > 0.0 and float(m_hi["std_dmg"]) > 0.0 and int(m_hi["base_level"]) == 16, "бувалому — нечисть міряється з ним")
-	check(is_equal_approx(Far.xp_mult(16, 16), 1.0) and is_equal_approx(Far.xp_mult(16, 30), 1.84) and is_equal_approx(Far.xp_mult(16, 99), Far.XP_MAX) and is_equal_approx(float(m_hi["xp_mult"]), Far.xp_mult(16, 60)), "надбавка до досвіду росте з різницею рівнів, але не безмежно")
+	check(Far.matched(L16, hero) and int(m_hi["level"]) == 60 and int(m_hi["hero_level"]) == 60 and int(m_hi["base_level"]) == 16, "бувалому — нечисть його рівня")
+	check(not m_hi.has("std_hp") and not m_hi.has("std_dmg") and not m_hi.has("xp_mult"), "сила й досвід нечисті далекого краю — звичайні для її рівня, без надбавок")
 	check(Far.mods(Data.LOCATIONS["rapids"], hero).is_empty(), "старі місцевості без змін")
 	check(not Far.mods(Data.LOCATIONS["zmiinyi"], hero).has("goal"), "у печерах мети зачистки нема")
 	check(Far.region_of("oleshky") == "pivden" and Far.region_of("izium") == "slobid" and Far.region_of("kyiv") == "" and Far.open_level("pivden") == 16, "край за місцем і рівень, з якого він відкривається")
@@ -6240,7 +6244,7 @@ func _suite_far_lands_game() -> void:
 	# Дика місцевість, що росте з героєм
 	game.enter_location("oleshky")
 	await _frames(3)
-	check(c.is_field() and int(c.loc["level"]) == 40 and int(c.loc["base_level"]) == 16 and c.loc.has("std_hp") and c.field_goal == 110 and c.ground.biome == "sand", "Олешківські піски: рівень героя, мета 110, піщана земля")
+	check(c.is_field() and int(c.loc["level"]) == 40 and int(c.loc["base_level"]) == 16 and not c.loc.has("std_hp") and c.field_goal == 110 and c.ground.biome == "sand", "Олешківські піски: рівень героя, мета 110, піщана земля")
 	var e0 = null
 	for e in c.get_tree().get_nodes_in_group("enemies"):
 		if e.kind == "zlyden" or e.kind == "pesyholovets" or e.kind == "kamiana_baba":
@@ -6326,7 +6330,7 @@ func _suite_far_lands_game() -> void:
 	for n in built.find_children("*", "Label", true, false):
 		ptext += n.text + "\n"
 	built.free()
-	check("Волинь і Поділля" in ptext and "з 14-го рівня" in ptext and "міряється з тобою" in ptext, "панель далекого місця: край, рівень відкриття, підказка")
+	check("Волинь і Поділля" in ptext and "з 14-го рівня" in ptext and ("нечисть тут твого %d-го рівня" % p.level) in ptext and "Тобі тут: " in ptext and "витримаєш" in ptext, "панель далекого місця: край, рівень відкриття, підказка")
 	var low = load("res://scripts/entities/player.gd").new()
 	low._ready()
 	low.level = 5
@@ -7392,7 +7396,7 @@ func _suite_difficulty() -> void:
 	var Far = load("res://scripts/game/far_service.gd")
 	var Power = load("res://scripts/game/power.gd")
 	var Depth = load("res://scripts/game/depth_service.gd")
-	check(Data.ARMOR_CAP < 0.75 and Data.LIFESTEAL_MAX_HPS <= 0.02 and Data.BOSS_DMG_MULT > 1.5 and Data.BOSS_HP_MULT > 8.0 and Data.ENEMY_DMG_PER_LEVEL > 0.12, "ручки складності: захист, вампіризм, боси, шкода ворогів")
+	check(Data.ARMOR_CAP < 0.75 and Data.LIFESTEAL_MAX_HPS <= 0.02 and Data.BOSS_DMG_MULT > 1.5 and Data.BOSS_HP_MULT > 8.0 and Data.enemy_hit(50) >= 0.08, "ручки складності: захист, вампіризм, боси, шкода ворогів")
 	var tank = _new_player()
 	tank.stats["vit"] = 500
 	tank.recalc()
@@ -7402,10 +7406,93 @@ func _suite_difficulty() -> void:
 	var plain_dps: float = Power.dps(mage)
 	mage.skill_power = 4.0
 	check(Power.dps(mage) > plain_dps * 1.15 and Power.dps(mage) < plain_dps * 1.25, "мірило сили бачить силу вмінь, але в межах")
-	var fm: Dictionary = Far.floor_mods(tank, 1.0, 0.028)
-	check(is_equal_approx(float(fm["min_std_hp"]), Power.dps(tank)) and is_equal_approx(float(fm["min_std_dmg"]), Power.hit(tank, 0.028)), "підлога сили нечисті рахується від героя")
+	tank.level = 50
+	var fm: Dictionary = Far.floor_mods(tank, 0.5)
+	check(is_equal_approx(float(fm["min_std_hp"]), Data.enemy_std_hp(50) * 0.5) and is_equal_approx(float(fm["min_std_dmg"]), Data.enemy_std_dmg(50) * 0.5), "підлога сили нечисті — частка мірки для рівня героя, а не його спорядження")
+	tank.level = 1
+	var d1: Dictionary = Depth.loc_for(1)
 	var d23: Dictionary = Depth.loc_for(23)
-	check(float(d23["hp_mult"]) > 12.0 and float(d23["dmg_mult"]) > 3.0, "Глибини лютіші, ніж були")
+	check(float(d23["hp_mult"]) > float(d1["hp_mult"]) and float(d23["dmg_mult"]) > float(d1["dmg_mult"]) and int(d23["level"]) > int(d1["level"]) and float(d23["hp_mult"]) < 2.0, "Глибини важчають рівнем нечисті й малою надбавкою понад нього")
+	# Оцінка «чи під силу»: за спорядженням героя, а не лише за рівнем
+	var th = _new_player()
+	th.change_class("cossack")
+	th.level = 60
+	th.stats["str"] = 60
+	th.stats["vit"] = 150
+	th.recalc()
+	var t_own: Dictionary = Power.threat(th, 60)
+	var t_low: Dictionary = Power.threat(th, 1)
+	check(int(t_own["grade"]) == Power.THREAT.size() and str(t_own["name"]) == Power.THREAT_WORST, "голому героєві нечисть свого рівня смертельна")
+	check(int(t_low["grade"]) == 0 and str(t_low["name"]) == str(Power.THREAT[0]["name"]) and float(t_low["ttk"]) < float(t_own["ttk"]) and float(t_low["hits"]) > float(t_own["hits"]), "нечисть першого рівня йому легка")
+	var t_floor: Dictionary = Power.threat(th, 1, 1.0, 1.0, 1.0)
+	check(is_equal_approx(float(t_floor["ttk"]), float(t_own["ttk"])) and is_equal_approx(float(t_floor["hits"]), float(t_own["hits"])), "підлога сили від рівня героя входить в оцінку")
+	check(float(Power.threat(th, 30, 2.0, 2.0)["ttk"]) > float(Power.threat(th, 30)["ttk"]) * 1.9 and float(Power.threat(th, 30, 2.0, 2.0)["hits"]) < float(Power.threat(th, 30)["hits"]) * 0.6, "надбавки місця роблять оцінку гіршою")
+	_fit(th, 1.0)
+	check(float(Power.threat(th, 60)["ttk"]) <= Data.enemy_ttk(60) * 1.01, "герой з еталонною шкодою рубає нечисть свого рівня за еталонний час")
+	check(is_equal_approx(Power.score(th), Power.dps(th) * Power.ehp(th)), "сила героя — шкода на запас живучості")
+	var MP = load("res://scripts/ui/map_panel.gd")
+	var w_th = load("res://scripts/game/world_state.gd").new()
+	w_th.story = {"chapter": 6, "step": 0, "stage": "done"}
+	var panel_text := func(c: Control) -> String:
+		var t := ""
+		for n in c.find_children("*", "Label", true, false):
+			t += n.text + "\n"
+		c.free()
+		return t
+	check("Тобі тут: " in panel_text.call(MP.build_depths(w_th, th, 1, func(_x): pass, func(_x): pass)), "панель Глибин каже, чи під силу")
+	check("Тобі тут: " in panel_text.call(MP.build_tower(w_th, th, 1, func(_x): pass, func(_x): pass)), "панель Башти каже, чи під силу")
+	th.free()
+	# Ціна смерті: 1% досвіду рівня від 10-го рівня, не нижче нуля, рівень не падає
+	var dp = _new_player()
+	dp.level = Data.DEATH_XP_FROM - 1
+	dp.xp_next = Data.xp_for_level(dp.level)
+	dp.xp = dp.xp_next / 2
+	check(dp.death_xp_loss() == 0 and dp.xp == dp.xp_next / 2, "новачка до %d-го рівня смерть досвідом не карає" % Data.DEATH_XP_FROM)
+	dp.level = 60
+	dp.xp_next = Data.xp_for_level(60)
+	dp.xp = dp.xp_next / 2
+	var one: int = ceili(dp.xp_next * Data.DEATH_XP_LOSS)
+	check(is_equal_approx(Data.DEATH_XP_LOSS, 0.01) and dp.death_xp_loss() == one and dp.xp == dp.xp_next / 2 - one and dp.level == 60, "смерть забирає 1% досвіду, потрібного на рівень")
+	dp.xp = one / 3
+	check(dp.death_xp_loss() == one / 3 and dp.xp == 0 and dp.level == 60, "досвід не падає нижче нуля, рівень лишається")
+	dp.level = Data.Classes.BASE_LEVEL_MAX
+	dp.xp = 0
+	check(dp.death_xp_loss() == 0, "на останньому рівні втрачати нічого")
+	dp.free()
+	# Дорога до останнього рівня: кожен рівень дорожчий, з XP_LATE_FROM-го ще й із надбавкою
+	var mono := true
+	for lv in range(2, Data.Classes.BASE_LEVEL_MAX):
+		mono = mono and Data.xp_for_level(lv) > Data.xp_for_level(lv - 1)
+	var plain := func(lv: int) -> float:
+		return (200 + 150 * lv + 15 * lv * lv) * pow(1.0 + 0.6 * (lv - 29), 0.8)
+	check(mono and Data.xp_for_level(Data.XP_LATE_FROM - 1) == int(plain.call(Data.XP_LATE_FROM - 1)), "кожен рівень дорожчий за попередній; до %d-го крива стара" % Data.XP_LATE_FROM)
+	check(Data.xp_for_level(Data.XP_LATE_FROM) == int(float(plain.call(Data.XP_LATE_FROM)) * (1.0 + Data.XP_LATE_STEP)) and Data.xp_for_level(98) == int(float(plain.call(98)) * (1.0 + Data.XP_LATE_STEP * (98 - Data.XP_LATE_FROM + 1))) and Data.xp_for_level(98) > 4 * int(plain.call(98)), "з %d-го рівня кожен наступний дорожчий ще на %d%%" % [Data.XP_LATE_FROM, roundi(Data.XP_LATE_STEP * 100.0)])
+	var sv = _new_player()
+	sv.from_dict({"level": 75, "xp": 500, "xp_next": 1000})
+	check(sv.xp_next == Data.xp_for_level(75) and sv.xp == int(0.5 * Data.xp_for_level(75)), "старе збереження зберігає частку шляху до наступного рівня")
+	sv.free()
+	# Довідник знає нові правила й називає числа з балансу
+	var WSv = load("res://scripts/game/wiki_service.gd")
+	var arts := {}
+	for sx in WSv.sections():
+		for e in sx["entries"]:
+			arts[str(e["title"])] = str(e["text"])
+	var hard: String = str(arts.get("Складність", ""))
+	check(("%s с" % WSv._num(Data.enemy_ttk(1))) in hard and ("%s%%" % WSv._num(Data.enemy_hit(50) * 100.0)) in hard and ("+%d" % Data.MAX_UPGRADE) in hard and "Тобі тут" in hard and ("за %d%% сили" % roundi(Far.DEPTH_FLOOR * 100.0)) in hard and ("у Башті за %d%%" % roundi(Far.TOWER_FLOOR * 100.0)) in hard, "довідник пояснює складність із числами балансу")
+	var dying: String = str(arts.get("Смерть", ""))
+	check(("%s%% гривень" % WSv._num(Data.DEATH_GOLD_LOSS * 100.0)) in dying and ("%s%% досвіду" % WSv._num(Data.DEATH_XP_LOSS * 100.0)) in dying and ("До %d-го рівня" % Data.DEATH_XP_FROM) in dying and "Герць" in dying, "довідник називає ціну смерті")
+	var road: String = str(arts.get("Дорога до %d-го рівня" % Data.Classes.BASE_LEVEL_MAX, ""))
+	check(WSv._big(Data.xp_for_level(Data.Classes.BASE_LEVEL_MAX - 1)) in road and WSv._big(Data.xp_for_level(30)) in road and "Глибини" in road, "довідник показує, скільки досвіду коштують рівні")
+	check(WSv._big(1234567) == "1 234 567" and WSv._big(999) == "999" and WSv._big(1000) == "1 000", "великі числа з пробілами між розрядами")
+	var soul_rule: String = str(arts.get("Шанс душі", ""))
+	check("слабша за звичайну нечисть твого рівня" in soul_rule and "Від спорядження це не залежить" in soul_rule, "довідник: душі залежать від рівня нечисті, а не від спорядження")
+	# Мірка сили нечисті: еталонний герой у середньому спорядженні
+	var curve_ok := true
+	for lv in range(2, 100):
+		curve_ok = curve_ok and Data.enemy_std_hp(lv) > Data.enemy_std_hp(lv - 1) and Data.enemy_std_dmg(lv) > Data.enemy_std_dmg(lv - 1)
+	check(curve_ok, "нечисть кожного наступного рівня здоровіша й б'є сильніше")
+	check(is_equal_approx(Data.enemy_std_hp(50), Data.ref_dps(50) * Data.enemy_ttk(50)) and is_equal_approx(Data.enemy_std_dmg(50), Data.ref_ehp(50) * Data.enemy_hit(50)), "мірка: секунди шкоди еталонного героя й частка його живучості")
+	check(Data.enemy_ttk(1) < 1.0 and Data.enemy_hit(1) < 0.05 and Data.enemy_ttk(50) >= 2.0 and Data.enemy_ttk(99) >= Data.enemy_ttk(50) and Data.enemy_hit(99) >= Data.enemy_hit(50), "новачкам м'якше, з 50-го рівня — повна суворість")
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
 	game.account_path = TEST_ACCOUNT
@@ -7482,9 +7569,9 @@ func _suite_difficulty() -> void:
 	for x in c.get_tree().get_nodes_in_group("enemies"):
 		if x.kind == "zarazhenyi" and not x.is_boss and not x.elite:
 			foe = x
-	check(c.is_dungeon() and c.loc.has("depth") and float(c.loc.get("min_std_hp", 0.0)) > Power.dps(p) * Far.DEPTH_FLOOR_TTK * 0.5, "Глибина знає силу героя (%s)" % str(c.loc.get("min_std_hp", "нема")))
+	check(c.is_dungeon() and c.loc.has("depth") and is_equal_approx(float(c.loc.get("min_std_hp", 0.0)), Data.enemy_std_hp(int(p.level)) * Far.DEPTH_FLOOR), "Глибина знає рівень героя (%s)" % str(c.loc.get("min_std_hp", "нема")))
 	if foe != null:
-		check(foe.max_hp >= float(c.loc.get("min_std_hp", 0.0)) * 0.99, "заражений першої глибини тримає щонайменше секунду шкоди героя сорокового рівня")
+		check(foe.max_hp >= float(c.loc.get("min_std_hp", 0.0)) * 0.99, "заражений першої глибини не слабший за підлогу для рівня героя")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -8909,7 +8996,7 @@ func _suite_event_lift() -> void:
 	var Bounty = load("res://scripts/game/bounty_service.gd")
 	var WS = load("res://scripts/game/wiki_service.gd")
 	var base_dmg := func(lvl: int) -> float:
-		return 13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (lvl - 1))
+		return Data.enemy_std_dmg(lvl)
 	# Слабкий герой: мірка нижча за нечисть свого рівня, тож нічого не міняється
 	var weak = _new_player()
 	var w0 = load("res://scripts/game/world_state.gd").new()
@@ -8922,17 +9009,17 @@ func _suite_event_lift() -> void:
 	strong.stats["vit"] = 400
 	strong.recalc()
 	var m: Dictionary = Far.event_mods(strong)
-	check(is_equal_approx(float(m["min_std_hp"]), Power.dps(strong) * Far.EVENT_TTK) and is_equal_approx(float(m["min_std_dmg"]), Power.hit(strong, Far.EVENT_HIT)), "мірка події: шкода героя за %s с і удар на %s%% його здоров'я" % [str(Far.EVENT_TTK), str(Far.EVENT_HIT * 100.0)])
+	check(is_equal_approx(float(m["min_std_hp"]), Data.enemy_std_hp(60) * Far.EVENT_FLOOR) and is_equal_approx(float(m["min_std_dmg"]), Data.enemy_std_dmg(60) * Far.EVENT_FLOOR), "мірка події: %d%% сили нечисті рівня героя" % roundi(Far.EVENT_FLOOR * 100.0))
 	# Новачкам мірка не діє, далі вмикається плавно
 	check(is_equal_approx(Far.event_share(Far.EVENT_FROM), 0.0) and is_equal_approx(Far.event_share(1), 0.0) and is_equal_approx(Far.event_share(Far.EVENT_FULL), 1.0) and is_equal_approx(Far.event_share(99), 1.0) and is_equal_approx(Far.event_share((Far.EVENT_FROM + Far.EVENT_FULL) / 2), 0.5), "мірка вмикається від %d-го рівня до повної на %d-му" % [Far.EVENT_FROM, Far.EVENT_FULL])
 	strong.level = Far.EVENT_FROM
 	var m_new: Dictionary = Far.event_mods(strong)
 	var novice: Dictionary = DS.battle_loc(w0, "chyhyryn", strong)
-	check(is_equal_approx(float(m_new["min_std_hp"]), 0.0) and is_equal_approx(float(novice["gate_hp"]), 600.0 + 120.0 * int(novice["level"])), "героєві %d-го рівня події лишаються як були, хоч який він сильний" % Far.EVENT_FROM)
+	check(is_equal_approx(float(m_new["min_std_hp"]), 0.0) and is_equal_approx(float(novice["gate_hp"]), (600.0 + 120.0 * int(novice["level"])) * Far.guard_mult(int(novice["level"]))), "героєві %d-го рівня підлога подій не діє, хоч який він сильний" % Far.EVENT_FROM)
 	strong.level = 60
 	var sl: Dictionary = DS.battle_loc(w0, "chyhyryn", strong)
 	var g: float = Far.guard_mult(int(sl["level"]), sl)
-	check(int(sl["level"]) == 59 and g > 1.5 and is_equal_approx(g, float(m["min_std_dmg"]) / float(base_dmg.call(59))) and is_equal_approx(float(sl["gate_hp"]), (600.0 + 120.0 * 59) * g) and sl.has("min_std_hp"), "облога: мірка героя й міцніша брама (×%.1f)" % g)
+	check(int(sl["level"]) == 59 and g > 1.5 and is_equal_approx(g, float(base_dmg.call(59)) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * 58.0))) and is_equal_approx(float(sl["gate_hp"]), (600.0 + 120.0 * 59) * g) and sl.has("min_std_hp"), "облога: мірка героя й міцніша брама (×%.1f)" % g)
 	EvS.start(w0, strong, "village_raid", "black_forest")
 	var el: Dictionary = EvS.battle_loc(w0, EvS.active(w0), strong)
 	check(el.has("min_std_hp") and int(el["level"]) == 59 and is_equal_approx(float(el["gate_hp"]), (500.0 + 100.0 * 59) * Far.guard_mult(59, el)), "набіг на село: мірка героя й міцніші хати")
@@ -8944,7 +9031,7 @@ func _suite_event_lift() -> void:
 	# Ніч: у полі рівень підтягується до героя, обсяг зачистки лишається за місцем; у печері лише мірка
 	var nf: Dictionary = Far.night_mods(Data.LOCATIONS["black_forest"], strong)
 	var nd: Dictionary = Far.night_mods(Data.LOCATIONS["zmii_cave"], strong)
-	check(int(nf["level"]) == 60 and int(nf["base_level"]) == int(Data.LOCATIONS["black_forest"]["level"]) and int(nf["goal"]) == Data.FIELD_GOAL_BASE + int(Data.LOCATIONS["black_forest"]["level"]) * Data.FIELD_GOAL_PER_LEVEL and is_equal_approx(float(nf["min_std_hp"]), Power.dps(strong) * Far.EVENT_TTK * Far.NIGHT_MULT), "ніч у полі: рівень героя, мірка на %d%% лютіша, зачистка за місцем" % roundi((Far.NIGHT_MULT - 1.0) * 100.0))
+	check(int(nf["level"]) == 60 and int(nf["base_level"]) == int(Data.LOCATIONS["black_forest"]["level"]) and int(nf["goal"]) == Data.FIELD_GOAL_BASE + int(Data.LOCATIONS["black_forest"]["level"]) * Data.FIELD_GOAL_PER_LEVEL and is_equal_approx(float(nf["min_std_hp"]), Data.enemy_std_hp(60) * Far.EVENT_FLOOR * Far.NIGHT_MULT), "ніч у полі: рівень героя, мірка на %d%% лютіша, зачистка за місцем" % roundi((Far.NIGHT_MULT - 1.0) * 100.0))
 	check(not nd.has("level") and nd.has("min_std_hp") and not Far.night_mods(Data.LOCATIONS["black_forest"], weak).has("level"), "ніч у печері й для слабшого героя рівня не міняє")
 	check(not Far.night_mods(Data.LOCATIONS["ridne_selo"], strong).has("goal"), "місце з власним обсягом зачистки його зберігає")
 	weak.free()
@@ -8972,8 +9059,7 @@ func _suite_event_lift() -> void:
 	var fm: Dictionary = Far.event_mods(p)
 	# hp_mult — множник здоров'я поверх мірки (еліта, ніч), dmg_mult — те саме для удару
 	var floor_ok := func(e, hp_mult: float, dmg_mult: float = 1.0) -> bool:
-		var sc: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (e.level - 1))
-		return e.max_hp >= e.raw_hp / (70.0 * sc) * float(fm["min_std_hp"]) * hp_mult * 0.999 and e.damage >= e.raw_dmg / float(base_dmg.call(e.level)) * float(fm["min_std_dmg"]) * dmg_mult * 0.999
+		return e.max_hp >= e.raw_hp / Data.enemy_std_hp(e.level) * float(fm["min_std_hp"]) * hp_mult * 0.999 and e.damage >= e.raw_dmg / float(base_dmg.call(e.level)) * float(fm["min_std_dmg"]) * dmg_mult * 0.999
 	var foes := func() -> Array:
 		return get_nodes_in_group("enemies").filter(func(e): return not e.is_queued_for_deletion())
 	# Облога: уся нечисть не слабша за мірку й сильніша, ніж просто за рівнем
@@ -8985,12 +9071,9 @@ func _suite_event_lift() -> void:
 		if foes.call().size() >= 3:
 			break
 	var all_ok := true
-	var lifted := 0
 	for e in foes.call():
-		all_ok = all_ok and floor_ok.call(e, 1.0)
-		if e.max_hp > e.raw_hp * 1.2:
-			lifted += 1
-	check(foes.call().size() > 0 and all_ok and lifted > 0 and is_equal_approx(c.gate.max_hp, float(c.loc["gate_hp"])), "в облозі нечисть підтягнуто до героя (%d із %d сильніші, ніж за рівнем)" % [lifted, foes.call().size()])
+		all_ok = all_ok and e.level == 59 and floor_ok.call(e, 1.0)
+	check(foes.call().size() > 0 and all_ok and is_equal_approx(c.gate.max_hp, float(c.loc["gate_hp"])), "в облозі нечисть рівня героя й не слабша за мірку (%d)" % foes.call().size())
 	_clear_enemies(game)
 	game.enter_map()
 	await _frames(2)
@@ -9049,7 +9132,7 @@ func _suite_event_lift() -> void:
 		for e in sx["entries"]:
 			if str(e["title"]) == "Сила нечисті в подіях":
 				rule = str(e["text"])
-	check(("%s с" % WS._num(Far.EVENT_TTK)) in rule and ("%s%%" % WS._num(Far.EVENT_HIT * 100.0)) in rule and "розшукуваною" in rule and "Уночі" in rule and ("з %d-го рівня" % Far.EVENT_FROM) in rule and ("на %d-му" % Far.EVENT_FULL) in rule, "довідник пояснює силу нечисті в подіях із числами балансу")
+	check(("%d%% звичайної сили" % roundi(Far.EVENT_FLOOR * 100.0)) in rule and "розшукуваною" in rule and "Уночі" in rule and ("з %d-го рівня" % Far.EVENT_FROM) in rule and ("на %d-му" % Far.EVENT_FULL) in rule, "довідник пояснює силу нечисті в подіях із числами балансу")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -9850,9 +9933,26 @@ func _suite_camp() -> void:
 
 # ======================= 8. Ігровий сценарій =======================
 
+## Зробити тестового героя сильнішим за еталон його рівня (у k разів за шкодою). Уся нечисть тепер тримає удар
+## еталонного героя в середньому спорядженні, тож голий герой із тестів рубав би її хвилинами.
+## Це перевірки ходу гри, а не балансу: баланс міряють tools/*_sim.gd.
+func _fit(p, k: float = 3.0) -> void:
+	var Power = load("res://scripts/game/power.gd")
+	var key: String = "spi" if p.weapon_type == "staff" else ("agi" if p.weapon_type == "pishchal" else "str")
+	var want: float = Data.ref_dps(int(p.level)) * k
+	var guard := 0
+	while Power.dps(p) < want and guard < 200:
+		p.stats[key] = int(p.stats[key]) + maxi(10, int(p.stats[key]) / 4)
+		p.recalc()
+		guard += 1
+	p.set_meta("fit", int(p.level))
+
+
 func _bot_fight(game) -> void:
 	var p = game.player
 	var c = game.combat
+	if int(p.get_meta("fit", 0)) != int(p.level):
+		_fit(p)
 	var en = c.nearest_enemy(p.global_position, 5000.0)
 	game.hud.joystick.vector = (en.global_position - p.global_position).normalized() * 0.8 if en else Vector2.ZERO
 	game.hud.btn_attack.held = true
@@ -10290,11 +10390,20 @@ func _suite_gameplay() -> void:
 	check(comp["level"] > clvl or clvl >= game.player.level, "супутник підріс у бою")
 	check(game.combat.companion_nodes[0].level == comp["level"], "показники живого супутника оновились")
 	var gold_before: int = game.player.gold
+	game.player.xp = game.player.xp_next / 2
+	var xp_before: int = game.player.xp
+	var lvl_before: int = game.player.level
 	game.player.invuln = 0.0
 	game.player.take_damage(1e9)
 	await _frames(150)
 	check(game.state == game.State.DEAD, "смерть козака")
-	check(game.player.gold == gold_before - int(gold_before * 0.25), "втрата чверті гривень")
+	check(game.player.gold == gold_before - int(gold_before * Data.DEATH_GOLD_LOSS) and is_equal_approx(Data.DEATH_GOLD_LOSS, 0.05), "смерть забирає 5% гривень")
+	var want_loss: int = ceili(game.player.xp_next * Data.DEATH_XP_LOSS) if lvl_before >= Data.DEATH_XP_FROM else 0
+	check(game.player.level == lvl_before and game.player.xp == xp_before - want_loss, "смерть забирає досвід за правилом (%d), рівень не падає" % want_loss)
+	var death_text := ""
+	for n in game.hud.overlay_box.find_children("*", "Label", true, false):
+		death_text += n.text + "\n"
+	check(("Втрачено %d досвіду" % want_loss) in death_text if want_loss > 0 else "Втрачено" in death_text and not "досвіду" in death_text, "екран поразки називає втрачене")
 	game.enter_city(game.world.last_city)
 	check(game.player.alive and game.player.hp == game.player.max_hp, "козак отямився в місті")
 	game.queue_free()

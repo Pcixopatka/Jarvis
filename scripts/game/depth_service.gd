@@ -42,8 +42,9 @@ static func loc_for(depth: int) -> Dictionary:
 		"level": lvl, "rooms": mini(8, 4 + depth / 5), "enemies": pool.slice(0, 3),
 		"boss": BOSSES[(depth - 1) % BOSSES.size()], "depth": depth,
 		"elite_bonus": minf(0.25, 0.04 + 0.01 * depth),
-		# Глибше — нечисть лютіша понад свій рівень (і щедріша на досвід)
-		"hp_mult": 1.4 + 0.35 * depth + 0.006 * depth * depth, "dmg_mult": 1.3 + 0.08 * depth, "xp_mult": 1.0 + 0.05 * depth,
+		# Глибше — нечисть лютіша понад свій рівень (і щедріша на досвід). Надбавки малі: сама мірка нечисті
+		# тепер росте разом із рівнем глибини (Data.enemy_std_*), а не лінійно, як раніше.
+		"hp_mult": 1.1 + 0.02 * depth, "dmg_mult": 1.05 + 0.01 * depth, "xp_mult": 1.0 + 0.05 * depth,
 		"desc": "Корені зарази під Кремлем. Що глибше — то лютіше."}
 
 

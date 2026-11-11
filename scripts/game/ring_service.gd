@@ -58,8 +58,8 @@ static func lineup(week_key: String = "") -> Array:
 ## здоров'я воно щонайбільше втрачає за секунду (щоб сильний герой не клав його одним вмінням).
 static func boss_stats(player, stage: int) -> Dictionary:
 	var i := clampi(stage, 0, int(Acts.RING_STAGES) - 1)
-	return {"hp": Power.dps(player) * float(Acts.RING_SECONDS[i]),
-		"dmg": Power.hit(player, float(Acts.RING_HIT[i]) * DuelService.hit_scale(player.level)),
+	return {"hp": Power.ref_dps(int(player.level)) * float(Acts.RING_SECONDS[i]),
+		"dmg": Power.ref_hit(int(player.level), float(Acts.RING_HIT[i]) * DuelService.hit_scale(player.level)),
 		"cap": 1.0 / (float(Acts.RING_CAP) * float(Acts.RING_SECONDS[i]))}
 
 
@@ -67,7 +67,7 @@ static func boss_stats(player, stage: int) -> Dictionary:
 static func battle_loc(player) -> Dictionary:
 	return {"name": "Коло Кожум'яки", "type": "ring", "biome": "steppe", "level": maxi(1, player.level), "enemies": ["zarazhenyi"],
 		"bosses": lineup(), "hero_level": player.level,
-		"std_hp": Power.dps(player) * float(Acts.RING_STD_TTK), "std_dmg": Power.hit(player, float(Acts.RING_STD_HIT)),
+		"std_hp": Power.ref_dps(int(player.level)) * float(Acts.RING_STD_TTK), "std_dmg": Power.ref_hit(int(player.level), float(Acts.RING_STD_HIT)),
 		"xp_mult": float(Acts.RING_XP), "desc": ""}
 
 

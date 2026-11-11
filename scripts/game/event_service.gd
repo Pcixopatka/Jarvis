@@ -220,7 +220,7 @@ static func battle_loc(world, ev: Dictionary, player) -> Dictionary:
 		hp = 900.0 + 150.0 * lvl
 	elif kind == "wounded":
 		hp = 250.0 + 40.0 * lvl
-	# нечисть міряється з героєм; те, що він боронить, міцнішає на стільки ж
+	# нечисть не слабша за мірку для рівня героя; те, що він боронить, міцнішає разом із нею
 	var Far = load("res://scripts/game/far_service.gd")
 	var lift: Dictionary = Far.event_mods(player)
 	var out := {"name": name_of(kind) + (": " + place(target) if kind != "sich_siege" else ""), "type": "defense", "biome": biome,

@@ -211,7 +211,7 @@ static func battle_loc(world, city: String, player) -> Dictionary:
 		enemies = ["zarazhenyi", "pishchalnyk", "vovkulaka", "upyr"]
 	if lvl >= 13:
 		enemies = ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"]
-	# нечисть міряється з героєм; вози міцнішають на стільки ж
+	# нечисть не слабша за мірку для рівня героя; вози міцнішають разом із нею
 	var Far = load("res://scripts/game/far_service.gd")
 	var lift: Dictionary = Far.event_mods(player)
 	var out := {"name": "Напад на валку", "type": "defense", "biome": "steppe", "level": lvl, "enemies": enemies, "waves": 3,

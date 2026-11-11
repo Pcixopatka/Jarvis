@@ -49,10 +49,13 @@ static func gain_xp(world, hero_level: int, amount: int) -> Array:
 
 static func stats(type: String, level: int, mult: float = 1.0) -> Dictionary:
 	var info: Dictionary = Data.COMPANIONS[type]
+	# Побратим тримає свою частку від еталонного героя на будь-якому рівні: інакше нечисть,
+	# що росте за еталоном рівня, клала б його одним ударом, а його удари нічого не важили б.
+	var live: float = Data.ref_ehp(level) / Data.ref_ehp(1)
 	var out := {
-		"hp": (info["hp"] + info["hp_lvl"] * (level - 1)) * mult,
-		"dmg": (info["dmg"] + info["dmg_lvl"] * (level - 1)) * mult,
+		"hp": info["hp"] * live * mult,
+		"dmg": info["dmg"] * Data.ref_dps(level) / Data.ref_dps(1) * mult,
 	}
 	if info.has("heal"):
-		out["heal"] = (info["heal"] + info["heal_lvl"] * (level - 1)) * mult
+		out["heal"] = info["heal"] * live * mult
 	return out

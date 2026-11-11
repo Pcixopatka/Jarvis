@@ -6,7 +6,6 @@ const Data := preload("res://scripts/data/data.gd")
 const Souls := preload("res://scripts/data/souls.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Elites := preload("res://scripts/data/elites.gd")
-const Power := preload("res://scripts/game/power.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
 
 static var _base_hp := {}
@@ -91,13 +90,14 @@ static func _hp_of(kind: String, boss: bool) -> float:
 	return float(_base_hp[key])
 
 
-## Гідність ворога: 1, якщо він тримається проти героя стільки, скільки нечисть рівного йому краю.
-## Кого герой вбиває миттю, той душу лишає рідше, тож легкі місця не стають копальнею душ.
+## Гідність ворога: 1, якщо він не слабший за звичайну нечисть рівня героя (Data.enemy_std_hp).
+## Слабша нечисть із давно пройдених місць лишає душу рідше, тож легкі місця не стають копальнею душ.
+## Від спорядження героя гідність не залежить: краще вдягнений бере душі так само часто, лише швидше.
 static func worth(player, e) -> float:
 	var std: float = float(e.max_hp) / _hp_of(str(e.kind), e.is_boss) * _hp_of("zarazhenyi", false)
 	if e.elite:
 		std /= float(Elites.HP_MULT)
-	return clampf(std / (Power.dps(player) * FarService.TTK), Souls.W_MIN_BOSS if e.is_boss else Souls.W_MIN, 1.0)
+	return clampf(std / Data.enemy_std_hp(int(player.level)), Souls.W_MIN_BOSS if e.is_boss else Souls.W_MIN, 1.0)
 
 
 ## Нечисть упала: чи лишає вона душу. Повертає id душі або "". Веде поклик душ героя.

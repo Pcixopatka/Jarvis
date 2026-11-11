@@ -1,55 +1,40 @@
 extends RefCounted
 ## Далекі краї: Сіверщина, Волинь і Поділля, Слобожанщина й Донеччина, Чорномор'я і Крим.
-## Їхні місцевості мають позначку "scale": рівень не нижчий за вказаний у даних і росте разом із героєм,
-## а нечисть міряється з ним силою (як на варті й у герці). Тому сюди є чого ходити і на 20-му рівні,
-## і на 90-му: здобич, досвід і завдання завжди під стать герою.
+## Їхні місцевості мають позначку "scale": рівень не нижчий за вказаний у даних і росте разом із героєм.
+## Сила нечисті — звичайна мірка її рівня (Data.enemy_std_*), досвід і здобич теж за рівнем. Тому сюди є чого
+## ходити і на 20-му рівні, і на 90-му, а краще спорядження тут справді відчувається.
 ## Героєві, слабшому за позначений рівень, край не піддається: там звичайна нечисть цього рівня.
 
 const Data := preload("res://scripts/data/data.gd")
-const Power := preload("res://scripts/game/power.gd")
 
-## Скільки секунд чистої шкоди героя тримає «звичайний заражений» і яку частку здоров'я героя забирає його удар.
-## Решта нечисті й боси — у своїй пропорції до нього (кам'яна баба втричі міцніша, злидень утричі кволіший).
-const TTK := 1.1
-const HIT := 0.035
-const DUNGEON_TTK := 1.2
-const DUNGEON_HIT := 0.032
-# Підлога сили нечисті в Глибинах і Башті для героя, що їх переріс (кімнат і хвиль там більше, тож трохи м'якше за печеру краю)
-const DEPTH_FLOOR_TTK := 1.0
-const DEPTH_FLOOR_HIT := 0.028
-const TOWER_FLOOR_TTK := 0.9
-const TOWER_FLOOR_HIT := 0.028
-# Події (облоги, набіги, валки, полон, супровід, розшук, сторож скарбу, лігво на стежці, ніч): нечисть не слабша
-# проти героя за цю мірку. Трохи м'якше за далекий край, бо там ще хвилі й те, що треба вберегти.
-const EVENT_TTK := 0.9
-const EVENT_HIT := 0.028
+## Підлога сили нечисті: частка звичайної мірки для рівня героя (Data.enemy_std_hp і enemy_std_dmg).
+## Потрібна там, де місце слабше за героя: він переріс Глибину чи поверх Башти, шукає розшукувану нечисть
+## у полі для новачків, зайшов уночі в давню печеру. Нечисть свого рівня й так не слабша за мірку.
+## У Глибинах і Башті підлога помітно нижча за повну мірку: мілкіша глибина чи нижчий поверх мають бути
+## легшим кроком для героя, якому свій рівень ще не під силу, але не прогулянкою.
+const DEPTH_FLOOR := 0.6
+const TOWER_FLOOR := 0.5
+# Події: облоги, набіги, валки, полон, супровід, розшук, сторож скарбу, лігво на стежці, ніч.
+const EVENT_FLOOR := 0.8
 const NIGHT_MULT := 1.3  # уночі мірка лютіша
 # Новачкам події лишаються як були: мірка вмикається плавно, від EVENT_FROM-го рівня героя до повної сили на EVENT_FULL-му.
 const EVENT_FROM := 10
 const EVENT_FULL := 30
 const GOAL_MAX := 110  # більше стількох на зачистку не просимо, хоч який рівень
-## Нечисть тут легша за глибинну, тож бувалому героєві даємо надбавку до досвіду й гривень:
-## +6% за кожен рівень понад рівень краю, але не більше ніж учетверо з половиною.
-## На 66-му рівні це близько половини того, що дають Глибини (див. tools/far_sim.gd і depth_sim.gd).
-const XP_PER_LEVEL := 0.06
-const XP_MAX := 4.5
-
-
-## Надбавка до досвіду й гривень для героя рівня hero у краї рівня base.
-static func xp_mult(base: int, hero: int) -> float:
-	return minf(XP_MAX, 1.0 + XP_PER_LEVEL * maxi(0, hero - base))
 
 
 static func is_far(L: Dictionary) -> bool:
 	return bool(L.get("scale", false))
 
 
-## Чи герой уже доріс до цього краю (тоді нечисть міряється з ним).
+## Чи герой уже доріс до цього краю (тоді нечисть там його рівня).
 static func matched(L: Dictionary, player) -> bool:
 	return is_far(L) and player.level >= int(L["level"])
 
 
 ## Додатки до опису місцевості для бою (змішуються з Data.LOCATIONS[id] у combat.enter).
+## Нечисть далекого краю має рівень героя. Її сила — звичайна мірка цього рівня (Data.enemy_std_*),
+## тож краще вдягненому героєві тут легше, а гірше вдягненому важче.
 static func mods(L: Dictionary, player) -> Dictionary:
 	if not is_far(L):
 		return {}
@@ -58,19 +43,16 @@ static func mods(L: Dictionary, player) -> Dictionary:
 	if L["type"] != "dungeon":
 		out["goal"] = mini(GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
 	if player.level >= base:
-		var dungeon: bool = L["type"] == "dungeon"
 		out["level"] = player.level
 		out["hero_level"] = player.level
-		out["std_hp"] = Power.dps(player) * (DUNGEON_TTK if dungeon else TTK)
-		out["std_dmg"] = Power.hit(player, DUNGEON_HIT if dungeon else HIT)
-		out["xp_mult"] = xp_mult(base, player.level)
 	return out
 
 
-## Найменша сила нечисті в Глибинах і Башті: не слабша проти героя, ніж у печері далекого краю.
-## Формули глибини й поверху діють далі; це лише підлога для героя, що їх переріс.
-static func floor_mods(player, ttk: float, hit_frac: float) -> Dictionary:
-	return {"min_std_hp": Power.dps(player) * ttk, "min_std_dmg": Power.hit(player, hit_frac)}
+## Найменша сила нечисті в Глибинах, Башті й подіях: частка share звичайної мірки для рівня героя.
+## Формули глибини й поверху діють далі; це лише підлога.
+static func floor_mods(player, share: float) -> Dictionary:
+	return {"min_std_hp": Data.enemy_std_hp(int(player.level)) * share,
+		"min_std_dmg": Data.enemy_std_dmg(int(player.level)) * share}
 
 
 ## Яка частка мірки подій діє на героя цього рівня: 0 до EVENT_FROM, 1 від EVENT_FULL.
@@ -80,14 +62,13 @@ static func event_share(level: int) -> float:
 
 ## Підлога сили нечисті для бою події: звичайна нечисть свого рівня лишається, якщо вона й так сильніша.
 static func event_mods(player, mult: float = 1.0) -> Dictionary:
-	var share := event_share(int(player.level)) * mult
-	return floor_mods(player, EVENT_TTK * share, EVENT_HIT * share)
+	return floor_mods(player, EVENT_FLOOR * event_share(int(player.level)) * mult)
 
 
-## У скільки разів удар підтягнутої нечисті сильніший за звичайний для її рівня (не менше 1).
-## На стільки ж міцнішає те, що герой боронить: брама, вози, мандрівник. Інакше воно падало б за кілька ударів.
-static func guard_mult(level: int, mods: Dictionary) -> float:
-	return maxf(1.0, float(mods.get("min_std_dmg", 0.0)) / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))))
+## У скільки разів удар нечисті рівня level сильніший за стару лінійну шкоду, під яку зроблені формули
+## здоров'я брам, хат, возів і мандрівників. На стільки ж вони міцнішають, інакше падали б за кілька ударів.
+static func guard_mult(level: int, _mods: Dictionary = {}) -> float:
+	return maxf(1.0, Data.enemy_std_dmg(level) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * (level - 1))))
 
 
 ## Нічний похід: нечисть лютіша за мірку події, а в полі її рівень підтягується до героя

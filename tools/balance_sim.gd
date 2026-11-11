@@ -169,8 +169,47 @@ func _build_hero(lvl: int) -> void:
 		p.add_item(it)
 		p.equip(it["uid"])
 	p.recalc()
+	# SIM_GEAR=good | best: краще спорядження, ніж середнє (див. _regear)
+	match OS.get_environment("SIM_GEAR"):
+		"good":
+			_regear(p, lvl, 3, 5, false)
+		"best":
+			_regear(p, lvl, 3, Data.MAX_UPGRADE, true)
 	p.hp = p.max_hp
 	p.mana = p.max_mana
+	p.potions = p.potion_max()
+
+
+## Вдягнути героя заново: якість речей, заточка; best — ще й душі в гніздах і клейноди роду.
+## «Середнє» спорядження сима — добротні речі з типовою заточкою, «добре» — легендарні +5,
+## «найкраще» — легендарні з найбільшою заточкою, дібраними властивостями, душами й клейнодами.
+func _regear(p, lvl: int, rarity: int, up: int, best: bool) -> void:
+	for it in p.inventory.duplicate():
+		p.remove_from_bag(it["uid"])
+	for slot in Data.SLOTS:
+		if p.equipment.has(slot):
+			p.equipment.erase(slot)
+	var wt: String = "staff" if p.is_volkhv() else str(SPEC_WEAPON.get(p.job, "sabre"))
+	var souls := {"weapon": "b_putinoid", "amulet": "b_lykho", "head": "zarazhenyi", "body": "vedmid", "belt": "vovkulaka", "boots": "pesyholovets"}
+	for slot in Data.SLOTS:
+		var pick: Dictionary = {}
+		var pick_score := -1.0
+		for i in (12 if best else 1):
+			var it: Dictionary = Data.gen_item(lvl, rarity, slot, wt if slot == "weapon" else "")
+			it["up"] = up
+			if best:
+				it["sock"] = 1
+				it["soul"] = souls[slot]
+			var sc := 0.0
+			for a in it["affixes"]:
+				sc += 1.0 if a in ["dmg_pct", "crit", "aspd", "hp", "armor", "str", "vit"] else 0.0
+			if sc > pick_score:
+				pick_score = sc
+				pick = it
+		p.add_item(pick, true)
+		p.equip(pick["uid"])
+	p.klein = {"dmg": 0.1, "hp": 0.1, "crit": 0.05, "cd": 0.1} if best else {}
+	p.recalc()
 
 
 # ======================= Бот =======================
@@ -194,6 +233,8 @@ func _bot(p, c) -> void:
 				p.dodge()
 	hud.joystick.vector = dir
 	hud.btn_attack.held = en != null
+	if p.hp < p.max_hp * 0.4 and OS.get_environment("SIM_POTIONS") != "0":
+		p.use_potion()  # жива людина п'є зілля, коли припече (SIM_POTIONS=0 — без зілля)
 	if en:
 		for id in p.active_skills():
 			if id == "first_aid" and p.hp > p.max_hp * 0.6:

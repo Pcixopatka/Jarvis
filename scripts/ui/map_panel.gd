@@ -74,6 +74,7 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 	v.add_child(row)
 	var danger: bool = int(L["level"]) > player.level + 2
 	v.add_child(_wrapped("Рівень %d  •  кімнат: %d" % [L["level"], L["rooms"]], 19, UI.BAD if danger else UI.TEXT))
+	_threat_line(v, player, int(L["level"]), float(L["hp_mult"]), float(L["dmg_mult"]), load("res://scripts/game/far_service.gd").DEPTH_FLOOR)
 	var names := []
 	for e in L["enemies"]:
 		names.append(Data.ENEMY_NAMES[e])
@@ -120,7 +121,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 				return v
 			var rs: Dictionary = RS.state(world)
 			var stages := int(Acts.RING_STAGES)
-			v.add_child(_wrapped("Три чудовиська поспіль, між ними кілька секунд перепочинку. Вони міряються силою з тобою, тож легко не буде на жодному рівні. Смерті нема: не встояв — винесуть із кола.", 17, UI.TEXT))
+			v.add_child(_wrapped("Три чудовиська поспіль, між ними кілька секунд перепочинку. Їхня сила росте з твоїм рівнем, тож легко не буде ніколи, а краще спорядження справді допомагає. Смерті нема: не встояв — винесуть із кола.", 17, UI.TEXT))
 			var ids: Array = RS.lineup()
 			var paid := int(rs["paid"])
 			for i in ids.size():
@@ -184,6 +185,7 @@ static func build_tower(world, player, sel: int, on_change: Callable, on_go: Cal
 	v.add_child(row)
 	var danger: bool = int(L["level"]) > player.level + 2
 	v.add_child(_wrapped("Рівень %d  •  хвиль: %d" % [L["level"], L["waves"]], 19, UI.BAD if danger else UI.TEXT))
+	_threat_line(v, player, int(L["level"]), float(L["hp_mult"]), float(L["dmg_mult"]), load("res://scripts/game/far_service.gd").TOWER_FLOOR)
 	var names := []
 	for e in L["enemies"]:
 		names.append(Data.ENEMY_NAMES[e])
@@ -289,11 +291,12 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		var region: String = str(Data.REGIONS.get(str(L.get("region", "")), {}).get("name", "Далекий край"))
 		v.add_child(_wrapped("%s  •  з %d-го рівня%s" % [region, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
 		if Far.matched(L, player):
-			v.add_child(_wrapped("Далекий край: нечисть тут міряється з тобою, а здобич і досвід — за твоїм %d-м рівнем." % player.level, 16, UI.GOOD))
+			v.add_child(_wrapped("Далекий край: нечисть тут твого %d-го рівня, з повною силою, досвідом і здобиччю цього рівня." % player.level, 16, UI.GOOD))
 		else:
 			v.add_child(_wrapped("Далекий край: коли доростеш до %d-го рівня, він ростиме разом із тобою." % int(L["level"]), 16, UI.MUTED))
 	else:
 		v.add_child(_wrapped("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
+	_threat_line(v, player, Data.loc_level(L, int(player.level)))
 	v.add_child(_wrapped(L["desc"], 18, UI.TEXT))
 	var pl: int = load("res://scripts/game/plague_service.gd").level(world, sel)
 	if pl > 0:
@@ -333,6 +336,15 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		else:
 			v.add_child(_wrapped("Швидкий похід: %s." % why, 14, UI.MUTED))
 	return v
+
+
+## Рядок «чи під силу тобі це місце»: за спорядженням героя, а не лише за рівнем (Power.threat).
+static func _threat_line(v: Control, player, level: int, hp_mult: float = 1.0, dmg_mult: float = 1.0, floor_share: float = 0.0) -> void:
+	var Power = load("res://scripts/game/power.gd")
+	var t: Dictionary = Power.threat(player, level, hp_mult, dmg_mult, floor_share)
+	var col: Color = [UI.GOOD, UI.TEXT, UI.GOLD, UI.BAD][int(t["grade"])]
+	var sec: String = ("%.1f" % float(t["ttk"])).replace(".", ",")
+	v.add_child(_wrapped("Тобі тут: %s. Звичайну нечисть рубаєш %s с, витримаєш %d її ударів." % [t["name"], sec, int(t["hits"])], 16, col))
 
 
 static func _wrapped(text: String, size: int, col: Color) -> Label:

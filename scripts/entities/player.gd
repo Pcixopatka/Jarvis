@@ -414,6 +414,11 @@ func to_dict() -> Dictionary:
 func from_dict(d: Dictionary) -> void:
 	for k in d:
 		set(k, d[k])
+	# Ціна рівня могла змінитися між версіями: частка пройденого шляху до наступного рівня лишається тією самою
+	var want: int = Data.xp_for_level(level)
+	if xp_next != want:
+		xp = int(float(xp) / maxf(1.0, float(xp_next)) * want)
+		xp_next = want
 	_normalize_buffs()
 	recalc()
 	hp = max_hp
@@ -744,6 +749,15 @@ func add_xp(value: int) -> void:
 			combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 32, 420, 6, 0.6)
 		leveled_up.emit(level)
 		Events.level_up.emit(level)
+
+
+## Ціна смерті: забирає частку досвіду поточного рівня (не нижче нуля, рівень не падає). Повертає, скільки втрачено.
+func death_xp_loss() -> int:
+	if level < Data.DEATH_XP_FROM or level >= Classes.BASE_LEVEL_MAX:
+		return 0
+	var lost: int = mini(xp, ceili(xp_next * Data.DEATH_XP_LOSS))
+	xp -= lost
+	return lost
 
 
 ## Досвід майстерності: та сама здобич, окрема смужка. На вершині класу — стоїть.

@@ -82,14 +82,15 @@ static func gold_for(round_i: int, level: int) -> int:
 	return int(Acts.DUEL_GOLD[round_i]) * level
 
 
-## Опис бою з конкретним суперником у конкретному колі. Суперник міряється силою з героєм:
-## здоров'я — від шкоди героя, удар — від його здоров'я, тож герць чесний на будь-якому рівні.
+## Опис бою з конкретним суперником у конкретному колі. Сила суперника — від рівня героя:
+## здоров'я — від шкоди еталонного героя цього рівня, удар — від його запасу живучості.
+## Від спорядження не залежить, тож краще вдягненому героєві легше.
 static func loc_for(player, rival_id: String, round_i: int) -> Dictionary:
 	return {"name": "Герць: " + str(Acts.RIVALS[rival_id]["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
 		"rival": rival_id, "round": round_i,
-		"rival_hp": Power.dps(player) * float(Acts.DUEL_SECONDS[round_i]),
+		"rival_hp": Power.ref_dps(int(player.level)) * float(Acts.DUEL_SECONDS[round_i]),
 		"rival_cap": 1.0 / (0.6 * float(Acts.DUEL_SECONDS[round_i])),  # найшвидший герць — 60% від розрахункового часу
-		"rival_dmg": Power.hit(player, float(Acts.DUEL_HIT[round_i]) * hit_scale(player.level)), "desc": ""}
+		"rival_dmg": Power.ref_hit(int(player.level), float(Acts.DUEL_HIT[round_i]) * hit_scale(player.level)), "desc": ""}
 
 
 ## Досвідчений герой краще лікується в бою (вампіризм, вміння), тож суперник б'є трохи сильніше.
@@ -161,7 +162,7 @@ static func free_gold(level: int, streak: int) -> int:
 	return int(Acts.FREE_DUEL_GOLD * level * (1.0 + 0.25 * mini(streak, 8)))
 
 
-## Опис бою вільного герцю: суперник міряється з героєм і міцнішає з кожною перемогою в серії.
+## Опис бою вільного герцю: суперник росте з рівнем героя й міцнішає з кожною перемогою в серії.
 static func free_loc(world, player) -> Dictionary:
 	var k := int(state(world)["streak"])
 	var rival := free_rival(world)
@@ -169,8 +170,8 @@ static func free_loc(world, player) -> Dictionary:
 	var hit_frac: float = float(Acts.FREE_DUEL_HIT) * (1.0 + float(Acts.FREE_DUEL_HIT_STEP) * k) * hit_scale(player.level)
 	return {"name": "Вільний герць: " + str(rival["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
 		"rival": rival["id"], "round": k, "free": true,
-		"rival_hp": Power.dps(player) * secs, "rival_cap": 1.0 / (0.6 * secs),
-		"rival_dmg": Power.hit(player, hit_frac), "desc": ""}
+		"rival_hp": Power.ref_dps(int(player.level)) * secs, "rival_cap": 1.0 / (0.6 * secs),
+		"rival_dmg": Power.ref_hit(int(player.level), hit_frac), "desc": ""}
 
 
 ## Перемога у вільному герці: серія росте; перші перемоги дня — з гаманцем і славою.

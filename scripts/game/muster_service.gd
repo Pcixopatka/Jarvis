@@ -1,7 +1,7 @@
 extends RefCounted
 ## Гетьманський огляд у Чигирині — тижневі сутички ватаг: герой із побратимами проти сотні.
 ## Три сутички проти трьох сотень, три спроби на тиждень. Без смерті: поклали — мінус спроба.
-## Суперники міряються з героєм (як у герці), тож добрий загін тут справді важить:
+## Сила суперників — від рівня героя (як у герці), тож добрий загін і спорядження тут справді важать:
 ## побратими б'ють і відвертають на себе удари. Без побратимів сотня виставляє менше людей.
 ## Стан — world.muster: {"week": ключ тижня, "round": виграно сутичок (0..3), "tries": спроб лишилось,
 ##   "titles": скільки разів виграно весь огляд, "wins": виграних сутичок за весь час, "prize": чи вже має ладанку}
@@ -119,8 +119,8 @@ static func battle_loc(world, player) -> Dictionary:
 	var secs: float = float(Acts.MUSTER_SECONDS[r])
 	return {"name": "Огляд: " + str(team["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
 		"round": r, "muster": true, "back": "До Чигирина", "team": fighters(str(team["id"]), n),
-		"rival_hp": Power.dps(player) * secs, "rival_cap": 1.0 / (0.5 * secs),
-		"rival_dmg": Power.hit(player, float(Acts.MUSTER_HIT[r]) * DuelService.hit_scale(player.level)),
+		"rival_hp": Power.ref_dps(int(player.level)) * secs, "rival_cap": 1.0 / (0.5 * secs),
+		"rival_dmg": Power.ref_hit(int(player.level), float(Acts.MUSTER_HIT[r]) * DuelService.hit_scale(player.level)),
 		"captain_mult": float(Acts.MUSTER_CAPTAIN), "ally_hit": float(Acts.MUSTER_ALLY_HIT[r]), "desc": ""}
 
 

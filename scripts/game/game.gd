@@ -645,7 +645,7 @@ func enter_location(id: String) -> void:
 	if Data.LOCATIONS.has(id):
 		if extra.get("night", false) and not FarService.is_far(Data.LOCATIONS[id]):
 			extra.merge(FarService.night_mods(Data.LOCATIONS[id], player))  # нічний похід підтягується до героя
-		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї міряються з героєм
+		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї ростуть із рівнем героя
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
 	hud.set_mode(true, true)
 	state = State.PLAYING
@@ -952,11 +952,15 @@ func _on_player_died() -> void:
 	hud.char_btn.visible = false
 	hud.show_banner("Козак поліг...", Color(1.0, 0.4, 0.35))
 	await get_tree().create_timer(1.4).timeout
-	var lost := int(player.gold * 0.25)
+	var lost := int(player.gold * Data.DEATH_GOLD_LOSS)
 	player.gold -= lost
+	var lost_xp: int = player.death_xp_loss()
 	_open_menu()
 	hud.add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
-	hud.add_title("Побратими винесли тебе з бою. Втрачено %d грн." % lost, 24, UI.TEXT)
+	var price := "Втрачено %d грн." % lost
+	if lost_xp > 0:
+		price = "Втрачено %d досвіду і %d грн." % [lost_xp, lost]
+	hud.add_title("Побратими винесли тебе з бою. %s" % price, 24, UI.TEXT)
 	hud.add_button("Отямитися: %s" % Data.place_name(world.last_city), func(): enter_city(world.last_city))
 
 
@@ -1179,7 +1183,7 @@ func start_depth(depth: int) -> void:
 		return
 	depth = clampi(depth, 1, int(DepthService.state(world)["max"]))
 	combat.custom_loc = DepthService.loc_for(depth)
-	combat.custom_loc.merge(FarService.floor_mods(player, FarService.DEPTH_FLOOR_TTK, FarService.DEPTH_FLOOR_HIT))
+	combat.custom_loc.merge(FarService.floor_mods(player, FarService.DEPTH_FLOOR))
 	enter_location(DepthService.LOC_ID)
 	hint("depths", "Глибини зарази: що глибше — то сильніші вороги й щедріша здобич. Пройдеш глибину — відкриється наступна.")
 
@@ -1193,7 +1197,7 @@ func start_tower(floor_: int) -> void:
 	floor_ = clampi(floor_, 1, int(TowerService.state(world)["max"]))
 	tower_sel = floor_
 	combat.custom_loc = TowerService.loc_for(floor_)
-	combat.custom_loc.merge(FarService.floor_mods(player, FarService.TOWER_FLOOR_TTK, FarService.TOWER_FLOOR_HIT))
+	combat.custom_loc.merge(FarService.floor_mods(player, FarService.TOWER_FLOOR))
 	enter_location(TowerService.LOC_ID)
 	hint("tower", "Башта Кощія: кожен поверх — хвилі нечисті й міні-бос, кожен п'ятий — супербос. Пройшов поверх — портал веде вище; вийти можна кнопкою «На мапу», коли поруч нема ворогів.")
 
@@ -1230,7 +1234,7 @@ func _on_tower_next(floor_: int) -> void:
 		return
 	tower_sel = nxt
 	var next_loc: Dictionary = TowerService.loc_for(nxt)
-	next_loc.merge(FarService.floor_mods(player, FarService.TOWER_FLOOR_TTK, FarService.TOWER_FLOOR_HIT))
+	next_loc.merge(FarService.floor_mods(player, FarService.TOWER_FLOOR))
 	combat.next_floor(next_loc)
 
 

@@ -29,12 +29,12 @@ static func unlocked(player) -> bool:
 	return not player.is_peasant() and player.level >= int(Acts.SPOTS[SPOT_ID]["level"])
 
 
-## Сила нечисті на конкретній хвилині варти (0 — перша). Нечисть міряється з героєм:
-## std_hp — здоров'я звичайного зараженого (стільки секунд шкоди героя він тримає),
+## Сила нечисті на конкретній хвилині варти (0 — перша). Мірка — еталонний герой цього рівня:
+## std_hp — здоров'я звичайного зараженого (стільки секунд шкоди еталонного героя він тримає),
 ## std_dmg — його удар (частка здоров'я героя після захисту). Досвіду з юрби менше — нагорода тут за хвилини.
 static func targets_at(player, minute: int) -> Dictionary:
-	return {"std_hp": Power.dps(player) * (Acts.VIGIL_TTK + Acts.VIGIL_TTK_STEP * minute),
-		"std_dmg": Power.hit(player, Acts.VIGIL_HIT + Acts.VIGIL_HIT_STEP * minute),
+	return {"std_hp": Power.ref_dps(int(player.level)) * (Acts.VIGIL_TTK + Acts.VIGIL_TTK_STEP * minute),
+		"std_dmg": Power.ref_hit(int(player.level), Acts.VIGIL_HIT + Acts.VIGIL_HIT_STEP * minute),
 		"xp_mult": Acts.VIGIL_XP}
 
 
