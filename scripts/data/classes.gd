@@ -41,7 +41,7 @@ const CLASSES := {
 		"weapons": ["pistols"], "mana_mult": 1.1, "regen_mult": 1.7, "address": "легеню", "hp_mult": 1.4, "dmg_mult": 1.25,
 		"where": "verkhovyna", "mentor": "opryshok", "desc": "Карпатський месник: два пістолі й бартка, стрільба впритул, ухили й крити."},
 	"sokolnyk": {"name": "Сокольник", "tier": 2, "job_max": 50, "next": [], "parent": "strilets",
-		"weapons": ["bow"], "mana_mult": 1.5, "regen_mult": 1.9, "address": "стрільче", "hp_mult": 1.25, "dmg_mult": 0.95,
+		"weapons": ["bow"], "mana_mult": 1.5, "regen_mult": 1.9, "address": "стрільче", "hp_mult": 1.25, "dmg_mult": 0.88,
 		"where": "baturyn", "mentor": "tymish", "desc": "Ловчий із соколом: птах сам б'є нечисть і мітить ціль для господаря."},
 	# ---- Спеціалізації Волхва (Карпати, кожна — у свого наставника) ----
 	"znakhar": {"name": "Знахар", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
