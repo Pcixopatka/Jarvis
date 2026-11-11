@@ -102,9 +102,14 @@ static func battle_loc(world, target: String, player) -> Dictionary:
 	if lvl >= 13:
 		enemies = ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"]
 	var camp := target == Camp.CAMP_ID
-	return {"name": ("Оборона хутора" if camp else "Оборона: " + name_of(target)), "type": "defense", "biome": "steppe",
+	# нечисть міряється з героєм; брама міцнішає на стільки ж
+	var Far = load("res://scripts/game/far_service.gd")
+	var lift: Dictionary = Far.event_mods(player)
+	var out := {"name": ("Оборона хутора" if camp else "Оборона: " + name_of(target)), "type": "defense", "biome": "steppe",
 		"level": lvl, "enemies": enemies, "waves": WAVES, "target": target, "camp": camp,
-		"gate_hp": 600.0 + 120.0 * lvl, "desc": ""}
+		"gate_hp": (600.0 + 120.0 * lvl) * Far.guard_mult(lvl, lift), "desc": ""}
+	out.merge(lift)
+	return out
 
 
 static func win(world, player, target: String) -> String:

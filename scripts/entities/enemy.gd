@@ -21,6 +21,8 @@ const HIT_STATUS_CHANCE := 0.3
 var combat: Combat
 var kind := "mavka"
 var level := 1
+var raw_hp := 0.0  # здоров'я й удар одразу після setup, до множників бою (для мірки героя)
+var raw_dmg := 0.0
 var radius := 16.0
 var r_draw := 16.0  # радіус для малювання (без урахування масштабу боса)
 var max_hp := 30.0

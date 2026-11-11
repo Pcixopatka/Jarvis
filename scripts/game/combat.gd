@@ -31,6 +31,7 @@ const Sounds := preload("res://scripts/data/sounds.gd")
 const TrailScript := preload("res://scripts/world/trail.gd")
 const LootService := preload("res://scripts/game/loot_service.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
+const FarService := preload("res://scripts/game/far_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
@@ -245,8 +246,9 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 		if loc.get("treasure", false):
 			# Сторож скарбу: еліта з двома властивостями, після неї — скриня
 			var gp := _clamp_in(player.position + Vector2.from_angle(randf() * TAU) * 700.0, 80.0)
-			spawn_enemy(en[randi() % en.size()], int(loc["level"]) + 1, false, gp)
+			spawn_enemy(en[randi() % en.size()], maxi(int(loc["level"]) + 1, player.level), false, gp)
 			var g = _last_enemy()
+			lift_to_hero(g)
 			var gk := Elites.AFFIXES.keys()
 			gk.shuffle()
 			g.make_elite(gk.slice(0, 2))
@@ -309,7 +311,8 @@ func _trail_found() -> void:
 			Events.banner.emit(info["text"], Color(1.0, 0.5, 0.4))
 			var en: Array = loc["enemies"]
 			for i in 3:
-				spawn_enemy(en[randi() % en.size()], lvl, false, _clamp_in(pos + Vector2.from_angle(i * TAU / 3.0 + 0.5) * 150.0, 60.0))
+				spawn_enemy(en[randi() % en.size()], maxi(lvl, player.level), false, _clamp_in(pos + Vector2.from_angle(i * TAU / 3.0 + 0.5) * 150.0, 60.0))
+				lift_to_hero(_last_enemy())
 			var boss = _last_enemy()
 			if boss != null and not boss.elite:
 				boss.make_elite(Elites.roll_affixes(lvl))
@@ -333,6 +336,7 @@ func _spawn_bounty(b: Dictionary) -> void:
 	var pos := _clamp_in(player.position + Vector2.from_angle(randf() * TAU) * 820.0, 100.0)
 	spawn_enemy(b["kind"], int(b["level"]), false, pos)
 	var e = _last_enemy()
+	lift_to_hero(e)
 	e.make_elite(b["affixes"])
 	e.max_hp *= 2.5
 	e.hp = e.max_hp
@@ -1414,6 +1418,24 @@ func nearest_enemy(from: Vector2, max_dist: float) -> Node2D:
 	return best
 
 
+## Не дати ворогові бути слабшим за мірку: std_hp і std_dmg — здоров'я й удар «звичайного зараженого»,
+## решта видів і боси лишаються у своїй пропорції до нього.
+func _floor_enemy(e, std_hp: float, std_dmg: float) -> void:
+	var s: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (e.level - 1))
+	e.max_hp = maxf(e.max_hp, e.raw_hp / (70.0 * s) * std_hp)
+	e.damage = maxf(e.damage, e.raw_dmg / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (e.level - 1))) * std_dmg)
+
+
+## Підтягнути особливого ворога події (розшук, сторож скарбу, лігво на стежці) до сили героя.
+## Кличеться одразу після появи, до елітних множників: вони лягають уже поверх мірки.
+func lift_to_hero(e) -> void:
+	if e == null:
+		return
+	var m: Dictionary = FarService.event_mods(player)
+	_floor_enemy(e, float(m["min_std_hp"]), float(m["min_std_dmg"]))
+	e.hp = e.max_hp
+
+
 func alive_enemy_count() -> int:
 	return get_tree().get_nodes_in_group("enemies").size()
 
@@ -1437,6 +1459,8 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 	e.combat = self
 	e.position = pos
 	e.setup(kind, level, boss)
+	e.raw_hp = e.max_hp
+	e.raw_dmg = e.damage
 	if loc.has("std_hp"):
 		# Варта: нечисть міряється силою з героєм (std — звичайний заражений; інші види — у своїй пропорції)
 		var s0: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (level - 1))
@@ -1444,18 +1468,15 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 		e.hp = e.max_hp
 		e.damage = e.damage / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))) * float(loc["std_dmg"])
 		e.xp_value = maxi(1, int(e.xp_value * float(loc.get("xp_mult", 1.0))))
-	elif loc.has("hp_mult"):
-		var hp0: float = e.max_hp
-		var dmg0: float = e.damage
-		e.max_hp *= float(loc["hp_mult"])
-		e.damage *= float(loc["dmg_mult"])
+	else:
+		if loc.has("hp_mult"):
+			e.max_hp *= float(loc["hp_mult"])
+			e.damage *= float(loc["dmg_mult"])
+			e.xp_value = int(e.xp_value * float(loc["xp_mult"]))
 		if loc.has("min_std_hp"):
-			# Глибини й Башта: проти героя, що їх переріс, нечисть не слабша, ніж у печері далекого краю
-			var s1: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (level - 1))
-			e.max_hp = maxf(e.max_hp, hp0 / (70.0 * s1) * float(loc["min_std_hp"]))
-			e.damage = maxf(e.damage, dmg0 / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))) * float(loc["min_std_dmg"]))
+			# Глибини, Башта й події: проти героя, що їх переріс, нечисть не слабша за його мірку
+			_floor_enemy(e, float(loc["min_std_hp"]), float(loc["min_std_dmg"]))
 		e.hp = e.max_hp
-		e.xp_value = int(e.xp_value * float(loc["xp_mult"]))
 	if plague > 0:
 		e.max_hp *= plague_mods["hp"]
 		e.hp = e.max_hp

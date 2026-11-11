@@ -211,8 +211,13 @@ static func battle_loc(world, city: String, player) -> Dictionary:
 		enemies = ["zarazhenyi", "pishchalnyk", "vovkulaka", "upyr"]
 	if lvl >= 13:
 		enemies = ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"]
-	return {"name": "Напад на валку", "type": "defense", "biome": "steppe", "level": lvl, "enemies": enemies, "waves": 3,
-		"target": city, "camp": false, "variant": "caravan", "ambush": true, "gate_hp": 400.0 + 80.0 * lvl, "desc": ""}
+	# нечисть міряється з героєм; вози міцнішають на стільки ж
+	var Far = load("res://scripts/game/far_service.gd")
+	var lift: Dictionary = Far.event_mods(player)
+	var out := {"name": "Напад на валку", "type": "defense", "biome": "steppe", "level": lvl, "enemies": enemies, "waves": 3,
+		"target": city, "camp": false, "variant": "caravan", "ambush": true, "gate_hp": (400.0 + 80.0 * lvl) * Far.guard_mult(lvl, lift), "desc": ""}
+	out.merge(lift)
+	return out
 
 
 ## Вози розбито: половина краму пропала. Повертає повідомлення.

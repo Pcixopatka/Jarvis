@@ -585,6 +585,8 @@ func enter_location(id: String) -> void:
 	if ChallengeService.pending(world, "trail"):
 		extra["trail_sure"] = true  # виклик просить стежку слідів — вона буде в цьому ж поході
 	if Data.LOCATIONS.has(id):
+		if extra.get("night", false) and not FarService.is_far(Data.LOCATIONS[id]):
+			extra.merge(FarService.night_mods(Data.LOCATIONS[id], player))  # нічний похід підтягується до героя
 		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї міряються з героєм
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
 	hud.set_mode(true, true)
@@ -1496,7 +1498,7 @@ func start_event(ev: Dictionary) -> void:
 
 ## Супровід мандрівника (завдання міста): оборона, де замість брами — людина, що сама йде ареною.
 func start_escort(q: Dictionary) -> void:
-	combat.defense_loc = EscortService.battle_loc(q)
+	combat.defense_loc = EscortService.battle_loc(q, player)
 	enter_location("defense")
 	map_here = q["loc"]
 	hint("escort", "Супровід: мандрівник сам іде через арену. Коли нечисть поруч, він стоїть і чекає. На шляху три засідки. Тримайся поруч і не дай його скривдити.")

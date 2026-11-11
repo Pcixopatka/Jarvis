@@ -118,6 +118,7 @@ func _run() -> void:
 	await _suite_journal()
 	await _suite_skills_tab()
 	await _suite_full_bag_and_scroll()
+	await _suite_event_lift()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -4922,7 +4923,7 @@ func _suite_escort_game() -> void:
 	await _ride(game, "wild_field", true)
 	var c = game.combat
 	check(game.state == game.State.PLAYING and c.is_defense() and c.gate != null and c.gate.variant == "escort", "«Провести» — супровід")
-	check(c.gate.sheet == "trav_kobzar" and c.gate.label_text() == "Кобзар" and c.gate.radius < 30.0 and is_equal_approx(c.gate.max_hp, ES.hp(1)), "мандрівник на арені: кобзар")
+	check(c.gate.sheet == "trav_kobzar" and c.gate.label_text() == "Кобзар" and c.gate.radius < 30.0 and is_equal_approx(c.gate.max_hp, float(ES.battle_loc(q, game.player)["gate_hp"])) and c.gate.max_hp >= ES.hp(1), "мандрівник на арені: кобзар")
 	check(game.world.hints.has("escort"), "підказку про супровід показано")
 	check("Шлях 0%" in game._combat_info()["sub"] and "Кобзар 100%" in game._combat_info()["sub"], "рядок бою: %s" % game._combat_info()["sub"])
 	var y0: float = c.gate.position.y
@@ -7690,6 +7691,31 @@ func _suite_journal() -> void:
 		if w.is_done(w.quests[3]):
 			break
 	check(w.is_done(w.quests[3]) and last == ["Завдання виконано! Здай: Київ"], "принесене до кінця: «%s»" % str(last))
+	# Сюжетна гілка в журналі є завжди: розділами, і після фіналу теж
+	var story_sec: Dictionary = Journal.sections(w, p)[0]
+	var cur_ch: int = int(game.StoryService.state(w)["chapter"])
+	var states := []
+	for ch in story_sec["chapters"]:
+		states.append(str(ch["state"]))
+	check(str(story_sec["title"]).begins_with("Історія. ") and states.size() == game.StoryService.Story.CHAPTERS.size() and states.count("now") == 1 and states.find("now") == cur_ch and states.count("done") == cur_ch, "журнал показує гілку історії розділами: %s" % ", ".join(states))
+	var story_keep: Dictionary = w.story.duplicate(true)
+	w.story = {"chapter": game.StoryService.Story.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
+	var done_sec: Dictionary = Journal.sections(w, p)[0]
+	var all_done := true
+	for ch in done_sec["chapters"]:
+		all_done = all_done and str(ch["state"]) == "done"
+	check(str(done_sec["title"]) == "Історія" and done_sec["rows"].is_empty() and all_done and "Історію пройдено" in str(done_sec["empty"]) and "Глибини" in str(done_sec["empty"]), "після фіналу розділ «Історія» лишається: усе пройдено й сказано, що далі")
+	game.open_character()
+	game.char_tab = 1
+	game._build_character()
+	await _frames(2)
+	var jtext := ""
+	for n in game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(1).find_children("*", "Label", true, false):
+		jtext += n.text + "\n"
+	check("✓ Пролог. Попіл рідного села" in jtext and "✓ Розділ V. Кремль" in jtext and "Історію пройдено" in jtext, "екран журналу показує пройдену гілку історії")
+	game.close_character()
+	await _frames(2)
+	w.story = story_keep
 	# Журнал: дотик до завдання показує на мапі мету, а для виконаного — місто, де здати
 	var jrows: Array = find.call("Завдання міст")["rows"]
 	check(jrows[0]["place"] == "sich" and jrows[2]["place"] == "kyiv" and find.call("Розшук")["rows"][0]["place"] == "kyiv" and str(Journal.sections(w, p)[0]["rows"][0]["place"]) == str(game.StoryService.target(w)), "журнал знає місце кожного завдання")
@@ -7883,6 +7909,166 @@ func _suite_skills_tab() -> void:
 
 
 # ======================= Повна торба, викинути й знищити, гортання з будь-якої точки =======================
+
+func _suite_event_lift() -> void:
+	suite("Події: нечисть міряється силою з героєм")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Far = load("res://scripts/game/far_service.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var DS = load("res://scripts/game/defense_service.gd")
+	var EvS = load("res://scripts/game/event_service.gd")
+	var TS = load("res://scripts/game/trade_service.gd")
+	var EscS = load("res://scripts/game/escort_service.gd")
+	var Bounty = load("res://scripts/game/bounty_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var base_dmg := func(lvl: int) -> float:
+		return 13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (lvl - 1))
+	# Слабкий герой: мірка нижча за нечисть свого рівня, тож нічого не міняється
+	var weak = _new_player()
+	var w0 = load("res://scripts/game/world_state.gd").new()
+	var wl: Dictionary = DS.battle_loc(w0, "chyhyryn", weak)
+	check(is_equal_approx(Far.guard_mult(int(wl["level"]), wl), 1.0) and is_equal_approx(float(wl["gate_hp"]), 600.0 + 120.0 * int(wl["level"])), "слабкому героєві брама лишається звичайною")
+	# Сильний герой: мірка за його шкодою й здоров'ям, брама міцнішає на стільки ж, на скільки лютішає удар
+	var strong = _new_player()
+	strong.level = 60
+	strong.stats["str"] = 400
+	strong.stats["vit"] = 400
+	strong.recalc()
+	var m: Dictionary = Far.event_mods(strong)
+	check(is_equal_approx(float(m["min_std_hp"]), Power.dps(strong) * Far.EVENT_TTK) and is_equal_approx(float(m["min_std_dmg"]), Power.hit(strong, Far.EVENT_HIT)), "мірка події: шкода героя за %s с і удар на %s%% його здоров'я" % [str(Far.EVENT_TTK), str(Far.EVENT_HIT * 100.0)])
+	# Новачкам мірка не діє, далі вмикається плавно
+	check(is_equal_approx(Far.event_share(Far.EVENT_FROM), 0.0) and is_equal_approx(Far.event_share(1), 0.0) and is_equal_approx(Far.event_share(Far.EVENT_FULL), 1.0) and is_equal_approx(Far.event_share(99), 1.0) and is_equal_approx(Far.event_share((Far.EVENT_FROM + Far.EVENT_FULL) / 2), 0.5), "мірка вмикається від %d-го рівня до повної на %d-му" % [Far.EVENT_FROM, Far.EVENT_FULL])
+	strong.level = Far.EVENT_FROM
+	var m_new: Dictionary = Far.event_mods(strong)
+	var novice: Dictionary = DS.battle_loc(w0, "chyhyryn", strong)
+	check(is_equal_approx(float(m_new["min_std_hp"]), 0.0) and is_equal_approx(float(novice["gate_hp"]), 600.0 + 120.0 * int(novice["level"])), "героєві %d-го рівня події лишаються як були, хоч який він сильний" % Far.EVENT_FROM)
+	strong.level = 60
+	var sl: Dictionary = DS.battle_loc(w0, "chyhyryn", strong)
+	var g: float = Far.guard_mult(int(sl["level"]), sl)
+	check(int(sl["level"]) == 59 and g > 1.5 and is_equal_approx(g, float(m["min_std_dmg"]) / float(base_dmg.call(59))) and is_equal_approx(float(sl["gate_hp"]), (600.0 + 120.0 * 59) * g) and sl.has("min_std_hp"), "облога: мірка героя й міцніша брама (×%.1f)" % g)
+	EvS.start(w0, strong, "village_raid", "black_forest")
+	var el: Dictionary = EvS.battle_loc(w0, EvS.active(w0), strong)
+	check(el.has("min_std_hp") and int(el["level"]) == 59 and is_equal_approx(float(el["gate_hp"]), (500.0 + 100.0 * 59) * Far.guard_mult(59, el)), "набіг на село: мірка героя й міцніші хати")
+	var tl: Dictionary = TS.battle_loc(w0, "kyiv", strong)
+	check(tl.has("min_std_hp") and is_equal_approx(float(tl["gate_hp"]), (400.0 + 80.0 * 59) * Far.guard_mult(59, tl)), "напад на валку: мірка героя й міцніші вози")
+	var eq := {"id": 1, "city": "sich", "loc": "rapids", "progress": 0, "lvl": 2, "target": "kobzar"}
+	var esc: Dictionary = EscS.battle_loc(eq, strong)
+	check(int(esc["level"]) == 59 and esc.has("min_std_hp") and is_equal_approx(float(esc["gate_hp"]), EscS.hp(59) * Far.guard_mult(59, esc)) and int(EscS.battle_loc(eq)["level"]) == 2 and not EscS.battle_loc(eq).has("min_std_hp"), "супровід: рівень і мірка героя, мандрівник міцніший")
+	# Ніч: у полі рівень підтягується до героя, обсяг зачистки лишається за місцем; у печері лише мірка
+	var nf: Dictionary = Far.night_mods(Data.LOCATIONS["black_forest"], strong)
+	var nd: Dictionary = Far.night_mods(Data.LOCATIONS["zmii_cave"], strong)
+	check(int(nf["level"]) == 60 and int(nf["base_level"]) == int(Data.LOCATIONS["black_forest"]["level"]) and int(nf["goal"]) == Data.FIELD_GOAL_BASE + int(Data.LOCATIONS["black_forest"]["level"]) * Data.FIELD_GOAL_PER_LEVEL and is_equal_approx(float(nf["min_std_hp"]), Power.dps(strong) * Far.EVENT_TTK * Far.NIGHT_MULT), "ніч у полі: рівень героя, мірка на %d%% лютіша, зачистка за місцем" % roundi((Far.NIGHT_MULT - 1.0) * 100.0))
+	check(not nd.has("level") and nd.has("min_std_hp") and not Far.night_mods(Data.LOCATIONS["black_forest"], weak).has("level"), "ніч у печері й для слабшого героя рівня не міняє")
+	check(not Far.night_mods(Data.LOCATIONS["ridne_selo"], strong).has("goal"), "місце з власним обсягом зачистки його зберігає")
+	weak.free()
+	strong.free()
+	# ---- У грі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "defense", "bounty", "event_village_raid", "night"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 60
+	p.stats["str"] = 400
+	p.stats["vit"] = 400
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	var fm: Dictionary = Far.event_mods(p)
+	# hp_mult — множник здоров'я поверх мірки (еліта, ніч), dmg_mult — те саме для удару
+	var floor_ok := func(e, hp_mult: float, dmg_mult: float = 1.0) -> bool:
+		var sc: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (e.level - 1))
+		return e.max_hp >= e.raw_hp / (70.0 * sc) * float(fm["min_std_hp"]) * hp_mult * 0.999 and e.damage >= e.raw_dmg / float(base_dmg.call(e.level)) * float(fm["min_std_dmg"]) * dmg_mult * 0.999
+	var foes := func() -> Array:
+		return get_nodes_in_group("enemies").filter(func(e): return not e.is_queued_for_deletion())
+	# Облога: уся нечисть не слабша за мірку й сильніша, ніж просто за рівнем
+	game.start_defense("chyhyryn")
+	for i in 600:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+		if foes.call().size() >= 3:
+			break
+	var all_ok := true
+	var lifted := 0
+	for e in foes.call():
+		all_ok = all_ok and floor_ok.call(e, 1.0)
+		if e.max_hp > e.raw_hp * 1.2:
+			lifted += 1
+	check(foes.call().size() > 0 and all_ok and lifted > 0 and is_equal_approx(c.gate.max_hp, float(c.loc["gate_hp"])), "в облозі нечисть підтягнуто до героя (%d із %d сильніші, ніж за рівнем)" % [lifted, foes.call().size()])
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	# Розшук і сторож скарбу в звичайній місцевості: лише вони підтягуються, решта лишається за рівнем місця
+	Bounty.state(game.world)["active"].append({"id": 7, "city": "kyiv", "kind": "upyr", "name": "Упир Кривий", "loc": "wild_field", "affixes": ["fiery"], "gold": 300, "glory": 6, "killed": false})
+	EvS.state(game.world)["treasure"]["wild_field"] = true
+	game.enter_location("wild_field")
+	await _frames(3)
+	var bounty = null
+	var guard = null
+	var plain := 0
+	var plain_raised := 0
+	for e in foes.call():
+		if e.bounty_id > 0:
+			bounty = e
+		elif e.treasure_guard:
+			guard = e
+		elif not e.elite:  # випадкова еліта має власний множник здоров'я, її не рахуємо
+			plain += 1
+			# зараза в місцевості додає своє, але це не мірка героя
+			if e.max_hp > e.raw_hp * (float(c.plague_mods["hp"]) if c.plague > 0 else 1.0) * 1.01:
+				plain_raised += 1
+	check(bounty != null and bounty.level == 60 and floor_ok.call(bounty, 2.5), "розшукувана нечисть рівня героя й не слабша за мірку (ще й ×2,5 як еліта)")
+	check(guard != null and guard.level == 60 and floor_ok.call(guard, 1.5), "сторож скарбу рівня героя й не слабший за мірку")
+	check(plain_raised == 0, "звичайна нечисть місцевості лишається за рівнем місця (%d)" % plain)
+	# Лігво на стежці
+	_clear_enemies(game)
+	await _frames(2)
+	c.spawn_trail("den", 5)
+	c._trail_found()
+	await _frames(2)
+	var den: Array = foes.call()
+	var den_ok: bool = den.size() == 3
+	for e in den:
+		den_ok = den_ok and e.level == 60 and floor_ok.call(e, 1.0)
+	check(den_ok, "лігво на стежці: троє рівня героя й не слабші за мірку")
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	# Нічний похід: уся місцевість підтягується
+	EvS.state(game.world)["treasure"].clear()
+	Bounty.state(game.world)["active"].clear()
+	EvS.state(game.world)["night"]["black_forest"] = 2
+	game.enter_location("black_forest")
+	await _frames(3)
+	var night_ok := true
+	for e in foes.call():
+		night_ok = night_ok and e.level == 60 and floor_ok.call(e, Far.NIGHT_MULT, Far.NIGHT_MULT)
+	check(c.loc.get("night", false) and int(c.loc["level"]) == 60 and foes.call().size() > 0 and night_ok and c.field_goal == Data.FIELD_GOAL_BASE + int(Data.LOCATIONS["black_forest"]["level"]) * Data.FIELD_GOAL_PER_LEVEL, "нічний похід: нечисть рівня героя й лютіша за мірку, зачистка за місцем")
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	# Довідник знає правило й називає ті самі числа
+	var rule := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Сила нечисті в подіях":
+				rule = str(e["text"])
+	check(("%s с" % WS._num(Far.EVENT_TTK)) in rule and ("%s%%" % WS._num(Far.EVENT_HIT * 100.0)) in rule and "розшукуваною" in rule and "Уночі" in rule and ("з %d-го рівня" % Far.EVENT_FROM) in rule and ("на %d-му" % Far.EVENT_FULL) in rule, "довідник пояснює силу нечисті в подіях із числами балансу")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
 
 func _suite_full_bag_and_scroll() -> void:
 	suite("Повна торба, викинути й знищити, гортання з будь-якої точки")

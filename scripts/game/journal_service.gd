@@ -8,6 +8,10 @@ const HeroService := preload("res://scripts/game/hero_service.gd")
 const SpecService := preload("res://scripts/game/spec_service.gd")
 
 
+## Що журнал каже про історію, коли її пройдено: гілка лишається на видноті, а герой знає, куди далі.
+const DONE_TEXT := "Історію пройдено: Путіноїда здолано, зараза відступила. Далі чекають Глибини зарази під Кремлем, Башта Кощія, далекі краї, Московія, розшук і події."
+
+
 ## Рядок завдання без позначки на початку («★ », «✦ », «◆ »): у журналі їх замінює заголовок розділу.
 static func _clean(line: String) -> String:
 	for mark in ["★ ", "✦ ", "◆ "]:
@@ -23,13 +27,23 @@ static func _row(text: String, where: String = "", from: String = "", reward: St
 
 static func sections(world, player) -> Array:
 	var out := []
-	# Історія
+	# Історія: уся гілка розділами. Розділ є завжди, і коли історію вже пройдено:
+	# "chapters" — [{"title", "state"}], state: done (пройдено), now (нинішній), ahead (попереду).
+	var Story = StoryService.Story
+	var ss: Dictionary = StoryService.state(world)
+	var finished: bool = str(ss["stage"]) == "done"
+	var chapters := []
+	for i in Story.CHAPTERS.size():
+		chapters.append({"title": str(Story.CHAPTERS[i]["title"]),
+			"state": "done" if finished or i < int(ss["chapter"]) else ("now" if i == int(ss["chapter"]) else "ahead")})
 	var story: String = StoryService.objective_line(world)
+	var story_rows := []
 	if story != "":
 		var target: String = StoryService.target(world)
-		var back: bool = str(StoryService.state(world)["stage"]) == "turnin"
-		out.append({"title": "Історія. " + str(StoryService.chapter_title(world)), "empty": "",
-			"rows": [_row(_clean(story), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target)]})
+		var back: bool = str(ss["stage"]) == "turnin"
+		story_rows.append(_row(_clean(story), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
+	out.append({"title": "Історія" + ("" if finished else ". " + str(StoryService.chapter_title(world))), "rows": story_rows, "chapters": chapters,
+		"empty": DONE_TEXT if finished else ""})
 	# Побратими й посвята в спеціалізацію
 	var rows := []
 	for line in HeroService.objective_lines(world):

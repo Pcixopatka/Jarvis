@@ -42,16 +42,26 @@ static func hp(level: int) -> float:
 
 
 ## Опис бою для Combat.enter_defense.
-static func battle_loc(q: Dictionary) -> Dictionary:
+## player — хто веде: нечисть підтягується до його рівня й сили (без нього — за рівнем місця, для довідок).
+static func battle_loc(q: Dictionary, player = null) -> Dictionary:
 	var L: Dictionary = Data.LOCATIONS[q["loc"]]
 	var lvl := maxi(int(L["level"]), int(q.get("lvl", 0)) if L.get("scale", false) else 0)  # у далеких краях — за рівнем героя на час завдання
+	var lift := {}
+	var guard := 1.0
+	if player != null:
+		var Far = load("res://scripts/game/far_service.gd")
+		lvl = maxi(lvl, int(player.level) - 1)
+		lift = Far.event_mods(player)
+		guard = Far.guard_mult(lvl, lift)  # мандрівник міцнішає на стільки ж, на скільки лютішає нечисть
 	var biome: String = L["biome"]
 	if biome in ["cave", "plague"]:
 		biome = "steppe"
 	var w := who(q)
-	return {"name": "Супровід: %s" % str(w["name"]).to_lower(), "type": "defense", "biome": biome, "level": lvl,
+	var out := {"name": "Супровід: %s" % str(w["name"]).to_lower(), "type": "defense", "biome": biome, "level": lvl,
 		"enemies": L["enemies"], "waves": Acts.ESCORT_WAVES, "target": q["loc"], "camp": false, "variant": "escort",
-		"escort": int(q["id"]), "who": str(q["target"]), "gate_hp": hp(lvl), "desc": ""}
+		"escort": int(q["id"]), "who": str(q["target"]), "gate_hp": hp(lvl) * guard, "desc": ""}
+	out.merge(lift)
+	return out
 
 
 ## Дієслово минулого часу за родом мандрівника: «дійшов» чи «дійшла».

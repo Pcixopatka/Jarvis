@@ -213,8 +213,19 @@ static func _journal(game) -> Control:
 	v.add_child(UI.label(head, 17, UI.GOOD if ready > 0 else UI.MUTED, false))
 	for sec in secs:
 		v.add_child(UI.label(sec["title"], 22, UI.GOLD, false))
-		if sec["rows"].is_empty():
-			v.add_child(UI.label(sec["empty"], 16, UI.MUTED, false))
+		if sec.has("chapters"):
+			# сюжетна гілка розділами: пройдені, нинішній і ті, що попереду
+			var flow := HFlowContainer.new()
+			flow.add_theme_constant_override("h_separation", 18)
+			flow.add_theme_constant_override("v_separation", 2)
+			for ch in sec["chapters"]:
+				var mark: String = {"done": "✓ ", "now": "★ ", "ahead": "· "}[ch["state"]]
+				flow.add_child(UI.label(mark + str(ch["title"]), 15, {"done": UI.GOOD, "now": UI.GOLD, "ahead": UI.MUTED}[ch["state"]], false))
+			v.add_child(flow)
+		if sec["rows"].is_empty() and str(sec["empty"]) != "":
+			var el := UI.label(sec["empty"], 16, UI.MUTED, false)
+			el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(el)
 		for r in sec["rows"]:
 			var card := PanelContainer.new()
 			card.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.1), Color(0.5, 0.9, 0.4) if r["ready"] else Color(0.42, 0.33, 0.2), 10, 10))
@@ -245,7 +256,7 @@ static func _journal(game) -> Control:
 				# завдання з місцем: дотик показує на мапі мету, а для виконаного — місто, де здати
 				_tap_card(card, line, "на мапі ›", _do(game, "place_show", [r["place"], r["text"]]))
 			v.add_child(card)
-	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». На мапі зірка веде за історією, а «!» позначає місце завдання.", 15, UI.MUTED, false))
+	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». На мапі зірка веде за історією, «!» позначає мету завдання, а зелена галочка стоїть на місті, де здати виконане.", 15, UI.MUTED, false))
 	v.get_child(v.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return v
 

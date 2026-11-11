@@ -19,6 +19,14 @@ const DEPTH_FLOOR_TTK := 1.0
 const DEPTH_FLOOR_HIT := 0.028
 const TOWER_FLOOR_TTK := 0.9
 const TOWER_FLOOR_HIT := 0.028
+# Події (облоги, набіги, валки, полон, супровід, розшук, сторож скарбу, лігво на стежці, ніч): нечисть не слабша
+# проти героя за цю мірку. Трохи м'якше за далекий край, бо там ще хвилі й те, що треба вберегти.
+const EVENT_TTK := 0.9
+const EVENT_HIT := 0.028
+const NIGHT_MULT := 1.3  # уночі мірка лютіша
+# Новачкам події лишаються як були: мірка вмикається плавно, від EVENT_FROM-го рівня героя до повної сили на EVENT_FULL-му.
+const EVENT_FROM := 10
+const EVENT_FULL := 30
 const GOAL_MAX := 110  # більше стількох на зачистку не просимо, хоч який рівень
 ## Нечисть тут легша за глибинну, тож бувалому героєві даємо надбавку до досвіду й гривень:
 ## +6% за кожен рівень понад рівень краю, але не більше ніж учетверо з половиною.
@@ -63,6 +71,36 @@ static func mods(L: Dictionary, player) -> Dictionary:
 ## Формули глибини й поверху діють далі; це лише підлога для героя, що їх переріс.
 static func floor_mods(player, ttk: float, hit_frac: float) -> Dictionary:
 	return {"min_std_hp": Power.dps(player) * ttk, "min_std_dmg": Power.hit(player, hit_frac)}
+
+
+## Яка частка мірки подій діє на героя цього рівня: 0 до EVENT_FROM, 1 від EVENT_FULL.
+static func event_share(level: int) -> float:
+	return clampf(float(level - EVENT_FROM) / float(EVENT_FULL - EVENT_FROM), 0.0, 1.0)
+
+
+## Підлога сили нечисті для бою події: звичайна нечисть свого рівня лишається, якщо вона й так сильніша.
+static func event_mods(player, mult: float = 1.0) -> Dictionary:
+	var share := event_share(int(player.level)) * mult
+	return floor_mods(player, EVENT_TTK * share, EVENT_HIT * share)
+
+
+## У скільки разів удар підтягнутої нечисті сильніший за звичайний для її рівня (не менше 1).
+## На стільки ж міцнішає те, що герой боронить: брама, вози, мандрівник. Інакше воно падало б за кілька ударів.
+static func guard_mult(level: int, mods: Dictionary) -> float:
+	return maxf(1.0, float(mods.get("min_std_dmg", 0.0)) / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))))
+
+
+## Нічний похід: нечисть лютіша за мірку події, а в полі її рівень підтягується до героя
+## (разом із досвідом і здобиччю). Обсяг зачистки лишається за рівнем самого місця.
+static func night_mods(L: Dictionary, player) -> Dictionary:
+	var out := event_mods(player, NIGHT_MULT)
+	var base := int(L["level"])
+	if L["type"] != "dungeon" and player.level > base:
+		out["base_level"] = base
+		out["level"] = player.level
+		if not L.has("goal"):
+			out["goal"] = mini(GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
+	return out
 
 
 ## Край за місцем (місто чи місцевість) або "".

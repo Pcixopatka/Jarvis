@@ -220,9 +220,14 @@ static func battle_loc(world, ev: Dictionary, player) -> Dictionary:
 		hp = 900.0 + 150.0 * lvl
 	elif kind == "wounded":
 		hp = 250.0 + 40.0 * lvl
-	return {"name": name_of(kind) + (": " + place(target) if kind != "sich_siege" else ""), "type": "defense", "biome": biome,
+	# нечисть міряється з героєм; те, що він боронить, міцнішає на стільки ж
+	var Far = load("res://scripts/game/far_service.gd")
+	var lift: Dictionary = Far.event_mods(player)
+	var out := {"name": name_of(kind) + (": " + place(target) if kind != "sich_siege" else ""), "type": "defense", "biome": biome,
 		"level": lvl, "enemies": enemies, "waves": WAVES[kind], "target": target, "camp": false, "variant": variant,
-		"event": kind, "gate_hp": hp, "desc": ""}
+		"event": kind, "gate_hp": hp * Far.guard_mult(lvl, lift), "desc": ""}
+	out.merge(lift)
+	return out
 
 
 static func win(world, player, ev: Dictionary, gate_part: float = 1.0) -> String:
@@ -367,9 +372,9 @@ static func treasure_found(world, loc: String) -> void:
 static func notes_for(world, loc: String) -> Array:
 	var out := []
 	if is_night(world, loc):
-		out.append(["Ніч: темно, нечисть на 30% сильніша, досвід і гривні на 50% щедріші.", "night"])
+		out.append(["Ніч: темно, нечисть підтягується до твого рівня й на 30% лютіша, досвід і гривні на 50% щедріші.", "night"])
 	if has_treasure(world, loc):
-		out.append(["Чутка про скарб: десь тут сторож із двома властивостями, а за ним — скриня з рідкісною річчю.", "treasure"])
+		out.append(["Чутка про скарб: десь тут сторож із двома властивостями, рівня з тобою, а за ним — скриня з рідкісною річчю.", "treasure"])
 	if is_burned(world, loc):
 		out.append(["Спалене село: менше здобичі й більше нечисті ще %d походи." % int(state(world)["burned"][loc]), "burned"])
 	return out
