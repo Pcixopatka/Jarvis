@@ -13283,6 +13283,7 @@ func _suite_divine() -> void:
 		art_ok = art_ok and str(Div.DEFS[id]["name"]) in art and str(int(Div.DEFS[id]["price"])) in art
 	check(art_ok, "довідник описує всі дари з цінами")
 	check(load("res://scripts/ui/ui_character.gd").TRADER_BTN in art and "над торбою" in art and "голоблі" in art, "довідник каже про кнопку крамниці над торбою й про мажу на голоблях")
+	check("одразу лягає в торбу" in art and "нема куди покласти" in art, "довідник каже, що з Хованцем здобич одразу в торбі")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -13469,6 +13470,76 @@ func _suite_divine() -> void:
 	game.close_character()
 	await _frames(2)
 	check(game.state == game.State.PLAYING and not get_root().get_tree().paused, "із торби бій триває далі")
+	# ---- Хованець: здобич одразу лягає в торбу ----
+	var lcb = game.combat
+	var PickS = lcb.PickupScript
+	var ground := func() -> int:
+		var n := 0
+		for node in lcb.entities.get_children():
+			if node.get_script() == PickS and not node.is_queued_for_deletion():
+				n += 1
+		return n
+	for node in lcb.entities.get_children():
+		if node.get_script() == PickS:
+			node.queue_free()
+	await _frames(2)
+	var far: Vector2 = gp.global_position + Vector2(600, 0)  # далеко за звичайним радіусом збору
+	lcb.pickup_filter = [true, true, true, true]
+	lcb.autosell = false
+	gp.potions = 0
+	gp.mana_potions = 0
+	gp.hp = gp.max_hp * 0.5
+	var loot_gold: int = gp.gold
+	var loot_bag: int = gp.inventory.size()
+	var loot_wood: int = int(gp.resources.get("wood", 0))
+	var drop1: Dictionary = Data.gen_item(20, 1, "boots")
+	lcb.spawn_pickup(far, "coin", 5)
+	lcb.spawn_pickup(far, "item", 0, drop1)
+	lcb.spawn_pickup(far, "res", 3, {"res": "wood"})
+	lcb.spawn_pickup(far, "potion", 1)
+	lcb.spawn_pickup(far, "mana", 1)
+	lcb.spawn_pickup(far, "varenyk", 10)
+	check(bool(gp.divine_fx.get("loot", false)) and ground.call() == 0, "із Хованцем здобич на землю не падає")
+	check(gp.gold > loot_gold and gp.inventory.size() == loot_bag + 1 and gp.inventory[-1]["name"] == drop1["name"] and int(gp.resources.get("wood", 0)) >= loot_wood + 3 and gp.potions == 1 and gp.mana_potions == 1 and gp.hp > gp.max_hp * 0.5, "гривні, річ, дерево, зілля й вареник одразу в героя")
+	# нема куди покласти: падає на землю
+	gp.potions = gp.potion_max()
+	lcb.spawn_pickup(far, "potion", 1)
+	check(ground.call() == 1 and gp.potions == gp.potion_max(), "запас зілля повний: зілля падає на землю")
+	while not gp.bag_full():
+		gp.add_item(Data.gen_item(10, 1, "belt"), true)
+	var full_n: int = gp.inventory.size()
+	lcb.spawn_pickup(far, "item", 0, Data.gen_item(20, 1, "head"))
+	check(ground.call() == 2 and gp.inventory.size() == full_n, "торба повна: річ падає на землю й чекає")
+	lcb.spawn_pickup(far, "coin", 3)
+	lcb.spawn_pickup(far, "res", 1, {"res": "iron"})
+	check(ground.call() == 2, "гривні й ресурси беруться й із повною торбою")
+	# фільтр автопідбору й викинуті речі Хованець не чіпає
+	gp.remove_from_bag(gp.inventory[-1]["uid"])
+	lcb.pickup_filter = [false, true, true, true]
+	lcb.spawn_pickup(far, "item", 0, Data.gen_item(20, 0, "belt"))
+	check(ground.call() == 3 and gp.inventory.size() == full_n - 1, "чого не бере фільтр автопідбору, те лишається лежати")
+	lcb.pickup_filter = [true, true, true, true]
+	var thrown: Dictionary = gp.remove_from_bag(gp.inventory[0]["uid"])
+	lcb.drop_item(thrown)
+	check(ground.call() == 4 and gp.inventory.size() == full_n - 2, "викинута з торби річ лежить на землі: назад сама не стрибає")
+	# без Хованця все як було: здобич падає на землю
+	for node in lcb.entities.get_children():
+		if node.get_script() == PickS:
+			node.queue_free()
+	await _frames(2)
+	DS.unequip(gw, gp, "pet")
+	var plain_gold: int = gp.gold
+	lcb.spawn_pickup(far, "coin", 5)
+	lcb.spawn_pickup(far, "item", 0, Data.gen_item(20, 1, "boots"))
+	check(not bool(gp.divine_fx.get("loot", false)) and ground.call() == 2 and gp.gold == plain_gold, "без Хованця здобич, як і раніше, падає на землю")
+	DS.equip(gw, gp, "khovanets")
+	check(bool(gp.divine_fx.get("loot", false)) and DS.remote_shop(gp) and float(gp.divine_fx.get("pickup", 0.0)) == float(Div.DEFS["khovanets"]["pickup"]), "решта властивостей Хованця без змін: крамниця будь-де й великий радіус збору")
+	for node in lcb.entities.get_children():
+		if node.get_script() == PickS:
+			node.queue_free()
+	while gp.inventory.size() > 6:
+		gp.remove_from_bag(gp.inventory[-1]["uid"])
+	await _frames(2)
 	game._show_pause()
 	await _frames(2)
 	var pause_trader := false

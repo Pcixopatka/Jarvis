@@ -1837,7 +1837,61 @@ func spawn_bolt(points: PackedVector2Array) -> void:
 	effects.add_child(b)
 
 
+## Чому здобич зараз не взяти: "" — можна, "full" — нема куди покласти (повна торба чи повний запас
+## зілля), "filter" — фільтр автопідбору не бере речі такої рідкості.
+func loot_block(kind: String, item: Dictionary = {}, manual: bool = false) -> String:
+	match kind:
+		"item":
+			return pick_block(item, manual)
+		"potion":
+			return "" if player.potions < player.potion_max() else "full"
+		"mana":
+			return "" if player.mana_potions < player.mana_potion_max() else "full"
+	return ""
+
+
+## Забрати здобич героєві. Так само бере її і здобич із землі (Pickup), і Хованець одразу з нечисті.
+## pos — де вона впала: там спалах і напис. Повертає false, якщо покласти не вдалося.
+func take_loot(kind: String, value: int, item: Dictionary, pos: Vector2) -> bool:
+	match kind:
+		"coin":
+			player.add_xp(value)
+			player.add_gold(Data.coin_gold(value))
+			Audio.play("coin", 0.1, -6.0)
+			fx.burst(pos, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
+		"item":
+			return pick_item(item)
+		"res":
+			add_resource(item["res"], value)
+			float_text(pos + Vector2(0, -30), "+%d %s" % [value, Camp.res_name(item["res"])], Camp.RESOURCE_COLORS[item["res"]].lightened(0.3))
+		"potion":
+			if not player.add_potion():
+				return false
+			float_text(pos + Vector2(0, -30), "+1 зілля", Color(1.0, 0.45, 0.45))
+			Audio.play("item", 0.05, -6.0)
+		"token":
+			Events.holiday_token.emit(value, pos)
+			Audio.play("coin", 0.25, 0.0)
+		"mana":
+			if not player.add_mana_potion():
+				return false
+			float_text(pos + Vector2(0, -30), "+1 зілля наснаги", Color(0.5, 0.75, 1.0))
+			Audio.play("item", 0.05, -6.0)
+			Events.hint.emit("mana_potion", "Зілля наснаги! Синя кнопка «Наснага» повертає більшу частину наснаги посеред бою.")
+		_:
+			player.heal(value)  # вареник
+	return true
+
+
 func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {}) -> void:
+	# Хованець: здобич не падає на землю, а одразу лягає в торбу. На землі лишається тільки те,
+	# що нема куди покласти (повна торба, повний запас зілля) або чого не бере фільтр автопідбору.
+	if player != null and player.alive and bool(player.divine_fx.get("loot", false)):
+		var why := loot_block(kind, item)
+		if why == "" and take_loot(kind, value, item, pos):
+			return
+		if why == "full" and kind == "item":
+			note_bag_full()  # річ упала на землю, бо торба повна: кажемо про це одразу
 	var p = PickupScript.new()
 	p.combat = self
 	p.kind = kind

@@ -44,30 +44,7 @@ func _process(delta: float) -> void:
 		pull_speed = minf(pull_speed + 1600.0 * delta, 900.0)
 		position += to.normalized() * minf(pull_speed * delta, dist)
 	if dist < (30.0 if manual else 22.0):
-		if kind == "coin":
-			p.add_xp(value)
-			p.add_gold(Data.coin_gold(value))
-			Audio.play("coin", 0.1, -6.0)
-			combat.fx.burst(global_position, Color(1.0, 0.9, 0.4), 4, 90, 3, 0.3)
-		elif kind == "item":
-			combat.pick_item(item)
-		elif kind == "res":
-			combat.add_resource(item["res"], value)
-			combat.float_text(global_position + Vector2(0, -30), "+%d %s" % [value, Camp.res_name(item["res"])], Camp.RESOURCE_COLORS[item["res"]].lightened(0.3))
-		elif kind == "potion":
-			if p.add_potion():
-				combat.float_text(global_position + Vector2(0, -30), "+1 зілля", Color(1.0, 0.45, 0.45))
-				Audio.play("item", 0.05, -6.0)
-		elif kind == "token":
-			Events.holiday_token.emit(value, global_position)
-			Audio.play("coin", 0.25, 0.0)
-		elif kind == "mana":
-			if p.add_mana_potion():
-				combat.float_text(global_position + Vector2(0, -30), "+1 зілля наснаги", Color(0.5, 0.75, 1.0))
-				Audio.play("item", 0.05, -6.0)
-				Events.hint.emit("mana_potion", "Зілля наснаги! Синя кнопка «Наснага» повертає більшу частину наснаги посеред бою.")
-		else:
-			p.heal(value)
+		combat.take_loot(kind, value, item, global_position)  # те саме робить Хованець одразу з нечисті
 		queue_free()
 		return
 	queue_redraw()
@@ -75,15 +52,8 @@ func _process(delta: float) -> void:
 
 ## Чому це не підбирається: "" — підбирається, "full" — нема куди покласти (повна торба чи повний
 ## запас зілля), "filter" — фільтр автопідбору не бере речі такої рідкості.
-func _block(p) -> String:
-	match kind:
-		"item":
-			return combat.pick_block(item, manual)
-		"potion":
-			return "" if p.potions < p.potion_max() else "full"
-		"mana":
-			return "" if p.mana_potions < p.mana_potion_max() else "full"
-	return ""
+func _block(_p) -> String:
+	return combat.loot_block(kind, item, manual)
 
 
 func _wanted(p) -> bool:
