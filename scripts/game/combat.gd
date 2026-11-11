@@ -318,7 +318,7 @@ func _trail_found() -> void:
 			player.resources["meat"] = int(player.resources.get("meat", 0)) + meat
 			Events.banner.emit("%s\n+%d м'яса для казана" % [info["text"], meat], Color(1.0, 0.85, 0.35))
 			float_text(pos + Vector2(0, -40), "+%d м'яса" % meat, Color(1.0, 0.8, 0.6))
-			spawn_pickup(pos, "res", 1 + player.pk("h_trophy"), {"res": Camp.TROPHY})
+			spawn_pickup(pos, "res", 1 + player.pk("h_trophy") + int(player.art.get("trophy", 0)), {"res": Camp.TROPHY})
 	Audio.play("quest", 0.0)
 	Events.trail_found.emit(str(trail.kind))
 
@@ -1208,19 +1208,23 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "item", 0, golden)
 			Events.banner.emit("Золота здобич!\n%s" % golden["name"], Data.RARITY_COLORS[int(golden["rarity"])])
 			Audio.play("coin", 0.0, 2.0)
+		var trophy: Dictionary = LootService.artifact_on_boss(self, player, e)
+		if not trophy.is_empty():
+			spawn_pickup(pos, "item", 0, trophy)
+			float_text(pos + Vector2(0, -90), "Артефакт: %s" % trophy["name"], Data.RARITY_COLORS[int(trophy["rarity"])])
 		for i in 10:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
 		for i in (3 if drop_boost > 1.0 else 2):
 			spawn_pickup(pos, "item", 0, _loot(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
-		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy") + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 	elif e.bounty_id > 0:
 		for i in 6:
 			spawn_pickup(pos, "coin", maxi(2, e.xp_value / 5))
 		spawn_pickup(pos, "item", 0, _loot(ilvl, maxi(1, Data.roll_rarity(ilvl, 1))))
 		_resource_bundle(pos, roundi(3 * drop_boost))
-		spawn_pickup(pos, "res", 2 + player.pk("h_trophy") + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 2 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 		Events.bounty_killed.emit(e.bounty_id)
 	elif e.treasure_guard:
 		Events.banner.emit("Сторожа скарбу вбито!\nСкриня твоя", Color(1.0, 0.85, 0.35))
@@ -1236,7 +1240,7 @@ func _drop_loot(e: Node2D) -> void:
 		if randf() < Elites.ITEM_CHANCE * (1.0 + float(festive.get("loot", 0.0))) * drop_boost:
 			spawn_pickup(pos, "item", 0, _loot(ilvl, Data.roll_rarity(ilvl, 1)))
 		_resource_bundle(pos, roundi(2 * drop_boost))
-		spawn_pickup(pos, "res", 1 + player.pk("h_trophy") + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", 1 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 		if randf() < 0.3:
 			spawn_pickup(pos, "potion", 1)
 	else:
@@ -1263,7 +1267,7 @@ func _loot(ilvl: int, rarity: int) -> Dictionary:
 
 ## Скільки ресурсу в одній купці з урахуванням свята (Зелені свята — вдвічі).
 func _res_amount(n: int) -> int:
-	return int(round(n * (1.0 + float(festive.get("res", 0.0)))))
+	return int(round(n * (1.0 + float(festive.get("res", 0.0)) + float(player.art.get("res", 0.0)))))
 
 
 ## Ресурс для хутора: здебільшого той, яким багатий ландшафт.

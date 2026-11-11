@@ -103,7 +103,7 @@ static func renew_cost(item: Dictionary, lvl: int) -> Dictionary:
 
 
 static func can_renew(world, item: Dictionary, lvl: int) -> bool:
-	return CampService.level(world, "kuznia") >= 3 and int(item["ilvl"]) < lvl
+	return CampService.level(world, "kuznia") >= 3 and int(item["ilvl"]) < lvl and not item.has("artifact")
 
 
 ## Ті самі властивості, але сила — як у речі рівня козака. Заточка зберігається.

@@ -5,6 +5,7 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const Classes := preload("res://scripts/data/classes.gd")
+const Artifacts := preload("res://scripts/data/artifacts.gd")
 
 
 ## Справжній господар лігва чи супербос Башти (не ватажок варти, не примара, не чудовисько Кола).
@@ -94,7 +95,7 @@ static func on_boss(combat, player, e) -> Dictionary:
 	if not worthy(combat, player, e):
 		return {}
 	var tier := boss_tier(combat, e)
-	if randf() >= chance(tier, int(player.u_luck)):
+	if randf() >= chance(tier, int(player.u_luck)) * (1.0 + float(player.art.get("unique_luck", 0.0))):
 		player.u_luck += 1
 		return {}
 	var id := pick(player, tier, e.kind)
@@ -102,3 +103,16 @@ static func on_boss(combat, player, e) -> Dictionary:
 		return {}
 	player.u_luck = 0
 	return Uniques.make(id, int(e.level))
+
+
+## Бос упав: чи лишає він свій трофей-артефакт. Того, що вже лежить у торбі, удруге не дає.
+static func artifact_on_boss(combat, player, e) -> Dictionary:
+	if not is_lair_boss(combat, e):
+		return {}
+	var id: String = Artifacts.by_boss(e.kind)
+	if id == "" or Artifacts.has(player.inventory, id):
+		return {}
+	var ch: float = Artifacts.CHANCE_TOWER if combat.is_tower() else (Artifacts.CHANCE if worthy(combat, player, e) else Artifacts.CHANCE_GREY)
+	if randf() >= ch:
+		return {}
+	return Artifacts.make(id)

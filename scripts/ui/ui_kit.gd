@@ -55,7 +55,7 @@ static func item_button(item: Dictionary, cb: Callable, selected: bool = false, 
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	var b := Button.new()
 	var up: String = (" +%d" % item["up"]) if item["up"] > 0 else ""
-	b.text = ("★ " if item.has("unique") else "") + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
+	b.text = ("★ " if item.has("unique") else ("◆ " if item.has("artifact") else "")) + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
 	b.custom_minimum_size = Vector2(150, 62)
 	b.clip_text = true
 	b.add_theme_font_size_override("font_size", 15)
@@ -85,6 +85,16 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 	v.add_theme_constant_override("separation", 4)
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	v.add_child(label(Data.item_title(item), 24, col, false))
+	if item.has("artifact"):
+		# артефакт: не вдягається, діє з торби
+		var AD: Dictionary = load("res://scripts/data/artifacts.gd").DEFS[str(item["artifact"])]
+		v.add_child(label("Артефакт • діє, поки лежить у торбі", 16, MUTED, false))
+		for row in [[str(AD["text"]), 18, GOOD], ["Трофей боса: %s. Другий такий самий не діє, у скрині артефакт спить." % Data.BOSS_NAMES.get(AD["boss"], ""), 15, MUTED], [str(AD["lore"]), 15, MUTED]]:
+			var al := label(row[0], row[1], row[2], false)
+			al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			al.custom_minimum_size = Vector2(290, 0)
+			v.add_child(al)
+		return v
 	var Uniq = load("res://scripts/data/uniques.gd")
 	var golden: bool = Uniq.is_unique(item)
 	var rar: String = Data.RARITY_NAMES[item["rarity"]]

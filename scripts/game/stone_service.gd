@@ -32,7 +32,7 @@ static func on_boss(player, kind: String, first: bool) -> Array:
 		got.append_array(FIRST_KILL[kind])
 	else:
 		for id in CHANCE:
-			if randf() < CHANCE[id]:
+			if randf() < CHANCE[id] * (1.0 + float(player.art.get("stone", 0.0))):
 				got.append(id)
 	var msgs := []
 	for id in got:

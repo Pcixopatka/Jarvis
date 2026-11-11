@@ -13,6 +13,7 @@ const Story := preload("res://scripts/data/story.gd")
 const Elites := preload("res://scripts/data/elites.gd")
 const Status := preload("res://scripts/game/status.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
+const Artifacts := preload("res://scripts/data/artifacts.gd")
 
 static var _cache: Array = []
 
@@ -449,7 +450,18 @@ static func _items() -> Array:
 	out.append(_e(SS.NAMES["alatyr"], "камінь долі", Camp.STONE_TEXT["alatyr"] + " Козак може стати Волхвом і навпаки, спеціалізація — іншою спеціалізацією своєї гілки.", {"loot": "stone_alatyr"}))
 	out.append(_e("Де взяти камені", "", "Рідко падають із босів, перша перемога над сюжетним босом дає камінь напевно. Ще — нагороди рангів слави, великих свят і Башти, а в скарбника на хуторі — за гривні."))
 	out.append(_e("Продаж", "крамниця в місті", "Речі продаються в крамниці, кілька разом — кнопками «Продати звичайні» й далі. Під час ярмарку продаж удвічі дорожчий. Можна ввімкнути автопродаж звичайних речей, коли торба повна."))
-	return out + _uniques()
+	return out + _uniques() + _artifacts()
+
+
+## Артефакти: правила й усі трофеї босів.
+static func _artifacts() -> Array:
+	var out := []
+	out.append(_e("Артефакти", "діють просто з торби", "Трофеї босів. Артефакт не вдягають: він дає свій бонус, поки лежить у торбі героя. Діють усі різні артефакти разом, але кожен займає місце в торбі. Другий такий самий не діє, у скрині артефакт спить. Заточити, оновити чи переплавити його не можна.", {}, "Артефакти"))
+	out.append(_e("Де взяти артефакт", "у кожного боса свій", "Свій трофей лишає господар лігва: шанс %s%% за перемогу, супербос Башти дає %s%%, а бос, значно слабший за героя, лише %s%%. Що вже лежить у торбі, удруге не падає. Реклама «×2 здобичі» на цей шанс не впливає. При повній торбі артефакт лягає понад місце." % [_num(Artifacts.CHANCE * 100.0), _num(Artifacts.CHANCE_TOWER * 100.0), _num(Artifacts.CHANCE_GREY * 100.0)]))
+	for id in Artifacts.ORDER:
+		var D: Dictionary = Artifacts.DEFS[id]
+		out.append(_e(str(D["name"]), "артефакт • %s" % Data.BOSS_NAMES.get(D["boss"], ""), "%s.\n%s" % [D["text"], D["lore"]], {}, "Артефакти: усі %d" % Artifacts.ORDER.size() if id == Artifacts.ORDER[0] else ""))
+	return out
 
 
 ## Золоті (унікальні) речі: правила й усі речі з їхніми силами.

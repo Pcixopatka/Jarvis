@@ -365,6 +365,9 @@ static func _gear(game) -> Control:
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
 	bag.add_child(UI.label("Торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
+	var arts: Array = p.Artifacts.active_ids(p.inventory)
+	if not arts.is_empty():
+		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 16, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
 		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
@@ -385,6 +388,9 @@ static func _gear(game) -> Control:
 	var equipped: bool = p.is_equipped(sel)
 	var cmp: Dictionary = {} if equipped else p.equipment.get(item["slot"], {})
 	det.add_child(UI.item_card(item, cmp))
+	if item.has("artifact"):
+		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
+		return h
 	if equipped:
 		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
 	else:

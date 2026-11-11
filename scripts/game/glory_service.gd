@@ -33,7 +33,7 @@ static func to_next(world) -> int:
 ## Додати славу (на Покрову — вдвічі). Повертає повідомлення про нові ранги (з нагородами).
 static func add(world, player, amount: int) -> Array:
 	var kleinod: float = load("res://scripts/game/kleinod_service.gd").bonus(world, "glory")  # корогва роду
-	return add_plain(world, player, int(round(amount * (1.0 + HolidayService.bonus("glory") + kleinod))))
+	return add_plain(world, player, int(round(amount * (1.0 + HolidayService.bonus("glory") + kleinod + float(player.art.get("glory", 0.0))))))
 
 
 ## Додати славу без святкових надбавок.

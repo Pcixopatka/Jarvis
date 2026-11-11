@@ -111,6 +111,7 @@ func _run() -> void:
 	await _suite_muscovy_game()
 	_suite_uniques()
 	await _suite_uniques_game()
+	await _suite_artifacts()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -6839,6 +6840,178 @@ func _suite_uniques_game() -> void:
 	p.change_class("volkhv")
 	wear.call("posokh_molfara")
 	check(p.u_pow.has("vidlunnia") and float(p.u_pow["vidlunnia"]["chance"]) > 0.2, "Посох мольфара дає Відлуння")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Артефакти =======================
+
+func _suite_artifacts() -> void:
+	suite("Артефакти: трофеї босів, що діють із торби")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var Loot = load("res://scripts/game/loot_service.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Tower = load("res://scripts/game/tower_service.gd")
+	var Depth = load("res://scripts/game/depth_service.gd")
+	var UI = load("res://scripts/ui/ui_kit.gd")
+	var Glory = load("res://scripts/game/glory_service.gd")
+	# Кожен бос має свій артефакт (новий бос без трофея провалить перевірку)
+	var bosses := {}
+	for id in Data.LOCATIONS:
+		if Data.LOCATIONS[id].has("boss"):
+			bosses[Data.LOCATIONS[id]["boss"]] = true
+	for b in Tower.SUPER_BOSSES + Depth.BOSSES:
+		bosses[b] = true
+	var missing := []
+	for b in bosses:
+		if Arts.by_boss(b) == "":
+			missing.append(b)
+	check(missing.is_empty() and Arts.ORDER.size() == Arts.DEFS.size() and Arts.ORDER.size() == bosses.size(), "у кожного з %d босів свій артефакт: %s" % [bosses.size(), str(missing)])
+	var known := ["st_burn", "st_bleed", "st_chill", "st_weak", "status", "travel", "plague", "potion_max", "mana_potion_max", "dodge_cd", "elite_dmg", "boss_dmg", "stone", "gold", "glory", "res", "unique_luck", "pickup", "trophy", "xp"]
+	var data_ok := true
+	var names := {}
+	for id in Arts.ORDER:
+		var D: Dictionary = Arts.DEFS[id]
+		data_ok = data_ok and str(D["name"]) != "" and not names.has(D["name"]) and str(D["text"]) != "" and str(D["lore"]) != "" and Data.BOSS_NAMES.has(D["boss"]) and not D["bonus"].is_empty()
+		for k in D["bonus"]:
+			data_ok = data_ok and k in known
+		names[D["name"]] = true
+	check(data_ok, "артефакти: назва, бонус із відомих ключів, опис і переказ; без лікування й загоєння")
+	# Діє з торби, копія не діє, у скрині спить
+	var p = _new_player()
+	var xp0: float = p.xp_mult
+	var gold0: float = p.gold_mult
+	var zoria: Dictionary = Arts.make("zoria_karachuna")
+	check(p.add_item(zoria) and is_equal_approx(p.xp_mult, xp0 + 0.06) and Arts.is_artifact(zoria) and int(zoria["rarity"]) == 5, "артефакт у торбі діє одразу: +6% досвіду")
+	p.add_item(Arts.make("zoria_karachuna"))
+	check(is_equal_approx(p.xp_mult, xp0 + 0.06) and Arts.active_ids(p.inventory).size() == 1, "другий такий самий не діє")
+	p.add_item(Arts.make("kliuchi_kremlia"))
+	check(is_equal_approx(p.gold_mult, gold0 + 0.08) and Arts.active_ids(p.inventory).size() == 2, "різні артефакти діють разом")
+	p.remove_from_bag(zoria["uid"])
+	check(is_equal_approx(p.xp_mult, xp0 + 0.06), "забрали один із двох однакових: другий діє далі")
+	for it in p.inventory.duplicate():
+		p.remove_from_bag(it["uid"])
+	check(is_equal_approx(p.xp_mult, xp0) and is_equal_approx(p.gold_mult, gold0) and p.art.is_empty(), "торба порожня: бонусів нема")
+	# Не вдягається, не точиться, не продається гуртом, не переплавляється
+	var hl: Dictionary = Arts.make("vidmyn_hlechyk")
+	var pm0: int = p.potion_max()
+	p.add_item(hl)
+	check(p.potion_max() == pm0 + 1 and not p.can_use(hl) and not p.equip(hl["uid"]) and p.sharpen(hl["uid"]) == "" and not p.find_item(hl["uid"]).is_empty(), "артефакт не вдягають і не точать; Відьмин глечик дає +1 зілля")
+	CityService.sell_up_to(p, 9)
+	CityService.sell_junk(p)
+	var w = WorldState.new()
+	load("res://scripts/game/camp_service.gd").state(w)["buildings"]["kuznia"] = 3
+	check(not p.find_item(hl["uid"]).is_empty() and load("res://scripts/game/camp_service.gd").salvage(w, p, hl["uid"]) == 0 and not load("res://scripts/game/craft_service.gd").can_renew(w, hl, 50), "ні продаж гуртом, ні переплавка, ні оновлення артефакт не чіпають")
+	# Бонуси, що діють поза перерахунком
+	p.add_item(Arts.make("mitla_yahy"))
+	var q = _new_player()
+	check(p.dodge_cooldown < q.dodge_cooldown * 0.93, "Мітла Баби Яги: перекид частіше")
+	p.add_item(Arts.make("perlyna_tsaria"))
+	check(p.mana_potion_max() == q.mana_potion_max() + 1, "Перлина Морського царя: +1 зілля наснаги")
+	p.add_item(Arts.make("lisovykova_sopilka"))
+	check(p.pickup_radius > q.pickup_radius * 1.25, "Сопілка Лісового Діда: здобич збирається здалеку")
+	# Збереження
+	var r = _new_player()
+	r.from_dict(p.to_dict().duplicate(true))
+	check(r.art.has("dodge_cd") and r.potion_max() == p.potion_max() and Arts.active_ids(r.inventory).size() == 4, "артефакти переживають збереження й діють після завантаження")
+	# Довідник і картка
+	var titles := {}
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			titles[str(e["title"])] = str(e["text"])
+	var wiki_ok := titles.has("Артефакти") and titles.has("Де взяти артефакт")
+	for id in Arts.ORDER:
+		wiki_ok = wiki_ok and titles.has(str(Arts.DEFS[id]["name"])) and str(Arts.DEFS[id]["text"]) in str(titles.get(str(Arts.DEFS[id]["name"]), ""))
+	check(wiki_ok, "у довіднику є правила й кожен артефакт із бонусом")
+	var card: Control = UI.item_card(hl)
+	var ctext := ""
+	for n in card.find_children("*", "Label", true, false):
+		ctext += n.text + "\n"
+	card.free()
+	var btn: Button = UI.item_button(hl, func(): pass)
+	check("діє, поки лежить у торбі" in ctext and "+1 зілля здоров'я" in ctext and "Відьма" in ctext and btn.text.begins_with("◆ Відьмин глечик") and "Артефакт" in btn.text, "картка артефакта: що дає, чий трофей; ромб на кнопці")
+	btn.free()
+	# У грі: трофей із господаря лігва, без повторів; стани минають швидше; більше шкоди босам
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gp = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones"]:
+		game.world.hints[k] = true
+	gp.change_class("cossack")
+	gp.level = 40
+	gp.stats["str"] = 120
+	gp.stats["vit"] = 150
+	gp.recalc()
+	gp.hp = gp.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	game.enter_location("zmiinyi")
+	await _frames(3)
+	_clear_enemies(game)
+	if c.portal != null and is_instance_valid(c.portal):
+		c.portal.queue_free()
+	c.portal = null
+	c.room = int(c.loc["rooms"])
+	c._spawn_room()
+	await _frames(2)
+	var boss = null
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.is_boss:
+			boss = e
+	var got := 0
+	var kinds := {}
+	for i in 400:
+		var a: Dictionary = Loot.artifact_on_boss(c, gp, boss)
+		if not a.is_empty():
+			got += 1
+			kinds[a["artifact"]] = true
+	check(got >= 4 and got <= 40 and kinds.keys() == ["perlyna_tsaria"], "Морський цар лишає свою Перлину приблизно в 4% перемог (%d із 400)" % got)
+	gp.add_item(Arts.make("perlyna_tsaria"))
+	var again := 0
+	for i in 200:
+		if not Loot.artifact_on_boss(c, gp, boss).is_empty():
+			again += 1
+	check(again == 0, "артефакт, що вже лежить у торбі, удруге не падає")
+	_clear_enemies(game)
+	c.spawn_enemy("upyr", 40, true, gp.global_position + Vector2(300, 0))
+	check(Loot.artifact_on_boss(c, gp, c._last_enemy()).is_empty(), "прикликаний бос трофея не дає")
+	# Стани
+	gp.statuses.clear()
+	gp.add_status("burn", 10.0, 1.0)
+	var plain: float = float(gp.statuses["burn"]["t"]) if gp.statuses["burn"] is Dictionary and gp.statuses["burn"].has("t") else -1.0
+	gp.statuses.clear()
+	gp.add_item(Arts.make("zmiiv_zub"))
+	gp.add_status("burn", 10.0, 1.0)
+	var short: float = float(gp.statuses["burn"]["t"]) if gp.statuses["burn"] is Dictionary and gp.statuses["burn"].has("t") else -1.0
+	check(plain > 0.0 and short > 0.0 and short < plain * 0.7, "Зміїв зуб: горіння минає на третину швидше (%s проти %s)" % [str(short), str(plain)])
+	gp.statuses.clear()
+	# Шкода босам і елітам
+	_clear_enemies(game)
+	c.spawn_enemy("upyr", 40, true, gp.global_position + Vector2(200, 0))
+	var b1 = c._last_enemy()
+	b1.set_process(false)
+	var hp1: float = b1.hp
+	gp.hit(b1, 1000.0, Vector2.ZERO, false)
+	var d_plain: float = hp1 - b1.hp
+	gp.add_item(Arts.make("yadro_tsar_harmaty"))
+	hp1 = b1.hp
+	gp.hit(b1, 1000.0, Vector2.ZERO, false)
+	check(d_plain > 0.0 and (hp1 - b1.hp) > d_plain * 1.05, "Ядро Цар-гармати: +6% шкоди босам")
+	# Слава
+	var glory0: int = int(game.world.glory) if "glory" in game.world else 0
+	gp.add_item(Arts.make("persten_biloi_pani"))
+	check(float(gp.art.get("glory", 0.0)) > 0.0 and float(gp.art.get("boss_dmg", 0.0)) > 0.0, "бонуси слави й шкоди зібрано з торби")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

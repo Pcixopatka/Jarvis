@@ -160,8 +160,8 @@ static func salvage_value(item: Dictionary) -> int:
 
 
 static func salvage(world, player, uid: int) -> int:
-	if level(world, "kuznia") < 2 or player.is_equipped(uid):
-		return 0
+	if level(world, "kuznia") < 2 or player.is_equipped(uid) or player.find_item(uid).has("artifact"):
+		return 0  # артефакт не переплавляють
 	var it: Dictionary = player.remove_from_bag(uid)
 	if it.is_empty():
 		return 0

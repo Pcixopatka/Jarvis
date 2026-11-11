@@ -11,6 +11,7 @@ const Classes := preload("res://scripts/data/classes.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
+const Artifacts := preload("res://scripts/data/artifacts.gd")
 const Power := preload("res://scripts/game/power.gd")
 const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
 const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
@@ -95,6 +96,7 @@ var attack_timer := 0.0
 var dodge_timer := 0.0
 var skill_timers := {"whirl": 0.0, "lightning": 0.0, "musket": 0.0}
 var dodge_time_left := 0.0
+var art := {}  # бонуси артефактів, що лежать у торбі (ключ -> значення; рахує recalc)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
 var u_luck := 0  # лічильник Долі: скільки гідних босів поспіль не дали золота (зберігається)
@@ -205,11 +207,11 @@ func bag_full() -> bool:
 
 
 func potion_max() -> int:
-	return Data.POTION_MAX + potion_bonus + pk("h_flask")
+	return Data.POTION_MAX + potion_bonus + pk("h_flask") + int(art.get("potion_max", 0))
 
 
 func mana_potion_max() -> int:
-	return Data.MANA_POTION_MAX + (1 if is_volkhv() else 0)
+	return Data.MANA_POTION_MAX + (1 if is_volkhv() else 0) + int(art.get("mana_potion_max", 0))
 
 
 ## Волхв чи його спеціалізація (за класом, а не за зброєю в руках).
@@ -224,11 +226,15 @@ func add_item(item: Dictionary, force: bool = false) -> bool:
 	if bag_full() and not force:
 		return false
 	inventory.append(item)
+	if Artifacts.is_artifact(item):
+		recalc()  # артефакт діє з торби одразу
 	return true
 
 
 ## Чи може цей клас користуватися річчю (зброя обмежена класом).
 func can_use(item: Dictionary) -> bool:
+	if Artifacts.is_artifact(item):
+		return false  # артефакт не вдягають: він діє з торби
 	if item.get("slot", "") != "weapon":
 		return true
 	return item.get("type", "") in Classes.CLASSES[job]["weapons"]
@@ -267,6 +273,8 @@ func remove_from_bag(uid: int) -> Dictionary:
 		if inventory[i]["uid"] == uid:
 			var it: Dictionary = inventory[i]
 			inventory.remove_at(i)
+			if Artifacts.is_artifact(it):
+				recalc()  # артефакт покинув торбу й більше не діє
 			return it
 	return {}
 
@@ -278,6 +286,8 @@ func add_gold(v: int) -> void:
 ## Заточка: повертає "ok", "fail", "down", "nogold" або "max".
 ## cost_mult/chance_bonus — бонуси кузні хутора; safe — безпечна заточка (рівень не падає).
 func sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0, safe: bool = false) -> String:
+	if Artifacts.is_artifact(find_item(uid)):
+		return ""
 	var it := find_item(uid)
 	if it.is_empty():
 		return "fail"
@@ -491,6 +501,7 @@ func _bonus(id: String) -> int:
 func recalc() -> void:
 	var old_max := max_hp
 	_calc_equipment()
+	art = Artifacts.mods(inventory)
 	var s_str := _bonus("str")
 	var s_agi := _bonus("agi")
 	var s_vit := _bonus("vit")
@@ -531,14 +542,14 @@ func recalc() -> void:
 	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0)))
 	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)), 0.0, 0.75)
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0) + max_hp * float(festive.get("regen", 0.0))
-	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll"))
+	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0)))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
-	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0)
-	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0))
-	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0))
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0)))
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0))
+	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0))
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
 	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))
 	var ci := class_info()
@@ -884,6 +895,11 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		return
 	if pk("h_execute") > 0 and e.hp < e.max_hp * 0.3:
 		dmg *= 1.2
+	if not art.is_empty():
+		if e.is_boss:
+			dmg *= 1.0 + float(art.get("boss_dmg", 0.0))
+		elif e.elite or e.bounty_id > 0:
+			dmg *= 1.0 + float(art.get("elite_dmg", 0.0))
 	e.take_damage(dmg, kb, crit)
 	if not _u_proc:
 		_unique_on_hit(e, dmg, crit)
@@ -1952,9 +1968,11 @@ func add_status(id: String, dur: float, dps: float = 0.0) -> void:
 	if id == "plague":
 		if plague_immune:
 			return
-		dps *= 1.0 - plague_resist
+		dps *= (1.0 - plague_resist) * (1.0 - float(art.get("plague", 0.0)))
 	var fresh := not statuses.has(id)
-	Status.apply(self, id, dur * (1.0 - float(festive.get("status", 0.0))), dps)  # на Здвиження пристріт слабне
+	# на Здвиження пристріт слабне; артефакти теж скорочують стани, разом не більш як на 60%
+	var shorter: float = minf(0.6, float(festive.get("status", 0.0)) + float(art.get("status", 0.0)) + float(art.get("st_" + id, 0.0)))
+	Status.apply(self, id, dur * (1.0 - shorter), dps)
 	if fresh and _in_combat():
 		combat.float_text(global_position + Vector2(0, -95), Status.INFO[id]["name"] + "!", Status.INFO[id]["color"])
 

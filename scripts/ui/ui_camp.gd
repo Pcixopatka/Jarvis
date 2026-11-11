@@ -232,6 +232,8 @@ static func _forge(game) -> Control:
 	list.add_child(UI.label("Торба", 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
+		if it.has("artifact"):
+			continue  # артефакти не точать і не переплавляють
 		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
 	list.add_child(bg)
 	h.add_child(list)

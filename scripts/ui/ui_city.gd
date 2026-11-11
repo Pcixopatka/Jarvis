@@ -143,6 +143,8 @@ static func _shop(game, city: String) -> Control:
 	bag.add_child(head)
 	var bg := UI.grid(3)
 	for it in p.inventory:
+		if it.has("artifact"):
+			continue  # артефакти не продають і не точать: вони лежать у торбі
 		var marked: bool = game.sell_marked.has(it["uid"])
 		if game.sell_multi:
 			bg.add_child(UI.item_button(it, _do(game, "mark", it["uid"]), marked, ("✓ " if marked else "") + "+%d грн" % Data.sell_price(it)))
@@ -215,6 +217,8 @@ static func _smith(game) -> Control:
 	list.add_child(UI.label("Торба", 22, UI.GOLD, false))
 	var bg := UI.grid(3)
 	for it in p.inventory:
+		if it.has("artifact"):
+			continue  # артефакти не продають і не точать: вони лежать у торбі
 		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
 	list.add_child(bg)
 	h.add_child(list)

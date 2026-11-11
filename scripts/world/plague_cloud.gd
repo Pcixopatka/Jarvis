@@ -24,7 +24,8 @@ func _process(delta: float) -> void:
 				continue
 			if a.global_position.distance_to(global_position) < radius + a.radius:
 				var resist = a.get("plague_resist") if status == "plague" else null
-				a.take_damage(dps * 0.5 * (1.0 - (resist if resist != null else 0.0)), null)
+				var art_resist: float = float(a.art.get("plague", 0.0)) if status == "plague" and "art" in a else 0.0  # артефакт «Чорна книга»
+				a.take_damage(dps * 0.5 * (1.0 - (resist if resist != null else 0.0)) * (1.0 - art_resist), null)
 				if a.has_method("add_status"):
 					a.add_status(status, 2.0)  # у хмарі зарази рани гояться вдвічі гірше; відьмине зілля знесилює
 	queue_redraw()

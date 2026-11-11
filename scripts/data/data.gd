@@ -135,7 +135,7 @@ static func find_perk(id: String) -> Array:
 # ======================= Спорядження =======================
 
 const SLOTS := ["weapon", "head", "body", "belt", "boots", "amulet"]
-const SLOT_NAMES := {"weapon": "Зброя", "head": "Шапка", "body": "Жупан", "belt": "Пояс", "boots": "Чоботи", "amulet": "Оберіг"}
+const SLOT_NAMES := {"weapon": "Зброя", "head": "Шапка", "body": "Жупан", "belt": "Пояс", "boots": "Чоботи", "amulet": "Оберіг", "artifact": "Артефакт"}
 const INVENTORY_SIZE := 24
 const MAX_UPGRADE := 10
 const UPGRADE_BONUS := 0.12  # +12% до всіх бонусів речі за кожен рівень заточки
@@ -143,8 +143,8 @@ const SHARPEN_CHANCE := [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
 const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
 const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гривні: у стільки разів дорожча
 
-const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна", "Унікальна"]
-const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15), Color(1.0, 0.85, 0.3)]
+const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна", "Унікальна", "Артефакт"]
+const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15), Color(1.0, 0.85, 0.3), Color(0.35, 0.88, 0.8)]
 const RARITY_MAX_RANDOM := 3  # випадкова річ не буває унікальною: золоті речі іменні (див. Uniques)
 const LEGEND_EPITHETS := ["Громовиця", "Вовча", "Чорноморська", "Січова", "Перунова", "Хортицька", "Буревісна", "Гайдамацька"]
 
