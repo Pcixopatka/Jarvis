@@ -30,6 +30,7 @@ const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const Sounds := preload("res://scripts/data/sounds.gd")
 const TrailScript := preload("res://scripts/world/trail.gd")
 const LootService := preload("res://scripts/game/loot_service.gd")
+const SoulService := preload("res://scripts/game/soul_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
@@ -1255,6 +1256,16 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "mana", 1)
 		if randf() < Data.ITEM_DROP_CHANCE * (1.0 + float(festive.get("loot", 0.0))) * drop_boost:
 			spawn_pickup(pos, "item", 0, _loot(ilvl, Data.roll_rarity(ilvl)))
+	# Душа: вкрай рідко, з будь-якої нечисті (реклама ×2 здобичі на це не впливає)
+	var soul_id: String = SoulService.roll(player, e)
+	if soul_id != "":
+		SoulService.grant(player, soul_id)
+		var scol: Color = SoulService.color(soul_id)
+		fx.burst(pos, scol, 30, 220, 8, 0.9)
+		fx.ring(pos, scol, 28, 110, 5, 0.6)
+		float_text(pos + Vector2(0, -60), SoulService.soul_name(soul_id), scol)
+		Events.banner.emit("%s!\nУ торбинці душ. Коваль проб'є для неї гніздо" % SoulService.soul_name(soul_id), scol)
+		Audio.play("quest", 0.0)
 
 
 ## Річ із нечисті. На Катерини доля всміхається: частина речей на рідкість краща.

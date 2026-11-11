@@ -266,6 +266,7 @@ static func _forge(game) -> Control:
 	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
 		det.add_child(UI.button("Переплавити на залізо (+%d)" % CampService.salvage_value(it), _do(game, "salvage", sel), Vector2(370, 56), 18))
 	_craft_item_actions(game, det, it)
+	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, it, func(a: String, b): return _do(game, a, b), true, CampService.forge_cost_mult(w)))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 20, game.smith_msg_color, false))
 	return h

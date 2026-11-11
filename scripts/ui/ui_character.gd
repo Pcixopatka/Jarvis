@@ -365,6 +365,7 @@ static func _gear(game) -> Control:
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
 	bag.add_child(UI.label("Торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
+	bag.add_child(UI.button("Душі: %d" % p.SoulService.pouch_count(p), _do(game, "select", -2), Vector2(200, 46), 17))
 	var arts: Array = p.Artifacts.active_ids(p.inventory)
 	if not arts.is_empty():
 		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 16, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
@@ -381,6 +382,9 @@ static func _gear(game) -> Control:
 	det.add_theme_constant_override("separation", 8)
 	h.add_child(det)
 	var item: Dictionary = p.find_item(sel) if sel > 0 else {}
+	if sel == -2:
+		det.add_child(load("res://scripts/ui/ui_souls.gd").codex(p))  # Пом'яник душ замість картки речі
+		return h
 	if item.is_empty():
 		det.add_child(UI.label("Торкнись речі,\nщоб побачити бонуси.", 20, UI.MUTED, false))
 		det.add_child(UI.label("Заточувати речі можна\nу коваля в будь-якому місті.", 17, UI.MUTED, false))
@@ -391,6 +395,7 @@ static func _gear(game) -> Control:
 	if item.has("artifact"):
 		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
 		return h
+	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, item, func(a: String, b): return _do(game, a, b), false))
 	if equipped:
 		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
 	else:

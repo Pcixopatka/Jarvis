@@ -128,6 +128,14 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		v.add_child(label("Зараз вдягнуто: " + Data.item_title(compare), 15, MUTED, false))
 	if item["up"] > 0:
 		v.add_child(label("Заточка +%d: усі бонуси +%d%%" % [item["up"], roundi(item["up"] * Data.UPGRADE_BONUS * 100)], 15, GOLD, false))
+	if int(item.get("sock", 0)) > 0:
+		# гніздо для душі
+		var SS = load("res://scripts/game/soul_service.gd")
+		var sid: String = str(item.get("soul", ""))
+		var sl := label(("◈ %s: %s" % [SS.soul_name(sid), SS.fx_text(sid)]) if sid != "" else "◈ Гніздо для душі порожнє", 16, SS.color(sid) if sid != "" else MUTED, false)
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.custom_minimum_size = Vector2(290, 0)
+		v.add_child(sl)
 	if golden:
 		# сила золотої речі й переказ про неї
 		var uid: String = str(item["unique"])

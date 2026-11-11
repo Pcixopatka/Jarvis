@@ -248,6 +248,7 @@ static func _smith(game) -> Control:
 		if it["up"] >= Data.SHARPEN_RISK_FROM and safe_n <= 0:
 			var safe_cost := Data.sharpen_safe_cost(it)
 			det.add_child(UI.button("Заточити без ризику\n%s грн • рівень не впаде" % UI.num(safe_cost), _do(game, "sharpen_safe", sel), Vector2(340, 72), 17, p.gold >= safe_cost))
+	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, it, func(a: String, b): return _do(game, a, b), true))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 22, game.smith_msg_color, false))
 	return h

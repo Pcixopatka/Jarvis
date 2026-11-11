@@ -6,7 +6,7 @@ extends RefCounted
 ## Вкладки довідника за порядком.
 const SECTIONS := [
 	["basics", "Як грати"], ["events", "Події"], ["classes", "Класи"], ["enemies", "Нечисть"], ["bosses", "Боси"],
-	["map", "Мапа"], ["holidays", "Свята"], ["camp", "Хутір"], ["items", "Речі"], ["rules", "Правила"],
+	["map", "Мапа"], ["holidays", "Свята"], ["camp", "Хутір"], ["items", "Речі"], ["souls", "Душі"], ["rules", "Правила"],
 ]
 
 const BASICS := [

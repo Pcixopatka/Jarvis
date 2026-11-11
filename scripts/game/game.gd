@@ -10,6 +10,7 @@ const UiCity := preload("res://scripts/ui/ui_city.gd")
 const MapPanel := preload("res://scripts/ui/map_panel.gd")
 const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
+const SoulService := preload("res://scripts/game/soul_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const HeroService := preload("res://scripts/game/hero_service.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
@@ -1674,6 +1675,8 @@ func city_do(action: String, arg) -> void:
 			_sharpen(arg)
 		"sharpen_safe":
 			_sharpen(arg, 1.0, 0.0, true)
+		"socket", "soul_in", "soul_out":
+			_soul_action(action, arg, 1.0)
 		"hire":
 			CityService.hire(world, player, city_id, arg)
 		"buy_potion":
@@ -1826,8 +1829,10 @@ func char_do(action: String, arg) -> void:
 		"unequip":
 			player.unequip(arg)
 		"drop":
-			player.remove_from_bag(arg)
+			SoulService.strip(player, player.remove_from_bag(arg))  # душа з викинутої речі вертається в торбинку
 			char_sel_uid = -1
+		"socket", "soul_in", "soul_out":
+			_soul_action(action, arg, 1.0)
 		"stone_reset":
 			if confirm_action != "stone_reset":
 				confirm_action = "stone_reset"
@@ -2317,6 +2322,8 @@ func camp_do(action: String, arg) -> void:
 			_sharpen(arg, CampService.forge_cost_mult(world), CampService.forge_chance_bonus(world))
 		"sharpen_safe":
 			_sharpen(arg, CampService.forge_cost_mult(world), CampService.forge_chance_bonus(world), true)
+		"socket", "soul_in", "soul_out":
+			_soul_action(action, arg, CampService.forge_cost_mult(world))
 		"kleinod":
 			if KleinodService.buy(world, player, arg):
 				var kl := KleinodService.level(world, arg)
@@ -2435,6 +2442,26 @@ func camp_do(action: String, arg) -> void:
 	save_game()
 	# Вибір речі чи ступеня кування показує інше, тож список починається згори; решта дій лишає його на місці
 	_build_camp(action not in ["select", "craft_tier"])
+
+
+## Гнізда й душі: пробити гніздо (uid), вселити душу ([uid, id душі]), вийняти душу (uid).
+func _soul_action(action: String, arg, cost_mult: float) -> void:
+	match action:
+		"socket":
+			if SoulService.make_socket(player, arg, cost_mult):
+				Audio.play("quest", 0.0)
+				smith_msg = "Гніздо для душі готове"
+				smith_msg_color = UI.GOOD
+		"soul_in":
+			if SoulService.insert(player, arg[0], arg[1]):
+				Audio.play("quest", 0.0)
+				smith_msg = "%s тепер у речі" % SoulService.soul_name(arg[1])
+				smith_msg_color = SoulService.color(arg[1])
+		"soul_out":
+			if SoulService.remove(player, arg, cost_mult):
+				smith_msg = "Душа повернулась у торбинку"
+				smith_msg_color = UI.TEXT
+	save_game()
 
 
 ## Реклама за годинний подарунок ("xp2" чи "drop2"); refresh перебудовує поточний екран після перегляду.

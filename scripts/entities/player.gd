@@ -12,6 +12,7 @@ const Gfx := preload("res://scripts/world/gfx.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
+const SoulService := preload("res://scripts/game/soul_service.gd")
 const Power := preload("res://scripts/game/power.gd")
 const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
 const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
@@ -96,6 +97,11 @@ var attack_timer := 0.0
 var dodge_timer := 0.0
 var skill_timers := {"whirl": 0.0, "lightning": 0.0, "musket": 0.0}
 var dodge_time_left := 0.0
+# Душі: торбинка героя (id душі -> скільки), поклик душ і сума бонусів душ у вдягнених речах
+var souls := {}
+var soul_luck := 0.0
+var soul_found := 0
+var soul_fx := {}
 var art := {}  # бонуси артефактів, що лежать у торбі (ключ -> значення; рахує recalc)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
@@ -340,7 +346,8 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck}
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck,
+		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -502,6 +509,7 @@ func recalc() -> void:
 	var old_max := max_hp
 	_calc_equipment()
 	art = Artifacts.mods(inventory)
+	soul_fx = SoulService.fx_of(self)
 	var s_str := _bonus("str")
 	var s_agi := _bonus("agi")
 	var s_vit := _bonus("vit")
@@ -529,29 +537,31 @@ func recalc() -> void:
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
 	if weapon_type == "pishchal":
 		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
+	attack_cooldown /= 1.0 + float(soul_fx.get("aspd", 0.0))
 	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)))
-	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit")
+	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0))
 	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0
 
 	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist") + 0.04 * pk("h_body")) * float(class_info().get("hp_mult", 1.0))
-	damage *= float(class_info().get("dmg_mult", 1.0)) * (1.0 + float(festive.get("dmg", 0.0))) * (1.0 + float(klein.get("dmg", 0.0)))
+	damage *= float(class_info().get("dmg_mult", 1.0)) * (1.0 + float(festive.get("dmg", 0.0))) * (1.0 + float(klein.get("dmg", 0.0))) * (1.0 + float(soul_fx.get("dmg", 0.0)))
 	if meal == "kulish":
 		max_hp *= 1.15
 	elif meal == "borshch":
 		max_hp *= 1.1
-	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0)))
+	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0))) * (1.0 + float(soul_fx.get("hp", 0.0)))
 	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)), 0.0, 0.75)
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0) + max_hp * float(festive.get("regen", 0.0))
-	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0)))
+	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0))) * (1.0 - float(soul_fx.get("dodge_cd", 0.0)))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
-	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0)
-	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0)))
+	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0)))
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0)))
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0))
-	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0))
+	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0))
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * s_spi) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
-	skill_power = 1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))
+	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))))
+	skill_power = (1.0 + 0.05 * s_spi + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0)))
 	var ci := class_info()
 	var old_mana := max_mana
 	max_mana = (40.0 + 5.0 * s_spi) * float(ci["mana_mult"]) * (1.0 + 0.2 * pk("deep_well") + 0.1 * pk("steel_will"))
@@ -900,7 +910,14 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 			dmg *= 1.0 + float(art.get("boss_dmg", 0.0))
 		elif e.elite or e.bounty_id > 0:
 			dmg *= 1.0 + float(art.get("elite_dmg", 0.0))
+	if not soul_fx.is_empty():
+		if e.hp < e.max_hp * 0.3:
+			dmg *= 1.0 + float(soul_fx.get("execute", 0.0))
+		if e.is_boss or e.elite:
+			dmg *= 1.0 + float(soul_fx.get("big_dmg", 0.0))
 	e.take_damage(dmg, kb, crit)
+	if not soul_fx.is_empty():
+		_soul_on_hit(e, dmg)
 	if not _u_proc:
 		_unique_on_hit(e, dmg, crit)
 	if zamova_timer > 0.0 and not _chaining:
@@ -911,6 +928,30 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		Status.apply(e, "bleed", 3.0, dmg * 0.1)  # критичний удар лишає кровотечу
 	if lifesteal > 0.0:
 		heal(dmg * lifesteal, false)
+
+
+## Душі у вдягнених речах: стани від удару (не частіше ніж раз на Souls.PROC_LOCK с на ворога) і вибух убитого.
+func _soul_on_hit(e, dmg: float) -> void:
+	var now: float = combat._time
+	for pair in [["burn_hit", "burn", 3.0], ["chill_hit", "chill", 2.0], ["weak_hit", "weak", 3.0], ["curse_hit", "curse", 2.0], ["stun_hit", "", 0.6]]:
+		var key: String = pair[0]
+		if e.dead or not soul_fx.has(key) or randf() >= float(soul_fx[key]):
+			continue
+		if now < float(e.get_meta("sl_" + key, -100.0)):
+			continue
+		e.set_meta("sl_" + key, now + SoulService.Souls.PROC_LOCK)
+		if key == "stun_hit":
+			if not e.is_boss:
+				e.stun = maxf(e.stun, float(pair[2]))
+		else:
+			Status.apply(e, pair[1], pair[2], dmg * 0.1 if key == "burn_hit" else 0.0)
+	if e.dead and soul_fx.has("kill_blast") and randf() < float(soul_fx["kill_blast"]):
+		var c: Vector2 = e.global_position
+		for o in _alive_enemies():
+			if o.global_position.distance_to(c) <= 120.0 + o.radius:
+				o.take_damage(e.max_hp * 0.2, (o.global_position - c).normalized() * 200.0, false)
+		combat.fx.burst(c, Color(1.0, 0.6, 0.2), 22, 240, 7, 0.45)
+		Audio.play("clash", 0.1, -6.0)
 
 
 ## Сили золотих речей, що спрацьовують від удару: Звитяга (за вбитого) і Перунова блискавка (за крит).
@@ -1896,7 +1937,7 @@ func take_damage(amount: float, source = null) -> bool:
 		if block_time <= PARRY_WINDOW:
 			_parry(source)
 			return false
-		amount *= BLOCK_MULT
+		amount *= BLOCK_MULT * (1.0 - float(soul_fx.get("block", 0.0)))
 		combat.float_text(global_position + Vector2(0, -70), "Блок", Color(0.75, 0.85, 1.0))
 	if ward_hp > 0.0:
 		var absorbed := minf(ward_hp, amount)
@@ -1971,14 +2012,14 @@ func add_status(id: String, dur: float, dps: float = 0.0) -> void:
 		dps *= (1.0 - plague_resist) * (1.0 - float(art.get("plague", 0.0)))
 	var fresh := not statuses.has(id)
 	# на Здвиження пристріт слабне; артефакти теж скорочують стани, разом не більш як на 60%
-	var shorter: float = minf(0.6, float(festive.get("status", 0.0)) + float(art.get("status", 0.0)) + float(art.get("st_" + id, 0.0)))
+	var shorter: float = minf(0.6, float(festive.get("status", 0.0)) + float(art.get("status", 0.0)) + float(art.get("st_" + id, 0.0)) + float(soul_fx.get("status_res", 0.0)))
 	Status.apply(self, id, dur * (1.0 - shorter), dps)
 	if fresh and _in_combat():
 		combat.float_text(global_position + Vector2(0, -95), Status.INFO[id]["name"] + "!", Status.INFO[id]["color"])
 
 
 func heal(amount: float, show: bool = true) -> void:
-	amount *= Status.heal_mult(self)
+	amount *= Status.heal_mult(self) * (1.0 - float(soul_fx.get("heal_taken", 0.0)))
 	var before := hp
 	hp = minf(max_hp, hp + amount)
 	var gained := int(hp - before)

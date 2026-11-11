@@ -165,6 +165,7 @@ static func salvage(world, player, uid: int) -> int:
 	var it: Dictionary = player.remove_from_bag(uid)
 	if it.is_empty():
 		return 0
+	player.SoulService.strip(player, it)  # душа з переплавленої речі вертається в торбинку
 	var v := salvage_value(it)
 	player.resources["iron"] = int(player.resources.get("iron", 0)) + v
 	return v

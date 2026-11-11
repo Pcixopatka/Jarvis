@@ -112,6 +112,7 @@ func _run() -> void:
 	_suite_uniques()
 	await _suite_uniques_game()
 	await _suite_artifacts()
+	await _suite_souls()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7012,6 +7013,307 @@ func _suite_artifacts() -> void:
 	var glory0: int = int(game.world.glory) if "glory" in game.world else 0
 	gp.add_item(Arts.make("persten_biloi_pani"))
 	check(float(gp.art.get("glory", 0.0)) > 0.0 and float(gp.art.get("boss_dmg", 0.0)) > 0.0, "бонуси слави й шкоди зібрано з торби")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Душі =======================
+
+func _suite_souls() -> void:
+	suite("Душі: гнізда, торбинка, шанс і бонуси")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Souls = load("res://scripts/data/souls.gd")
+	var SS = load("res://scripts/game/soul_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Tower = load("res://scripts/game/tower_service.gd")
+	var Depth = load("res://scripts/game/depth_service.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var CampS = load("res://scripts/game/camp_service.gd")
+	var UI = load("res://scripts/ui/ui_kit.gd")
+	var Status = load("res://scripts/game/status.gd")
+	# Повнота: у кожної нечисті й кожного боса гри є своя записана душа
+	var kinds := {}
+	var bosses := {}
+	for id in Data.LOCATIONS:
+		for k in Data.LOCATIONS[id]["enemies"]:
+			kinds[k] = true
+		if Data.LOCATIONS[id].has("boss"):
+			bosses[Data.LOCATIONS[id]["boss"]] = true
+	for k in Tower.POOL:
+		kinds[k] = true
+	for b in Tower.SUPER_BOSSES + Depth.BOSSES:
+		bosses[b] = true
+	var no_soul := []
+	for k in kinds:
+		if not Souls.SOULS.has(k):
+			no_soul.append(k)
+	for b in bosses:
+		if not Souls.SOULS.has("b_" + b):
+			no_soul.append("b_" + b)
+	check(no_soul.is_empty() and kinds.size() >= 18 and bosses.size() >= 19, "своя душа в кожної нечисті (%d) й кожного боса (%d): %s" % [kinds.size(), bosses.size(), str(no_soul)])
+	var data_ok := true
+	var bad := []
+	for id in Souls.ORDER:
+		var D: Dictionary = Souls.SOULS[id]
+		var t: int = int(D["tier"])
+		var good: bool = str(D["name"]) != "" and str(D["lore"]) != "" and not D["fx"].is_empty() and t >= 1 and t <= 6 and (t >= Souls.BOSS_TIER) == id.begins_with("b_") and not "%s" in SS.fx_text(id) and SS.owner_name(id) != ""
+		for k in D["fx"]:
+			good = good and Souls.FX.has(k) and not k in Souls.FORBIDDEN
+		if not good:
+			bad.append(id)
+		data_ok = data_ok and good
+	check(data_ok and Souls.ORDER.size() == Souls.SOULS.size() and SS.known().size() == Souls.ORDER.size(), "душі: назва, ступінь, бонуси з відомих ключів, жодного лікування чи наснаги: %s" % str(bad))
+	check(SS.soul_name("zlyden") == "Душа злидня" and SS.fx_text("b_baba_yaha") == "+10% швидкості бігу, перекид готовий на 10% швидше" and SS.tier("b_vii") == 6, "назви й тексти бонусів")
+	var unknown: Dictionary = SS.info("nova_nechyst")
+	check(str(unknown["name"]) == "Душа невідомої нечисті" and unknown["fx"].has("hp") and int(SS.info("b_nova")["tier"]) == Souls.BOSS_TIER, "нова нечисть без запису теж має просту душу")
+	check(is_equal_approx(float(Souls.CHANCE["regular"]), 0.00005) and float(Souls.CHANCE["elite"]) < 0.001 and float(Souls.CHANCE["boss"]) <= 0.005, "шанси вкрай малі")
+	# Гніздо
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 66
+	p.gold = 5000000
+	p.resources[Camp.TROPHY] = 20
+	var junk: Dictionary = Data.gen_item(66, 0, "weapon", "sabre")
+	var sabre: Dictionary = Data.gen_item(66, 3, "weapon", "sabre")
+	var boots: Dictionary = Data.gen_item(66, 2, "boots")
+	var amulet: Dictionary = Data.gen_item(66, 3, "amulet")
+	for it in [junk, sabre, boots, amulet]:
+		p.add_item(it)
+	check(SS.socket_block(junk) != "" and SS.socket_block(sabre) == "" and not SS.make_socket(p, junk["uid"]), "у звичайній речі гнізда не буває")
+	var cost: Dictionary = SS.socket_cost(p, sabre)
+	check(int(cost["gold"]) == 217800 and int(cost["trophy"]) == Souls.SOCKET_TROPHY and int(SS.socket_cost(p, sabre, 0.8)["gold"]) == 174240, "ціна гнізда: легендарна 66-го рівня 217 800 грн, у своїй кузні дешевше")
+	var g0: int = p.gold
+	check(SS.make_socket(p, sabre["uid"]) and SS.has_socket(sabre) and p.gold == g0 - 217800 and int(p.resources[Camp.TROPHY]) == 17 and int(sabre["spent"]) == 217800 and not SS.make_socket(p, sabre["uid"]), "гніздо пробито за гривні й трофеї, друге в ту саму річ не б'ється")
+	SS.make_socket(p, boots["uid"])
+	SS.make_socket(p, amulet["uid"])
+	# Вселити: лише з торбинки, душі босів — у зброю й оберіг
+	check(SS.insert_block(p, sabre, "b_vii") != "" and not SS.insert(p, sabre["uid"], "b_vii"), "душі, якої нема в торбинці, не вселити")
+	p.souls = {"b_vii": 2, "mavka": 1, "b_idolyshche": 1}
+	check(SS.insert_block(p, boots, "b_vii") == "Душа боса стає лише в зброю чи оберіг" and SS.insert_block(p, boots, "mavka") == "", "душа боса в чоботи не стає, душа мавки стає")
+	var dmg0: float = p.damage
+	check(SS.insert(p, sabre["uid"], "b_vii") and SS.soul_in(sabre) == "b_vii" and int(p.souls["b_vii"]) == 1 and p.soul_fx.is_empty(), "душа в речі з торби ще не діє")
+	var cm0: float = p.crit_mult
+	p.equip(sabre["uid"])
+	check(is_equal_approx(p.crit_mult, cm0 + 0.12) and is_equal_approx(float(p.soul_fx["stun_hit"]), 0.06), "вдягнув річ: душа Вія діє")
+	SS.insert(p, amulet["uid"], "b_vii")
+	p.equip(amulet["uid"])
+	check(is_equal_approx(p.crit_mult, cm0 + 0.12) and SS.active_ids(p) == ["b_vii"], "та сама душа у двох речах діє один раз")
+	SS.insert(p, boots["uid"], "mavka")
+	var sp0: float = p.speed
+	p.equip(boots["uid"])
+	check(p.speed > sp0 * 1.04 and SS.active_ids(p).size() == 2, "душа мавки: біг швидший")
+	# Межа суми
+	var q = _new_player()
+	for pair in [["weapon", "b_idolyshche"], ["amulet", "b_solovei"], ["head", "boyaryn"], ["belt", "zlyden"]]:
+		var it2: Dictionary = Data.gen_item(10, 2, pair[0], "sabre" if pair[0] == "weapon" else "")
+		it2["sock"] = 1
+		it2["soul"] = pair[1]
+		q.assign_uid(it2)
+		q.equipment[pair[0]] = it2
+	q.recalc()
+	check(is_equal_approx(float(q.soul_fx["gold"]), 0.4), "бонуси різних душ складаються лише до межі: гривень не більш як +40%")
+	# Вийняти, продати, переплавити: душа не губиться
+	var g1: int = p.gold
+	check(SS.remove_cost(p, amulet) == 21780 and SS.remove(p, amulet["uid"]) and p.gold == g1 - 21780 and SS.soul_in(amulet) == "" and int(p.souls["b_vii"]) == 1 and SS.has_socket(amulet), "вийняти душу: 10% ціни гнізда, душа ціла в торбинці, гніздо лишилось")
+	p.unequip(boots["uid"])
+	CityService.sell_up_to(p, 3)
+	check(not p.find_item(boots["uid"]).is_empty(), "масовий продаж річ із душею не чіпає")
+	CityService.sell(p, boots["uid"])
+	check(int(p.souls.get("mavka", 0)) == 1 and p.find_item(boots["uid"]).is_empty(), "продав річ із душею: душа вернулась у торбинку")
+	p.unequip(sabre["uid"])
+	var w = WorldState.new()
+	CampS.state(w)["buildings"]["kuznia"] = 3
+	check(CampS.salvage(w, p, sabre["uid"]) > 0 and int(p.souls["b_vii"]) == 2, "переплавив річ із душею: душа вернулась")
+	# Збереження
+	SS.insert(p, amulet["uid"], "b_idolyshche")
+	p.soul_luck = 0.37
+	p.soul_found = 5
+	var r = _new_player()
+	r.from_dict(p.to_dict().duplicate(true))
+	check(int(r.souls["b_vii"]) == 2 and is_equal_approx(r.soul_luck, 0.37) and r.soul_found == 5 and is_equal_approx(float(r.soul_fx.get("gold", 0.0)), 0.3), "торбинка, поклик душ і душа у вдягненій речі переживають збереження")
+	var old = _new_player()
+	var od: Dictionary = old.to_dict().duplicate(true)
+	for k in ["souls", "soul_luck", "soul_found"]:
+		od.erase(k)
+	old.from_dict(od)
+	check(old.souls.is_empty() and old.soul_fx.is_empty(), "старе збереження без душ вантажиться")
+	# Довідник і картка
+	var soul_sec: Array = WS.sections()[WS.index_of("souls")]["entries"]
+	var titles := {}
+	for e in soul_sec:
+		titles[str(e["title"])] = true
+	var wiki_ok := titles.has("Душі") and titles.has("Гніздо для душі") and titles.has("Шанс душі")
+	for id in SS.known():
+		wiki_ok = wiki_ok and titles.has(SS.soul_name(id))
+	check(wiki_ok and WS.sections()[WS.index_of("souls")]["title"] == "Душі", "у довіднику окремий розділ «Душі» з правилами й кожною душею")
+	var card: Control = UI.item_card(amulet)
+	var ctext := ""
+	for n in card.find_children("*", "Label", true, false):
+		ctext += n.text + "\n"
+	card.free()
+	check("◈ Душа Ідолища Поганого: +30% гривень, +6% здоров'я" in ctext, "картка речі показує душу в гнізді")
+	# У грі
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gp = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones"]:
+		game.world.hints[k] = true
+	gp.change_class("cossack")
+	gp.level = 40
+	gp.stats["str"] = 120
+	gp.stats["vit"] = 150
+	gp.recalc()
+	gp.hp = gp.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	game.enter_location("oleshky")
+	await _frames(3)
+	_clear_enemies(game)
+	# Яка душа
+	c.spawn_enemy("zlyden", 40, false, gp.global_position + Vector2(300, 0))
+	var z = c._last_enemy()
+	z.set_process(false)
+	c.spawn_enemy("upyr", 40, true, gp.global_position + Vector2(400, 0))
+	var lead = c._last_enemy()
+	lead.set_process(false)
+	check(SS.id_for(z) == "zlyden" and SS.id_for(lead) == "b_upyr" and SS.class_of(z) == "regular" and SS.class_of(lead) == "boss", "рядова нечисть лишає свою душу, ватажок — душу боса")
+	z.xp_value = 0
+	check(SS.id_for(z) == "", "прикликаний без досвіду душі не має")
+	z.xp_value = 3
+	# Гідність: кого герой вбиває миттю, той лишає душу рідше
+	check(is_equal_approx(SS.worth(gp, z), 1.0), "у далекому краї нечисть гідна: шанс повний")
+	var weak_hp: float = z.max_hp
+	z.max_hp = weak_hp * 0.01
+	check(is_equal_approx(SS.worth(gp, z), Souls.W_MIN), "слабка нечисть: шанс удесятеро менший")
+	z.max_hp = weak_hp
+	# Перша душа й поклик душ
+	gp.soul_found = 0
+	gp.soul_luck = 0.0
+	var first_regular := 0
+	for i in 200:
+		if SS.roll(gp, z) != "":
+			first_regular += 1
+	check(first_regular <= 1 and gp.soul_luck > 0.0, "рядова нечисть першої душі напевно не дає, а поклик душ росте")
+	z.elite = true
+	z.affixes = ["fiery"]
+	check(SS.roll(gp, z) == "zlyden", "перша душа героя: з першого ж елітного")
+	SS.grant(gp, "zlyden")
+	check(int(gp.souls["zlyden"]) == 1 and gp.soul_found == 1 and gp.soul_luck == 0.0, "душа в торбинці, поклик скинувся")
+	var later := 0
+	for i in 300:
+		if SS.roll(gp, z) != "":
+			later += 1
+	check(later <= 2, "далі душі падають вкрай рідко (%d із 300 елітних)" % later)
+	z.elite = false
+	z.affixes = []
+	# Душа з убитого через справжню здобич
+	gp.soul_found = 0
+	gp.souls.clear()
+	lead.loot_gold = 0
+	c._drop_loot(lead)
+	check(int(gp.souls.get("b_upyr", 0)) == 1, "убитий ватажок лишив душу, вона вже в торбинці")
+	# Бонуси в бою: стан від удару з замком, більше шкоди великим, Блок
+	_clear_enemies(game)
+	var wpn: Dictionary = Data.gen_item(40, 3, "weapon", "sabre")
+	wpn["sock"] = 1
+	wpn["soul"] = "b_karachun"
+	gp.assign_uid(wpn)
+	gp.equipment["weapon"] = wpn
+	var am: Dictionary = Data.gen_item(40, 3, "amulet")
+	am["sock"] = 1
+	am["soul"] = "b_pushkar"
+	gp.assign_uid(am)
+	gp.equipment["amulet"] = am
+	gp.recalc()
+	c.spawn_enemy("upyr", 40, false, gp.global_position + Vector2(100, 0))
+	var foe = c._last_enemy()
+	foe.set_process(false)
+	foe.max_hp = 1.0e9
+	foe.hp = 1.0e9
+	var chilled := false
+	for i in 300:
+		gp.hit(foe, 1.0, Vector2.ZERO, false)
+		if foe.statuses.has("chill"):
+			chilled = true
+			break
+	check(chilled and foe.has_meta("sl_chill_hit"), "душа Карачуна: удар часом студить ворога")
+	foe.statuses.clear()
+	for i in 300:
+		gp.hit(foe, 1.0, Vector2.ZERO, false)
+	check(not foe.statuses.has("chill"), "той самий стан на того самого ворога не лягає знову, поки не минув замок")
+	var hp_a: float = foe.hp
+	gp.hit(foe, 1000.0, Vector2.ZERO, false)
+	var plain_hit: float = hp_a - foe.hp
+	foe.elite = true
+	foe.affixes = ["fiery"]
+	hp_a = foe.hp
+	gp.hit(foe, 1000.0, Vector2.ZERO, false)
+	check((hp_a - foe.hp) > plain_hit * 1.1, "душа Пушкаря: +12% шкоди елітам і босам")
+	# Блок і лікування
+	var hd: Dictionary = Data.gen_item(40, 2, "head")
+	hd["sock"] = 1
+	hd["soul"] = "kamiana_baba"
+	gp.assign_uid(hd)
+	gp.equipment["head"] = hd
+	gp.recalc()
+	check(is_equal_approx(float(gp.soul_fx["block"]), 0.16), "душа кам'яної баби: Блок міцніший")
+	wpn["soul"] = "b_putinoid"
+	gp.recalc()
+	gp.hp = 1.0
+	gp.statuses.clear()
+	gp.heal(100.0, false)
+	check(is_equal_approx(gp.hp, 81.0), "чорна душа Путіноїда: лікування на 20% слабше")
+	# Екрани: коваль пробиває гніздо, вселяє й виймає душу; Пом'яник
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("sich")
+	await _frames(2)
+	gp.gold = 3000000
+	gp.resources[Camp.TROPHY] = 10
+	gp.souls = {"mavka": 1, "b_vii": 1}
+	var belt: Dictionary = Data.gen_item(40, 2, "belt")
+	gp.add_item(belt)
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i).begins_with("Коваль"):
+			game.city_tab = i
+	game.city_do("select", belt["uid"])
+	await _frames(2)
+	var texts := func() -> Array:
+		var out := []
+		for b in game.hud.screen_root.find_children("*", "Button", true, false):
+			out.append(b.text)
+		return out
+	check(texts.call().any(func(t): return str(t).begins_with("Пробити гніздо для душі")), "у коваля є кнопка гнізда")
+	game.city_do("socket", belt["uid"])
+	await _frames(2)
+	var tt: Array = texts.call()
+	check(SS.has_socket(belt) and tt.any(func(t): return str(t).begins_with("Вселити: Душа мавки")) and tt.any(func(t): return "Душа боса стає лише в зброю чи оберіг" in str(t)), "гніздо пробито: коваль пропонує душі з торбинки")
+	game.city_do("soul_in", [belt["uid"], "mavka"])
+	await _frames(2)
+	check(SS.soul_in(belt) == "mavka" and not gp.souls.has("mavka") and texts.call().any(func(t): return str(t).begins_with("Вийняти душу")), "душу вселено, коваль може її вийняти")
+	game.city_do("soul_out", belt["uid"])
+	await _frames(2)
+	check(SS.soul_in(belt) == "" and int(gp.souls["mavka"]) == 1, "душу вийнято в торбинку")
+	game.open_character()
+	game.char_tab = 1
+	game.char_do("select", -2)
+	await _frames(2)
+	var labels := ""
+	for n in game.hud.screen_root.find_children("*", "Label", true, false):
+		labels += n.text + "\n"
+	check("Пом'яник душ" in labels and "Душа мавки  ×1 у торбинці" in labels and "ще не знайдено" in labels and texts.call().any(func(t): return str(t) == "Душі: 2"), "Пом'яник: що в торбинці й чого ще нема")
+	game.close_character()
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
