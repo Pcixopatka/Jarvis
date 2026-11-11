@@ -17,14 +17,15 @@ static func build(game) -> Control:
 		["Герой" + _pts(p.stat_points), _hero(game)],
 		["Журнал" + _pts(load("res://scripts/game/journal_service.gd").ready_count(game.world, p) + (1 if game.WayService.ready(game.world, p) else 0)), _journal(game)],
 		["Вміння" + _pts(p.skill_points), _skills(game)],
-		["Загартування" + _pts(p.perk_points), _perks(game)],
+		["Загартування" + _pts(p.perk_points + p.valor_points()), _perks(game)],
 		["Літопис", _chronicle(game)],
 		["Слава", _glory(game)],
 		["Свята" + _pts(_holiday_ready(game)), _holidays(game)],
 		["Події" + _pts(game.EventsBoard.ready_count(game.world, p)), _events(game)],
 		["Виклики" + _pts(game.ChallengeService.ready_count(game.world, p)), _challenges(game)],
 	]
-	return UI.screen("%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), p.level, UI.num(p.gold)], "Назад", game.close_character,
+	var title: String = game.PerilService.title(game.world)
+	return UI.screen("%s%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), (" «%s»" % title) if title != "" else "", p.level, UI.num(p.gold)], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i, [["Довідник", func(): game.open_wiki(game._build_character)]])
 
 
@@ -84,11 +85,17 @@ static func _hero(game) -> Control:
 
 	var bar := ProgressBar.new()
 	bar.min_value = 0.0
-	bar.max_value = maxf(1.0, float(p.xp_next))
-	bar.value = float(p.xp)
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(0, 14)
-	left.add_child(_kv("Досвід до рівня %d" % (p.level + 1), "%s / %s" % [UI.num(p.xp), UI.num(p.xp_next)], 15))
+	if p.level >= p.Classes.BASE_LEVEL_MAX:
+		# останній рівень: досвід наповнює смугу звитяги
+		bar.max_value = maxf(1.0, float(p.valor_next()))
+		bar.value = float(p.valor_xp)
+		left.add_child(_kv("Звитяга %d: до наступної" % p.valor, "%s / %s" % [UI.num(p.valor_xp), UI.num(p.valor_next())], 15))
+	else:
+		bar.max_value = maxf(1.0, float(p.xp_next))
+		bar.value = float(p.xp)
+		left.add_child(_kv("Досвід до рівня %d" % (p.level + 1), "%s / %s" % [UI.num(p.xp), UI.num(p.xp_next)], 15))
 	left.add_child(bar)
 
 	# Очки характеристик: чотири коробки з «+»
@@ -150,6 +157,20 @@ static func _hero(game) -> Control:
 	var arts: Array = p.Artifacts.active_ids(p.inventory)
 	if not arts.is_empty():
 		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 15, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
+	# Набори: скільки речей вдягнено й які щаблі вже діють
+	var worn: Dictionary = p.Sets.count(p.equipment)
+	for sid in p.Sets.ORDER:
+		var n: int = int(worn.get(sid, 0))
+		if n <= 0:
+			continue
+		var on := []
+		for step in p.Sets.STEPS:
+			if n >= int(step):
+				on.append(p.Sets.step_text(sid, step))
+		var sl := UI.label("✦ %s %d/%d%s" % [p.Sets.SETS[sid]["name"], n, Data.SLOTS.size(), (": " + ", ".join(on)) if not on.is_empty() else ": бонус від 2 речей"], 15, p.Sets.COLOR, false)
+		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl.custom_minimum_size = Vector2(300, 0)
+		bag.add_child(sl)
 	# Кращі за вдягнене речі позначено зеленою стрілкою; одна кнопка вдягає найкраще в кожну клітинку
 	var gains := {}
 	var up_slots := {}  # клітинки, для яких у торбі є щось сильніше (рахуємо з тих самих примірок)
@@ -955,6 +976,7 @@ static func _perks(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 14)
 	v.add_child(UI.label("Очки Загартування: %d   (+1 за кожні %d рівні героя). Спільне для всіх класів. Новий ярус — за кожні %d очки в гілці." % [p.perk_points, p.Classes.HARDEN_EVERY, Data.PERK_TIER_STEP], 20, UI.GOLD if p.perk_points > 0 else UI.MUTED))
+	_valor_block(game, v)
 	var h := HBoxContainer.new()
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 12)
@@ -982,6 +1004,44 @@ static func _perks(game) -> Control:
 			col.add_child(row)
 		h.add_child(col)
 	return v
+
+
+## Звитяги: поступ після останнього рівня. Смуга, вільні очки, п'ять ліній і іменні звитяги героя.
+static func _valor_block(game, v: VBoxContainer) -> void:
+	var p = game.player
+	var Valor = p.Valor
+	var cap: int = p.Classes.BASE_LEVEL_MAX
+	if p.level < cap and p.valor <= 0:
+		v.add_child(UI.label("Звитяги відкриються на %d-му рівні: досвід далі наповнює смугу звитяги, а кожна смуга дає очко малих вічних бонусів." % cap, 15, UI.MUTED))
+		_named_valor(game, v)
+		return
+	var head := UI.label("Звитяга %d   •   вільних очок: %d   •   до наступної: %s / %s" % [p.valor, p.valor_points(), UI.num(p.valor_xp), UI.num(p.valor_next())], 19, UI.GOLD)
+	v.add_child(head)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 8)
+	for id in Valor.ORDER:
+		var L: Dictionary = Valor.LINES[id]
+		var n: int = int(p.valor_spent.get(id, 0))
+		var text := "%s  %d/%d\n%s" % [L["name"], n, Valor.LINE_MAX, Valor.text(id, float(L["per"]) * maxi(n, 1))]
+		row.add_child(_tree_button(text, n, Valor.LINE_MAX, p.can_add_valor(id), false, 13, Vector2(214, 78), _do(game, "valor", id)))
+	v.add_child(row)
+	_named_valor(game, v)
+
+
+## Іменні звитяги героя: звання за надважких босів і їхні бонуси.
+static func _named_valor(game, v: VBoxContainer) -> void:
+	var PS = game.PerilService
+	var Peril = game.Peril
+	var got: Array = PS.titles(game.world)
+	if got.is_empty():
+		return
+	var parts := []
+	for boss in got:
+		parts.append("%s (%s)" % [str(Peril.TITLES.get(boss, "")), game.player.Valor.fx_text(Peril.TITLE_FX.get(boss, {}))])
+	var l := UI.label("Іменні звитяги: " + ", ".join(parts), 15, UI.GOOD)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(l)
 
 
 ## Додати до кнопки піксельний значок вміння (ліворуч від тексту або над ним).

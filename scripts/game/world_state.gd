@@ -45,6 +45,7 @@ var spec_trial := {}  # випробування в наставника (див
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
 var heroes := {}  # побратими: зустріч, дружба, особисті завдання (див. HeroService)
+var peril := {}  # надважкі печери: пройдені, найкращий час, звання (див. PerilService)
 
 
 # ---------- Лояльність ----------
@@ -123,8 +124,8 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 	var lvl: int = Data.CITIES[city]["level"] + loyalty_level(city)
 	var locs := []
 	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].get("endless", false):
-			continue  # Глибини — не для доручень
+		if Data.LOCATIONS[id].get("endless", false) or Data.LOCATIONS[id].has("peril"):
+			continue  # Глибини й надважкі печери — не для доручень
 		if want_escort and Data.LOCATIONS[id]["type"] == "dungeon":
 			continue
 		var l: int = Data.LOCATIONS[id]["level"]
@@ -135,7 +136,9 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 			if Data.LOCATIONS[id]["type"] != "dungeon" and not Data.LOCATIONS[id].get("endless", false) and int(Data.LOCATIONS[id]["level"]) <= lvl + 3:
 				locs.append(id)
 	if locs.is_empty():
-		locs = Data.LOCATIONS.keys()
+		for id in Data.LOCATIONS:
+			if not Data.LOCATIONS[id].has("peril"):
+				locs.append(id)
 	var loc_id: String = locs[randi() % locs.size()]
 	var L: Dictionary = Data.LOCATIONS[loc_id]
 	# Далекі краї ростуть із героєм: нагорода за завдання туди — за його рівнем, обсяг — за рівнем краю
@@ -261,11 +264,12 @@ func has_companion(type: String) -> bool:
 # ---------- Збереження ----------
 
 func to_dict() -> Dictionary:
-	return {"loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
+	return {"peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
 		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "ring": ring, "muster": muster, "trade": trade, "outdoors": outdoors, "tavern": tavern, "way": way}
 
 
 func from_dict(d: Dictionary) -> void:
+	peril = d.get("peril", {})
 	loyalty = d.get("loyalty", {})
 	boards = d.get("boards", {})
 	quests = d.get("quests", [])

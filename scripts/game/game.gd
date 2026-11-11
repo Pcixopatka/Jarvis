@@ -33,6 +33,9 @@ const EventsBoard := preload("res://scripts/game/events_board.gd")
 const GuideService := preload("res://scripts/game/guide_service.gd")
 const WayService := preload("res://scripts/game/way_service.gd")
 const QuickService := preload("res://scripts/game/quick_service.gd")
+const PerilService := preload("res://scripts/game/peril_service.gd")
+const Peril := preload("res://scripts/data/peril.gd")
+const Sets := preload("res://scripts/data/sets.gd")
 const WikiService := preload("res://scripts/game/wiki_service.gd")
 const UiWiki := preload("res://scripts/ui/ui_wiki.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
@@ -484,6 +487,8 @@ func _leave_combat() -> void:
 
 func enter_map() -> void:
 	world.hero_level = player.level
+	if player.valor > int(world.stats.get("valor", 0)):
+		_record("valor", player.valor)
 	var from_trip: bool = combat.active and combat.counts_as_trip()
 	_leave_combat()
 	hud.clear_screen()
@@ -646,6 +651,9 @@ func enter_location(id: String) -> void:
 		if extra.get("night", false) and not FarService.is_far(Data.LOCATIONS[id]):
 			extra.merge(FarService.night_mods(Data.LOCATIONS[id], player))  # нічний похід підтягується до героя
 		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї ростуть із рівнем героя
+		extra.merge(PerilService.combat_mods(id))  # надважка печера: міцніший бос і його лють
+		if PerilService.is_peril(id):
+			extra["peril_first"] = PerilService.cleared(world, id) == 0  # перша перемога дає річ набору напевно
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
 	hud.set_mode(true, true)
 	state = State.PLAYING
@@ -902,11 +910,28 @@ func _on_dungeon_cleared(loc_id: String) -> void:
 		if randf() < 0.15 + 0.005 * d:
 			StoneService.grant(player, "zabuttia" if randf() < 0.6 else "alatyr")
 			combat.float_text(player.global_position + Vector2(0, -150), "Камінь долі з глибин!", Color(0.85, 0.7, 1.0))
+	if PerilService.is_peril(loc_id):
+		var pm: Array = PerilService.on_clear(world, player, loc_id, combat.run_time, slot)
+		if not pm.is_empty():
+			hud.show_banner("\n".join(pm), UI.GOLD)
+		_record("peril")
+		_record("peril_bosses", PerilService.bosses_down(world))
 	_cleanse(loc_id)
 	_record("dungeon")
 	_spec_event("dungeon", loc_id)
 	_story_event("dungeon", loc_id)
 	_hero_event("dungeon", loc_id)
+
+
+## Досягнення за повний набір: усі шість вдягнених речей з одного набору.
+func _check_full_set() -> void:
+	if int(world.stats.get("set_full", 0)) > 0:
+		return
+	var worn: Dictionary = Sets.count(player.equipment)
+	for sid in worn:
+		if int(worn[sid]) >= Data.SLOTS.size():
+			_record("set_full", 1)
+			return
 
 
 ## Подія для викликів і досягнень; виконані показуються банером.
@@ -954,14 +979,19 @@ func _on_player_died() -> void:
 	await get_tree().create_timer(1.4).timeout
 	var lost := int(player.gold * Data.DEATH_GOLD_LOSS)
 	player.gold -= lost
-	var lost_xp: int = player.death_xp_loss()
+	# у надважкій печері смерть коштує більше досвіду, а отямлюється герой у таборі біля входу
+	var peril_id: String = combat.loc_id if PerilService.is_peril(combat.loc_id) else ""
+	var lost_xp: int = player.death_xp_loss(Peril.DEATH_XP_MULT if peril_id != "" else 1.0)
 	_open_menu()
 	hud.add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
 	var price := "Втрачено %d грн." % lost
 	if lost_xp > 0:
 		price = "Втрачено %d досвіду і %d грн." % [lost_xp, lost]
 	hud.add_title("Побратими винесли тебе з бою. %s" % price, 24, UI.TEXT)
-	hud.add_button("Отямитися: %s" % Data.place_name(world.last_city), func(): enter_city(world.last_city))
+	if peril_id != "":
+		hud.add_button("Отямитися в таборі біля входу", func(): _wake_at_camp(peril_id))
+	else:
+		hud.add_button("Отямитися: %s" % Data.place_name(world.last_city), func(): enter_city(world.last_city))
 
 
 ## Показує підказку один раз за всю гру.
@@ -1051,6 +1081,9 @@ func _build_map_panel() -> void:
 	if Acts.SPOTS.has(map_sel):
 		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block())
 		return
+	if PerilService.is_peril(map_sel):
+		hud.set_map_panel(MapPanel.build_peril(map_sel, world, player, map_here == map_sel, _go_to, enter_peril, peril_camp_do), _sponsor_block())
+		return
 	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort, quick_raid), _sponsor_block())
 
 
@@ -1132,8 +1165,64 @@ func _arrive(id: String) -> void:
 			enter_city(id)
 	elif not escort_q.is_empty():
 		start_escort(escort_q)  # завдання міста: провести мандрівника
+	elif PerilService.is_peril(id):
+		_arrive_camp(id)  # надважка печера: спершу табір біля входу, у бій — кнопкою
 	else:
 		enter_location(id)
+
+
+# ======================= Надважкі печери =======================
+
+## Герой прибув до табору біля входу в надважку печеру: лишаємось на мапі, панель показує табір.
+func _arrive_camp(id: String) -> void:
+	map_here = id
+	map_sel = id
+	hud.map_view.current = id
+	hud.map_view.selected = id
+	_build_map_panel()
+	save_game()
+	hint("peril_camp", "Табір біля входу до надважкої печери. Тут можна перепочити й купити зілля. Нечисть у печері сильніша за будь-якого героя, смерть коштує втричі більше досвіду, а бос лютішає, коли бій затягнувся.")
+
+
+## Увійти з табору в печеру (кнопка на панелі мапи).
+func enter_peril(id: String) -> void:
+	var why: String = PerilService.block_reason(world, player, id)
+	if why != "":
+		hud.show_banner(why, UI.BAD)
+		return
+	enter_location(id)
+
+
+## Справи в таборі біля надважкої печери: перепочинок і маркітант.
+func peril_camp_do(action: String) -> void:
+	match action:
+		"rest":
+			player.revive()
+			world.revive_companions()
+			Audio.play("quest", 0.1, -6.0)
+			hud.show_banner("Перепочив біля вогнища: здоров'я й наснага повні", UI.GOOD)
+		"potion":
+			var price: int = PerilService.potion_price(player)
+			if player.gold >= price and player.potions < player.potion_max() and player.add_potion():
+				player.gold -= price
+				Audio.play("coins", 0.05)
+		"mana":
+			var mprice: int = PerilService.mana_potion_price(player)
+			if player.gold >= mprice and player.mana_potions < player.mana_potion_max() and player.add_mana_potion():
+				player.gold -= mprice
+				Audio.play("coins", 0.05)
+	_build_map_panel()
+	save_game()
+
+
+## Після смерті в надважкій печері герой отямлюється в таборі біля входу, а не в далекому місті.
+func _wake_at_camp(id: String) -> void:
+	player.revive()
+	world.revive_companions()
+	map_here = id
+	map_sel = id
+	enter_map()
+	_build_map_panel()
 
 
 ## Крок подорожі (викликається з _process, коли ми на мапі й їдемо).
@@ -1945,10 +2034,13 @@ func char_do(action: String, arg) -> void:
 			player.learn_skill(arg)
 		"perk":
 			player.learn_perk(arg)
+		"valor":
+			player.add_valor(arg)
 		"select":
 			char_sel_uid = arg
 		"equip":
 			player.equip(arg)
+			_check_full_set()
 		"unequip":
 			player.unequip(arg)
 		"destroy":

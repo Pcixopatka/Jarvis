@@ -22,9 +22,11 @@ static func worthy(combat, player, e) -> bool:
 	return is_lair_boss(combat, e) and int(e.level) >= int(player.level) - Uniques.LEVEL_GAP
 
 
-## Ступінь боса: власний, а в Глибинах і Башті вищий.
+## Ступінь боса: власний, а в Глибинах і Башті вищий. Шостий ступінь мають лише надважкі боси:
+## Глибини й Башта до нього не дотягують.
 static func boss_tier(combat, e) -> int:
 	var t: int = int(Uniques.BOSS_TIER.get(e.kind, 0))
+	var top: int = maxi(Uniques.TOP_COMMON_TIER, t)
 	if t == 0:
 		t = 3
 		for id in Data.LOCATIONS:
@@ -37,7 +39,7 @@ static func boss_tier(combat, e) -> int:
 		t += 2 if int(combat.loc.get("floor", 0)) >= 40 else 1
 	elif combat.loc.has("depth"):
 		t += int(combat.loc["depth"]) / 8
-	return clampi(t, 1, 5)
+	return clampi(t, 1, top)
 
 
 static func chance(tier: int, luck: int) -> float:
@@ -95,7 +97,7 @@ static func on_boss(combat, player, e) -> Dictionary:
 	if not worthy(combat, player, e):
 		return {}
 	var tier := boss_tier(combat, e)
-	if randf() >= chance(tier, int(player.u_luck)) * (1.0 + float(player.art.get("unique_luck", 0.0))):
+	if randf() >= chance(tier, int(player.u_luck)) * (1.0 + float(player.art.get("unique_luck", 0.0))) * player.loot_luck():
 		player.u_luck += 1
 		return {}
 	var id := pick(player, tier, e.kind)
@@ -121,9 +123,11 @@ static func artifact_on_boss(combat, player, e) -> Dictionary:
 	if id == "" or Artifacts.has(player.inventory, id):
 		return {}
 	var base: float = Artifacts.CHANCE_TOWER if combat.is_tower() else (Artifacts.CHANCE if worthy(combat, player, e) else Artifacts.CHANCE_GREY)
+	if combat.loc.has("peril"):
+		base = Artifacts.CHANCE_PERIL
 	var kind := str(e.kind)
 	var luck: int = int(player.art_luck.get(kind, 0))
-	if randf() >= artifact_chance(base, luck):
+	if randf() >= artifact_chance(base, luck) * player.loot_luck():
 		player.art_luck[kind] = luck + 1
 		return {}
 	player.art_luck.erase(kind)

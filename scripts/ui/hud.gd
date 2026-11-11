@@ -14,6 +14,7 @@ signal character_pressed
 signal map_pressed
 signal map_location_selected(id: String)
 
+const Classes := preload("res://scripts/data/classes.gd")
 const Data := preload("res://scripts/data/data.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
@@ -452,8 +453,13 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	hp_bar.max_value = player.max_hp
 	hp_bar.value = player.hp
 	hp_label.text = "Здоров'я %d / %d" % [roundi(player.hp), roundi(player.max_hp)]
-	xp_bar.max_value = player.xp_next
-	xp_bar.value = player.xp
+	if player.level >= Classes.BASE_LEVEL_MAX:
+		# на останньому рівні смуга показує звитягу
+		xp_bar.max_value = player.valor_next()
+		xp_bar.value = player.valor_xp
+	else:
+		xp_bar.max_value = player.xp_next
+		xp_bar.value = player.xp
 	mana_bar.max_value = player.max_mana
 	mana_bar.value = player.mana
 	job_bar.max_value = maxi(1, player.job_next())

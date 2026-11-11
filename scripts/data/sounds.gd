@@ -24,6 +24,11 @@ const DEATH := {
 	"potopelnyk": "die_undead", "pesyholovets": "die_beast", "kamiana_baba": "die_undead", "mara": "die_spirit", "zlyden": "die_beast",
 	"oprychnyk": "die_human", "vedmid": "die_beast", "kikimora": "die_spirit", "mertvyi_strilets": "die_undead", "kromeshnyk": "die_human", "boyaryn": "die_undead", "lisovyk": "die_spirit", "pushkar": "die_human", "lisovyi_did": "die_spirit", "idolyshche": "die_beast", "karachun": "die_spirit",
 	"morskyi_tsar": "die_slime", "shubin": "die_undead", "bila_pani": "die_spirit",
+	"almasty": "die_beast", "kadzhi": "die_spirit", "dev": "die_beast",
+	"karakondzhul": "die_beast", "samodiva": "die_spirit", "khala": "die_beast",
+	"mertvyi_lytsar": "die_undead", "lauma": "die_spirit", "aitvaras": "die_spirit", "velnias": "die_beast",
+	"menkv": "die_beast", "shurale": "die_beast", "chud": "die_human", "zolota_baba": "die_undead",
+	"stallo": "die_beast", "khiisi": "die_spirit", "chornoboh": "die_spirit",
 }
 
 ## Фоновий шум за ландшафтом ("" — тиша).

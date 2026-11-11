@@ -289,8 +289,10 @@ const RECORDS := {
 	"duel_streak": {"name": "Серія у вільному герці", "fmt": "%d поспіль", "step": 5, "glory": 4},
 	"ring_titles": {"name": "Коло Кожум'яки", "fmt": "пройдено: %d", "step": 5, "glory": 5},
 	"muster_titles": {"name": "Гетьманський огляд", "fmt": "перемог: %d", "step": 1, "glory": 3},
+	"peril_bosses": {"name": "Надважкі боси", "fmt": "здолано: %d", "step": 1, "glory": 10},
+	"valor": {"name": "Звитяги", "fmt": "звитяга %d", "step": 10, "glory": 5},
 }
-const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "muster_titles", "ring_titles", "bounties", "trade_profit", "dice_streak"]
+const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "muster_titles", "ring_titles", "peril_bosses", "valor", "bounties", "trade_profit", "dice_streak"]
 ## Звідки береться слава (підказка у вкладці «Слава»).
 const GLORY_SOURCES := [
 	"Герць на майдані: кожне вигране коло й титул чемпіона",

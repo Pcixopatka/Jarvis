@@ -7,17 +7,19 @@ const Data := preload("res://scripts/data/data.gd")
 
 const RARITY := 4
 ## Ступені: що вищий, то сильніша головна властивість і рідкісніша річ.
-const TIER_NAMES := ["", "Сотницька", "Полковницька", "Кошова", "Гетьманська", "Характерницька"]
-const PRIMARY_MULT := [1.0, 1.0, 1.04, 1.08, 1.12, 1.18]
+const TIER_NAMES := ["", "Сотницька", "Полковницька", "Кошова", "Гетьманська", "Характерницька", "Заповітна"]
+const PRIMARY_MULT := [1.0, 1.0, 1.04, 1.08, 1.12, 1.18, 1.24]
 ## Шанс золотої речі з боса за його ступенем (малий; росте з лічильником Долі).
-const BASE_CHANCE := [0.0, 0.010, 0.014, 0.018, 0.024, 0.032]
+const BASE_CHANCE := [0.0, 0.010, 0.014, 0.018, 0.024, 0.032, 0.05]
+const TOP_COMMON_TIER := 5  # найвищий ступінь поза надважкими печерами: шостий дають лише їхні боси
 const LUCK_STEP := 20.0  # кожні 20 босів без золота подвоюють шанс
 const LUCK_SURE := 99  # сотий бос поспіль без золота дає річ напевно
 const LEVEL_GAP := 8  # бос має бути не нижчий за героя більш як на стільки рівнів
 ## Власний ступінь боса. Нового боса без запису оцінюють за рівнем його лігва (див. LootService.boss_tier).
 const BOSS_TIER := {"zmii": 1, "upyr": 1, "vovkulaka": 1, "chaklun": 2, "vidma": 2, "baba_yaha": 2, "solovei": 2,
 	"koshchii": 3, "bila_pani": 3, "pushkar": 3, "vii": 4, "shubin": 4, "lykho": 4, "morskyi_tsar": 4, "putinoid": 4,
-	"oprychnyk": 4, "lisovyi_did": 4, "idolyshche": 4, "karachun": 5}
+	"oprychnyk": 4, "lisovyi_did": 4, "idolyshche": 4, "karachun": 5,
+	"dev": 6, "khala": 6, "velnias": 6, "zolota_baba": 6, "chornoboh": 6}
 
 ## Середина кидка властивості легендарної речі: [стала, приріст за рівень] (див. Data._roll_value).
 const MID := {"dmg_pct": [4.5, 0.4], "crit": [2.5, 0.15], "aspd": [4.5, 0.3], "hp": [12.0, 3.0], "armor": [2.25, 0.2],
@@ -114,9 +116,34 @@ const DEFS := {
 	"posokh_dazhboha": {"name": "Посох Дажбога", "slot": "weapon", "type": "staff", "tier": 5, "bosses": ["chaklun", "karachun"],
 		"affixes": {"spi": 1.0, "skill_power": 1.0, "crit": 1.0, "dmg_pct": 1.0, "skill_cd": 0.9}, "power": "yadro", "params": {"period": 4, "sec": 1.0, "r": 170},
 		"lore": "Дажбог щоранку котить сонце небом. Його посох скидає жмені того сонця на нечисть, що ховається в пітьмі."},
+	"mech_kladenets": {"name": "Меч-кладенець", "slot": "weapon", "type": "sabre", "tier": 6, "bosses": ["dev", "chornoboh"],
+		"affixes": {"str": 1.1, "agi": 1.0, "crit": 1.1, "dmg_pct": 1.1, "aspd": 1.0}, "power": "perun", "params": {"chance": 0.4, "jumps": 6, "pct": 0.8, "icd": 0.4},
+		"lore": "Лежав під каменем, доки не прийшов той, кому він до руки. Сам рубає, щойно витягнеш із піхов."},
+	"palytsia_vernyhory": {"name": "Палиця Вернигори", "slot": "weapon", "type": "mace", "tier": 6, "bosses": ["dev", "zolota_baba"],
+		"affixes": {"str": 1.1, "vit": 1.1, "dmg_pct": 1.1, "hp": 1.1, "crit": 1.0}, "power": "hrim", "params": {"radius": 360, "pct": 1.9, "stun": 0.9},
+		"lore": "Вернигора зсував нею гори з дороги. Де вдарить, там яр."},
+	"spys_zmiiebortsia": {"name": "Спис змієборця", "slot": "weapon", "type": "pike", "tier": 6, "bosses": ["khala"],
+		"affixes": {"str": 1.0, "agi": 1.1, "dmg_pct": 1.1, "crit": 1.1, "aspd": 1.0}, "power": "zvytiaha", "params": {"dmg": 0.035, "max": 10, "dur": 7},
+		"lore": "Таким списом на старих іконах колють змія. Хала його впізнала."},
+	"kris_dovbusha": {"name": "Кріс Довбуша", "slot": "weapon", "type": "pishchal", "tier": 6, "bosses": ["velnias"],
+		"affixes": {"agi": 1.1, "crit": 1.1, "dmg_pct": 1.1, "aspd": 1.0, "speed": 0.9}, "power": "vypad", "params": {"window": 2.2, "bonus": 0.38},
+		"lore": "Олексу Довбуша не брала жодна куля, крім срібної. Його власний кріс б'є без промаху і пана, і чорта."},
+	"posokh_svaroha": {"name": "Посох Сварога", "slot": "weapon", "type": "staff", "tier": 6, "bosses": ["khala", "chornoboh"],
+		"affixes": {"spi": 1.1, "skill_power": 1.1, "crit": 1.0, "dmg_pct": 1.0, "skill_cd": 1.0}, "power": "yadro", "params": {"period": 4, "sec": 1.25, "r": 185},
+		"lore": "Сварог викував сонце й навчив людей кувати залізо. З його посоха на нечисть сиплеться небесна кузня."},
+	"bronia_sviatoslava": {"name": "Броня Святослава", "slot": "body", "type": "", "tier": 6, "bosses": ["velnias", "chornoboh"],
+		"affixes": {"vit": 1.1, "hp": 1.2, "dmg_pct": 0.9, "crit": 0.9, "skill_cd": 0.8}, "power": "pokrova", "params": {"threshold": 0.5, "ward": 0.35, "dur": 6, "cd": 18},
+		"lore": "«Іду на ви». Князь Святослав не возив за собою ні возів, ні казанів, а броні не знімав і вві сні."},
+	"oberih_berehyni": {"name": "Оберіг Берегині", "slot": "amulet", "type": "", "tier": 6, "bosses": ["zolota_baba"],
+		"affixes": {"spi": 1.1, "vit": 1.0, "hp": 1.1, "skill_cd": 1.0, "xp": 1.0}, "power": "vidlunnia", "params": {"chance": 0.32},
+		"lore": "Берегиня стереже рід від початку світу. З її оберегом кожне слово лунає двічі."},
+	"sholom_oleha": {"name": "Шолом Віщого Олега", "slot": "head", "type": "", "tier": 6, "bosses": ["dev", "velnias"],
+		"affixes": {"vit": 1.0, "crit": 1.1, "dmg_pct": 1.1, "armor": 1.0, "skill_power": 1.0}, "power": "vypad", "params": {"window": 2.2, "bonus": 0.38},
+		"lore": "Олег прибив щит на брамі Царгорода, а шолом лишив удома. Хто його вдягне, той б'є першим."},
 }
 
-const ORDER := ["kotyhoroshko", "osykovyi_spys", "kozhukh_kozhumiaky", "vovcha_kuchma", "lishchynova_palytsia", "poias_baidy", "choboty_skorokhody", "samopal_morozenka", "namysto_lysoi_hory", "posokh_chornoknyzhnyka", "pernach_sahaidachnoho", "koshchieva_holka", "kolchuha_bohuna", "shapka_nalyvaika", "posokh_velesa", "shablia_sirka", "osten_morskoho_tsaria", "cheres_shubina", "pyshchal_kryvonosa", "shapka_nevydymka", "posokh_molfara", "bulava_mazepy", "shablia_bohdana", "zhupan_polubotka", "ladanka_mamaia", "posokh_dazhboha"]
+const ORDER := ["kotyhoroshko", "osykovyi_spys", "kozhukh_kozhumiaky", "vovcha_kuchma", "lishchynova_palytsia", "poias_baidy", "choboty_skorokhody", "samopal_morozenka", "namysto_lysoi_hory", "posokh_chornoknyzhnyka", "pernach_sahaidachnoho", "koshchieva_holka", "kolchuha_bohuna", "shapka_nalyvaika", "posokh_velesa", "shablia_sirka", "osten_morskoho_tsaria", "cheres_shubina", "pyshchal_kryvonosa", "shapka_nevydymka", "posokh_molfara", "bulava_mazepy", "shablia_bohdana", "zhupan_polubotka", "ladanka_mamaia", "posokh_dazhboha",
+	"mech_kladenets", "palytsia_vernyhory", "spys_zmiiebortsia", "kris_dovbusha", "posokh_svaroha", "bronia_sviatoslava", "oberih_berehyni", "sholom_oleha"]
 
 
 static func is_unique(item: Dictionary) -> bool:

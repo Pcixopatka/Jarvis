@@ -28,12 +28,12 @@ static func left_today(world) -> int:
 	return maxi(0, PER_DAY - used_today(world))
 
 
-## Чи буває в цьому місці швидкий похід узагалі: звичайна місцевість чи печера, не Глибини й не Башта.
+## Чи буває в цьому місці швидкий похід узагалі: звичайна місцевість чи печера, не Глибини, не Башта й не надважка печера.
 static func applies(loc_id: String) -> bool:
 	if not Data.LOCATIONS.has(loc_id):
 		return false
 	var L: Dictionary = Data.LOCATIONS[loc_id]
-	return L["type"] in ["field", "dungeon"] and not L.get("endless", false)
+	return L["type"] in ["field", "dungeon"] and not L.get("endless", false) and not L.has("peril")
 
 
 ## Чому швидкий похід зараз недоступний ("" — доступний).

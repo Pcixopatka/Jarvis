@@ -102,7 +102,7 @@ static func is_upgrade(player: Player, it: Dictionary) -> bool:
 static func bulk_candidates(player: Player, max_rarity: int) -> Array:
 	var out := []
 	for it in player.inventory:
-		if int(it["rarity"]) <= max_rarity and not it.has("unique") and not it.has("artifact") and str(it.get("soul", "")) == "" and not is_upgrade(player, it):
+		if int(it["rarity"]) <= max_rarity and not it.has("unique") and not it.has("artifact") and not it.has("set") and str(it.get("soul", "")) == "" and not is_upgrade(player, it):
 			out.append(it)
 	return out
 

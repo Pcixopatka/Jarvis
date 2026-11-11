@@ -5,6 +5,7 @@ extends RefCounted
 
 ## Шанс душі за одне вбивство (до поправки на гідність ворога й поклик душ).
 const CHANCE := {"regular": 0.00005, "elite": 0.00015, "named": 0.005, "boss": 0.005}
+const CHANCE_PERIL := 0.03  # надважкий бос у своїй печері: бій довгий і лютий, тож душа падає частіше
 const W_MIN := 0.1  # найменша гідність рядового ворога, набагато слабшого за нечисть рівня героя
 const W_MIN_BOSS := 0.25
 const PITY_MAX := 2.0  # поклик душ: невдачі підіймають шанс щонайбільше втричі
@@ -15,8 +16,8 @@ const BOSS_SLOTS := ["weapon", "amulet"]
 const SOCKET_TROPHY := 3
 const REMOVE_PART := 0.1  # вийняти душу коштує цю частку ціни гнізда
 
-const TIER_NAMES := ["", "Блукаюча душа", "Неспокійна душа", "Люта душа", "Владна душа", "Могутня душа", "Прадавня душа"]
-const TIER_COLORS := [Color.WHITE, Color(0.75, 0.8, 0.9), Color(0.6, 0.88, 0.92), Color(0.62, 0.7, 1.0), Color(0.78, 0.58, 1.0), Color(1.0, 0.5, 0.62), Color(1.0, 1.0, 1.0)]
+const TIER_NAMES := ["", "Блукаюча душа", "Неспокійна душа", "Люта душа", "Владна душа", "Могутня душа", "Прадавня душа", "Предвічна душа"]
+const TIER_COLORS := [Color.WHITE, Color(0.75, 0.8, 0.9), Color(0.6, 0.88, 0.92), Color(0.62, 0.7, 1.0), Color(0.78, 0.58, 1.0), Color(1.0, 0.5, 0.62), Color(1.0, 1.0, 1.0), Color(1.0, 0.86, 0.45)]
 
 ## Бонуси душ: текст (число у відсотках) і межа суми для всіх душ разом.
 const FX := {
@@ -85,6 +86,30 @@ const SOULS := {
 		"lore": "Збирав оброк і після смерті. Тепер збирає тобі."},
 	"kamiana_baba": {"name": "Душа кам'яної баби", "tier": 3, "fx": {"block": 16},
 		"lore": "Тисячу літ стояла на кургані. Удар об твій Блок її не зрушить."},
+	"almasty": {"name": "Душа алмасти", "tier": 3, "fx": {"dmg": 3, "speed": 4},
+		"lore": "Дикий чоловік гір не знає втоми: і б'є, і біжить."},
+	"kadzhi": {"name": "Душа каджі", "tier": 3, "fx": {"burn_hit": 8, "skill": 3},
+		"lore": "Коваль бурі. Його горно тепер жевріє у твоїй зброї."},
+	"karakondzhul": {"name": "Душа караконджула", "tier": 3, "fx": {"aspd": 4, "dodge_cd": 6},
+		"lore": "Вискакував на плечі подорожнім. Тепер сам носить тебе."},
+	"samodiva": {"name": "Душа самодіви", "tier": 3, "fx": {"crit_dmg": 9, "chill_hit": 5},
+		"lore": "Гірська діва не хибила й у танці. Стріла в неї холодна."},
+	"mertvyi_lytsar": {"name": "Душа мертвого лицаря", "tier": 3, "fx": {"block": 12, "hp": 4},
+		"lore": "Сотні літ тримав щит під городищем. Потримає й твій."},
+	"lauma": {"name": "Душа лауми", "tier": 3, "fx": {"weak_hit": 8, "cd": 2},
+		"lore": "Пряла чужу долю. Тепер пряде слабкість твоїм ворогам."},
+	"aitvaras": {"name": "Душа айтвараса", "tier": 3, "fx": {"gold": 15, "burn_hit": 6},
+		"lore": "Вогняний півень носив господареві крадене золото. Тепер господар ти."},
+	"menkv": {"name": "Душа менква", "tier": 3, "fx": {"hp": 6, "status_res": 10},
+		"lore": "Зроблений із модрини: ні гниль, ні мороз його не беруть."},
+	"shurale": {"name": "Душа шурале", "tier": 3, "fx": {"execute": 9, "aspd": 3},
+		"lore": "Лоскотав до смерті. Знає, коли жертві лишилося зовсім трохи."},
+	"chud": {"name": "Душа чуді білоокої", "tier": 3, "fx": {"gold": 15, "pickup": 15},
+		"lore": "Підземний народ чує золото крізь камінь."},
+	"stallo": {"name": "Душа Стало", "tier": 3, "fx": {"big_dmg": 6, "hp": 4},
+		"lore": "Велет у залізній сорочці мірявся силою лише з найдужчими."},
+	"khiisi": {"name": "Душа хійсі", "tier": 3, "fx": {"speed": 6, "chill_hit": 6},
+		"lore": "Північний вітер у скелях: не наздоженеш і не зігрієшся."},
 	"b_vovkulaka": {"name": "Душа Вовкулаки-ватажка", "tier": 4, "fx": {"aspd": 5, "speed": 5},
 		"lore": "Сто зим водив зграю Карпатами. Тепер веде тебе."},
 	"b_zmii": {"name": "Душа Триголового Змія", "tier": 4, "fx": {"dmg": 4, "burn_hit": 4},
@@ -123,6 +148,16 @@ const SOULS := {
 		"lore": "Голова як пивний котел, черево як діжа. Гребе все до себе, тепер для тебе."},
 	"b_vii": {"name": "Душа Вія", "tier": 6, "fx": {"stun_hit": 6, "crit_dmg": 12},
 		"lore": "«Підніміть мені повіки!» Тепер його погляд спиняє твоїх ворогів."},
+	"b_dev": {"name": "Душа Дева", "tier": 7, "fx": {"dmg": 7, "hp": 8},
+		"lore": "Кам'яний велет Кавказу. Його сила й досі важить як гора."},
+	"b_khala": {"name": "Душа Хали", "tier": 7, "fx": {"aspd": 7, "chill_hit": 12},
+		"lore": "Буревійна змія несла град на поля. Тепер град б'є з твоєї руки."},
+	"b_velnias": {"name": "Душа Велняса", "tier": 7, "fx": {"skill": 9, "cd": 5},
+		"lore": "Господар мертвих знав усі угоди й усі закляття. Цю угоду він програв."},
+	"b_zolota_baba": {"name": "Душа Золотої Баби", "tier": 7, "fx": {"gold": 30, "big_dmg": 12},
+		"lore": "Їй несли золото з усього Кам'яного Поясу. Великих вона не боялася й тобі не велить."},
+	"b_chornoboh": {"name": "Душа Чорнобога", "tier": 7, "fx": {"dmg": 8, "execute": 16, "curse_hit": 4},
+		"lore": "Володар кінця світу. Свій кінець він знайшов від твоєї руки, і тепер кінчає інших."},
 }
 
-const ORDER := ["zlyden", "mavka", "bolotianyk", "kikimora", "mara", "chort", "vovkulaka", "pishchalnyk", "zarazhenyi", "kromeshnyk", "mertvyi_strilets", "pesyholovets", "upyr", "potopelnyk", "lisovyk", "chaklun", "vedmid", "boyaryn", "kamiana_baba", "b_vovkulaka", "b_zmii", "b_upyr", "b_chaklun", "b_vidma", "b_bila_pani", "b_baba_yaha", "b_solovei", "b_koshchii", "b_oprychnyk", "b_morskyi_tsar", "b_lisovyi_did", "b_putinoid", "b_lykho", "b_pushkar", "b_karachun", "b_shubin", "b_idolyshche", "b_vii"]
+const ORDER := ["zlyden", "mavka", "bolotianyk", "kikimora", "mara", "chort", "vovkulaka", "pishchalnyk", "zarazhenyi", "kromeshnyk", "mertvyi_strilets", "pesyholovets", "upyr", "potopelnyk", "lisovyk", "chaklun", "vedmid", "boyaryn", "kamiana_baba", "almasty", "kadzhi", "karakondzhul", "samodiva", "mertvyi_lytsar", "lauma", "aitvaras", "menkv", "shurale", "chud", "stallo", "khiisi", "b_vovkulaka", "b_zmii", "b_upyr", "b_chaklun", "b_vidma", "b_bila_pani", "b_baba_yaha", "b_solovei", "b_koshchii", "b_oprychnyk", "b_morskyi_tsar", "b_lisovyi_did", "b_putinoid", "b_lykho", "b_pushkar", "b_karachun", "b_shubin", "b_idolyshche", "b_vii", "b_dev", "b_khala", "b_velnias", "b_zolota_baba", "b_chornoboh"]

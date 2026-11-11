@@ -99,7 +99,7 @@ func _draw() -> void:
 		_draw_icon()
 		return
 	if kind == "item":
-		var col: Color = Data.RARITY_COLORS[item["rarity"]]
+		var col: Color = Data.item_color(item)
 		draw_circle(Vector2.ZERO, 20.0 + sin(phase * 2.0) * 3.0, Color(col, 0.25))
 		# Вузлик зі здобиччю
 		draw_circle(Vector2(0, 2), 11.0, Color(0.55, 0.38, 0.2))
@@ -148,7 +148,7 @@ func _draw() -> void:
 func _draw_icon() -> void:
 	match kind:
 		"item":
-			var col: Color = Data.RARITY_COLORS[item["rarity"]]
+			var col: Color = Data.item_color(item)
 			draw_circle(Vector2.ZERO, 20.0 + sin(phase * 2.0) * 3.0, Color(col, 0.25))
 			Gfx.icon(self, "chest", Vector2(0, -2), 2.0)
 			draw_circle(Vector2(10, -12), 3.0, col)

@@ -338,6 +338,56 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	return v
 
 
+## Панель надважкої печери: правила, поступ, рекорди й табір біля входу.
+## here — герой уже стоїть у таборі: тоді видно кнопки входу, перепочинку й маркітанта.
+static func build_peril(sel: String, world, player, here: bool, on_go: Callable, on_enter: Callable, on_camp: Callable) -> Control:
+	var PS = load("res://scripts/game/peril_service.gd")
+	var Peril = load("res://scripts/data/peril.gd")
+	var L: Dictionary = Data.LOCATIONS[sel]
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(_wrapped(L["name"], 28, UI.GOLD))
+	v.add_child(_wrapped("Надважка печера  •  %s" % PS.land_name(sel), 17, UI.MUTED))
+	v.add_child(_wrapped("Нечисть %d-го рівня  •  кімнат: %d" % [int(L["level"]), int(L["rooms"])], 19, UI.BAD))
+	v.add_child(_wrapped("Надважкий бос: %s" % Data.BOSS_NAMES[L["boss"]], 17, UI.GOLD))
+	_threat_line(v, player, int(L["level"]), PS.hp_mult(sel), PS.dmg_mult(sel))
+	v.add_child(_wrapped(L["desc"], 17, UI.TEXT))
+	var names := []
+	for e in L["enemies"]:
+		names.append(Data.ENEMY_NAMES[e])
+	v.add_child(_wrapped("Нечисть: " + ", ".join(names), 16, UI.MUTED))
+	v.add_child(_wrapped("Правила: смерть забирає %s%% досвіду рівня замість %s%%. Бос лютішає, якщо бій із ним триває довше за %s хв. Зілля й побратими працюють як завжди." % [
+		_pct(Data.DEATH_XP_LOSS * Peril.DEATH_XP_MULT), _pct(Data.DEATH_XP_LOSS), _pct(Peril.ENRAGE_AFTER / 6000.0)], 15, UI.MUTED))
+	var times: int = PS.cleared(world, sel)
+	if times > 0:
+		v.add_child(_wrapped("Пройдено разів: %d  •  твій найкращий час: %s" % [times, PS.time_text(PS.best_time(world, sel))], 16, UI.GOOD))
+	var fam: Dictionary = PS.family_best(world, sel)
+	if not fam.is_empty():
+		v.add_child(_wrapped("Рекорд роду: %s, %s" % [PS.time_text(float(fam["value"])), str(fam.get("who", ""))], 15, UI.MUTED))
+	var why: String = PS.block_reason(world, player, sel)
+	if why != "":
+		v.add_child(_wrapped(why, 17, UI.BAD))
+	if not here:
+		v.add_child(UI.button("Вирушити до табору", on_go.bind(sel), Vector2(350, 66), 24))
+		return v
+	v.add_child(_wrapped("Табір біля входу", 22, UI.GOLD))
+	v.add_child(UI.button("Увійти до печери", on_enter.bind(sel), Vector2(350, 66), 24, why == ""))
+	v.add_child(UI.button("Перепочити біля вогнища", on_camp.bind("rest"), Vector2(350, 54), 19))
+	var pp: int = PS.potion_price(player)
+	var mp: int = PS.mana_potion_price(player)
+	v.add_child(UI.button("Зілля здоров'я: %d грн (маєш %d із %d)" % [pp, int(player.potions), player.potion_max()], on_camp.bind("potion"), Vector2(350, 50), 16,
+		player.gold >= pp and int(player.potions) < player.potion_max()))
+	v.add_child(UI.button("Зілля наснаги: %d грн (маєш %d із %d)" % [mp, int(player.mana_potions), player.mana_potion_max()], on_camp.bind("mana"), Vector2(350, 50), 16,
+		player.gold >= mp and int(player.mana_potions) < player.mana_potion_max()))
+	return v
+
+
+## Частка відсотками без зайвих нулів: 0.03 → «3», 0.025 → «2,5».
+static func _pct(v: float) -> String:
+	var f := v * 100.0
+	return str(int(round(f))) if is_equal_approx(f, round(f)) else ("%.1f" % f).replace(".", ",")
+
+
 ## Рядок «чи під силу тобі це місце»: за спорядженням героя, а не лише за рівнем (Power.threat).
 static func _threat_line(v: Control, player, level: int, hp_mult: float = 1.0, dmg_mult: float = 1.0, floor_share: float = 0.0) -> void:
 	var Power = load("res://scripts/game/power.gd")

@@ -126,6 +126,10 @@ func _run() -> void:
 	await _suite_quick_raid()
 	await _suite_pickup_filter()
 	await _suite_renew_cost()
+	_suite_peril()
+	_suite_sets()
+	_suite_valor()
+	await _suite_peril_game()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -6188,7 +6192,7 @@ func _suite_far_lands() -> void:
 	var WM0 = load("res://scripts/ui/world_map.gd")
 	for id in ids:
 		var pos: Vector2 = places[id]
-		map_ok = map_ok and pos.x > 19.3 and pos.x < 41.7 and pos.y > 44.1 and pos.y < WM0.LAT1 - 0.15
+		map_ok = map_ok and pos.x > WM0.LON0 + 0.5 and pos.x < WM0.LON1 - 0.5 and pos.y > WM0.LAT0 + 0.5 and pos.y < WM0.LAT1 - 0.5
 	check(map_ok, "усе вміщається в межах мапи")
 	# Рівні
 	var L16: Dictionary = Data.LOCATIONS["oleshky"]
@@ -6432,7 +6436,7 @@ func _suite_muscovy() -> void:
 	check(Data.BOSS_NAMES["idolyshche"] == "Ідолище Погане" and not "п'ятидесятник" in str(Acts.BOUNTY_NAMES["mertvyi_strilets"]).to_lower(), "назви без мовних огріхів")
 	var snow := []
 	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id]["biome"] == "snow":
+		if Data.LOCATIONS[id]["biome"] == "snow" and not Data.LOCATIONS[id].has("peril"):
 			snow.append(id)
 	check(snow.size() == 3 and "snow" in Ground.TILED and Data.LOCATIONS["kryzhanyi_ostroh"].get("night", false), "три снігові місця, у Крижаному острозі вічна ніч: %s" % str(snow))
 	var icons_tex: Texture2D = load("res://assets/gfx/sprites/map_icons.png")
@@ -6665,7 +6669,7 @@ func _suite_uniques() -> void:
 	var bad := []
 	for id in Uniques.ORDER:
 		var D: Dictionary = Uniques.DEFS[id]
-		var good: bool = Data.SLOTS.has(D["slot"]) and int(D["tier"]) >= 1 and int(D["tier"]) <= 5 and Uniques.POWERS.has(D["power"]) and str(D["lore"]) != "" and not names.has(D["name"])
+		var good: bool = Data.SLOTS.has(D["slot"]) and int(D["tier"]) >= 1 and int(D["tier"]) <= 6 and Uniques.POWERS.has(D["power"]) and str(D["lore"]) != "" and not names.has(D["name"])
 		if D["slot"] == "weapon":
 			good = good and Data.WEAPON_TYPES.has(D["type"])
 			wtypes[D["type"]] = true
@@ -6683,9 +6687,9 @@ func _suite_uniques() -> void:
 	check(ok, "кожна золота річ: слот, ступінь, сила з числами, властивості без вампіризму й загоєння, переказ: %s" % str(bad))
 	check(slots.size() == Data.SLOTS.size() and wtypes.size() == Data.WEAPON_TYPES.size(), "золото є для кожного слота й кожного виду зброї")
 	var tiers_ok := true
-	for t in range(1, 6):
+	for t in range(1, 7):
 		tiers_ok = tiers_ok and int(per_tier.get(t, 0)) >= 3
-	check(tiers_ok, "у кожному з п'яти ступенів щонайменше три речі: %s" % str(per_tier))
+	check(tiers_ok, "у кожному з шести ступенів щонайменше три речі: %s" % str(per_tier))
 	# Кожен бос гри має свій ступінь (новий бос без ступеня провалить цю перевірку)
 	var bosses := {}
 	for id in Data.LOCATIONS:
@@ -6984,7 +6988,7 @@ func _suite_artifacts() -> void:
 		if Arts.by_boss(b) == "":
 			missing.append(b)
 	check(missing.is_empty() and Arts.ORDER.size() == Arts.DEFS.size() and Arts.ORDER.size() == bosses.size(), "у кожного з %d босів свій артефакт: %s" % [bosses.size(), str(missing)])
-	var known := ["st_burn", "st_bleed", "st_chill", "st_weak", "status", "travel", "plague", "potion_max", "mana_potion_max", "dodge_cd", "elite_dmg", "boss_dmg", "stone", "gold", "glory", "res", "unique_luck", "pickup", "trophy", "xp"]
+	var known := ["st_burn", "st_bleed", "st_chill", "st_weak", "status", "travel", "plague", "potion_max", "mana_potion_max", "dodge_cd", "elite_dmg", "boss_dmg", "stone", "gold", "glory", "res", "unique_luck", "pickup", "trophy", "xp", "death_xp", "enrage", "soul", "set_luck", "dmg"]
 	var data_ok := true
 	var names := {}
 	for id in Arts.ORDER:
@@ -7186,7 +7190,7 @@ func _suite_souls() -> void:
 	for id in Souls.ORDER:
 		var D: Dictionary = Souls.SOULS[id]
 		var t: int = int(D["tier"])
-		var good: bool = str(D["name"]) != "" and str(D["lore"]) != "" and not D["fx"].is_empty() and t >= 1 and t <= 6 and (t >= Souls.BOSS_TIER) == id.begins_with("b_") and not "%s" in SS.fx_text(id) and SS.owner_name(id) != ""
+		var good: bool = str(D["name"]) != "" and str(D["lore"]) != "" and not D["fx"].is_empty() and t >= 1 and t <= 7 and (t >= Souls.BOSS_TIER) == id.begins_with("b_") and not "%s" in SS.fx_text(id) and SS.owner_name(id) != ""
 		for k in D["fx"]:
 			good = good and Souls.FX.has(k) and not k in Souls.FORBIDDEN
 		if not good:
@@ -10518,3 +10522,576 @@ func _suite_gameplay() -> void:
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
 	await _frames(2)
+
+
+# ======================= Надважкі печери, набори речей, звитяги =======================
+
+## Найменше, що потрібно службам здобичі від бою: опис місця й чи це Башта.
+class FakeCombat:
+	var loc := {}
+	var tower := false
+	func is_tower() -> bool:
+		return tower
+	func is_dungeon() -> bool:
+		return not tower
+
+
+func _suite_peril() -> void:
+	suite("Надважкі печери: дані, правила, нагороди")
+	var Peril = load("res://scripts/data/peril.gd")
+	var PS = load("res://scripts/game/peril_service.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var Souls = load("res://scripts/data/souls.gd")
+	var SS = load("res://scripts/game/soul_service.gd")
+	var Loot = load("res://scripts/game/loot_service.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var WM = load("res://scripts/ui/world_map.gd")
+	var Wiki = load("res://scripts/data/wiki_data.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Rec = load("res://scripts/game/record_service.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	var WorldState = load("res://scripts/game/world_state.gd")
+	var EnemyS = load("res://scripts/entities/enemy.gd")
+	# ---- Печери ----
+	var ids: Array = PS.ids()
+	var levels := []
+	var lands := {}
+	var data_ok := true
+	var boss_kinds := []
+	for id in ids:
+		var L: Dictionary = Data.LOCATIONS[id]
+		levels.append(int(L["level"]))
+		lands[str(L["land"])] = true
+		boss_kinds.append(str(L["boss"]))
+		data_ok = data_ok and L["type"] == "dungeon" and not L.get("scale", false) and Peril.LANDS.has(L["land"]) and Data.BOSS_NAMES.has(L["boss"]) and GfxS.has(L["boss"]) and Wiki.BOSSES.has(L["boss"]) and WM.ICON_ORDER.has(str(L["icon"])) and Peril.TITLES.has(L["boss"]) and Peril.TITLE_FX.has(L["boss"]) and int(L["rooms"]) >= 6
+		for e in L["enemies"]:
+			data_ok = data_ok and Data.ENEMY_NAMES.has(e) and GfxS.has(e) and Wiki.ENEMIES.has(e) and Souls.SOULS.has(e)
+	check(ids.size() == 5 and levels == [100, 110, 120, 130, 140] and lands.size() == 5 and Peril.LAND_ORDER.size() == 5, "п'ять печер у п'яти землях, рівні від 100 до 140 з кроком 10: %s" % str(levels))
+	check(data_ok, "кожна печера: земля, бос зі спрайтом, описом і званням, нечисть з описами й душами")
+	check(Classes.BASE_LEVEL_MAX < int(levels[0]) and PS.is_peril(ids[0]) and not PS.is_peril("zmii_cave") and not PS.is_peril("nema"), "нечисть надважких печер вища за стелю рівня героя")
+	var w = WorldState.new()
+	var no_quests := true
+	for i in 200:
+		var q: Dictionary = w._gen_quest(Data.CITIES.keys()[i % Data.CITIES.size()])
+		no_quests = no_quests and not PS.is_peril(str(q["loc"]))
+	check(no_quests, "доручень у надважкі печери не дають")
+	# ---- Сила нечисті росте від печери до печери ----
+	var cm: Dictionary = PS.combat_mods(ids[0])
+	var cm5: Dictionary = PS.combat_mods(ids[4])
+	check(is_equal_approx(float(cm["hp_mult"]), Peril.HP_MULT) and is_equal_approx(float(cm["dmg_mult"]), Peril.DMG_MULT) and Peril.HP_MULT >= 3.0 and Peril.DMG_MULT >= 2.0, "нечисть першої печери в рази сильніша за звичайну свого рівня")
+	check(float(cm5["hp_mult"]) > float(cm["hp_mult"]) * 1.3 and float(cm5["dmg_mult"]) > float(cm["dmg_mult"]) * 1.3 and PS.number(ids[4]) == 5, "кожна наступна печера ще лютіша понад рівень")
+	check(is_equal_approx(float(cm["enrage_after"]), Peril.ENRAGE_AFTER) and float(cm["boss_hp_mult"]) > 1.0 and float(cm["xp_mult"]) > 1.0 and PS.combat_mods("zmii_cave").is_empty(), "бос міцніший і лютішає, досвіду більше; звичайних печер це не зачіпає")
+	var th = _new_player()
+	th.change_class("cossack")
+	th.level = 99
+	th.recalc()
+	_fit(th, 6.0)
+	var t1: Dictionary = Power.threat(th, int(levels[0]), PS.hp_mult(ids[0]), PS.dmg_mult(ids[0]))
+	var t5: Dictionary = Power.threat(th, int(levels[4]), PS.hp_mult(ids[4]), PS.dmg_mult(ids[4]))
+	check(float(t5["ttk"]) > float(t1["ttk"]) * 2.5 and float(t5["hits"]) < float(t1["hits"]) * 0.6 and int(t5["grade"]) == 3, "остання печера смертельна для героя, якому перша під силу (%.1f с проти %.1f с)" % [float(t5["ttk"]), float(t1["ttk"])])
+	th.free()
+	# ---- Вхід по черзі, звання, рекорди ----
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = Peril.OPEN_LEVEL - 1
+	p.recalc()
+	check(str(Peril.OPEN_LEVEL) in PS.block_reason(w, p, ids[0]), "до %d-го рівня не пускають" % Peril.OPEN_LEVEL)
+	p.level = Peril.OPEN_LEVEL
+	check(PS.block_reason(w, p, ids[0]) == "" and PS.block_reason(w, p, ids[1]) != "" and PS.block_reason(w, p, "zmii_cave") == "", "перша печера відкрита, друга чекає на першу")
+	check(PS.previous(ids[0]) == "" and PS.previous(ids[3]) == ids[2] and PS.title(w) == "" and PS.bosses_down(w) == 0, "порядок печер, звань іще нема")
+	var hp0: float = p.max_hp
+	var m1: Array = PS.on_clear(w, p, ids[0], 300.0, 0)
+	var said: String = "\n".join(m1)
+	check(PS.cleared(w, ids[0]) == 1 and PS.bosses_down(w) == 1 and PS.title(w) == str(Peril.TITLES[boss_kinds[0]]) and PS.block_reason(w, p, ids[1]) == "" and PS.block_reason(w, p, ids[2]) != "", "перша перемога: звання й відкрита наступна печера")
+	check("Іменна звитяга" in said and str(Data.LOCATIONS[ids[1]]["name"]) in said and "5:00" in said, "про звання, наступну печеру й час сказано: %s" % said.replace("\n", " | "))
+	check(is_equal_approx(p.max_hp / hp0, 1.0 + float(Peril.TITLE_FX[boss_kinds[0]]["hp"]) / 100.0) and PS.title_fx(w) == {"hp": 3.0}, "іменна звитяга одразу дає свій бонус")
+	check(is_equal_approx(PS.best_time(w, ids[0]), 300.0) and int(PS.family_best(w, ids[0])["slot"]) == 0 and PS.time_text(75.4) == "1:15", "найкращий час героя й роду записано")
+	var m2: Array = PS.on_clear(w, p, ids[0], 240.0, 1)
+	check(PS.cleared(w, ids[0]) == 2 and is_equal_approx(PS.best_time(w, ids[0]), 240.0) and "Рекорд роду побито" in "\n".join(m2) and PS.titles(w).size() == 1, "швидший похід іншого героя забирає рекорд роду, звання двічі не дають")
+	var m3: Array = PS.on_clear(w, p, ids[0], 500.0, 1)
+	check(m3.is_empty() and is_equal_approx(PS.best_time(w, ids[0]), 240.0), "повільніший похід рекорду не псує")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(PS.cleared(w2, ids[0]) == 3 and PS.title(w2) == PS.title(w) and is_equal_approx(PS.best_time(w2, ids[0]), 240.0), "поступ у надважких печерах зберігається")
+	for i in range(1, ids.size()):
+		PS.on_clear(w, p, ids[i], 400.0, 0)
+	check(PS.bosses_down(w) == 5 and PS.title(w) == str(Peril.TITLES[boss_kinds[4]]) and PS.title_fx(w).size() == 5, "п'ять босів: показуємо звання за найдальшого, діють усі п'ять бонусів")
+	check("peril_bosses" in Acts.RECORD_ORDER and "valor" in Acts.RECORD_ORDER and int(Rec.hero_values(w, p)["peril_bosses"]) == 5, "надважкі боси й звитяги є в літописі рекордів")
+	var rec_ok := true
+	for key in Acts.RECORD_ORDER:
+		rec_ok = rec_ok and Rec.hero_values(w, p).has(key) and Acts.RECORDS.has(key)
+	check(rec_ok, "кожен рекорд літопису має значення героя")
+	var ach := {}
+	for a in Ach.ACHIEVEMENTS:
+		ach[a["id"]] = a
+	check(ach.has("peril_1") and ach.has("peril_5") and ach["peril_5"]["stat"] == "peril_bosses" and ach.has("valor_10") and ach.has("set_full"), "досягнення надважких печер, звитяг і наборів")
+	# ---- Ціна смерті ----
+	var d = _new_player()
+	d.level = 95
+	d.xp_next = Data.xp_for_level(95)
+	d.xp = d.xp_next / 2
+	var x0: int = d.xp
+	var lost1: int = d.death_xp_loss(Peril.DEATH_XP_MULT)
+	check(Peril.DEATH_XP_MULT >= 3.0 and absi(lost1 - ceili(d.xp_next * Data.DEATH_XP_LOSS * Peril.DEATH_XP_MULT)) <= 1 and d.xp == x0 - lost1, "смерть у надважкій печері забирає втричі більше досвіду")
+	d.add_item(Arts.make("lanka_lantsiuha"), true)
+	d.recalc()
+	var lost2: int = d.death_xp_loss(Peril.DEATH_XP_MULT)
+	check(absi(lost2 * 2 - lost1) <= 2, "«Ланка велетового ланцюга» зменшує втрату вдвічі (%d проти %d)" % [lost2, lost1])
+	d.free()
+	# ---- Золото шостого ступеня ----
+	check(Uniques.TIER_NAMES.size() == 7 and Uniques.PRIMARY_MULT.size() == 7 and Uniques.BASE_CHANCE.size() == 7 and is_equal_approx(Loot.chance(6, 0), float(Uniques.BASE_CHANCE[6])) and float(Uniques.BASE_CHANCE[6]) > float(Uniques.BASE_CHANCE[5]), "шостий ступінь золота: назва, сила, шанс")
+	var tier_ok := true
+	for b in Uniques.BOSS_TIER:
+		tier_ok = tier_ok and (int(Uniques.BOSS_TIER[b]) == 6) == (b in boss_kinds)
+	var fav := {}
+	for id in Uniques.ORDER:
+		if int(Uniques.DEFS[id]["tier"]) == 6:
+			for b in Uniques.DEFS[id]["bosses"]:
+				tier_ok = tier_ok and b in boss_kinds
+				fav[b] = true
+	check(tier_ok and fav.size() == 5, "шостий ступінь мають лише надважкі боси, і в кожного є улюблена річ")
+	var fc = FakeCombat.new()
+	fc.loc = Data.LOCATIONS[ids[0]].duplicate()
+	var boss = EnemyS.new()
+	boss.setup(boss_kinds[0], int(levels[0]), true)
+	check(Loot.is_lair_boss(fc, boss) and Loot.worthy(fc, p, boss) and Loot.boss_tier(fc, boss) == 6, "надважкий бос у своїй печері: шостий ступінь")
+	var tw = FakeCombat.new()
+	tw.tower = true
+	tw.loc = {"type": "tower", "floor": 60, "level": 99}
+	var kar = EnemyS.new()
+	kar.setup("karachun", 99, true)
+	check(Loot.boss_tier(tw, kar) == Uniques.TOP_COMMON_TIER and Loot.boss_tier(tw, boss) == 6, "Башта й Глибини до шостого ступеня не дотягують")
+	var top: Dictionary = Uniques.make("mech_kladenets", 140)
+	check(float(top["base"]["flat_dmg"]) > float(Uniques.make("shablia_bohdana", 140)["base"]["flat_dmg"]) * 1.04 and int(top["ilvl"]) == 140, "«Заповітна» зброя сильніша за «Характерницьку»")
+	var six := 0
+	for i in 400:
+		if int(Uniques.DEFS[Loot.pick(p, 6, boss_kinds[0])]["tier"]) == 6:
+			six += 1
+	check(six > 200, "надважкий бос найчастіше дає річ шостого ступеня (%d із 400)" % six)
+	# ---- Артефакти й душі ----
+	var art_ok := true
+	for b in boss_kinds:
+		art_ok = art_ok and Arts.by_boss(b) != "" and Souls.SOULS.has("b_" + b) and SS.tier("b_" + b) == 7
+	check(art_ok and Souls.TIER_NAMES.size() == 8 and Souls.TIER_COLORS.size() == 8, "у кожного надважкого боса свій артефакт і душа сьомого ступеня")
+	var sp = _new_player()
+	sp.level = 99
+	sp.soul_found = 1
+	var arts := 0
+	for i in 2000:
+		sp.art_luck = {}
+		if not Loot.artifact_on_boss(fc, sp, boss).is_empty():
+			arts += 1
+	check(arts > 110 and arts < 215 and Arts.CHANCE_PERIL > Arts.CHANCE, "артефакт із надважкого боса падає частіше, ніж зі звичайного (%d із 2000)" % arts)
+	boss.enrage_after = Peril.ENRAGE_AFTER
+	var souls := 0
+	for i in 3000:
+		sp.soul_luck = 0.0
+		if SS.roll(sp, boss) != "":
+			souls += 1
+	check(souls > 50 and souls < 140 and Souls.CHANCE_PERIL > float(Souls.CHANCE["boss"]), "душа надважкого боса падає частіше, ніж звичайного (%d із 3000)" % souls)
+	sp.add_item(Arts.make("ulamok_chornoho_sontsia"), true)
+	sp.add_item(Arts.make("velniasova_torba"), true)
+	sp.add_item(Arts.make("hromovyi_kamin"), true)
+	sp.add_item(Arts.make("zolota_lychyna"), true)
+	sp.recalc()
+	check(is_equal_approx(float(sp.art["dmg"]), 0.05) and is_equal_approx(float(sp.art["soul"]), 0.25) and is_equal_approx(float(sp.art["enrage"]), 30.0) and is_equal_approx(float(sp.art["set_luck"]), 0.25), "нові артефакти діють із торби")
+	boss.free()
+	kar.free()
+	sp.free()
+	p.free()
+
+
+func _suite_sets() -> void:
+	suite("Набори речей")
+	var Sets = load("res://scripts/data/sets.gd")
+	var SetS = load("res://scripts/game/set_service.gd")
+	var PS = load("res://scripts/game/peril_service.gd")
+	var City = load("res://scripts/game/city_service.gd")
+	var EnemyS = load("res://scripts/entities/enemy.gd")
+	var ids: Array = PS.ids()
+	var data_ok := true
+	var stats := {}
+	for sid in Sets.ORDER:
+		var S: Dictionary = Sets.SETS[sid]
+		stats[str(S["stat"])] = true
+		data_ok = data_ok and str(S["name"]) != "" and str(S["of"]) != "" and str(S["lore"]) != "" and str(S["stat"]) in Data.INT_STATS and S["affixes"].size() >= 4 and str(S["stat"]) in S["affixes"]
+		for a in S["affixes"]:
+			data_ok = data_ok and a in Data.AFFIX_POOL and not a in ["lifesteal", "regen"]
+		for step in Sets.STEPS:
+			data_ok = data_ok and S["bonus"].has(step) and not S["bonus"][step].is_empty() and Sets.step_text(sid, step) != "" and not "%s" in Sets.step_text(sid, step)
+			for k in S["bonus"][step]:
+				data_ok = data_ok and Sets.FX.has(k)
+	check(Sets.ORDER.size() == 3 and Sets.ORDER.size() == Sets.SETS.size() and stats.size() == 3 and Sets.STEPS == [2, 4, 6], "три набори під три головні риси, бонуси за 2, 4 й 6 речей")
+	check(data_ok, "кожен набір: назва, переказ, властивості без вампіризму й загоєння, бонуси з відомих ключів")
+	# ---- Річ набору ----
+	var it: Dictionary = Sets.make("sviatohor", "weapon", 120, "sabre")
+	check(it["name"] == "Шабля Святогора" and it["set"] == "sviatohor" and int(it["rarity"]) == 3 and int(it["ilvl"]) == 120 and it["affixes"].size() == 3 and Sets.is_set(it) and not Sets.is_set(Data.gen_item(10, 3)), "річ набору: ім'я, позначка, якість легендарної")
+	check(Sets.piece_name("dovbush", "belt") == "Пояс Довбуша" and Sets.piece_name("boian", "weapon", "staff") == "Посох Бояна", "назви речей наборів")
+	check(Data.item_color(it) == Data.SET_COLOR and Data.item_color(Data.gen_item(10, 3)) == Data.RARITY_COLORS[3] and not Data.SET_COLOR in Data.RARITY_COLORS, "у речі набору свій колір")
+	var aff_ok := true
+	for sid in Sets.ORDER:
+		for slot in Data.SLOTS:
+			for i in 6:
+				var x: Dictionary = Sets.make(sid, slot, 100, "sabre")
+				aff_ok = aff_ok and x["affixes"].size() == 3 and not x["affixes"].has(Data.SLOT_PRIMARY[slot]) and x["base"].has(Data.SLOT_PRIMARY[slot])
+				for a in x["affixes"]:
+					aff_ok = aff_ok and a in Sets.SETS[sid]["affixes"]
+	check(aff_ok, "властивості речі лише з переліку набору, без головної властивості клітинки")
+	# ---- Бонуси на герої ----
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 99
+	for slot in Data.SLOTS:
+		var piece: Dictionary = Sets.make("sviatohor", slot, 100, "sabre")
+		p.assign_uid(piece)
+		p.equipment[slot] = piece
+	p.recalc()
+	var full_hp: float = p.max_hp
+	var full_dmg: float = p.damage
+	var fx6: Dictionary = Sets.fx(p.equipment)
+	check(int(Sets.count(p.equipment)["sviatohor"]) == 6 and is_equal_approx(float(fx6["hp"]), 16.0) and is_equal_approx(float(fx6["dmg"]), 18.0) and is_equal_approx(float(fx6["big_dmg"]), 10.0) and is_equal_approx(float(fx6["armor"]), 4.0), "шість речей: діють усі три щаблі разом")
+	check(int(Sets.worn.get("sviatohor", 0)) == 6, "картка речі знає, скільки речей набору вдягнено")
+	for slot in Data.SLOTS:
+		p.equipment[slot].erase("set")
+	p.recalc()
+	check(is_equal_approx(full_hp / p.max_hp, 1.16) and is_equal_approx(full_dmg / p.damage, 1.18) and p.set_fx.is_empty(), "набір справді додає здоров'я й шкоди (×%.3f і ×%.3f)" % [full_hp / p.max_hp, full_dmg / p.damage])
+	p.equipment["head"]["set"] = "sviatohor"
+	check(Sets.fx(p.equipment).is_empty(), "одна річ бонусу не дає")
+	p.equipment["body"]["set"] = "sviatohor"
+	check(Sets.fx(p.equipment) == {"hp": 8.0}, "дві речі: перший щабель")
+	p.equipment["belt"]["set"] = "dovbush"
+	p.equipment["boots"]["set"] = "dovbush"
+	check(Sets.fx(p.equipment) == {"hp": 8.0, "aspd": 6.0}, "два набори по дві речі діють разом")
+	p.equipment["weapon"]["set"] = "sviatohor"
+	p.equipment["amulet"]["set"] = "sviatohor"
+	var cd0: float = p.attack_cooldown
+	p.recalc()
+	check(is_equal_approx(float(p.set_fx["dmg"]), 8.0) and is_equal_approx(float(p.set_fx["armor"]), 4.0) and is_equal_approx(cd0 / p.attack_cooldown, 1.06), "чотири речі одного набору й дві іншого")
+	# Картка речі
+	var card = load("res://scripts/ui/ui_kit.gd").item_card(p.equipment["head"])
+	var card_text := ""
+	for l in card.find_children("*", "Label", true, false):
+		card_text += l.text + "\n"
+	check("Спадок Святогора: вдягнено 4 із 6" in card_text and "2 речі:" in card_text and "6 речей:" in card_text and "Річ набору" in card_text, "картка речі показує набір, скільки вдягнено і щаблі")
+	card.free()
+	# Масовий продаж наборів не чіпає
+	p.inventory.clear()
+	var spare: Dictionary = Sets.make("boian", "head", 100)
+	p.add_item(spare, true)
+	p.add_item(Data.gen_item(1, 0), true)
+	var sold_set := false
+	for c in City.bulk_candidates(p, 3):
+		sold_set = sold_set or c.has("set")
+	check(not sold_set, "масовий продаж речей наборів не чіпає")
+	# ---- Яка річ падає ----
+	var sp = _new_player()
+	sp.change_class("cossack")
+	var mage = _new_player()
+	mage.change_class("volkhv")
+	check(SetS.main_stat(sp) == "str" and SetS.main_stat(mage) == "spi", "головна риса класу")
+	var own := 0
+	for i in 600:
+		if str(SetS.pick(sp)[0]) == "sviatohor":
+			own += 1
+	check(own > 330, "набір під свій клас трапляється частіше (%d із 600)" % own)
+	for slot in ["weapon", "head", "body", "belt", "amulet"]:
+		sp.add_item(Sets.make("sviatohor", slot, 100, "sabre"), true)
+	var boots := 0
+	var head := 0
+	for i in 1000:
+		var pk: Array = SetS.pick(sp)
+		if str(pk[0]) == "sviatohor":
+			if str(pk[1]) == "boots":
+				boots += 1
+			elif str(pk[1]) == "head":
+				head += 1
+	check(boots > head * 2 and SetS.owned(sp).size() == 5, "річ, якої ще нема, падає частіше за ту, що вже є (%d проти %d)" % [boots, head])
+	var staff_ok := true
+	for i in 120:
+		var r: Dictionary = SetS.roll(mage, 130)
+		staff_ok = staff_ok and Sets.is_set(r) and int(r["ilvl"]) == 130 and (r["slot"] != "weapon" or r["type"] == "staff")
+	check(staff_ok, "зброя набору завжди до руки класу, рівень речі — рівень печери")
+	# ---- Де падає ----
+	var fc = FakeCombat.new()
+	fc.loc = Data.LOCATIONS[ids[0]].duplicate()
+	var boss = EnemyS.new()
+	boss.setup(str(fc.loc["boss"]), int(fc.loc["level"]), true)
+	var first: Dictionary = SetS.on_boss(fc, sp, boss, true)
+	check(Sets.is_set(first) and int(first["ilvl"]) == int(fc.loc["level"]), "перша перемога над надважким босом дає річ набору напевно")
+	var n := 0
+	for i in 2000:
+		if not SetS.on_boss(fc, sp, boss, false).is_empty():
+			n += 1
+	check(n > 400 and n < 600, "далі бос дає річ набору приблизно раз на чотири перемоги (%d із 2000)" % n)
+	var el = EnemyS.new()
+	el.setup(str(fc.loc["enemies"][0]), int(fc.loc["level"]), false)
+	var plain := 0
+	for i in 500:
+		if not SetS.on_elite(fc, sp, el).is_empty():
+			plain += 1
+	el.elite = true
+	var en := 0
+	for i in 3000:
+		if not SetS.on_elite(fc, sp, el).is_empty():
+			en += 1
+	check(plain == 0 and en > 50 and en < 140, "елітна нечисть надважкої печери зрідка дає річ набору, рядова — ніколи (%d із 3000)" % en)
+	fc.loc = Data.LOCATIONS["zmii_cave"].duplicate()
+	check(SetS.on_boss(fc, sp, boss, true).is_empty() and SetS.on_elite(fc, sp, el).is_empty(), "поза надважкими печерами наборів нема")
+	boss.free()
+	el.free()
+	p.free()
+	sp.free()
+	mage.free()
+
+
+func _suite_valor() -> void:
+	suite("Звитяги: поступ після останнього рівня")
+	var Valor = load("res://scripts/data/valor.gd")
+	var Peril = load("res://scripts/data/peril.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var cap: int = Classes.BASE_LEVEL_MAX
+	var data_ok := true
+	for id in Valor.ORDER:
+		var L: Dictionary = Valor.LINES[id]
+		data_ok = data_ok and str(L["name"]) != "" and float(L["per"]) > 0.0 and not "%s" in Valor.text(id, 3.0)
+	check(Valor.ORDER.size() == 5 and Valor.ORDER.size() == Valor.LINES.size() and data_ok and Valor.LINE_MAX >= 20, "п'ять ліній звитяги з назвами й текстами")
+	var bar0: int = Valor.bar(0)
+	check(bar0 == int(Data.xp_for_level(cap - 1) * Valor.BAR_PART) and Valor.bar(10) > bar0 and Valor.bar(50) > Valor.bar(10) and Valor.BAR_PART <= 0.25, "перша смуга — частка останнього рівня, кожна наступна дорожча")
+	check(Valor.fx({"dmg": 2}, {"dmg": 3, "gold": 10}) == {"dmg": 5.0, "gold": 10.0} and Valor.fx_text({"hp": 3}) == "+3% здоров'я" and Valor.text("ward", 2.5) == "шкода по тобі менша на 2,5%" and Valor.fx_text({"gold": 10}) == "+10% гривень", "бонуси звитяг складаються й мають тексти")
+	# ---- Досвід після стелі ----
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = cap - 1
+	p.xp_next = Data.xp_for_level(cap - 1)
+	p.xp = 0
+	p.recalc()
+	p.add_xp(1000)
+	check(p.valor_xp == 0 and p.xp == 1000, "до останнього рівня досвід іде в рівень, а не у звитягу")
+	p.level = cap
+	p.xp = 0
+	p.add_xp(bar0 / 2)
+	check(p.valor == 0 and p.valor_xp == bar0 / 2 and p.level == cap and p.xp == 0 and p.valor_next() == bar0, "на останньому рівні досвід наповнює смугу звитяги")
+	p.add_xp(bar0)
+	check(p.valor == 1 and p.valor_points() == 1 and p.valor_xp == bar0 / 2 and p.valor_next() == Valor.bar(1), "заповнена смуга дає очко, решта досвіду переходить далі")
+	var dmg0: float = p.damage
+	var hp0: float = p.max_hp
+	var sk0: float = p.skill_power
+	var gold0: float = p.gold_mult
+	check(p.can_add_valor("dmg") and p.add_valor("dmg") and p.valor_points() == 0 and not p.add_valor("hp") and is_equal_approx(p.damage / dmg0, 1.01), "очко в «Лють»: +1% шкоди, більше очок нема")
+	p.valor = 60
+	p.valor_spent = {"dmg": Valor.LINE_MAX}
+	check(not p.can_add_valor("dmg") and p.can_add_valor("hp") and not p.can_add_valor("nema") and p.valor_points() == 60 - Valor.LINE_MAX, "у лінії є стеля, невідомих ліній нема")
+	p.valor_spent = {"hp": 10, "ward": 10, "skill": 4, "luck": 5}
+	p.title_fx = {"gold": 10}
+	p.recalc()
+	check(is_equal_approx(p.max_hp / hp0, 1.1) and is_equal_approx(p.skill_power / sk0, 1.04) and is_equal_approx(p.loot_luck(), 1.05) and is_equal_approx(float(p.valor_fx["ward"]), 5.0) and is_equal_approx(p.gold_mult - gold0, 0.1), "«Гарт», «Слово», «Талан», «Оберіг» та іменна звитяга діють")
+	check(is_equal_approx(Power.ehp(p), p.max_hp / maxf(1.0 - Data.ARMOR_CAP, 1.0 - p.armor) / 0.95), "«Оберіг» враховано в запасі живучості")
+	# ---- Смерть на останньому рівні ----
+	p.valor_xp = p.valor_next() / 2
+	var v0: int = p.valor_xp
+	var pts: int = p.valor
+	var lost: int = p.death_xp_loss(1.0)
+	check(lost > 0 and absi(lost - ceili(p.valor_next() * Data.DEATH_XP_LOSS)) <= 1 and p.valor_xp == v0 - lost and p.valor == pts, "смерть на останньому рівні забирає частку смуги звитяги, очки лишаються")
+	var lost3: int = p.death_xp_loss(Peril.DEATH_XP_MULT)
+	check(lost3 >= lost * 3 - 2 and lost3 <= lost * 3 + 2, "у надважкій печері втричі більше (%d проти %d)" % [lost3, lost])
+	p.valor_xp = 0
+	check(p.death_xp_loss(Peril.DEATH_XP_MULT) == 0 and p.valor == pts, "порожня смуга: нижче нуля не опускається")
+	# ---- Збереження ----
+	p.valor_xp = 12345
+	var q = _new_player()
+	q.from_dict(p.to_dict())
+	check(q.valor == p.valor and q.valor_xp == 12345 and q.valor_spent == p.valor_spent and q.title_fx.is_empty(), "звитяги зберігаються; іменні бонуси заново дає світ, а не збереження героя")
+	p.free()
+	q.free()
+
+
+func _suite_peril_game() -> void:
+	suite("Надважкі печери: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Peril = load("res://scripts/data/peril.gd")
+	var PS = load("res://scripts/game/peril_service.gd")
+	var Sets = load("res://scripts/data/sets.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "peril_camp", "enrage", "levelup"]:
+		w.hints[k] = true
+	p.change_class("cossack")
+	p.level = Classes.BASE_LEVEL_MAX
+	p.stat_points = 0
+	p.skill_points = 0
+	p.perk_points = 0
+	p.stats["vit"] = 400
+	p.recalc()
+	_fit(p, 8.0)
+	p.hp = p.max_hp
+	p.gold = 1000000
+	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	var ids: Array = PS.ids()
+	var id0: String = ids[0]
+	var panel_text := func() -> String:
+		var out := ""
+		for l in game.hud.map_panel.find_children("*", "Label", true, false):
+			out += l.text + "\n"
+		for b in game.hud.map_panel.find_children("*", "Button", true, false):
+			out += b.text + "\n"
+		return out
+	# ---- Мапа й табір ----
+	game.enter_map()
+	await _frames(2)
+	game._on_map_select(id0)
+	await _frames(1)
+	var far_text: String = panel_text.call()
+	check("Надважка печера" in far_text and "Вирушити до табору" in far_text and not "Увійти до печери" in far_text and str(Data.BOSS_NAMES[Data.LOCATIONS[id0]["boss"]]) in far_text and "Тобі тут" in far_text, "здалеку панель показує правила й кнопку дороги до табору")
+	await _ride(game, id0)
+	var camp_text: String = panel_text.call()
+	check(game.map_here == id0 and game.state == game.State.MAP and "Табір біля входу" in camp_text and "Увійти до печери" in camp_text and "Перепочити" in camp_text and "Зілля здоров'я" in camp_text, "дорога веде до табору, а не одразу в бій")
+	p.potions = 0
+	p.hp = 1.0
+	var g0: int = p.gold
+	game.peril_camp_do("potion")
+	game.peril_camp_do("rest")
+	check(p.potions == 1 and p.gold == g0 - PS.potion_price(p) and is_equal_approx(p.hp, p.max_hp) and PS.potion_price(p) > Data.potion_price(p.level), "у таборі можна перепочити й купити зілля в маркітанта, дорожче ніж у місті")
+	# ---- Вхід по черзі ----
+	game.enter_peril(ids[1])
+	await _frames(2)
+	check(game.state == game.State.MAP, "у другу печеру не пускають, поки не пройдено першу")
+	game.enter_peril(id0)
+	await _frames(3)
+	check(game.state == game.State.PLAYING and c.loc.has("peril") and is_equal_approx(float(c.loc["hp_mult"]), PS.hp_mult(id0)) and bool(c.loc.get("peril_first", false)), "вхід у першу печеру: нечисть із надбавкою надважкої печери")
+	# еліта й зараза множать силу ще далі, тож дивимось на найменшу надбавку серед нечисті кімнати
+	var min_hp := INF
+	var min_dmg := INF
+	for foe in c.get_tree().get_nodes_in_group("enemies"):
+		min_hp = minf(min_hp, float(foe.max_hp) / float(foe.raw_hp))
+		min_dmg = minf(min_dmg, float(foe.damage) / float(foe.raw_dmg))
+	check(min_hp >= PS.hp_mult(id0) - 0.01 and min_hp < PS.hp_mult(id0) * 2.0 and min_dmg >= PS.dmg_mult(id0) - 0.01, "рядова нечисть міцніша й б'є сильніше, ніж звичайна свого рівня (×%.2f і ×%.2f)" % [min_hp, min_dmg])
+	# ---- Бос і лють ----
+	_clear_enemies(game)
+	if c.portal != null and is_instance_valid(c.portal):
+		c.portal.queue_free()
+	c.portal = null
+	c.room = int(c.loc["rooms"])
+	c._spawn_room()
+	await _frames(2)
+	var boss = null
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.is_boss and not e.illusion:
+			boss = e
+	check(boss != null and is_equal_approx(float(boss.enrage_after), Peril.ENRAGE_AFTER) and float(boss.max_hp) > Data.enemy_std_hp(int(c.loc["level"])) * Data.BOSS_HP_MULT * PS.hp_mult(id0), "надважкий бос: міцніший за звичайного боса й має час люті")
+	var bd0: float = boss.damage
+	boss._fight_t = Peril.ENRAGE_AFTER - 0.05
+	boss._tick_enrage(0.1)
+	check(boss.enrage_n == 1 and is_equal_approx(boss.damage / bd0, 1.0 + Peril.ENRAGE_DMG), "бій затягнувся: бос лютішає, удар росте")
+	boss._tick_enrage(Peril.ENRAGE_EVERY * 2.0)
+	check(boss.enrage_n == 3 and boss.damage > bd0 * 1.2, "і росте далі кожні %d с" % int(Peril.ENRAGE_EVERY))
+	# ---- Смерть: утричі більше зі смуги звитяги, отямлюється в таборі ----
+	p.valor_xp = p.valor_next() / 2
+	var v0: int = p.valor_xp
+	p.hp = 1.0
+	p.invuln = 0.0
+	p.take_damage(999999.0)
+	await _frames(2)
+	var waited := 0
+	while game.hud.overlay_box == null or game.hud.overlay_box.find_children("*", "Button", true, false).is_empty():
+		await create_timer(0.1, true, false, true).timeout
+		waited += 1
+		if waited > 40:
+			break
+	var wake_btn: Button = null
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if "таборі" in b.text:
+			wake_btn = b
+	var want_loss: int = ceili(p.valor_next() * Data.DEATH_XP_LOSS * Peril.DEATH_XP_MULT)
+	check(game.state == game.State.DEAD and wake_btn != null and absi((v0 - p.valor_xp) - want_loss) <= 1, "смерть у надважкій печері: втрачено %d зі смуги звитяги, є кнопка табору" % (v0 - p.valor_xp))
+	if wake_btn != null:
+		wake_btn.pressed.emit()
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_here == id0 and p.alive and "Увійти до печери" in panel_text.call(), "герой отямився в таборі біля входу")
+	# ---- Перемога: звання, річ набору, рекорд ----
+	game.enter_peril(id0)
+	await _frames(3)
+	_clear_enemies(game)
+	if c.portal != null and is_instance_valid(c.portal):
+		c.portal.queue_free()
+	c.portal = null
+	c.room = int(c.loc["rooms"])
+	c._spawn_room()
+	await _frames(2)
+	boss = null
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e.is_boss and not e.illusion:
+			boss = e
+	c.run_time = 245.0
+	var hp_before: float = p.max_hp
+	# у кімнаті боса є ще й його почет: кладемо всіх, боса останнім
+	for e in c.get_tree().get_nodes_in_group("enemies"):
+		if e != boss and not e.dead:
+			e.take_damage(e.max_hp * 10.0, Vector2.ZERO, false)
+	boss.take_damage(boss.max_hp * 10.0, Vector2.ZERO, false)
+	await _frames(8)
+	var piece := {}
+	for ch in c.entities.get_children():
+		if ch.get_script() == c.PickupScript and ch.kind == "item" and ch.item.has("set") and not ch.is_queued_for_deletion():
+			piece = ch.item
+	check(PS.cleared(w, id0) == 1 and PS.title(w) == str(Peril.TITLES[Data.LOCATIONS[id0]["boss"]]) and PS.best_time(w, id0) >= 245.0 and PS.best_time(w, id0) < 250.0, "перемога: печеру пройдено, звання й час записано")
+	check(Sets.is_set(piece) and int(piece["ilvl"]) == int(Data.LOCATIONS[id0]["level"]), "перша перемога лишає річ набору рівня печери")
+	check(p.max_hp > hp_before * 1.02 and not p.title_fx.is_empty() and PS.block_reason(w, p, ids[1]) == "", "іменна звитяга діє одразу, друга печера відкрита")
+	check(int(w.stats.get("peril_bosses", 0)) == 1 and int(w.stats.get("peril", 0)) == 1 and game.ChallengeService.state(w, p)["ach"].has("peril_1"), "досягнення за першого надважкого боса")
+	game.enter_map()
+	await _frames(2)
+	# ---- Екран героя: звання й звитяги ----
+	p.valor = 3
+	p.valor_spent = {}
+	game.open_character()
+	await _frames(2)
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var tab_i := -1
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i).begins_with("Загартування"):
+			tab_i = i
+	check(tab_i >= 0 and "(+3)" in tc.get_tab_title(tab_i), "вкладка «Загартування» показує вільні очки звитяги")
+	var all_text := ""
+	for l in game.hud.screen_root.find_children("*", "Label", true, false):
+		all_text += l.text + "\n"
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		all_text += b.text + "\n"
+	check(str(Peril.TITLES[Data.LOCATIONS[id0]["boss"]]) in all_text and "Звитяга 3" in all_text and "Лють" in all_text and "Талан" in all_text and "Іменні звитяги" in all_text, "екран героя: звання в заголовку, смуга звитяги, лінії й іменні звитяги")
+	var dmg0: float = p.damage
+	game.char_do("valor", "dmg")
+	await _frames(2)
+	check(p.valor_points() == 2 and is_equal_approx(p.damage / dmg0, 1.01), "очко звитяги вкладається з екрана героя")
+	game.close_character()
+	await _frames(2)
+	# ---- Збереження й завантаження ----
+	game.save_game()
+	var d: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	check(not d.is_empty(), "гру збережено")
+	# ---- Довідник ----
+	var titles := {}
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			titles[str(e["title"])] = true
+	var missing := []
+	for t in ["Надважкі печери", "Набори речей", "Звитяги", "Спадок Святогора", "Убір Довбуша", "Шати Віщого Бояна", "Меч-кладенець", "Ланка велетового ланцюга", "Душа Чорнобога", "Дев, володар ущелини", "Чорнобог, володар кінця світу", "Алмасти", "Хійсі"]:
+		if not titles.has(t):
+			missing.append(t)
+	check(missing.is_empty(), "довідник знає про надважкі печери, набори, звитяги й нову нечисть: бракує %s" % str(missing))
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false

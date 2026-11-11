@@ -80,10 +80,7 @@ const BORDER := [
 	Vector2(23.5, 48.0), Vector2(22.9, 47.95),
 ]
 const BLACK_SEA := [
-	Vector2(27.5, 45.3), Vector2(28.95, 45.3), Vector2(29.7, 45.35), Vector2(30.2, 45.85), Vector2(30.7, 46.45),
-	Vector2(31.6, 46.55), Vector2(32.6, 46.1), Vector2(33.7, 46.15), Vector2(33.2, 45.8), Vector2(32.5, 45.35),
-	Vector2(33.4, 44.9), Vector2(33.6, 44.5), Vector2(34.4, 44.5), Vector2(35.4, 44.95), Vector2(36.4, 45.05),
-	Vector2(37.5, 44.6), Vector2(39.0, 44.2), Vector2(41.5, 42.0), Vector2(41.5, 40.5), Vector2(27.5, 40.5),
+	Vector2(28.95, 45.3), Vector2(29.7, 45.35), Vector2(30.2, 45.85), Vector2(30.7, 46.45), Vector2(31.6, 46.55), Vector2(32.6, 46.1), Vector2(33.7, 46.15), Vector2(33.2, 45.8), Vector2(32.5, 45.35), Vector2(33.4, 44.9), Vector2(33.6, 44.5), Vector2(34.4, 44.5), Vector2(35.4, 44.95), Vector2(36.4, 45.05), Vector2(37.5, 44.6), Vector2(38.3, 44.35), Vector2(39, 44.1), Vector2(39.7, 43.55), Vector2(41, 42.95), Vector2(41.65, 42.1), Vector2(41.6, 41.55), Vector2(40.2, 41), Vector2(38.4, 40.95), Vector2(37, 41.15), Vector2(36.1, 41.7), Vector2(35.1, 42.05), Vector2(33.3, 42), Vector2(32.3, 41.75), Vector2(31.4, 41.15), Vector2(29.9, 41.15), Vector2(29.1, 41.2), Vector2(28.2, 41.5), Vector2(28, 42), Vector2(27.6, 42.5), Vector2(27.9, 43.2), Vector2(28.6, 43.4), Vector2(28.65, 44.15), Vector2(29, 44.8), Vector2(29.6, 45.1),
 ]
 const AZOV_SEA := [
 	Vector2(34.9, 46.2), Vector2(35.8, 46.5), Vector2(36.7, 46.75), Vector2(37.5, 47.05), Vector2(38.2, 47.1),
@@ -113,6 +110,15 @@ const RIVERS := [
 	["Угра", [Vector2(33.3, 54.6), Vector2(34, 54.75), Vector2(34.6, 54.8), Vector2(35.24, 54.74), Vector2(35.8, 54.62), Vector2(36.3, 54.53)]],
 	["Західна Двіна", [Vector2(32.75, 56.9), Vector2(32.27, 56.65), Vector2(32.07, 56.26), Vector2(31.2, 55.6), Vector2(30.2, 55.2), Vector2(28.8, 55.5), Vector2(27.5, 55.8), Vector2(26.5, 55.87), Vector2(25.3, 56.4), Vector2(24.1, 56.95)]],
 	["Сосна", [Vector2(36.6, 52.45), Vector2(37.6, 52.42), Vector2(38.5, 52.62), Vector2(38.98, 52.65)]],
+	["Волга (пониззя)", [Vector2(42, 57.47), Vector2(43.1, 56.9), Vector2(44, 56.33), Vector2(46, 56.1), Vector2(47.5, 56.1), Vector2(49.1, 55.8), Vector2(49.4, 54.9), Vector2(48.6, 54.3), Vector2(49.6, 53.4), Vector2(50.1, 53.2), Vector2(48.8, 52.6), Vector2(47.4, 52), Vector2(46, 51.5), Vector2(45.4, 50.1), Vector2(44.5, 48.7), Vector2(45.6, 48.3), Vector2(46.8, 47.4), Vector2(48, 46.35), Vector2(48.5, 45.9)]],
+	["Кама", [Vector2(56.25, 58), Vector2(55.2, 57.3), Vector2(53.8, 56.5), Vector2(52.3, 55.7), Vector2(51, 55.5), Vector2(49.3, 55.35)]],
+	["Урал", [Vector2(59, 53.4), Vector2(58.6, 51.2), Vector2(57, 51.3), Vector2(55.1, 51.77), Vector2(53, 51.5), Vector2(51.4, 51.2), Vector2(51.6, 49.8), Vector2(52, 48.4), Vector2(51.9, 47.1)]],
+	["Дон (пониззя)", [Vector2(42, 48.9), Vector2(43.5, 48.7), Vector2(42.9, 47.9), Vector2(42, 47.5), Vector2(40.9, 47.4), Vector2(39.7, 47.24), Vector2(39.3, 47.2)]],
+	["Північна Двіна", [Vector2(46.3, 60.75), Vector2(46.6, 61.25), Vector2(44.3, 62.1), Vector2(42.8, 62.9), Vector2(41.9, 63.7), Vector2(40.6, 64.5)]],
+	["Дунай", [Vector2(17, 48), Vector2(18.9, 47.8), Vector2(19.05, 47.5), Vector2(18.9, 46.2), Vector2(19.85, 45.25), Vector2(20.46, 44.8), Vector2(21.4, 44.75), Vector2(22.5, 44.6), Vector2(22.7, 44.1), Vector2(22.9, 43.95), Vector2(24, 43.75), Vector2(25.6, 43.65), Vector2(26, 43.9), Vector2(27.3, 44.1), Vector2(27.9, 44.4), Vector2(28.05, 45.4), Vector2(28.8, 45.25), Vector2(29.6, 45.15)]],
+	["Кубань", [Vector2(42.1, 43.9), Vector2(42.05, 44.2), Vector2(41.1, 45), Vector2(39, 45.05), Vector2(38, 45.2), Vector2(37.4, 45.3)]],
+	["Терек", [Vector2(44.5, 42.7), Vector2(44.7, 43), Vector2(44.65, 43.75), Vector2(46, 43.55), Vector2(46.7, 43.85), Vector2(47.4, 43.8)]],
+	["Кура", [Vector2(43.3, 41.95), Vector2(44.8, 41.7), Vector2(46, 41), Vector2(47, 40.6), Vector2(48, 40.45)]],
 ]
 const POLAND := [
 	Vector2(19.0, 54.4), Vector2(22.8, 54.38), Vector2(23.5, 53.95), Vector2(23.9, 53.2), Vector2(23.5, 52.6),
@@ -127,14 +133,28 @@ const BELARUS := [
 	Vector2(23.65, 51.55), Vector2(23.2, 52.2), Vector2(23.5, 52.6), Vector2(23.9, 53.2),
 ]
 const BALTIC := [
-	Vector2(18.0, 54.4), Vector2(19.6, 54.45), Vector2(19.95, 54.95), Vector2(21.2, 55.2), Vector2(21.05, 56.5), Vector2(21.55, 57.4),
-	Vector2(22.6, 57.75), Vector2(23.5, 57.05), Vector2(24.1, 57.0), Vector2(24.35, 57.75), Vector2(24.5, 58.35), Vector2(23.5, 58.6),
-	Vector2(23.45, 58.9), Vector2(18.0, 58.9),
+	Vector2(17, 54.5), Vector2(18.3, 54.8), Vector2(18.6, 54.4), Vector2(19.6, 54.45), Vector2(19.95, 54.95), Vector2(21.2, 55.2), Vector2(21.05, 56.5), Vector2(21.55, 57.4), Vector2(22.6, 57.75), Vector2(23.5, 57.05), Vector2(24.1, 57), Vector2(24.35, 57.75), Vector2(24.5, 58.35), Vector2(23.5, 58.6), Vector2(23.45, 59.2), Vector2(24.75, 59.5), Vector2(26.5, 59.55), Vector2(28, 59.5), Vector2(29.9, 59.9), Vector2(28.6, 60.55), Vector2(26.5, 60.45), Vector2(24.9, 60.15), Vector2(23, 59.85), Vector2(21.5, 60.6), Vector2(21.4, 61.6), Vector2(21.3, 62.6), Vector2(22, 63.3), Vector2(24.6, 64.9), Vector2(25.3, 65.5), Vector2(24.2, 65.8), Vector2(22.2, 65.7), Vector2(21.3, 64.6), Vector2(20.3, 63.8), Vector2(18.6, 62.9), Vector2(17.4, 62), Vector2(17, 61.2),
 ]
+const CASPIAN := [
+	Vector2(47.3, 45.6), Vector2(48.2, 46.2), Vector2(49.2, 46.45), Vector2(51, 46.9), Vector2(52.6, 46.9), Vector2(53.1, 46.4), Vector2(52.9, 45.4), Vector2(51.3, 45.2), Vector2(50.3, 44.5), Vector2(50.9, 44), Vector2(51.2, 43.1), Vector2(52.6, 41.9), Vector2(52.9, 41), Vector2(53, 40.4), Vector2(49.6, 40.4), Vector2(49.3, 41), Vector2(48.6, 41.8), Vector2(48.2, 42.2), Vector2(47.5, 43), Vector2(47.4, 43.8), Vector2(46.8, 44.5),
+]
+const WHITE_SEA := [
+	Vector2(34.7, 64.5), Vector2(35.9, 64), Vector2(37, 63.85), Vector2(38.1, 64.2), Vector2(37.9, 64.75), Vector2(39.5, 64.55), Vector2(40.5, 64.55), Vector2(40.3, 65.2), Vector2(41.6, 66), Vector2(42.6, 66.45), Vector2(44.2, 66.2), Vector2(43.8, 67.5), Vector2(41.3, 67.5), Vector2(41, 66.9), Vector2(39.5, 66.2), Vector2(37, 66.2), Vector2(35, 66.55), Vector2(33.2, 66.75), Vector2(32.5, 67.1), Vector2(32.6, 66.75), Vector2(33.6, 66.2), Vector2(34.5, 65.7), Vector2(34.7, 65),
+]
+const LADOGA := [Vector2(30.9, 59.95), Vector2(31.6, 60.15), Vector2(32.6, 60.3), Vector2(33, 60.75), Vector2(32.5, 61.25), Vector2(31, 61.7), Vector2(30, 61.25), Vector2(30.1, 60.6)]
+const ONEGA := [Vector2(34.3, 61.3), Vector2(35.2, 61), Vector2(36.3, 61.2), Vector2(36, 62), Vector2(35, 62.6), Vector2(34.4, 62.6), Vector2(34.8, 61.9)]
+## Усі води мапи: моря й великі озера (малюються однаково).
+const SEAS := [BLACK_SEA, AZOV_SEA, BALTIC, CASPIAN, WHITE_SEA, LADOGA, ONEGA]
+## Підписи вод: [назва, де, частка розміру підпису країни]
+const SEA_NAMES := [["Чорне море", Vector2(33.6, 43.2), 0.3], ["Азовське море", Vector2(37.2, 46.3), 0.22], ["Каспійське море", Vector2(50.9, 42.3), 0.3],
+	["Балтійське море", Vector2(19.3, 57.2), 0.3], ["Біле море", Vector2(37.6, 65.3), 0.26]]
 const COUNTRY_NAMES := [
 	["ПОЛЬЩА", Vector2(20.9, 52.9)], ["БІЛОРУСЬ", Vector2(27.6, 53.4)], ["МОСКОВІЯ", Vector2(40.7, 53.4)], ["ЛАТВІЯ", Vector2(25.8, 57.2)],
 	["УКРАЇНА", Vector2(29.0, 49.75)], ["МОЛДОВА", Vector2(28.6, 47.2)], ["РУМУНІЯ", Vector2(24.8, 46.9)],
 	["СЛОВАЧЧИНА", Vector2(20.6, 48.75)], ["УГОРЩИНА", Vector2(21.0, 47.4)], ["ЛИТВА", Vector2(24.6, 55.0)],
+	["БОЛГАРІЯ", Vector2(25.3, 43.25)], ["СЕРБІЯ", Vector2(20.8, 44.0)], ["ТУРЕЧЧИНА", Vector2(33.6, 40.8)], ["ГРУЗІЯ", Vector2(43.6, 42.05)],
+	["АЗЕРБАЙДЖАН", Vector2(47.3, 40.9)], ["КАЗАХСТАН", Vector2(56.2, 48.2)], ["ЕСТОНІЯ", Vector2(25.9, 58.9)], ["ФІНЛЯНДІЯ", Vector2(26.3, 62.5)],
+	["ШВЕЦІЯ", Vector2(18.3, 64.6)],
 ]
 # Міста сусідів — лише орієнтири на мапі
 const TOWNS := [
@@ -144,12 +164,19 @@ const TOWNS := [
 	["Бєлгород", Vector2(36.6, 50.6)], ["Воронеж", Vector2(39.2, 51.66)], ["Ростов", Vector2(39.7, 47.24)],
 	["Яси", Vector2(27.6, 47.16)], ["Вільнюс", Vector2(25.28, 54.69)],
 	["Калуга", Vector2(36.25, 54.51)], ["Рязань", Vector2(39.74, 54.63)], ["Кострома", Vector2(40.93, 57.77)], ["Вітебськ", Vector2(30.2, 55.19)], ["Псков", Vector2(28.33, 57.82)], ["Рига", Vector2(24.1, 56.95)],
+	["Казань", Vector2(49.1, 55.8)], ["Нижній Новгород", Vector2(44, 56.33)], ["Астрахань", Vector2(48.03, 46.35)], ["Царицин", Vector2(44.5, 48.7)], ["Архангельськ", Vector2(40.53, 64.54)], ["Вологда", Vector2(39.9, 59.2)], ["Перм", Vector2(56.25, 58)], ["Уфа", Vector2(55.97, 54.74)], ["Самара", Vector2(50.1, 53.2)], ["Оренбург", Vector2(55.1, 51.77)], ["Тбілісі", Vector2(44.8, 41.7)], ["Софія", Vector2(23.32, 42.7)], ["Белград", Vector2(20.46, 44.8)], ["Бухарест", Vector2(26.1, 44.43)], ["Стамбул", Vector2(28.98, 41)], ["Таллінн", Vector2(24.75, 59.44)], ["Новгород", Vector2(31.27, 58.52)],
 ]
 
+## Степ: де малювати рідкі штрихи трави
+const STEPPE := [Vector2(35.5, 47.6), Vector2(37.5, 48.3), Vector2(33.0, 47.2), Vector2(30.0, 47.2), Vector2(34.0, 46.6), Vector2(38.5, 49.0), Vector2(40.0, 48.0),
+	Vector2(43.5, 47.0), Vector2(45.5, 48.0), Vector2(47.0, 49.5), Vector2(50.0, 49.0), Vector2(53.0, 49.5), Vector2(56.0, 49.6), Vector2(59.0, 49.8), Vector2(44.5, 45.5),
+	Vector2(46.0, 46.6), Vector2(54.5, 47.2), Vector2(57.5, 46.5), Vector2(55.5, 44.5), Vector2(58.5, 43.5), Vector2(56.0, 42.0), Vector2(60.0, 45.5), Vector2(49.5, 51.5),
+	Vector2(52.5, 52.0), Vector2(46.5, 51.0), Vector2(59.5, 41.6), Vector2(54.5, 41.2)]
 const MOUNTAINS := [
 	Vector2(22.8, 48.6), Vector2(23.3, 48.45), Vector2(23.8, 48.3), Vector2(24.3, 48.15), Vector2(24.9, 47.98),
 	Vector2(23.2, 48.85), Vector2(23.7, 48.7), Vector2(24.2, 48.5), Vector2(24.7, 48.35), Vector2(25.2, 48.15),
 	Vector2(34.2, 44.75), Vector2(34.8, 44.8),
+	Vector2(39.8, 43.9), Vector2(40.6, 43.6), Vector2(41.4, 43.4), Vector2(42.2, 43.3), Vector2(43, 43.1), Vector2(43.8, 42.9), Vector2(44.6, 42.7), Vector2(45.4, 42.6), Vector2(46.2, 42.3), Vector2(47, 41.9), Vector2(47.7, 41.4), Vector2(42.6, 42.8), Vector2(44.2, 42.4), Vector2(22.8, 43.3), Vector2(23.6, 42.95), Vector2(24.4, 42.8), Vector2(25.2, 42.75), Vector2(26, 42.8), Vector2(26.8, 42.85), Vector2(23.5, 42.1), Vector2(24.5, 41.75), Vector2(25.4, 41.6), Vector2(19.3, 43.4), Vector2(20, 42.8), Vector2(20.6, 42.2), Vector2(22.8, 45.4), Vector2(23.8, 45.45), Vector2(24.8, 45.5), Vector2(25.6, 45.45), Vector2(59.3, 53), Vector2(58.6, 53.9), Vector2(58.9, 54.8), Vector2(59.4, 55.7), Vector2(59.7, 56.6), Vector2(59.6, 57.6), Vector2(59.3, 58.6), Vector2(59.1, 59.6), Vector2(59.4, 60.6), Vector2(59.6, 61.6), Vector2(60, 62.6), Vector2(60.4, 63.6), Vector2(60.9, 64.6), Vector2(61.4, 65.6), Vector2(58.2, 54.4), Vector2(58.7, 56.1), Vector2(58.6, 58.1),
 ]
 const FORESTS := [
 	Vector2(24.8, 51.45), Vector2(25.9, 51.5), Vector2(27.0, 51.3), Vector2(28.2, 51.2), Vector2(29.4, 51.1),
@@ -158,19 +185,22 @@ const FORESTS := [
 	Vector2(23.9, 52.75), Vector2(26.2, 52.5), Vector2(27.6, 52.3), Vector2(28.6, 54.2), Vector2(25.3, 53.3),
 	Vector2(33.5, 53.2), Vector2(34.6, 53.6), Vector2(35.1, 52.6), Vector2(22.8, 51.8), Vector2(21.6, 53.6),
 	Vector2(34.3, 55.9), Vector2(37.3, 57.2), Vector2(40.3, 58.25), Vector2(41.2, 56.3), Vector2(37.2, 53.0), Vector2(34.7, 55.4), Vector2(39.4, 54.1), Vector2(31.4, 56.9), Vector2(35.6, 57.9), Vector2(41.3, 54.4), Vector2(32.0, 57.8),
+	Vector2(33, 59.6), Vector2(36, 59.8), Vector2(38.5, 60.4), Vector2(41, 59.6), Vector2(43.5, 60.2), Vector2(45.5, 59), Vector2(48, 58.4), Vector2(50.5, 58.9), Vector2(53, 59.4), Vector2(55.5, 59.9), Vector2(44, 62), Vector2(47.5, 62.5), Vector2(50.5, 62), Vector2(53.5, 61.5), Vector2(56.5, 61), Vector2(38, 62.5), Vector2(41.5, 61.3), Vector2(31.5, 62.8), Vector2(33.5, 63.6), Vector2(29, 62), Vector2(27, 63.5), Vector2(29.5, 65), Vector2(45, 64.5), Vector2(49, 64.8), Vector2(53, 64.2), Vector2(57, 63.4), Vector2(44.5, 57.6), Vector2(47, 57.2), Vector2(52, 57.3), Vector2(55, 56.2), Vector2(57, 55.2), Vector2(54, 54.2), Vector2(26.5, 58.2), Vector2(26.5, 61.5), Vector2(24, 62.3), Vector2(23.5, 64.2), Vector2(27.5, 60.9), Vector2(46.5, 65.9), Vector2(51, 66.3), Vector2(56, 65.6), Vector2(21, 44.3), Vector2(22, 43.6), Vector2(24.5, 43.3), Vector2(26.5, 43.3), Vector2(25.5, 45), Vector2(23, 46.2), Vector2(21.5, 46), Vector2(40, 44.5), Vector2(41.5, 44), Vector2(45.5, 43.2),
 ]
 
 
 # Межі мапи (довгота/широта)
-const LON0 := 19.0
-const LON1 := 42.0
-const LAT0 := 43.8
-const LAT1 := 58.6
+## Від Балкан і Кавказу на півдні до Білого моря на півночі, від Балтики на заході до Уралу на сході.
+const LON0 := 17.0
+const LON1 := 62.0
+const LAT0 := 40.4
+const LAT1 := 67.5
 const KX := 0.67  # довгота коротша за широту на цих широтах
 const MAP_W := (LON1 - LON0) * KX
 const MAP_H := LAT1 - LAT0
 const MIN_ZOOM := 1.0
-const MAX_ZOOM := 4.0
+const MAX_ZOOM := 7.5
+const HOME := Vector2(31.65, 49.4)  # де відкривається мапа: Наддніпрянщина
 
 var selected := ""
 var current := ""  # де зараз козак
@@ -184,8 +214,8 @@ var hero_level := 1
 ## Подорож: {"from": id, "to": id, "t": 0..1} або порожньо. Фігурка їде дугою, камера слідує.
 var travel := {}
 var map_rect := Rect2()  # область для мапи на екрані
-var zoom := 1.6
-var center := Vector2(MAP_W * 0.55, MAP_H * 0.62)  # центр огляду в одиницях мапи
+var zoom := 2.9
+var center := Vector2((HOME.x - LON0) * KX, LAT1 - HOME.y)  # центр огляду в одиницях мапи
 var _scale := 60.0
 var _origin := Vector2.ZERO
 var _k := 1.0  # множник розміру підписів і значків
@@ -398,13 +428,13 @@ func _draw() -> void:
 	draw_colored_polygon(poland, Color(LAND_NEAR, 0.6))
 	draw_colored_polygon(belarus, Color(LAND_NEAR, 0.6))
 	draw_colored_polygon(land, Color(LAND_UA, 0.75))
-	for sea in [BLACK_SEA, AZOV_SEA, BALTIC]:
+	for sea in SEAS:
 		var sp := _poly(sea)
 		draw_colored_polygon(sp, Color(SEA, 0.85))
 		draw_polyline(sp + PackedVector2Array([sp[0]]), INK_SOFT, 1.5, true)
 	# Штрихування моря хвильками
 	var wave_step := maxf(26.0, _scale * 0.5)
-	for sea in [BLACK_SEA, AZOV_SEA, BALTIC]:
+	for sea in SEAS:
 		var sp := _poly(sea)
 		var rr := Rect2(sp[0], Vector2.ZERO)
 		for q in sp:
@@ -420,7 +450,7 @@ func _draw() -> void:
 			yy += wave_step * 0.6
 			row += 1
 	# Степ: рідкі штрихи трави на півдні
-	for p in [Vector2(35.5, 47.6), Vector2(37.5, 48.3), Vector2(33.0, 47.2), Vector2(30.0, 47.2), Vector2(34.0, 46.6), Vector2(38.5, 49.0), Vector2(40.0, 48.0)]:
+	for p in STEPPE:
 		var c := _proj(p)
 		for i in 5:
 			var q := c + Vector2((i - 2) * 0.35, (i % 2) * 0.2 - 0.1) * _scale
@@ -450,10 +480,10 @@ func _draw() -> void:
 		if cn[0] == "УКРАЇНА" or cn[0].length() > 8:
 			fs = int(fs * 0.75)
 		_text(font, _proj(cn[1]), " ".join(cn[0].split()), fs, Color(INK, 0.3), false)
-	_text(font, _proj(Vector2(31.5, 44.1)), "Чорне море", int(clampf(_scale * 0.3, 13, 40)), Color(0.2, 0.3, 0.38), false)
-	_text(font, _proj(Vector2(37.2, 46.3)), "Азовське море", int(clampf(_scale * 0.22, 11, 30)), Color(0.2, 0.3, 0.38), false)
-	_icon("ship", _proj(Vector2(33.5, 43.3)), ico * 1.3)
-	_icon("ship", _proj(Vector2(29.0, 43.0)), ico * 1.1)
+	for sn in SEA_NAMES:
+		_text(font, _proj(sn[1]), sn[0], int(clampf(_scale * float(sn[2]), 11, 40)), Color(0.2, 0.3, 0.38), false)
+	for sh in [Vector2(31.2, 43.9), Vector2(36.8, 42.7), Vector2(29.3, 42.6), Vector2(50.6, 44.9), Vector2(19.0, 55.9), Vector2(20.0, 59.6), Vector2(38.9, 65.7)]:
+		_icon("ship", _proj(sh), ico * 1.2)
 	# Міста сусідів (орієнтири): ховаються, якщо мапа сильно віддалена
 	var town_fs := int(clampf(_scale * 0.2, 0, 22))
 	for t in TOWNS:

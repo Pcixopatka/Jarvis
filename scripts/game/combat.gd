@@ -30,6 +30,8 @@ const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const Sounds := preload("res://scripts/data/sounds.gd")
 const TrailScript := preload("res://scripts/world/trail.gd")
 const LootService := preload("res://scripts/game/loot_service.gd")
+const SetService := preload("res://scripts/game/set_service.gd")
+const Sets := preload("res://scripts/data/sets.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
@@ -121,6 +123,7 @@ var room := 0
 var room_cleared := false
 var portal: Node2D = null
 var spawn_timer := 0.0
+var run_time := 0.0  # скільки секунд триває цей похід (для рекордів надважких печер)
 var field_kills := 0
 var field_goal := 0
 var field_cleared := false
@@ -226,6 +229,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 		loc = loc.duplicate()
 		loc.merge(extra, true)
 	room = 1 if loc["type"] == "dungeon" else 0
+	run_time = 0.0
 	field_kills = 0
 	field_goal = int(loc.get("goal", Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL))
 	field_cleared = false
@@ -997,6 +1001,8 @@ func _process(delta: float) -> void:
 	if not active:
 		return
 	_time += delta
+	if not field_cleared and not room_cleared_all():
+		run_time += delta
 	if torch.enabled:
 		torch.energy = torch_base + sin(_time * 13.0) * 0.05 + randf() * 0.06
 	camera.global_position = player.global_position
@@ -1083,6 +1089,13 @@ func _spawn_room() -> void:
 		_maybe_elite(_last_enemy())
 	if room == int(loc["rooms"]):
 		spawn_enemy(loc["boss"], loc["level"], true, Vector2(0, arena.position.y + 220))
+		if loc.has("peril"):
+			# Надважкий бос: міцніший і лютіший за звичайного боса свого рівня, а в затяжному бою ще й лютішає
+			var b = _last_enemy()
+			b.max_hp *= float(loc.get("boss_hp_mult", 1.0))
+			b.hp = b.max_hp
+			b.damage *= float(loc.get("boss_dmg_mult", 1.0))
+			b.enrage_after = float(loc.get("enrage_after", 0.0)) + float(player.art.get("enrage", 0.0))  # «Громовий камінь» відсуває лють
 		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
 	else:
 		Events.banner.emit("%s\nКімната %d/%d" % [loc["name"], room, loc["rooms"]], Color(1, 0.92, 0.7))
@@ -1152,6 +1165,11 @@ func _field_complete() -> void:
 	_spawn_portal("На мапу", _clamp_in(player.global_position + Vector2(0, -260), 100.0))
 	Events.field_cleared.emit(loc_id)
 	Events.hint.emit("cleared", "Місцевість очищено! Збери скарб і зайди в портал, щоб повернутися на мапу.")
+
+
+## Чи печеру вже пройдено до кінця (останню кімнату зачищено): тоді час походу більше не йде.
+func room_cleared_all() -> bool:
+	return is_dungeon() and room_cleared and room >= int(loc.get("rooms", 0))
 
 
 func _dungeon_complete() -> void:
@@ -1265,6 +1283,10 @@ func _drop_loot(e: Node2D) -> void:
 		if not trophy.is_empty():
 			spawn_pickup(pos, "item", 0, trophy)
 			float_text(pos + Vector2(0, -90), "Артефакт: %s" % trophy["name"], Data.RARITY_COLORS[int(trophy["rarity"])])
+		var piece: Dictionary = SetService.on_boss(self, player, e, bool(loc.get("peril_first", false)))
+		if not piece.is_empty():
+			spawn_pickup(pos, "item", 0, piece)
+			float_text(pos + Vector2(0, -130), "Річ набору: %s" % piece["name"], Sets.COLOR)
 		for i in 10:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
 		for i in (3 if drop_boost > 1.0 else 2):
@@ -1292,6 +1314,10 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 3))
 		if randf() < Elites.ITEM_CHANCE * (1.0 + float(festive.get("loot", 0.0))) * drop_boost:
 			spawn_pickup(pos, "item", 0, _loot(ilvl, Data.roll_rarity(ilvl, 1)))
+		var piece: Dictionary = SetService.on_elite(self, player, e)
+		if not piece.is_empty():
+			spawn_pickup(pos, "item", 0, piece)
+			float_text(pos + Vector2(0, -90), "Річ набору: %s" % piece["name"], Sets.COLOR)
 		_resource_bundle(pos, roundi(2 * drop_boost))
 		spawn_pickup(pos, "res", 1 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 		if randf() < 0.3:
@@ -1406,7 +1432,7 @@ func note_bag_full() -> void:
 ## Підібрати річ. Повертає true, якщо вона пішла в торбу (або продана автопродажем).
 ## sweep — прибирання перед виходом: що не вмістилось, продається, бо на землі воно зникло б.
 func pick_item(item: Dictionary, sweep: bool = false) -> bool:
-	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	var col: Color = Data.item_color(item)
 	if autosell and int(item["rarity"]) == 0 and player.bag_full():
 		var g0 := Data.sell_price(item)
 		player.gold += g0

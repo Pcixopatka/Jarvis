@@ -8,6 +8,7 @@ const SLOT := "artifact"
 const CHANCE := 0.04
 const CHANCE_TOWER := 0.06  # супербос Башти
 const CHANCE_GREY := 0.02  # бос, значно слабший за героя (див. Uniques.LEVEL_GAP)
+const CHANCE_PERIL := 0.08  # надважкий бос у своїй печері
 ## Доля трофея: кожна перемога над босом без його артефакта наближає удачу саме з цим босом.
 ## Без цього кожен десятий гравець бив одного боса понад 59 разів, а кожен сотий понад 113 (tools/loot_probe.gd).
 ## Із цими числами трофей у середньому за 17 перемог (без долі було 25), кожен десятий чекає понад 36,
@@ -73,9 +74,25 @@ const DEFS := {
 	"zoria_karachuna": {"name": "Зоря найдовшої ночі", "boss": "karachun", "bonus": {"xp": 0.06},
 		"text": "+6% досвіду",
 		"lore": "Єдина зоря, що світила в Карачунову ніч. За довгу ніч багато чого навчишся."},
+	"lanka_lantsiuha": {"name": "Ланка велетового ланцюга", "boss": "dev", "bonus": {"death_xp": 0.5},
+		"text": "Смерть забирає вдвічі менше досвіду",
+		"lore": "Ланцюг, яким велета прикували до кавказької скелі. Хто носить ланку, того й смерть тримає не так міцно."},
+	"hromovyi_kamin": {"name": "Громовий камінь", "boss": "khala", "bonus": {"enrage": 30},
+		"text": "Надважкий бос починає лютішати на 30 с пізніше",
+		"lore": "Камінь, що впав із грозової хмари разом із Халою. Поки він у торбі, буря не поспішає."},
+	"velniasova_torba": {"name": "Велнясова торба", "boss": "velnias", "bonus": {"soul": 0.25},
+		"text": "Душі з нечисті падають на 25% частіше",
+		"lore": "У цю торбу господар мертвих складав душі тих, хто програв йому заклад. Вона й досі їх притягує."},
+	"zolota_lychyna": {"name": "Золота личина", "boss": "zolota_baba", "bonus": {"set_luck": 0.25},
+		"text": "Речі наборів падають на 25% частіше",
+		"lore": "Личина ідола з Кам'яного Поясу. Що їй колись жертвували, те вона тепер повертає."},
+	"ulamok_chornoho_sontsia": {"name": "Уламок чорного сонця", "boss": "chornoboh", "bonus": {"dmg": 0.05},
+		"text": "+5% шкоди по всій нечисті",
+		"lore": "Чорнобог збирався загасити ним білий світ. У твоїй торбі він гасить лише нечисть."},
 }
 
-const ORDER := ["zmiiv_zub", "iklo_upyria", "vovcha_lapa", "chorna_knyha", "vidmyn_hlechyk", "mitla_yahy", "svystok_soloveia", "koshchieva_skrynka", "kliuchi_kremlia", "rozbyti_kaidany", "kreidiane_kolo", "persten_biloi_pani", "lampa_shubina", "oko_lykha", "perlyna_tsaria", "yadro_tsar_harmaty", "lisovykova_sopilka", "kivsh_idolyshcha", "zoria_karachuna"]
+const ORDER := ["zmiiv_zub", "iklo_upyria", "vovcha_lapa", "chorna_knyha", "vidmyn_hlechyk", "mitla_yahy", "svystok_soloveia", "koshchieva_skrynka", "kliuchi_kremlia", "rozbyti_kaidany", "kreidiane_kolo", "persten_biloi_pani", "lampa_shubina", "oko_lykha", "perlyna_tsaria", "yadro_tsar_harmaty", "lisovykova_sopilka", "kivsh_idolyshcha", "zoria_karachuna",
+	"lanka_lantsiuha", "hromovyi_kamin", "velniasova_torba", "zolota_lychyna", "ulamok_chornoho_sontsia"]
 
 
 static func is_artifact(item: Dictionary) -> bool:

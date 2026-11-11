@@ -404,6 +404,16 @@ static func gen_item(ilvl: int, rarity: int, slot: String = "", type: String = "
 	}
 
 
+## Колір назви й клітинки речі: за рідкістю, а в речі набору свій (див. Sets.COLOR).
+const SET_COLOR := Color(0.88, 0.55, 1.0)
+
+
+static func item_color(item: Dictionary) -> Color:
+	if item.has("set"):
+		return SET_COLOR
+	return RARITY_COLORS[int(item["rarity"])]
+
+
 static func item_title(item: Dictionary) -> String:
 	return item["name"] + (" +%d" % item["up"] if item["up"] > 0 else "")
 
@@ -648,6 +658,22 @@ const LOCATIONS := {
 	"kryzhanyi_ostroh": {"name": "Крижаний острог", "type": "dungeon", "biome": "snow", "pos": Vector2(41.4, 58.2), "level": 30, "scale": true, "region": "zalissia", "night": true,
 		"rooms": 7, "enemies": ["vedmid", "lisovyk", "mara"], "boss": "karachun", "icon": "frost",
 		"desc": "Фортеця з криги в тайзі за Костромою, де ніколи не світає. Тут панує Карачун, і зима при ньому не минає."},
+	# ---- Надважкі печери нових земель (див. Peril, PerilService): нечисть від 100-го рівня, сильніша за будь-якого героя ----
+	"devova_ushchelyna": {"name": "Девова ущелина", "type": "dungeon", "biome": "mountain", "pos": Vector2(43.9, 43.45), "level": 100, "peril": 1, "land": "kavkaz",
+		"rooms": 6, "enemies": ["almasty", "kadzhi", "pesyholovets"], "boss": "dev", "icon": "mountain",
+		"desc": "Ущелина під самими льодовиками Кавказу. Алмасти стережуть стежку, каджі кують у печерах закляту зброю, а на дні сидить Дев і жбурляє скелі в кожного, хто зайде."},
+	"khalyna_planyna": {"name": "Халина планина", "type": "dungeon", "biome": "forest", "pos": Vector2(24.9, 42.3), "level": 110, "peril": 2, "land": "balkany",
+		"rooms": 6, "enemies": ["karakondzhul", "samodiva", "upyr"], "boss": "khala", "icon": "pine",
+		"desc": "Гірський праліс на Балканах, над яким ніколи не розходяться хмари. Уночі тут верхи на людях їздять караконджули, самодіви стріляють без промаху, а з хмари дивиться Хала."},
+	"velniasove_horodyshche": {"name": "Велнясове городище", "type": "dungeon", "biome": "swamp", "pos": Vector2(22.6, 56.0), "level": 120, "peril": 3, "land": "baltyka",
+		"rooms": 7, "enemies": ["mertvyi_lytsar", "lauma", "aitvaras"], "boss": "velnias", "icon": "ruin",
+		"desc": "Пагорб серед балтійських боліт, а під ним підземні двори Велняса. Сюди він зводить мертвих лицарів, що колись прийшли хрестити цей край мечем, і тут рахує своє золото."},
+	"hora_zolotoi_baby": {"name": "Гора Золотої Баби", "type": "dungeon", "biome": "cave", "pos": Vector2(57.9, 59.4), "level": 130, "peril": 4, "land": "ural",
+		"rooms": 7, "enemies": ["menkv", "shurale", "chud"], "boss": "zolota_baba", "icon": "mine",
+		"desc": "Печери в серці Кам'яного Поясу. Чудь білоока пішла сюди під землю разом зі своїм золотом, і відтоді його стереже Золота Баба: ідол, якому носили жертви від Ками до Обі."},
+	"chertohy_chornoboha": {"name": "Чертоги Чорнобога", "type": "dungeon", "biome": "snow", "pos": Vector2(35.6, 63.35), "level": 140, "peril": 5, "land": "pivnich", "night": true,
+		"rooms": 8, "enemies": ["stallo", "khiisi", "mara"], "boss": "chornoboh", "icon": "frost",
+		"desc": "Чорна крижана твердиня над Студеним морем, де сонце не сходить пів року. Тут кінець світу й престол Чорнобога. Далі дороги нема."},
 }
 
 
@@ -661,6 +687,11 @@ const ENEMY_NAMES := {"mavka": "Мавка", "upyr": "Упир", "bolotianyk": "
 	"vidma": "Відьма", "vii": "Вій",
 	"potopelnyk": "Потопельник", "pesyholovets": "Песиголовець", "kamiana_baba": "Кам'яна баба", "mara": "Мара", "zlyden": "Злидень",
 	"morskyi_tsar": "Морський цар", "shubin": "Шубін", "bila_pani": "Біла Пані",
+	"almasty": "Алмасти", "kadzhi": "Каджі", "dev": "Дев",
+	"karakondzhul": "Караконджул", "samodiva": "Самодіва", "khala": "Хала",
+	"mertvyi_lytsar": "Мертвий лицар", "lauma": "Лаума", "aitvaras": "Айтварас", "velnias": "Велняс",
+	"menkv": "Менкв", "shurale": "Шурале", "chud": "Чудь білоока", "zolota_baba": "Золота Баба",
+	"stallo": "Стало", "khiisi": "Хійсі", "chornoboh": "Чорнобог",
 	"vedmid": "Ведмідь-шатун",
 	"kikimora": "Кікімора",
 	"mertvyi_strilets": "Стрілець-мрець",
@@ -685,7 +716,12 @@ const ENEMY_PLURAL := {"mavka": "мавок", "upyr": "упирів", "bolotiany
 	"pushkar": "пушкарів",
 	"lisovyi_did": "лісових дідів",
 	"idolyshche": "ідолищ",
-	"karachun": "карачунів"}
+	"karachun": "карачунів",
+	"almasty": "алмастів", "kadzhi": "каджі", "dev": "девів",
+	"karakondzhul": "караконджулів", "samodiva": "самодів", "khala": "хал",
+	"mertvyi_lytsar": "мертвих лицарів", "lauma": "лаум", "aitvaras": "айтварасів", "velnias": "велнясів",
+	"menkv": "менквів", "shurale": "шурале", "chud": "чуді білоокої", "zolota_baba": "золотих баб",
+	"stallo": "стало", "khiisi": "хійсі", "chornoboh": "чорнобогів"}
 const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-володар", "vovkulaka": "Вовкулака-ватажок", "chaklun": "Чаклун Путіноїда",
 	"koshchii": "Кощій Безсмертний", "putinoid": "Путіноїд, кремлівський упир-цар",
 	"baba_yaha": "Баба Яга Кістяна Нога", "solovei": "Соловей-розбійник", "lykho": "Лихо Однооке", "oprychnyk": "Малюта, опричник-кат",
@@ -694,7 +730,9 @@ const BOSS_NAMES := {"zmii": "Триголовий Змій", "upyr": "Упир-
 	"pushkar": "Пушкар із Цар-гарматою",
 	"lisovyi_did": "Лісовий Дід, господар Оковського лісу",
 	"idolyshche": "Ідолище Погане",
-	"karachun": "Карачун, дух найдовшої ночі"}
+	"karachun": "Карачун, дух найдовшої ночі",
+	"dev": "Дев, володар ущелини", "khala": "Хала, буревійна змія", "velnias": "Велняс, господар мертвих",
+	"zolota_baba": "Золота Баба, ідол Кам'яного Поясу", "chornoboh": "Чорнобог, володар кінця світу"}
 const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упиря", "bolotianyk": "Болотяна твань", "vovkulaka": "Вовча шкура", "zarazhenyi": "Зразок зарази",
 	"chort": "Чортів ріг", "pishchalnyk": "Наказ воєводи",
 	"potopelnyk": "Мокра сорочка", "pesyholovets": "Собачий нашийник", "kamiana_baba": "Уламок ідола", "mara": "Пасмо туману", "zlyden": "Дірява торбина",
@@ -703,7 +741,12 @@ const QUEST_ITEMS := {"mavka": "Вінок мавки", "upyr": "Ікло упи
 	"mertvyi_strilets": "Стрілецька порохівниця",
 	"kromeshnyk": "Опричницька мітла",
 	"boyaryn": "Горлатна шапка",
-	"lisovyk": "Лісовикова шишка"}
+	"lisovyk": "Лісовикова шишка",
+	"almasty": "Пасмо рудої шерсті", "kadzhi": "Каджієве кресало",
+	"karakondzhul": "Караконджулове копито", "samodiva": "Самодівина хустка",
+	"mertvyi_lytsar": "Іржава острога", "lauma": "Лаумина стрічка", "aitvaras": "Жарина айтвараса",
+	"menkv": "Менквів зуб", "shurale": "Кіготь шурале", "chud": "Чудський самоцвіт",
+	"stallo": "Клапоть залізної сорочки", "khiisi": "Крижана голка хійсі"}
 
 const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
 const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]

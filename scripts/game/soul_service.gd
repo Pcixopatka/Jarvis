@@ -109,6 +109,9 @@ static func roll(player, e) -> String:
 	if Souls.FIRST_LEVEL > 0 and int(player.soul_found) == 0 and int(player.level) >= Souls.FIRST_LEVEL and cls != "regular":
 		return id  # перша душа героя: щоб нове одразу трапилось на очі
 	var p: float = float(Souls.CHANCE[cls]) * worth(player, e)
+	if e.is_boss and float(e.enrage_after) > 0.0:
+		p = Souls.CHANCE_PERIL  # надважкий бос у своїй печері
+	p *= (1.0 + float(player.art.get("soul", 0.0))) * player.loot_luck()  # артефакт «Велнясова торба» і звитяга «Талан»
 	if randf() < p * (1.0 + minf(Souls.PITY_MAX, float(player.soul_luck))):
 		return id
 	player.soul_luck = float(player.soul_luck) + p

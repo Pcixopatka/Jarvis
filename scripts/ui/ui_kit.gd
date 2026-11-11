@@ -52,10 +52,10 @@ static func button(text: String, cb: Callable, min_size: Vector2 = Vector2.ZERO,
 
 ## Кнопка-річ у кольорі рідкості.
 static func item_button(item: Dictionary, cb: Callable, selected: bool = false, extra: String = "") -> Button:
-	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	var col: Color = Data.item_color(item)
 	var b := Button.new()
 	var up: String = (" +%d" % item["up"]) if item["up"] > 0 else ""
-	b.text = ("★ " if item.has("unique") else ("◆ " if item.has("artifact") else "")) + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
+	b.text = ("★ " if item.has("unique") else ("◆ " if item.has("artifact") else ("✦ " if item.has("set") else ""))) + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
 	b.custom_minimum_size = Vector2(150, 62)
 	b.clip_text = true
 	b.add_theme_font_size_override("font_size", 15)
@@ -93,7 +93,7 @@ static func _cell_mark(text: String, col: Color, size: int, anchor: int, off: Ve
 ## заточка в кутку, позначки золотої речі, артефакта й душі в гнізді.
 ## better — річ сильніша за вдягнену в ту саму клітинку: зелена стрілка в нижньому правому куті.
 static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px: int = 72, better: bool = false) -> Button:
-	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	var col: Color = Data.item_color(item)
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(px, px)
 	b.clip_contents = true
@@ -111,6 +111,8 @@ static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px
 		b.add_child(_cell_mark("+%d" % int(item["up"]), GOLD, 14, Control.PRESET_TOP_RIGHT, Vector2(-30, 2)))
 	if item.has("unique"):
 		b.add_child(_cell_mark("★", GOLD, 15, Control.PRESET_TOP_LEFT, Vector2(5, 1)))
+	elif item.has("set"):
+		b.add_child(_cell_mark("✦", col.lightened(0.3), 15, Control.PRESET_TOP_LEFT, Vector2(5, 1)))
 	if int(item.get("sock", 0)) > 0:
 		var sid: String = str(item.get("soul", ""))
 		var scol: Color = load("res://scripts/game/soul_service.gd").color(sid) if sid != "" else MUTED
@@ -148,7 +150,7 @@ static func empty_slot_button(text: String) -> Button:
 static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContainer:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 4)
-	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	var col: Color = Data.item_color(item)
 	v.add_child(label(Data.item_title(item), 24, col, false))
 	if item.has("artifact"):
 		# артефакт: не вдягається, діє з торби
@@ -165,6 +167,10 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 	var rar: String = Data.RARITY_NAMES[item["rarity"]]
 	if golden:
 		rar += " «%s»" % Uniq.TIER_NAMES[Uniq.tier(item)]
+	var SetsD = load("res://scripts/data/sets.gd")
+	var set_id: String = SetsD.set_of(item)
+	if set_id != "":
+		rar = "Річ набору"
 	v.add_child(label("%s • %s • рівень речі %d" % [rar, Data.SLOT_NAMES[item["slot"]], item["ilvl"]], 16, MUTED, false))
 	if item["slot"] == "weapon":
 		v.add_child(label(Data.WEAPON_TYPES[item["type"]]["hint"], 16, MUTED, false))
@@ -201,6 +207,20 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		sl.custom_minimum_size = Vector2(290, 0)
 		v.add_child(sl)
+	if set_id != "":
+		# набір: скільки речей вдягнено й що дає кожен щабель
+		var have: int = int(SetsD.worn.get(set_id, 0))
+		v.add_child(label("✦ %s: вдягнено %d із %d" % [SetsD.SETS[set_id]["name"], have, Data.SLOTS.size()], 18, col, false))
+		for step in SetsD.STEPS:
+			var on: bool = have >= int(step)
+			var bl := label("%d речі: %s" % [step, SetsD.step_text(set_id, step)] if int(step) < 5 else "%d речей: %s" % [step, SetsD.step_text(set_id, step)], 16, GOOD if on else MUTED, false)
+			bl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			bl.custom_minimum_size = Vector2(290, 0)
+			v.add_child(bl)
+		var sl2 := label(str(SetsD.SETS[set_id]["lore"]), 15, MUTED, false)
+		sl2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		sl2.custom_minimum_size = Vector2(290, 0)
+		v.add_child(sl2)
 	if golden:
 		# сила золотої речі й переказ про неї
 		var uid: String = str(item["unique"])

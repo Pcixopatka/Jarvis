@@ -61,8 +61,8 @@ static func tick(world) -> Array:
 		if spread.size() >= MAX_SPREAD_PER_TRIP:
 			break
 		var lvl := int(levels.get(id, 0))
-		if lvl >= MAX_LEVEL:
-			continue
+		if lvl >= MAX_LEVEL or Data.LOCATIONS[id].has("peril"):
+			continue  # надважкі печери лежать за краєм мапи: зараза туди не доходить
 		var pos: Vector2 = Data.LOCATIONS[id]["pos"]
 		var chance := 0.0
 		for src in SOURCES:

@@ -23,6 +23,8 @@ static func hero_values(world, player) -> Dictionary:
 		"duel_streak": int(world.duel.get("best_streak", 0)),
 		"ring_titles": int(world.ring.get("titles", 0)),
 		"muster_titles": int(world.muster.get("titles", 0)),
+		"peril_bosses": load("res://scripts/game/peril_service.gd").bosses_down(world),
+		"valor": int(player.valor),
 		"bounties": int(world.bounties.get("done", 0)),
 		"trade_profit": int(world.trade.get("profit", 0)),
 		"dice_streak": int(world.tavern.get("best_streak", 0)),

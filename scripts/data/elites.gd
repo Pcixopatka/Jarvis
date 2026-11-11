@@ -20,7 +20,7 @@ const AFFIXES := {
 	"vampire": {"m": "Упирячий", "f": "Упиряча", "color": Color(0.85, 0.1, 0.25), "desc": "п'є кров"},
 	"explosive": {"m": "Вибуховий", "f": "Вибухова", "color": Color(1.0, 0.3, 0.1), "desc": "вибухає"},
 }
-const FEMININE := ["mavka", "kamiana_baba", "mara", "kikimora"]
+const FEMININE := ["mavka", "kamiana_baba", "mara", "kikimora", "samodiva", "lauma", "chud"]
 
 
 static func chance(loc_level: int, plague: int) -> float:

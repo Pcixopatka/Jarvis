@@ -12,6 +12,8 @@ const Gfx := preload("res://scripts/world/gfx.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
+const Sets := preload("res://scripts/data/sets.gd")
+const Valor := preload("res://scripts/data/valor.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
 const Power := preload("res://scripts/game/power.gd")
 const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
@@ -104,6 +106,13 @@ var soul_found := 0
 var soul_fx := {}
 var leech_pool := 0.0  # скільки здоров'я вампіризм ще може повернути просто зараз
 var art := {}  # бонуси артефактів, що лежать у торбі (ключ -> значення; рахує recalc)
+var set_fx := {}  # бонуси наборів за вдягненим (ключ -> відсотки; рахує recalc, див. Sets)
+## Звитяги: поступ після стелі рівня (див. Valor)
+var valor := 0  # скільки смуг звитяги заповнено: кожна дала очко (зберігається)
+var valor_xp := 0  # досвід у поточній смузі (зберігається)
+var valor_spent := {}  # лінія -> вкладені очки (зберігається)
+var title_fx := {}  # бонуси іменних звитяг: {ключ: відсотки} (виставляє PerilService.apply, у збереження не йде)
+var valor_fx := {}  # сума вкладених очок та іменних звитяг (рахує recalc)
 var art_luck := {}  # доля трофея: бос -> скільки перемог поспіль без його артефакта (зберігається)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
@@ -409,7 +418,8 @@ func to_dict() -> Dictionary:
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
 		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck, "art_luck": art_luck,
-		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found}
+		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found,
+		"valor": valor, "valor_xp": valor_xp, "valor_spent": valor_spent}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -577,6 +587,9 @@ func recalc() -> void:
 	_calc_equipment()
 	art = Artifacts.mods(inventory)
 	soul_fx = SoulService.fx_of(self)
+	set_fx = Sets.fx(equipment)
+	Sets.worn = Sets.count(equipment)
+	valor_fx = Valor.fx(valor_spent, title_fx)
 	var s_str := _bonus("str")
 	var s_agi := _bonus("agi")
 	var s_vit := _bonus("vit")
@@ -604,31 +617,32 @@ func recalc() -> void:
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
 	if weapon_type == "pishchal":
 		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
-	attack_cooldown /= 1.0 + float(soul_fx.get("aspd", 0.0))
-	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)))
-	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0))
+	attack_cooldown /= (1.0 + float(soul_fx.get("aspd", 0.0))) * (1.0 + float(set_fx.get("aspd", 0.0)) / 100.0)
+	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0)
+	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0)) + float(set_fx.get("crit_dmg", 0.0)) / 100.0
 	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0
 
 	max_hp = (100.0 + 12.0 * s_vit + 15.0 * pk("tough") + eq("hp")) * (1.0 + 0.06 * pk("hardy") + 0.08 * pk("zaporizka_vytryvalist") + 0.04 * pk("h_body")) * float(class_info().get("hp_mult", 1.0))
 	damage *= float(class_info().get("dmg_mult", 1.0)) * (1.0 + float(festive.get("dmg", 0.0))) * (1.0 + float(klein.get("dmg", 0.0))) * (1.0 + float(soul_fx.get("dmg", 0.0)))
+	damage *= (1.0 + float(set_fx.get("dmg", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("dmg", 0.0)) / 100.0)
 	if meal == "kulish":
 		max_hp *= 1.15
 	elif meal == "borshch":
 		max_hp *= 1.1
-	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0))) * (1.0 + float(soul_fx.get("hp", 0.0)))
-	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)), 0.0, Data.ARMOR_CAP)
+	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0))) * (1.0 + float(soul_fx.get("hp", 0.0))) * (1.0 + float(set_fx.get("hp", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("hp", 0.0)) / 100.0)
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)) + float(set_fx.get("armor", 0.0)) / 100.0, 0.0, Data.ARMOR_CAP)
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0) + max_hp * float(festive.get("regen", 0.0))
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0))) * (1.0 - float(soul_fx.get("dodge_cd", 0.0)))
 	thorns = 0.25 * pk("thorns")
 	varenyk_bonus = pk("varenyk")
 
-	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0)))
+	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0)))
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0))
-	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0))
+	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
-	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))))
-	skill_power = (1.0 + 0.05 * Data.soft_spi(s_spi) + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0)))
+	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0))
+	skill_power = (1.0 + 0.05 * Data.soft_spi(s_spi) + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0))) * (1.0 + float(set_fx.get("skill", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("skill", 0.0)) / 100.0)
 	var ci := class_info()
 	# Грозові й карпатські чари б'ють по кілька цілей і частіше за інші, тож сила вмінь у цих класів менша:
 	# так справжня шкода за секунду виходить як у решти (tools/dps_probe.gd).
@@ -738,6 +752,7 @@ func add_xp(value: int) -> void:
 	var gained := maxi(value, roundi(value * xp_mult * xp_boost))
 	_add_job_xp(gained)
 	if level >= Classes.BASE_LEVEL_MAX:
+		_add_valor_xp(gained)
 		return
 	xp += gained
 	while xp >= xp_next and level < Classes.BASE_LEVEL_MAX:
@@ -755,11 +770,58 @@ func add_xp(value: int) -> void:
 		Events.level_up.emit(level)
 
 
+## Досвід на останньому рівні наповнює смугу звитяги; заповнена смуга дає очко (див. Valor).
+func _add_valor_xp(gained: int) -> void:
+	valor_xp += gained
+	while valor_xp >= valor_next():
+		valor_xp -= valor_next()
+		valor += 1
+		if _in_combat():
+			Audio.play("levelup", 0.0)
+			combat.fx.ring(global_position, Color(1.0, 0.7, 0.35), 32, 420, 6, 0.6)
+		Events.banner.emit("Звитяга %d!\nНове очко: «Персонаж», вкладка «Загартування»" % valor, Color(1.0, 0.8, 0.4))
+
+
+## Скільки досвіду вміщає нинішня смуга звитяги.
+func valor_next() -> int:
+	return Valor.bar(valor)
+
+
+## Вільні очки звитяги.
+func valor_points() -> int:
+	return maxi(0, valor - Valor.spent_total(valor_spent))
+
+
+func can_add_valor(line: String) -> bool:
+	return Valor.LINES.has(line) and valor_points() > 0 and int(valor_spent.get(line, 0)) < Valor.LINE_MAX
+
+
+## Вкласти очко звитяги в лінію.
+func add_valor(line: String) -> bool:
+	if not can_add_valor(line):
+		return false
+	valor_spent[line] = int(valor_spent.get(line, 0)) + 1
+	recalc()
+	return true
+
+
+## Удача на рідкісну здобич від звитяг: множник шансу золота, артефактів, душ і речей наборів.
+func loot_luck() -> float:
+	return 1.0 + float(valor_fx.get("luck", 0.0)) / 100.0
+
+
 ## Ціна смерті: забирає частку досвіду поточного рівня (не нижче нуля, рівень не падає). Повертає, скільки втрачено.
-func death_xp_loss() -> int:
-	if level < Data.DEATH_XP_FROM or level >= Classes.BASE_LEVEL_MAX:
+## mult — у скільки разів ціна вища за звичайну (надважкі печери: Peril.DEATH_XP_MULT).
+func death_xp_loss(mult: float = 1.0) -> int:
+	if level < Data.DEATH_XP_FROM:
 		return 0
-	var lost: int = mini(xp, ceili(xp_next * Data.DEATH_XP_LOSS))
+	mult *= 1.0 - clampf(float(art.get("death_xp", 0.0)), 0.0, 0.9)  # «Ланка велетового ланцюга»
+	if level >= Classes.BASE_LEVEL_MAX:
+		# на останньому рівні смерть забирає ту саму частку зі смуги звитяги; зароблені очки не зникають
+		var gone: int = mini(valor_xp, ceili(valor_next() * Data.DEATH_XP_LOSS * mult))
+		valor_xp -= gone
+		return gone
+	var lost: int = mini(xp, ceili(xp_next * Data.DEATH_XP_LOSS * mult))
 	xp -= lost
 	return lost
 
@@ -1000,6 +1062,7 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		dmg *= 1.2
 	var hp_before: float = maxf(0.0, e.hp)
 	if not art.is_empty():
+		dmg *= 1.0 + float(art.get("dmg", 0.0))  # «Уламок чорного сонця»
 		if e.is_boss:
 			dmg *= 1.0 + float(art.get("boss_dmg", 0.0))
 		elif e.elite or e.bounty_id > 0:
@@ -1009,6 +1072,8 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 			dmg *= 1.0 + float(soul_fx.get("execute", 0.0))
 		if e.is_boss or e.elite:
 			dmg *= 1.0 + float(soul_fx.get("big_dmg", 0.0))
+	if not set_fx.is_empty() and (e.is_boss or e.elite):
+		dmg *= 1.0 + float(set_fx.get("big_dmg", 0.0)) / 100.0
 	e.take_damage(dmg, kb, crit)
 	if not soul_fx.is_empty():
 		_soul_on_hit(e, dmg)
@@ -2062,6 +2127,7 @@ func take_damage(amount: float, source = null) -> bool:
 	if source != null and thorns > 0.0 and not source.dead:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
+	amount *= 1.0 - float(valor_fx.get("ward", 0.0)) / 100.0  # звитяга «Оберіг»
 	if trip_buffs.has("antiplague"):
 		amount *= 0.8
 	hp -= amount

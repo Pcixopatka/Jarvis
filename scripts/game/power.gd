@@ -34,7 +34,8 @@ static func score(player) -> float:
 
 ## Запас живучості героя: здоров'я з поправкою на захист.
 static func ehp(player) -> float:
-	return player.max_hp / maxf(1.0 - Data.ARMOR_CAP, 1.0 - player.armor)
+	var ward: float = float(player.valor_fx.get("ward", 0.0)) / 100.0 if "valor_fx" in player else 0.0
+	return player.max_hp / maxf(1.0 - Data.ARMOR_CAP, 1.0 - player.armor) / maxf(0.5, 1.0 - ward)
 
 
 ## Оцінки «чи під силу»: найбільше секунд на звичайну нечисть і найменше її ударів, які герой має витримати.
