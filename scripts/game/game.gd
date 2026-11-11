@@ -132,6 +132,7 @@ var leave_notice := ""  # підсумок бою, який треба пока�
 var dice_anim := {}  # шинок: з якої кості анімувати кидок героя ("mine") і суперника ("theirs"); живе один показ
 var holiday_id := ""  # сезонне свято, що йде зараз ("" — будень); оновлюється на порозі мапи, міста й хутора
 var camp_sel_uid := -1
+var chest_sel := ""  # вибрана річ на вкладці «Скриня»: "c:uid" — у скрині, "b:uid" — у торбі ("" — нічого)
 
 
 func _ready() -> void:
@@ -3059,6 +3060,7 @@ func enter_camp() -> void:
 	hud.show_map(false)
 	hud.set_mode(false, false)
 	camp_sel_uid = -1
+	chest_sel = ""
 	smith_msg = ""
 	var back := _expedition_news(true)
 	_build_camp()
@@ -3138,7 +3140,12 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("sharpen_ok", 0.03)
 				smith_msg = "Річ піднято на рівень: тепер %d" % int(player.find_item(arg)["ilvl"])
 				smith_msg_color = UI.GOOD
+		"chest_select":
+			# дотик до клітинки скрині чи торби: показати картку речі; другий дотик переносить її (UiCamp._chest)
+			chest_sel = str(arg)
+			smith_msg = ""
 		"chest_put":
+			chest_sel = ""
 			if account.chest_full(CampService.level(world, "sklad")):
 				smith_msg = "Скриня повна"
 				smith_msg_color = UI.BAD
@@ -3151,6 +3158,7 @@ func camp_do(action: String, arg) -> void:
 					account.put_item(it, CampService.level(world, "sklad"))
 					smith_msg = ""
 		"chest_take":
+			chest_sel = ""
 			if player.bag_full():
 				smith_msg = "Торба повна"
 				smith_msg_color = UI.BAD

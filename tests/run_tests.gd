@@ -146,6 +146,7 @@ func _run() -> void:
 	await _suite_loot_rates()
 	await _suite_divine()
 	await _suite_legends()
+	await _suite_grid_shops()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -13317,7 +13318,7 @@ func _suite_divine() -> void:
 	var bulk_btn := false
 	for t in tbtn:
 		bulk_btn = bulk_btn or str(t).begins_with("Продати звичайні")
-	check("✓ Вибрати кілька" in tbtn and bulk_btn and tbtn.any(func(t): return str(t).begins_with("Купити зілля")) and not game.shop_stock(game.trader_city).is_empty(), "вона така сама, як у місті: товари, зілля, «Вибрати кілька» й продаж гуртом")
+	check("✓ Вибрати кілька" in tbtn and bulk_btn and tbtn.any(func(t): return str(t).begins_with("Купити •")) and not game.shop_stock(game.trader_city).is_empty(), "вона така сама, як у місті: товари, зілля, «Вибрати кілька» й продаж гуртом")
 	var gold0: int = gp.gold
 	game.city_do("buy_potion", null)
 	check(gp.potions == 1 and gp.gold == gold0 - game.CityService.potion_price(gw, gp, game.trader_city), "зілля куплено за ціною цього міста")
@@ -13445,6 +13446,176 @@ func _suite_divine() -> void:
 	gp.hp = -5.0
 	gp._check_death()
 	check(gp.alive and gp.hp >= gp.max_hp * 0.49 and not gp.ladanka_ready, "ладанка підняла героя з половиною здоров'я (%d із %d)" % [int(gp.hp), int(gp.max_hp)])
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Клітинки речей на екрані: кнопки заданого розміру без тексту (UI.item_cell).
+func _cells(root_c: Control, px: int) -> Array:
+	var out := []
+	for b in root_c.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text == "" and b.custom_minimum_size == Vector2(px, px):
+			out.append(b)
+	return out
+
+
+func _suite_grid_shops() -> void:
+	suite("Крамниця й скриня сіткою значків")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var UCity = load("res://scripts/ui/ui_city.gd")
+	var UCamp = load("res://scripts/ui/ui_camp.gd")
+	var UChar = load("res://scripts/ui/ui_character.gd")
+	var UKit = load("res://scripts/ui/ui_kit.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	# ---- Клітинка з ціною й позначкою ----
+	var sample: Dictionary = Data.gen_item(20, 2, "head")
+	var plain: Button = UKit.item_cell(sample, func(): pass, false, 70)
+	var priced: Button = UKit.item_cell(sample, func(): pass, false, 70, false, "1 384", true)
+	var note_ok := false
+	var check_ok := false
+	for l in priced.find_children("*", "Label", true, false):
+		note_ok = note_ok or l.text == "1 384"
+		check_ok = check_ok or l.text == "✓"
+	check(note_ok and check_ok and plain.find_children("*", "Label", true, false).is_empty() and priced.text == "" and priced.custom_minimum_size == Vector2(70, 70), "клітинка речі вміє показати ціну під значком і галочку")
+	plain.free()
+	priced.free()
+	check(UCity.SHOP_CELL == UChar.CELL and UCity.BAG_COLS == 6, "клітинки крамниці такі самі, як у торбі героя: той самий розмір і шість стовпців")
+	# ---- Крамниця міста ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "kleinody"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.level = 30
+	gp.gold = 500000
+	for i in 5:
+		gp.add_item(Data.gen_item(28, i % 3, "body" if i % 2 == 0 else "boots"), true)
+	gp.add_item(Arts.make(Arts.ORDER[0]), true)
+	gp.recalc()
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("poltava")
+	await _frames(2)
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var shop_i := -1
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i) == "Крамниця":
+			shop_i = i
+	var page: Control = tc.get_tab_control(shop_i)
+	var stock: Array = game.shop_stock("poltava")
+	var cells: Array = _cells(page, UCity.SHOP_CELL)
+	var tiles := 0
+	for b in page.find_children("*", "Button", true, false):
+		if "\n" in b.text and "грн" in b.text and not b.text.begins_with("Продати"):
+			tiles += 1
+	check(cells.size() == stock.size() + gp.inventory.size() and tiles == 0 and stock.size() > 0, "товари й торба стоять клітинками зі значками, текстових плиток нема (%d клітинок)" % cells.size())
+	var price_seen := false
+	var sell_seen := false
+	for l in page.find_children("*", "Label", true, false):
+		price_seen = price_seen or l.text == UKit.num(game.buy_price("poltava", stock[0]))
+		sell_seen = sell_seen or l.text == "+" + UKit.num(Data.sell_price(gp.inventory[0]))
+	var empties := 0
+	for pn in page.find_children("*", "Panel", true, false):
+		if pn.custom_minimum_size == Vector2(UCity.SHOP_CELL, UCity.SHOP_CELL):
+			empties += 1
+	check(price_seen and sell_seen and empties >= gp.bag_size() - gp.inventory.size(), "під значком ціна купівлі чи продажу, порожні місця торби видно клітинками")
+	# дотик до товару показує картку й кнопку купівлі
+	cells[0].pressed.emit()
+	await _frames(2)
+	page = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(shop_i)
+	var buy_btn = null
+	for b in page.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text.begins_with("Купити за"):
+			buy_btn = b
+	var bag0: int = gp.inventory.size()
+	check(game.city_sel_uid == int(stock[0]["uid"]) and buy_btn != null and not buy_btn.disabled, "дотик до клітинки товару відкриває картку з кнопкою «Купити»")
+	buy_btn.pressed.emit()
+	await _frames(2)
+	check(gp.inventory.size() == bag0 + 1, "товар куплено з картки")
+	# продаж кількох: позначені клітинки, артефакт не позначається
+	game.city_do("sell_multi", null)
+	await _frames(2)
+	page = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(shop_i)
+	var bag_cells: Array = _cells(page, UCity.SHOP_CELL).slice(game.shop_stock("poltava").size())
+	var art_i := -1
+	for i in gp.inventory.size():
+		if gp.inventory[i].has("artifact"):
+			art_i = i
+	bag_cells[0].pressed.emit()
+	bag_cells[1].pressed.emit()
+	bag_cells[art_i].pressed.emit()
+	await _frames(2)
+	check(game.sell_marked.size() == 2 and not game.sell_marked.has(gp.inventory[art_i]["uid"]), "у режимі «Вибрати кілька» дотик позначає клітинки, артефакт не позначається")
+	page = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(shop_i)
+	var ticks := 0
+	for l in page.find_children("*", "Label", true, false):
+		if not l.is_queued_for_deletion() and l.text == "✓":
+			ticks += 1
+	check(ticks == 2, "позначені клітинки мають галочку")
+	var n0: int = gp.inventory.size()
+	game.city_do("sell_marked", null)
+	await _frames(2)
+	check(gp.inventory.size() == n0 - 2, "вибране продано разом")
+	game.city_do("sell_multi", null)
+	# ---- Скриня на хуторі ----
+	game.enter_map()
+	await _frames(2)
+	var in_chest: Dictionary = Data.gen_item(25, 3, "amulet")
+	game.account.put_item(in_chest, 0)
+	game.enter_camp()
+	await _frames(2)
+	var ctc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in ctc.get_tab_count():
+		if ctc.get_tab_title(i) == "Скриня":
+			game.camp_tab = i
+	game._build_camp()
+	await _frames(2)
+	var cpage: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.camp_tab)
+	var ccells: Array = _cells(cpage, UCamp.CHEST_CELL)
+	var chest_n: int = game.account.chest["items"].size()
+	check(game.chest_sel == "" and ccells.size() == chest_n + gp.inventory.size() and chest_n == 1, "скриня й торба стоять двома сітками клітинок (%d)" % ccells.size())
+	var bag_n: int = gp.inventory.size()
+	ccells[0].pressed.emit()
+	await _frames(2)
+	cpage = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.camp_tab)
+	var take_btn := false
+	for b in cpage.find_children("*", "Button", true, false):
+		take_btn = take_btn or (not b.is_queued_for_deletion() and b.text == UCamp.CHEST_TAKE)
+	check(game.chest_sel.begins_with("c:") and take_btn and game.account.chest["items"].size() == 1 and gp.inventory.size() == bag_n, "перший дотик лише показує річ зі скрині й кнопку «%s»" % UCamp.CHEST_TAKE)
+	_cells(cpage, UCamp.CHEST_CELL)[0].pressed.emit()
+	await _frames(2)
+	check(game.account.chest["items"].is_empty() and gp.inventory.size() == bag_n + 1 and game.chest_sel == "", "другий дотик по тій самій клітинці забирає річ у торбу")
+	var put_uid: int = int(gp.inventory[0]["uid"])
+	game.camp_do("chest_select", "b:%d" % put_uid)
+	await _frames(2)
+	cpage = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.camp_tab)
+	var put_btn = null
+	for b in cpage.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text == UCamp.CHEST_PUT:
+			put_btn = b
+	check(put_btn != null, "вибрана річ із торби має кнопку «%s»" % UCamp.CHEST_PUT)
+	put_btn.pressed.emit()
+	await _frames(2)
+	check(game.account.chest["items"].size() == 1 and gp.find_item(put_uid).is_empty(), "кнопка картки кладе річ до скрині")
+	# ---- Довідник ----
+	var arts := {}
+	for e in WS._entries("basics") + WS._entries("camp"):
+		arts[str(e["title"])] = str(e["text"])
+	check("клітинками зі значками" in arts.get("Крамниця міста", "") and "«Вибрати кілька»" in arts.get("Крамниця міста", "") and UCamp.CHEST_TAKE in arts.get("Скриня", "") and "Другий дотик" in arts.get("Скриня", ""), "довідник описує крамницю й скриню сіткою значків")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

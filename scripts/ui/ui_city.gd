@@ -154,6 +154,12 @@ static func _quest_row(game, q: Dictionary, mode: String) -> Control:
 
 # ---------------- Крамниця ----------------
 
+const SHOP_CELL := 70  # клітинка крамниці: така сама, як у торбі на екрані героя
+const SHOP_COLS := 3  # товари стоять у три стовпці
+const BAG_COLS := 6  # торба в шість, як на екрані героя
+
+## Крамниця: товари й торба сіткою значків, як інвентар героя. Під значком ціна, дотик показує картку
+## речі праворуч, там же кнопки «Купити» й «Продати». Цю саму сторінку показує Хованець (UiDivine.trader).
 static func _shop(game, city: String) -> Control:
 	var p = game.player
 	var h := HBoxContainer.new()
@@ -164,64 +170,72 @@ static func _shop(game, city: String) -> Control:
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 6)
 	var disc: float = game.world.discount(city)
-	left.add_child(UI.label("Товари" + (("  (знижка %d%%)" % roundi(disc * 100)) if disc > 0 else ""), 22, UI.GOLD, false))
-	var sg := UI.grid(2)
+	left.add_child(UI.label("Товари" + (("  (знижка %d%%)" % roundi(disc * 100)) if disc > 0 else ""), 20, UI.GOLD, false))
+	var sg := UI.grid(SHOP_COLS)
 	for it in stock:
-		sg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "%d грн" % game.buy_price(city, it)))
-	if stock.is_empty():
-		left.add_child(UI.label("Усе розкупили.\nЗазирни після походу.", 17, UI.MUTED, false))
+		sg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, SHOP_CELL, float(p.gain_from(it)) > p.Power.MIN_GAIN, UI.num(game.buy_price(city, it))))
+	for i in maxi(0, SHOP_COLS * 2 - stock.size()):
+		sg.add_child(UI.empty_cell(SHOP_CELL))
 	left.add_child(sg)
+	if stock.is_empty():
+		left.add_child(UI.label("Усе розкупили.\nЗазирни після походу.", 15, UI.MUTED, false))
 	h.add_child(left)
 
+	var pw: int = SHOP_COLS * SHOP_CELL + (SHOP_COLS - 1) * 6
 	var pprice: int = game.CityService.potion_price(game.world, p, city)
-	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, p.potion_max()], 20, UI.TEXT, false))
-	left.add_child(UI.label("Лікує %d%% здоров'я в бою" % roundi(Data.POTION_HEAL * 100), 15, UI.MUTED, false))
-	left.add_child(UI.button("Купити зілля • %d грн" % pprice, _do(game, "buy_potion"), Vector2(306, 56), 18, p.gold >= pprice and p.potions < p.potion_max()))
+	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, p.potion_max()], 17, UI.TEXT, false))
+	left.add_child(UI.label("Лікує %d%% здоров'я" % roundi(Data.POTION_HEAL * 100), 13, UI.MUTED, false))
+	left.add_child(UI.button("Купити • %s грн" % UI.num(pprice), _do(game, "buy_potion"), Vector2(pw, 52), 16, p.gold >= pprice and p.potions < p.potion_max()))
 	var mprice: int = game.CityService.mana_potion_price(game.world, p, city)
-	left.add_child(UI.label("Зілля наснаги: %d/%d" % [p.mana_potions, p.mana_potion_max()], 20, UI.TEXT, false))
-	left.add_child(UI.label("Повертає %d%% наснаги в бою" % roundi(Data.MANA_POTION_RESTORE * 100), 15, UI.MUTED, false))
-	left.add_child(UI.button("Купити зілля наснаги • %d грн" % mprice, _do(game, "buy_mana_potion"), Vector2(306, 56), 17, p.gold >= mprice and p.mana_potions < p.mana_potion_max()))
+	left.add_child(UI.label("Зілля наснаги: %d/%d" % [p.mana_potions, p.mana_potion_max()], 17, UI.TEXT, false))
+	left.add_child(UI.label("Повертає %d%% наснаги" % roundi(Data.MANA_POTION_RESTORE * 100), 13, UI.MUTED, false))
+	left.add_child(UI.button("Купити • %s грн" % UI.num(mprice), _do(game, "buy_mana_potion"), Vector2(pw, 52), 16, p.gold >= mprice and p.mana_potions < p.mana_potion_max()))
 
 	var bag := VBoxContainer.new()
 	bag.add_theme_constant_override("separation", 6)
 	var head := HBoxContainer.new()
-	var bl := UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false)
+	head.add_theme_constant_override("separation", 10)
+	var bl := UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 20, UI.GOLD, false)
 	bl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(bl)
-	head.add_child(UI.button("✓ Вибрати кілька" if not game.sell_multi else "Готово", _do(game, "sell_multi"), Vector2(190, 44), 15))
+	head.add_child(UI.button("✓ Вибрати кілька" if not game.sell_multi else "Готово", _do(game, "sell_multi"), Vector2(190, 40), 15))
 	bag.add_child(head)
-	var bg := UI.grid(3)
-	for it in p.inventory:
-		if it.has("artifact"):
-			continue  # артефакти не продають і не точать: вони лежать у торбі
-		var marked: bool = game.sell_marked.has(it["uid"])
-		if game.sell_multi:
-			bg.add_child(UI.item_button(it, _do(game, "mark", it["uid"]), marked, ("✓ " if marked else "") + "+%d грн" % Data.sell_price(it)))
-		else:
-			bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, "+%d грн" % Data.sell_price(it)))
-	bag.add_child(bg)
+	# Продаж гуртом стоїть над сіткою, щоб кнопки не тікали вниз разом із довгою торбою
 	if game.sell_multi:
 		var total := 0
 		for uid in game.sell_marked:
 			var mi: Dictionary = p.find_item(uid)
 			if not mi.is_empty():
 				total += Data.sell_price(mi)
-		bag.add_child(UI.button("Продати вибране (%d) за %d грн" % [game.sell_marked.size(), total], _do(game, "sell_marked"), Vector2(300, 56), 17, not game.sell_marked.is_empty()))
+		bag.add_child(UI.button("Продати вибране (%d) за %s грн" % [game.sell_marked.size(), UI.num(total)], _do(game, "sell_marked"), Vector2(300, 50), 16, not game.sell_marked.is_empty()))
+		bag.add_child(UI.label("Торкайся речей у торбі: позначені продадуться разом.", 13, UI.MUTED, false))
 	else:
 		var CS = game.CityService
-		var row := HFlowContainer.new()
-		row.add_theme_constant_override("h_separation", 6)
-		row.add_theme_constant_override("v_separation", 6)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
 		for r in 3:
 			var cands: Array = CS.bulk_candidates(p, r)
 			var sum := 0
 			for c in cands:
 				sum += Data.sell_price(c)
 			var name: String = ["звичайні", "до добротних", "до рідкісних"][r]
-			row.add_child(UI.button("Продати %s\n%d шт • +%d грн" % [name, cands.size(), sum], _do(game, "sell_upto", r), Vector2(150, 56), 13, not cands.is_empty()))
+			row.add_child(UI.button("Продати %s\n%d шт • +%s грн" % [name, cands.size(), UI.num(sum)], _do(game, "sell_upto", r), Vector2(146, 52), 12, not cands.is_empty()))
 		bag.add_child(row)
-		bag.add_child(UI.label("Речі, кращі за вдягнені, не продаються.", 13, UI.MUTED, false))
-		bag.add_child(UI.button(("☑ " if game.combat.autosell else "☐ ") + "Автопродаж звичайних при повній торбі", _do(game, "autosell"), Vector2(300, 44), 13))
+		var arow := HBoxContainer.new()
+		arow.add_theme_constant_override("separation", 8)
+		arow.add_child(UI.button(("☑ " if game.combat.autosell else "☐ ") + "Автопродаж звичайних при повній торбі", _do(game, "autosell"), Vector2(300, 38), 13))
+		arow.add_child(UI.label("Кращі за вдягнені\nне продаються.", 12, UI.MUTED, false))
+		bag.add_child(arow)
+	var bg := UI.grid(BAG_COLS)
+	for it in p.inventory:
+		var art: bool = it.has("artifact")  # артефакти не продають: вони діють просто з торби
+		var marked: bool = game.sell_marked.has(it["uid"])
+		var act: String = "mark" if game.sell_multi and not art else "select"
+		bg.add_child(UI.item_cell(it, _do(game, act, it["uid"]), it["uid"] == sel and not game.sell_multi, SHOP_CELL, float(p.gain_from(it)) > p.Power.MIN_GAIN,
+			"" if art else "+" + UI.num(Data.sell_price(it)), marked))
+	for i in maxi(0, p.bag_size() - p.inventory.size()):
+		bg.add_child(UI.empty_cell(SHOP_CELL))
+	bag.add_child(bg)
 	h.add_child(bag)
 
 	var det := VBoxContainer.new()
@@ -235,14 +249,18 @@ static func _shop(game, city: String) -> Control:
 	if not shop_item.is_empty():
 		det.add_child(UI.item_card(shop_item, p.equipment.get(shop_item["slot"], {})))
 		var price: int = game.buy_price(city, shop_item)
-		det.add_child(UI.button("Купити за %d" % price, _do(game, "buy", sel), Vector2(300, 60), 22, p.gold >= price and not p.bag_full()))
+		det.add_child(UI.button("Купити за %s грн" % UI.num(price), _do(game, "buy", sel), Vector2(300, 60), 22, p.gold >= price and not p.bag_full()))
 	else:
 		var it: Dictionary = p.find_item(sel) if sel > 0 else {}
 		if not it.is_empty() and not p.is_equipped(sel):
 			det.add_child(UI.item_card(it, p.equipment.get(it["slot"], {})))
-			det.add_child(UI.button("Продати за %d" % Data.sell_price(it), _do(game, "sell", sel), Vector2(300, 60), 22))
+			if it.has("artifact"):
+				det.add_child(UI.label("Артефакти не продаються.", 16, UI.MUTED, false))
+			else:
+				det.add_child(UI.button("Продати за %s грн" % UI.num(Data.sell_price(it)), _do(game, "sell", sel), Vector2(300, 60), 22))
 		else:
-			det.add_child(UI.label("Торкнись товару або\nсвоєї речі.", 20, UI.MUTED, false))
+			det.add_child(UI.label("Торкнись товару або\nсвоєї речі,\nщоб побачити бонуси.", 20, UI.MUTED, false))
+			det.add_child(UI.label("Число під значком: ціна.\nЗелена стрілка: річ краща\nза вдягнену.", 15, UI.MUTED, false))
 	return h
 
 

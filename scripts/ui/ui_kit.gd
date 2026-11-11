@@ -92,21 +92,42 @@ static func _cell_mark(text: String, col: Color, size: int, anchor: int, off: Ve
 ## Клітинка речі для сітки торби й вдягненого: значок на тлі кольору рідкості,
 ## заточка в кутку, позначки золотої речі, артефакта й душі в гнізді.
 ## better — річ сильніша за вдягнену в ту саму клітинку: зелена стрілка в нижньому правому куті.
-static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px: int = 72, better: bool = false) -> Button:
+## note — дрібний підпис унизу клітинки (ціна в крамниці); check — річ позначено (продаж кількох одразу).
+static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px: int = 72, better: bool = false, note: String = "", check: bool = false) -> Button:
 	var col: Color = Data.item_color(item)
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(px, px)
 	b.clip_contents = true
 	var bg := col.darkened(0.5) if selected else col.darkened(0.74)
 	var edge := Color(1.0, 0.95, 0.75) if selected else col.darkened(0.2)
-	b.add_theme_stylebox_override("normal", style(bg, edge, 8, 2))
-	b.add_theme_stylebox_override("hover", style(bg.lightened(0.08), edge, 8, 2))
-	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.15), edge, 8, 2))
+	if check:
+		bg = Color(0.13, 0.33, 0.15)  # позначену річ видно здалеку: зелене тло й зелена рамка
+		edge = GOOD
+	b.add_theme_stylebox_override("normal", style(bg, edge, 8, 3 if check else 2))
+	b.add_theme_stylebox_override("hover", style(bg.lightened(0.08), edge, 8, 3 if check else 2))
+	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.15), edge, 8, 3 if check else 2))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var t := icon(item_icon_id(item), px - 22)
+	var isz: int = px - 22 - (8 if note != "" else 0)  # з підписом значок трохи менший і вищий
+	var t := icon(item_icon_id(item), isz)
 	t.set_anchors_preset(Control.PRESET_CENTER)
-	t.position = Vector2(-(px - 22) / 2.0, -(px - 22) / 2.0)
+	t.position = Vector2(-isz / 2.0, -isz / 2.0 - (6.0 if note != "" else 0.0))
 	b.add_child(t)
+	if note != "":
+		var nl := label(note, 12, TEXT, true)
+		nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		nl.add_theme_constant_override("outline_size", 4)
+		nl.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
+		nl.anchor_left = 0.0
+		nl.anchor_right = 1.0
+		nl.anchor_top = 1.0
+		nl.anchor_bottom = 1.0
+		nl.offset_top = -19.0
+		nl.offset_bottom = -1.0
+		nl.clip_text = true
+		b.add_child(nl)
+	if check:
+		b.add_child(_cell_mark("✓", GOOD, 20, Control.PRESET_BOTTOM_RIGHT, Vector2(-22, -28 - (13 if note != "" else 0))))
+	var lift: float = 13.0 if note != "" else 0.0  # над підписом позначки нижніх кутів стоять вище
 	if int(item.get("up", 0)) > 0:
 		b.add_child(_cell_mark("+%d" % int(item["up"]), GOLD, 14, Control.PRESET_TOP_RIGHT, Vector2(-30, 2)))
 	if item.has("unique"):
@@ -116,9 +137,9 @@ static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px
 	if int(item.get("sock", 0)) > 0:
 		var sid: String = str(item.get("soul", ""))
 		var scol: Color = load("res://scripts/game/soul_service.gd").color(sid) if sid != "" else MUTED
-		b.add_child(_cell_mark("◈" if sid != "" else "◇", scol, 15, Control.PRESET_BOTTOM_LEFT, Vector2(5, -22)))
-	if better:
-		b.add_child(_cell_mark("▲", GOOD, 16, Control.PRESET_BOTTOM_RIGHT, Vector2(-22, -24)))
+		b.add_child(_cell_mark("◈" if sid != "" else "◇", scol, 15, Control.PRESET_BOTTOM_LEFT, Vector2(5, -22 - lift)))
+	if better and not check:
+		b.add_child(_cell_mark("▲", GOOD, 16, Control.PRESET_BOTTOM_RIGHT, Vector2(-22, -24 - lift)))
 	b.pressed.connect(cb)
 	return b
 

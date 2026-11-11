@@ -163,6 +163,11 @@ static func _kleinody(game) -> Control:
 
 # ---------- Скриня (спільна на всіх персонажів) ----------
 
+const CHEST_CELL := 66  # клітинка скрині й торби на вкладці «Скриня»
+const CHEST_COLS := 6
+const CHEST_TAKE := "Забрати в торбу"
+const CHEST_PUT := "Покласти до скрині"
+
 static func _chest(game) -> Control:
 	var p = game.player
 	var acc = game.account
@@ -196,29 +201,51 @@ static func _chest(game) -> Control:
 		srow.add_child(UI.button("↓", _do(game, "chest_put_stone", id), Vector2(44, 40), 16, mine > 0))
 		srow.add_child(UI.button("↑", _do(game, "chest_take_stone", id), Vector2(44, 40), 16, there > 0))
 	v.add_child(srow)
-	# Речі: дві колонки — скриня й торба
+	# Речі: скриня й торба сіткою значків, як інвентар героя, і картка вибраної речі праворуч.
+	# Перший дотик показує річ, другий по тій самій клітинці переносить її.
+	var sel: String = game.chest_sel
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 18)
 	var left := VBoxContainer.new()
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left.add_child(UI.label("Скриня %d/%d  (торкнись — забрати)" % [items.size(), size], 20, UI.GOLD, false))
-	var cg := UI.grid(3)
+	left.add_theme_constant_override("separation", 6)
+	left.add_child(UI.label("Скриня %d/%d" % [items.size(), size], 20, UI.GOLD, false))
+	var cg := UI.grid(CHEST_COLS)
+	var picked: Dictionary = {}
 	for it in items:
-		cg.add_child(UI.item_button(it, _do(game, "chest_take", it["uid"]), false, Data.SLOT_NAMES[it["slot"]]))
-	if items.is_empty():
-		left.add_child(UI.label("Порожньо.", 16, UI.MUTED, false))
+		var key := "c:%d" % int(it["uid"])
+		if key == sel:
+			picked = it
+		cg.add_child(UI.item_cell(it, _do(game, "chest_take", it["uid"]) if key == sel else _do(game, "chest_select", key), key == sel, CHEST_CELL))
+	for i in maxi(0, size - items.size()):
+		cg.add_child(UI.empty_cell(CHEST_CELL))
 	left.add_child(cg)
 	h.add_child(left)
 	var right := VBoxContainer.new()
-	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.add_child(UI.label("Твоя торба %d/%d  (торкнись — покласти)" % [p.inventory.size(), p.bag_size()], 20, UI.GOLD, false))
-	var bg := UI.grid(3)
+	right.add_theme_constant_override("separation", 6)
+	right.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 20, UI.GOLD, false))
+	var bg := UI.grid(CHEST_COLS)
 	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(game, "chest_put", it["uid"]), false, Data.SLOT_NAMES[it["slot"]]))
-	if p.inventory.is_empty():
-		right.add_child(UI.label("Порожньо.", 16, UI.MUTED, false))
+		var key := "b:%d" % int(it["uid"])
+		if key == sel:
+			picked = it
+		bg.add_child(UI.item_cell(it, _do(game, "chest_put", it["uid"]) if key == sel else _do(game, "chest_select", key), key == sel, CHEST_CELL))
+	for i in maxi(0, p.bag_size() - p.inventory.size()):
+		bg.add_child(UI.empty_cell(CHEST_CELL))
 	right.add_child(bg)
 	h.add_child(right)
+	var det := VBoxContainer.new()
+	det.custom_minimum_size = Vector2(300, 0)
+	det.add_theme_constant_override("separation", 8)
+	h.add_child(det)
+	if picked.is_empty():
+		det.add_child(UI.label("Торкнись речі,\nщоб побачити бонуси.", 20, UI.MUTED, false))
+		det.add_child(UI.label("Другий дотик по тій самій\nклітинці переносить річ:\nзі скрині в торбу або назад.", 15, UI.MUTED, false))
+	else:
+		det.add_child(UI.item_card(picked))
+		if sel.begins_with("c:"):
+			det.add_child(UI.button(CHEST_TAKE, _do(game, "chest_take", picked["uid"]), Vector2(290, 58), 20, not p.bag_full()))
+		else:
+			det.add_child(UI.button(CHEST_PUT, _do(game, "chest_put", picked["uid"]), Vector2(290, 58), 20, not acc.chest_full(sklad) and not p.is_equipped(picked["uid"])))
 	v.add_child(h)
 	if game.smith_msg != "":
 		v.add_child(UI.label(game.smith_msg, 18, game.smith_msg_color, false))
