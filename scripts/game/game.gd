@@ -34,6 +34,8 @@ const GuideService := preload("res://scripts/game/guide_service.gd")
 const WayService := preload("res://scripts/game/way_service.gd")
 const QuickService := preload("res://scripts/game/quick_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
+const ShopService := preload("res://scripts/game/shop_service.gd")
+const UiShop := preload("res://scripts/ui/ui_shop.gd")
 const Peril := preload("res://scripts/data/peril.gd")
 const Sets := preload("res://scripts/data/sets.gd")
 const WikiService := preload("res://scripts/game/wiki_service.gd")
@@ -2374,27 +2376,37 @@ func _show_pause() -> void:
 	_open_menu()
 	hud.add_title("Пауза")
 	hud.add_button("Продовжити", _resume_play)
-	hud.add_button("Персонаж", func():
-		hud.close_overlay()
-		state = State.PLAYING
-		open_character())
+	# Другорядні кнопки стоять парами: інакше меню не вміщалось на низькому екрані
+	hud.add_row([
+		UI.button("Персонаж", func():
+			hud.close_overlay()
+			state = State.PLAYING
+			open_character(), HALF_BTN, 22),
+		UI.button("Довідник", func(): open_wiki(_show_pause), HALF_BTN, 22),
+	])
+	var ads := []
 	for id in ["xp2", "drop2"]:
 		var bname: String = AdRewards.BOOST_NAMES[id]
-		hud.add_button(("%s ще %s" % [bname, AdRewards.format_time(AdRewards.boost_left(world, id))]) if not AdRewards.can_boost(world, id) else "Реклама: %s на годину" % bname, _watch_boost.bind(id, _show_pause))
+		ads.append(UI.button(("%s\nще %s" % [bname, AdRewards.format_time(AdRewards.boost_left(world, id))]) if not AdRewards.can_boost(world, id) else "%s на годину\nза рекламу" % bname, _watch_boost.bind(id, _show_pause), HALF_BTN, 18))
+	hud.add_row(ads)
+	_add_sound_toggles(_show_pause, true)
 	var leave_text := "Покинути печеру (прогрес втратиться)" if combat.is_dungeon() else "Повернутися на мапу"
 	if combat.is_duel() and not combat.duel_over:
-		hud.add_button("Здатися (мінус спроба)", _duel_lost)
+		hud.add_button("Здатися (мінус спроба)", _duel_lost, WIDE_BTN)
 	else:
-		hud.add_button(leave_text, enter_map)
-	hud.add_button("Довідник", func(): open_wiki(_show_pause))
-	_add_sound_toggles(_show_pause)
+		hud.add_button(leave_text, enter_map, WIDE_BTN)
 	hud.add_button("Головне меню", func():
 		save_game()
 		combat.leave()
-		_show_main_menu())
+		_show_main_menu(), WIDE_BTN)
 
 
-func _add_sound_toggles(refresh: Callable) -> void:
+const HALF_BTN := Vector2(232, 64)  # дві такі кнопки в ряд займають ширину звичайної
+const WIDE_BTN := Vector2(480, 68)
+
+
+## Звук, музика й автопідбір; shop — поруч з автопідбором стоїть кнопка крамниці (там, де є герой).
+func _add_sound_toggles(refresh: Callable, shop: bool = false) -> void:
 	hud.add_row([
 		UI.button("Звук: " + ("так" if Audio.sound_on else "ні"), func():
 			Audio.set_sound(not Audio.sound_on)
@@ -2408,7 +2420,14 @@ func _add_sound_toggles(refresh: Callable) -> void:
 	var on := 0
 	for v in combat.pickup_filter:
 		on += 1 if v else 0
-	hud.add_button("Автопідбір: %s" % ("усе" if on == 4 else "%d із 4 рідкостей" % on), func(): _show_pickup_menu(refresh))
+	var pick_text := "Автопідбір: %s" % ("усе" if on == 4 else "%d із 4 рідкостей" % on)
+	if shop:
+		hud.add_row([
+			UI.button(pick_text.trim_suffix(" рідкостей"), func(): _show_pickup_menu(refresh), HALF_BTN, 20),
+			UI.button("Крамниця", func(): open_shop(refresh), HALF_BTN, 22),
+		])
+	else:
+		hud.add_button(pick_text, func(): _show_pickup_menu(refresh), Vector2(480, 64))
 
 
 ## Фільтр автопідбору: речі яких рідкостей герой підбирає сам. back — меню, з якого прийшли.
@@ -2550,6 +2569,72 @@ func close_wiki() -> void:
 		back.call()
 
 
+# ======================= Крамниця за донат =======================
+
+var shop_open := false
+var shop_tab := 0
+var shop_confirm := ""  # товар, що чекає другого дотику: покупку за червінці треба підтвердити
+var _shop_back := Callable()
+
+
+## Відкрити крамницю. back — куди вертатись після «Назад» (меню паузи, привал, екран героя).
+func open_shop(back: Callable) -> void:
+	_shop_back = back
+	shop_open = true
+	shop_confirm = ""
+	hud.close_overlay()
+	Audio.play("coins", 0.05)
+	hud.set_screen(UiShop.build(self))
+
+
+func close_shop() -> void:
+	if not shop_open:
+		return
+	shop_open = false
+	shop_confirm = ""
+	hud.clear_screen()
+	save_game()
+	var back := _shop_back
+	_shop_back = Callable()
+	if back.is_valid():
+		back.call()
+
+
+## Дії в крамниці: "pack" — купити набір червінців за гроші, "buy" — купити товар [вид, id] за червінці.
+func shop_do(action: String, arg) -> void:
+	match action:
+		"pack":
+			var p: Dictionary = ShopService.pack(str(arg))
+			if p.is_empty():
+				return
+			Billing.purchase(str(p["id"]), "%s: %s червінців" % [p["name"], UI.num(int(p["coins"]))], str(p["price"]), func(paid: bool):
+				if paid:
+					var n: int = ShopService.grant_pack(world, str(p["id"]))
+					save_game()
+					Audio.play("coins", 0.05)
+					hud.show_banner("Дякуємо за підтримку!\n+%s червінців" % UI.num(n), UI.GOLD)
+				if shop_open:
+					hud.set_screen(UiShop.build(self), true))
+			return
+		"buy":
+			var kind: String = str(arg[0])
+			var id: String = str(arg[1])
+			var key: String = ShopService.key(kind, id)
+			if ShopService.block_reason(world, player, kind, id) != "":
+				shop_confirm = ""
+			elif shop_confirm != key:
+				shop_confirm = key  # перший дотик лише питає: червінці коштують справжніх грошей
+			else:
+				shop_confirm = ""
+				var res: Dictionary = ShopService.buy(world, player, kind, id)
+				if bool(res["ok"]):
+					save_game()
+					Audio.play("quest", 0.0)
+					_check_full_set()
+				hud.show_banner(str(res["msg"]), UI.GOLD if bool(res["ok"]) else UI.BAD)
+	hud.set_screen(UiShop.build(self), true)
+
+
 ## Привал на мапі: звук, головне меню, вихід. Раніше з мапи до головного меню дороги не було.
 func _show_map_menu() -> void:
 	if state != State.MAP or travel_to != "":
@@ -2559,7 +2644,7 @@ func _show_map_menu() -> void:
 	hud.add_title("Привал")
 	hud.add_button("Далі в дорогу", _close_map_menu)
 	hud.add_button("Довідник", func(): open_wiki(_show_map_menu))
-	_add_sound_toggles(_show_map_menu)
+	_add_sound_toggles(_show_map_menu, true)
 	hud.add_button("Головне меню", func():
 		save_game()
 		map_menu = false

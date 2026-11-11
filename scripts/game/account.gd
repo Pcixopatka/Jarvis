@@ -6,6 +6,7 @@ extends RefCounted
 ##   challenges — щоденні/тижневі виклики й відкриті досягнення
 ##   records    — рекорди роду: найкраще серед усіх персонажів (див. RecordService)
 ##   holidays   — жетони й нагороди сезонних свят (див. HolidayService)
+##   shop       — крамниця за донат: червінці й покупки (див. ShopService)
 ## WorldState кожного персонажа тримає посилання на ці словники, тож сервіси, що працюють із
 ## world.camp / world.stats / world.challenges, не змінюються.
 
@@ -21,11 +22,12 @@ var stats := {}
 var challenges := {}
 var records := {}
 var holidays := {}
+var shop := {}  # крамниця за донат: червінці й покупки роду (див. ShopService)
 var next_uid := 1000000  # uid речей у скрині — з окремого діапазону, щоб не збігались із героєвими
 
 
 func to_dict() -> Dictionary:
-	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "records": records, "holidays": holidays, "next_uid": next_uid}
+	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "records": records, "holidays": holidays, "shop": shop, "next_uid": next_uid}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -37,6 +39,7 @@ func from_dict(d: Dictionary) -> void:
 	challenges = d.get("challenges", {})
 	records = d.get("records", {})
 	holidays = d.get("holidays", {})
+	shop = d.get("shop", {})
 	next_uid = int(d.get("next_uid", 1000000))
 
 
@@ -47,6 +50,7 @@ func attach(world) -> void:
 	world.challenges = challenges
 	world.records = records
 	world.holidays = holidays
+	world.shop = shop
 
 
 ## Перший запуск після оновлення: забрати спільне зі старого збереження персонажа.

@@ -26,7 +26,7 @@ static func build(game) -> Control:
 	]
 	var title: String = game.PerilService.title(game.world)
 	return UI.screen("%s%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), (" «%s»" % title) if title != "" else "", p.level, UI.num(p.gold)], "Назад", game.close_character,
-		pages, game.char_tab, func(i: int): game.char_tab = i, [["Довідник", func(): game.open_wiki(game._build_character)]])
+		pages, game.char_tab, func(i: int): game.char_tab = i, [["Крамниця", func(): game.open_shop(game._build_character)], ["Довідник", func(): game.open_wiki(game._build_character)]])
 
 
 static func _do(game, action: String, arg = null) -> Callable:

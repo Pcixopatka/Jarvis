@@ -59,6 +59,7 @@ var hint_panel: PanelContainer
 var hint_label: Label
 var overlay: ColorRect
 var overlay_box: VBoxContainer
+var overlay_scroll: ScrollContainer  # гортає меню, якщо воно вище за екран
 var _hint_tween: Tween
 var _banner_tween: Tween = null
 var _pulse := 0.0
@@ -244,13 +245,23 @@ func _build() -> void:
 	overlay.visible = false
 	overlay.z_index = 6
 	ui_root.add_child(overlay)
+	# Меню стоїть по центру, поки вміщається. На низькому екрані воно гортається, а не ховає нижні кнопки.
+	overlay_scroll = ScrollContainer.new()
+	overlay_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	overlay.add_child(overlay_scroll)
 	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay.add_child(center)
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL  # не нижчий за екран: коротке меню лишається по центру
+	overlay_scroll.add_child(center)
+	var pad := MarginContainer.new()
+	pad.add_theme_constant_override("margin_top", 12)
+	pad.add_theme_constant_override("margin_bottom", 12)
+	center.add_child(pad)
 	overlay_box = VBoxContainer.new()
-	overlay_box.add_theme_constant_override("separation", 18)
+	overlay_box.add_theme_constant_override("separation", 14)
 	overlay_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	center.add_child(overlay_box)
+	pad.add_child(overlay_box)
 
 
 func _build_stats() -> void:
@@ -634,6 +645,7 @@ func close_dialogue() -> void:
 func open_overlay() -> void:
 	for c in overlay_box.get_children():
 		c.queue_free()
+	overlay_scroll.scroll_vertical = 0
 	overlay.visible = true
 	controls.visible = false
 	joystick.release()

@@ -130,6 +130,8 @@ func _run() -> void:
 	_suite_sets()
 	_suite_valor()
 	await _suite_peril_game()
+	_suite_shop()
+	await _suite_shop_game()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -8333,7 +8335,7 @@ func _suite_pickup_filter() -> void:
 	for b in btns.call():
 		if b.text.begins_with("Автопідбір"):
 			entry = b
-	check(entry != null and entry.text == "Автопідбір: 3 із 4 рідкостей", "у меню привалу є кнопка фільтра: «%s»" % (entry.text if entry != null else "—"))
+	check(entry != null and entry.text == "Автопідбір: 3 із 4", "у меню привалу є кнопка фільтра: «%s»" % (entry.text if entry != null else "—"))
 	entry.pressed.emit()
 	await _frames(2)
 	var toggles: Array = btns.call().filter(func(b): return b.text.begins_with("☑ ") or b.text.begins_with("☐ "))
@@ -11092,6 +11094,215 @@ func _suite_peril_game() -> void:
 		if not titles.has(t):
 			missing.append(t)
 	check(missing.is_empty(), "довідник знає про надважкі печери, набори, звитяги й нову нечисть: бракує %s" % str(missing))
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+
+
+# ======================= Крамниця за донат і меню, що вміщаються =======================
+
+func _suite_shop() -> void:
+	suite("Крамниця за донат: каталог, ціни, покупка")
+	var Shop = load("res://scripts/data/shop.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var Sets = load("res://scripts/data/sets.gd")
+	var Souls = load("res://scripts/data/souls.gd")
+	var SS = load("res://scripts/game/soul_service.gd")
+	var PS = load("res://scripts/game/peril_service.gd")
+	var WorldState = load("res://scripts/game/world_state.gd")
+	var Account = load("res://scripts/game/account.gd")
+	# ---- Набори червінців ----
+	var packs_ok := true
+	var seen := {}
+	var prev := 0
+	for p in Shop.PACKS:
+		packs_ok = packs_ok and str(p["id"]) != "" and not seen.has(p["id"]) and str(p["name"]) != "" and str(p["price"]) != "" and int(p["coins"]) > prev and SH.pack(str(p["id"])) == p
+		seen[p["id"]] = true
+		prev = int(p["coins"])
+	check(Shop.PACKS.size() >= 4 and packs_ok and SH.pack("nema").is_empty(), "набори червінців: назва, ціна, щораз більше")
+	# ---- У крамниці є все рідкісне ----
+	check(SH.ids("unique").size() == Uniques.ORDER.size() and SH.ids("artifact").size() == Arts.ORDER.size() and SH.ids("soul").size() == SS.known().size() and SH.ids("set").size() == Sets.ORDER.size() * Data.SLOTS.size() and SH.ids("set_full").size() == Sets.ORDER.size(),
+		"у крамниці всі золоті речі (%d), артефакти (%d), душі (%d) й речі наборів (%d)" % [SH.ids("unique").size(), SH.ids("artifact").size(), SH.ids("soul").size(), SH.ids("set").size()])
+	var priced := true
+	for kind in ["unique", "artifact", "soul", "set", "set_full"]:
+		for id in SH.ids(kind):
+			priced = priced and SH.price(kind, id) > 0
+	check(priced and SH.price("unique", "nema") == 0 and SH.price("set", "sviatohor:nema") == 0 and SH.price("nema", "x") == 0, "кожен товар має ціну, вигаданих товарів нема")
+	check(SH.price("soul", "b_chornoboh") > SH.price("soul", "zlyden") and SH.price("unique", "mech_kladenets") > SH.price("unique", "kotyhoroshko") and SH.price("artifact", "ulamok_chornoho_sontsia") > SH.price("artifact", "zmiiv_zub"), "що вищий ступінь, то дорожче")
+	check(SH.price("set_full", "boian") < SH.price("set", "boian:head") * Data.SLOTS.size() and Shop.SOUL_PRICE.size() == Souls.TIER_NAMES.size() and Shop.UNIQUE_PRICE.size() == Uniques.TIER_NAMES.size(), "увесь набір дешевший, ніж поодинці; ціна є для кожного ступеня")
+	# ---- Червінці ----
+	var w = WorldState.new()
+	var acc = Account.new()
+	acc.attach(w)
+	check(SH.coins(w) == 0 and SH.grant_pack(w, "nema") == 0 and SH.grant_pack(w, "coins_550") == 550 and SH.coins(w) == 550 and int(acc.shop["coins"]) == 550, "оплачений набір зараховує червінці в акаунт роду")
+	var acc2 = Account.new()
+	acc2.from_dict(acc.to_dict())
+	var w2 = WorldState.new()
+	acc2.attach(w2)
+	check(SH.coins(w2) == 550 and int(SH.state(w2)["packs"]["coins_550"]) == 1, "червінці зберігаються разом з акаунтом")
+	# ---- Покупка ----
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 37
+	p.recalc()
+	var poor = WorldState.new()
+	var res0: Dictionary = SH.buy(poor, p, "unique", "shablia_sirka")
+	check(not bool(res0["ok"]) and "Бракує" in str(res0["msg"]) and p.inventory.is_empty() and SH.coins(poor) == 0, "без червінців нічого не продають")
+	SH.grant_pack(w, "coins_7000")
+	var c0: int = SH.coins(w)
+	var res1: Dictionary = SH.buy(w, p, "unique", "shablia_sirka")
+	var got: Dictionary = res1["items"][0] if not res1["items"].is_empty() else {}
+	check(bool(res1["ok"]) and got.get("unique", "") == "shablia_sirka" and int(got["ilvl"]) == 37 and p.find_item(int(got["uid"])) == got and SH.coins(w) == c0 - SH.price("unique", "shablia_sirka") and SH.bought(w, "unique", "shablia_sirka") == 1, "золота річ: рівень героя, лежить у торбі, червінці списано")
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 0))
+	var n0: int = p.inventory.size()
+	check(bool(SH.buy(w, p, "set", "sviatohor:belt")["ok"]) and p.inventory.size() == n0 + 1 and Sets.is_set(p.inventory[n0]) and int(p.inventory[n0]["ilvl"]) == 37, "куплене лягає й понад місце в торбі")
+	p.inventory.clear()
+	var c1: int = SH.coins(w)
+	check(bool(SH.buy(w, p, "soul", "b_dev")["ok"]) and int(p.souls.get("b_dev", 0)) == 1 and SH.coins(w) == c1 - SH.price("soul", "b_dev"), "душа летить у торбинку душ")
+	check(bool(SH.buy(w, p, "artifact", "zmiiv_zub")["ok"]) and Arts.has(p.inventory, "zmiiv_zub") and "Уже лежить" in SH.block_reason(w, p, "artifact", "zmiiv_zub") and not bool(SH.buy(w, p, "artifact", "zmiiv_zub")["ok"]), "артефакт удруге не продають: другий такий самий не діє")
+	var full: Dictionary = SH.buy(w, p, "set_full", "dovbush")
+	var slots := {}
+	for it in full["items"]:
+		slots[str(it["slot"])] = true
+	check(bool(full["ok"]) and full["items"].size() == Data.SLOTS.size() and slots.size() == Data.SLOTS.size() and int(SH.state(w)["spent"]) > 0, "увесь набір: шість речей у всі клітинки")
+	var mage = _new_player()
+	mage.change_class("volkhv")
+	check(SH.set_weapon(mage) == "staff" and SH.set_weapon(p) == str(p.weapon_type) and not SH.fits(p, "unique", "posokh_svaroha") and SH.fits(mage, "unique", "posokh_svaroha") and SH.fits(p, "soul", "zlyden"), "зброя набору до руки класу; чужу золоту зброю позначено")
+	var wpn: Dictionary = SH.buy(w, mage, "set", "boian:weapon")
+	check(bool(wpn["ok"]) and str(wpn["items"][0]["type"]) == "staff" and str(wpn["items"][0]["name"]) == "Посох Бояна", "волхв купує зброю набору посохом")
+	mage.level = 0
+	check(SH.block_reason(w, p, "unique", "nema") == "Такого товару нема" and SH.item_level(mage) == 1, "вигаданий товар не купити; рівень речі не нижчий за перший")
+	# ---- Тестова оплата ----
+	var billing = root.get_node("Billing")
+	var was_instant: bool = billing.instant
+	billing.instant = false
+	var paid := [null]
+	billing.purchase("coins_100", "Жменя", "39 грн", func(ok: bool): paid[0] = ok)
+	check(billing.is_test() and billing.is_busy() and paid[0] == null, "тестова оплата чекає на рішення гравця")
+	billing._finish(false)
+	check(paid[0] == false and not billing.is_busy(), "скасована оплата нічого не дає")
+	billing.instant = was_instant
+	p.free()
+	mage.free()
+
+
+func _suite_shop_game() -> void:
+	suite("Крамниця й меню: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var SH = load("res://scripts/game/shop_service.gd")
+	var Shop = load("res://scripts/data/shop.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var billing = root.get_node("Billing")
+	billing.instant = true
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup"]:
+		w.hints[k] = true
+	p.change_class("cossack")
+	p.level = 30
+	p.recalc()
+	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	var menu_texts := func() -> Array:
+		var out := []
+		for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion():
+				out.append(b.text)
+		return out
+	var press_menu := func(prefix: String) -> bool:
+		for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion() and b.text.begins_with(prefix):
+				b.pressed.emit()
+				return true
+		return false
+	# ---- Пауза вміщається на екрані ----
+	game.enter_location("wild_field")
+	await _frames(3)
+	game._show_pause()
+	await _frames(3)
+	var texts: Array = menu_texts.call()
+	var sc: ScrollContainer = game.hud.overlay_scroll
+	var bar: ScrollBar = sc.get_v_scroll_bar()
+	check("Продовжити" in texts and "Персонаж" in texts and "Довідник" in texts and "Крамниця" in texts and "Головне меню" in texts and "Повернутися на мапу" in texts, "у паузі є всі кнопки: %s" % str(texts).replace("\n", " "))
+	check(game.hud.overlay_box.size.y + 24.0 <= sc.size.y and bar.max_value <= bar.page + 1.0, "меню паузи вміщається на екрані без гортання (%d із %d)" % [int(game.hud.overlay_box.size.y), int(sc.size.y)])
+	for i in 8:
+		game.hud.add_button("Зайва кнопка %d" % i, func(): pass)
+	await _frames(3)
+	check(bar.max_value > bar.page + 100.0, "довше меню гортається, а не ховає нижні кнопки")
+	sc.scroll_vertical = 300
+	game._show_pause()
+	await _frames(3)
+	check(sc.scroll_vertical == 0, "нове меню відкривається згори")
+	# ---- Крамниця з паузи ----
+	check(press_menu.call("Крамниця"), "кнопка крамниці в паузі")
+	await _frames(2)
+	var tabs := []
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		tabs.append(tc.get_tab_title(i))
+	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі"], "крамницю відкрито: вкладки %s" % str(tabs))
+	game.shop_do("pack", "coins_1200")
+	await _frames(3)
+	check(SH.coins(w) == 1200 and int(game.account.shop["coins"]) == 1200, "набір червінців оплачено й зараховано")
+	var cost: int = SH.price("unique", "shablia_sirka")
+	game.shop_do("buy", ["unique", "shablia_sirka"])
+	await _frames(2)
+	check(game.shop_confirm == "unique:shablia_sirka" and SH.coins(w) == 1200 and p.inventory.is_empty(), "перший дотик лише просить підтвердити")
+	var confirm_seen := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		if b.text.begins_with("Підтвердити"):
+			confirm_seen = true
+	check(confirm_seen, "кнопка товару просить підтвердження")
+	game.shop_do("buy", ["unique", "shablia_sirka"])
+	await _frames(2)
+	var bought_it := false
+	for it in p.inventory:
+		bought_it = bought_it or it.get("unique", "") == "shablia_sirka"
+	check(bought_it and SH.coins(w) == 1200 - cost and game.shop_confirm == "", "другий дотик купує: річ у торбі, червінці списано")
+	game.shop_do("buy", ["set_full", "sviatohor"])
+	game.shop_do("buy", ["set_full", "sviatohor"])
+	await _frames(2)
+	check(SH.coins(w) == 1200 - cost and game.shop_confirm == "", "на що бракує червінців, те не купується")
+	game.close_shop()
+	await _frames(2)
+	check(not game.shop_open and game.state == game.State.PAUSED and game.hud.overlay.visible and "Продовжити" in menu_texts.call(), "«Назад» вертає в паузу")
+	# Збережено в акаунті
+	var f := FileAccess.open(TEST_ACCOUNT, FileAccess.READ)
+	var saved: Dictionary = f.get_var() if f != null else {}
+	check(int(saved.get("shop", {}).get("coins", -1)) == 1200 - cost, "червінці й покупки збережено у файлі роду")
+	# ---- Привал і екран героя ----
+	game.enter_map()
+	await _frames(2)
+	game._show_map_menu()
+	await _frames(2)
+	check("Крамниця" in menu_texts.call() and "Вийти з гри" in menu_texts.call(), "крамниця є й на привалі")
+	game._close_map_menu()
+	game.open_character()
+	await _frames(2)
+	var hero_btn := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		hero_btn = hero_btn or b.text == "Крамниця"
+	check(hero_btn, "і на екрані героя")
+	game.close_character()
+	await _frames(2)
+	# ---- Довідник ----
+	var found := false
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			if str(e["title"]) == "Крамниця":
+				found = "червінці" in str(e["text"]) and str(Shop.SET_FULL_PRICE) in str(e["text"])
+	check(found, "довідник пояснює крамницю й ціни")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
