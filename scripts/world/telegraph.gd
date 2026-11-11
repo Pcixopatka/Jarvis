@@ -3,7 +3,13 @@ extends Node2D
 ## Форми: "circle" (коло), "cone" (конус вогню), "line" (ривок).
 
 var combat
-var source  # хто атакує; якщо загинув — атака скасовується
+## Хто атакує; якщо загинув чи зник — атака скасовується. Звільнений об'єкт у Godot дорівнює null,
+## тож окремо пам'ятаємо, що джерело було: інакше зона спрацювала б і покликала on_fire зниклого ворога.
+var source:
+	set(v):
+		source = v
+		_had_source = v != null
+var _had_source := false
 var shape := "circle"
 var radius := 120.0
 var dir := Vector2.RIGHT
@@ -19,7 +25,7 @@ var _t := 0.0
 
 func _process(delta: float) -> void:
 	_t += delta
-	if source != null and (not is_instance_valid(source) or source.dead):
+	if _had_source and (not is_instance_valid(source) or source.dead):
 		queue_free()
 		return
 	if _t >= duration:

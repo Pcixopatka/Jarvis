@@ -5,11 +5,19 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 
 
+## З посохом майже вся шкода йде від чарів, а не від іскор: справжня шкода волхва за секунду
+## у стільки разів більша за оцінку від удару (виміряно tools/dps_probe.gd на 20–75-му рівнях).
+const STAFF_SPELLS := 2.2
+
+
 ## Приблизна шкода героя за секунду по одній цілі (удари з критами, серії та вміння).
 static func dps(player) -> float:
 	var crit: float = 1.0 + player.crit_chance * (player.crit_mult - 1.0)
 	# вміння додають до ударів тим більше, що вища сила вмінь (але не безмежно)
-	return player.damage / maxf(player.attack_cooldown, 0.1) * crit * maxf(1.6, 1.3 + 0.15 * minf(float(player.skill_power), 4.0))
+	var skills: float = maxf(1.6, 1.3 + 0.15 * minf(float(player.skill_power), 4.0))
+	if str(player.weapon_type) == "staff":
+		skills *= STAFF_SPELLS
+	return player.damage / maxf(player.attack_cooldown, 0.1) * crit * skills
 
 
 ## Скільки варта сила золотої речі в порівнянні спорядження: шкода й здоров'я її не показують.

@@ -15,7 +15,7 @@ const CLASSES := {
 		"weapons": ["sabre", "mace", "pike"], "mana_mult": 1.0, "regen_mult": 1.5, "address": "козаче", "hp_mult": 1.3, "dmg_mult": 1.15,
 		"where": "sich", "desc": "Воїн Січі: шабля, булава чи спис, самопал і бойовий клич. Влучні удари поповнюють наснагу."},
 	"volkhv": {"name": "Волхв", "tier": 1, "job_max": 40, "next": ["znakhar", "perun_zhrets", "molfar"],
-		"weapons": ["staff"], "mana_mult": 2.0, "regen_mult": 2.2, "address": "волхве", "hp_mult": 1.0, "dmg_mult": 1.0,
+		"weapons": ["staff"], "mana_mult": 2.0, "regen_mult": 2.2, "address": "волхве", "hp_mult": 1.0, "dmg_mult": 1.0, "skill_mult": 0.7,
 		"where": "kapyshche", "desc": "Знавець вогню, трав і оберегів із Карпат. Б'є іскрами здалеку; сила — від Характерництва."},
 	# ---- Спеціалізації Козака (Січ) ----
 	"zaporozhets": {"name": "Запорожець", "tier": 2, "job_max": 50, "next": [], "parent": "cossack",
@@ -32,13 +32,13 @@ const CLASSES := {
 		"where": "sich", "mentor": "yarema", "desc": "Воїн-чаклун: Вовча подоба, «Куля не бере», замовлена шабля, відвід очей."},
 	# ---- Спеціалізації Волхва (Карпати, кожна — у свого наставника) ----
 	"znakhar": {"name": "Знахар", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
-		"weapons": ["staff"], "mana_mult": 2.4, "regen_mult": 2.7, "address": "волхве", "hp_mult": 1.35, "dmg_mult": 1.05,
+		"weapons": ["staff"], "mana_mult": 2.4, "regen_mult": 2.7, "address": "волхве", "hp_mult": 1.35, "dmg_mult": 1.05, "skill_mult": 0.7,
 		"where": "verkhovyna", "mentor": "paraska", "desc": "Лікар і берегиня загону: Живиця, Очищення, Оберіг загону, Підняти побратима, отруйне зілля."},
 	"perun_zhrets": {"name": "Перунів жрець", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
-		"weapons": ["staff"], "mana_mult": 2.2, "regen_mult": 2.4, "address": "волхве", "hp_mult": 1.05, "dmg_mult": 1.3,
+		"weapons": ["staff"], "mana_mult": 2.2, "regen_mult": 2.4, "address": "волхве", "hp_mult": 1.05, "dmg_mult": 1.3, "skill_mult": 0.35,
 		"where": "pip_ivan", "mentor": "hromobii", "desc": "Повелитель грози: Блискавка, Ланцюг, Громовий молот, Буря."},
 	"molfar": {"name": "Мольфар", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
-		"weapons": ["staff"], "mana_mult": 2.3, "regen_mult": 2.5, "address": "волхве", "hp_mult": 1.2, "dmg_mult": 1.15,
+		"weapons": ["staff"], "mana_mult": 2.3, "regen_mult": 2.5, "address": "волхве", "hp_mult": 1.2, "dmg_mult": 1.15, "skill_mult": 0.5,
 		"where": "molfar_hut", "mentor": "yakym", "desc": "Карпатський чарівник: Град, Туман, Прокляття, Виклик духа."},
 }
 

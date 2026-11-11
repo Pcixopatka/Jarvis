@@ -6271,6 +6271,15 @@ func _suite_far_lands_game() -> void:
 		crowd_max = maxi(crowd_max, c.alive_enemy_count())
 		await process_frame
 	check(crowd_max <= c._field_cap() + 1 and crowd_max >= 3, "на арені не більше нечисті, ніж дозволяє межа (%d)" % crowd_max)
+	# Зона удару зникає разом із ворогом, що її кинув (раніше спрацьовувала й кликала вже зниклого ворога)
+	c.spawn_enemy("zarazhenyi", 40, false, p.global_position + Vector2(500, 0))
+	var caster = c._last_enemy()
+	var fired := [false]
+	var zone = caster._telegraph("circle", p.global_position + Vector2(1200, 0), 0.3, 1.0)
+	zone.on_fire = func(): fired[0] = true
+	caster.queue_free()
+	await _frames(30)
+	check(not is_instance_valid(zone) and not fired[0], "зона удару зниклого ворога скасовується й не б'є")
 	# Злидень краде гривні й повертає, коли його здолати
 	_clear_enemies(game)
 	await _frames(1)
@@ -6466,14 +6475,18 @@ func _suite_muscovy_game() -> void:
 		var dist := 240.0
 		c.spawn_enemy(kind, 40, false, p.global_position + Vector2(dist, 0))
 		var e = c._last_enemy()
-		var n0: int = c.effects.get_child_count()
 		var foes0: int = c.alive_enemy_count()
 		e._minion_ability(p, dist)
 		await _frames(1)
 		if kind == "boyaryn":
 			check(c.alive_enemy_count() == foes0 + 2 and c._last_enemy().kind == "zlyden" and c._last_enemy().xp_value == 0, "боярин кличе двох злиднів, досвіду за них нема")
 		else:
-			check(c.effects.get_child_count() > n0 and e.cast_time > 0.0, "%s малює свій прийом на землі" % Data.ENEMY_NAMES[kind])
+			# рахуємо саме зони цього ворога: зони попередніх, уже прибраних, зникають разом із ними
+			var mine := 0
+			for z in c.effects.get_children():
+				if not z.is_queued_for_deletion() and z.get("source") == e:
+					mine += 1
+			check(mine > 0 and e.cast_time > 0.0, "%s малює свій прийом на землі" % Data.ENEMY_NAMES[kind])
 	# Аркан кромішника тягне до нього, подих лісовика відкидає
 	for pair in [["kromeshnyk", -1.0], ["lisovyk", 1.0]]:
 		_clear_enemies(game)
@@ -7469,6 +7482,35 @@ func _suite_difficulty() -> void:
 	check("Тобі тут: " in panel_text.call(MP.build_depths(w_th, th, 1, func(_x): pass, func(_x): pass)), "панель Глибин каже, чи під силу")
 	check("Тобі тут: " in panel_text.call(MP.build_tower(w_th, th, 1, func(_x): pass, func(_x): pass)), "панель Башти каже, чи під силу")
 	th.free()
+	# Характерництво: перші SPI_SOFT очок повною мірою, далі вдесятеро слабше; класи з чарами по гурту б'ють слабше
+	check(is_equal_approx(Data.soft_spi(10.0), 10.0) and is_equal_approx(Data.soft_spi(Data.SPI_SOFT), Data.SPI_SOFT) and is_equal_approx(Data.soft_spi(Data.SPI_SOFT + 100.0), Data.SPI_SOFT + 100.0 * Data.SPI_LATE), "Характерництво понад %d очок рахується часткою" % int(Data.SPI_SOFT))
+	var sp = _new_player()
+	sp.stats["spi"] = Data.STAT_BASE + int(Data.SPI_SOFT)  # рахуються очки, вкладені понад початкові
+	sp.recalc()
+	var sp_soft: float = sp.skill_power
+	var cd_soft: float = sp.skill_cd_mult
+	sp.stats["spi"] = Data.STAT_BASE + int(Data.SPI_SOFT) + 100
+	sp.recalc()
+	check(is_equal_approx(sp_soft, 1.0 + 0.05 * Data.SPI_SOFT) and is_equal_approx(sp.skill_power - sp_soft, 0.05 * 100.0 * Data.SPI_LATE), "сила вмінь: +5%% за очко до %d-го, далі +%s%%" % [int(Data.SPI_SOFT), str(5.0 * Data.SPI_LATE)])
+	check(sp.skill_cd_mult < cd_soft and sp.skill_cd_mult > cd_soft * 0.6 and sp.max_mana > 500.0, "перезарядка від Характерництва теж росте щораз слабше, наснага — як раніше")
+	sp.job = "cossack"
+	sp.recalc()
+	var sp_plain: float = sp.skill_power
+	sp.job = "perun_zhrets"
+	sp.recalc()
+	var k_perun: float = float(Data.Classes.CLASSES["perun_zhrets"]["skill_mult"])
+	var staff_ok := true
+	for cid in Data.Classes.CLASSES:
+		var CI: Dictionary = Data.Classes.CLASSES[cid]
+		var staff: bool = CI["weapons"] == ["staff"]
+		staff_ok = staff_ok and (staff == CI.has("skill_mult")) and (not staff or (float(CI["skill_mult"]) > 0.3 and float(CI["skill_mult"]) < 1.0))
+	check(is_equal_approx(sp.skill_power, sp_plain * k_perun) and staff_ok and k_perun < float(Data.Classes.CLASSES["molfar"]["skill_mult"]) and float(Data.Classes.CLASSES["molfar"]["skill_mult"]) < float(Data.Classes.CLASSES["znakhar"]["skill_mult"]), "класи з посохом мають власний множник сили вмінь, найменший у Перунового жерця")
+	sp.job = "peasant"
+	sp.recalc()
+	var dps_hand: float = Power.dps(sp)
+	sp.weapon_type = "staff"
+	check(is_equal_approx(Power.dps(sp), dps_hand * Power.STAFF_SPELLS), "мірило сили знає, що з посохом шкода йде від чарів")
+	sp.free()
 	# Ціна смерті: 1% досвіду рівня від 10-го рівня, не нижче нуля, рівень не падає
 	var dp = _new_player()
 	dp.level = Data.DEATH_XP_FROM - 1
@@ -7511,6 +7553,14 @@ func _suite_difficulty() -> void:
 	var road: String = str(arts.get("Дорога до %d-го рівня" % Data.Classes.BASE_LEVEL_MAX, ""))
 	check(WSv._big(Data.xp_for_level(Data.Classes.BASE_LEVEL_MAX - 1)) in road and WSv._big(Data.xp_for_level(30)) in road and "Глибини" in road, "довідник показує, скільки досвіду коштують рівні")
 	check(WSv._big(1234567) == "1 234 567" and WSv._big(999) == "999" and WSv._big(1000) == "1 000", "великі числа з пробілами між розрядами")
+	var spi_rule: String = str(arts.get("Характерництво й сила вмінь", ""))
+	check(("Перші %d вкладених очок" % int(Data.SPI_SOFT)) in spi_rule and "вдесятеро менше" in spi_rule, "довідник пояснює Характерництво й силу вмінь")
+	var perun_art := ""
+	for sx in WSv.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Перунів жрець":
+				perun_art = str(e["text"])
+	check(("сила вмінь ×%s" % WSv._num(Data.Classes.CLASSES["perun_zhrets"]["skill_mult"])) in perun_art, "довідник показує множник сили вмінь класу")
 	var soul_rule: String = str(arts.get("Шанс душі", ""))
 	check("слабша за звичайну нечисть твого рівня" in soul_rule and "Від спорядження це не залежить" in soul_rule, "довідник: душі залежать від рівня нечисті, а не від спорядження")
 	# Мірка сили нечисті: еталонний герой у середньому спорядженні

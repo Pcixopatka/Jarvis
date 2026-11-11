@@ -149,6 +149,17 @@ static func xp_for_level(l: int) -> int:
 static func coin_gold(xp_value: int) -> int:
 	return maxi(1, roundi(xp_value * COIN_GOLD_RATIO))
 
+## Характерництво підсилює вміння щораз слабше: перші SPI_SOFT очок понад початкові повною мірою (+5% сили вмінь, швидша
+## перезарядка), кожне наступне — лише часткою SPI_LATE від того. Волхвові Характерництво дає ще й шкоду
+## посохом, тож без цього його вміння били вп'ятеро сильніше за воїнові (tools/dps_probe.gd).
+const SPI_SOFT := 20.0
+const SPI_LATE := 0.1
+
+
+static func soft_spi(spi: float) -> float:
+	return spi if spi <= SPI_SOFT else SPI_SOFT + (spi - SPI_SOFT) * SPI_LATE
+
+
 const STAT_POINTS_PER_LEVEL := 3
 const SKILL_POINTS_PER_LEVEL := 1  # очок вмінь за рівень майстерності
 const PERK_POINTS_PER_LEVEL := 1  # очок Загартування за кожні Classes.HARDEN_EVERY рівнів героя
@@ -158,7 +169,7 @@ const STATS := [
 	{"id": "str", "name": "Сила", "desc": "+6% шкоди"},
 	{"id": "agi", "name": "Спритність", "desc": "+4% швидкості удару, +1.5% криту, +1.5% бігу"},
 	{"id": "vit", "name": "Витривалість", "desc": "+12 здоров'я, +1% захисту"},
-	{"id": "spi", "name": "Характерництво", "desc": "+5% сили вмінь, -4% перезарядки вмінь"},
+	{"id": "spi", "name": "Характерництво", "desc": "Перші %d вкладених очок: +5%% сили вмінь і -4%% перезарядки, далі вдесятеро менше. Більше наснаги" % int(SPI_SOFT)},
 ]
 
 # Вміння тепер у деревах класів (див. classes.gd).
