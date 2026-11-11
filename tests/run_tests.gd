@@ -114,6 +114,7 @@ func _run() -> void:
 	await _suite_artifacts()
 	await _suite_souls()
 	await _suite_difficulty()
+	await _suite_hero_screen()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7307,7 +7308,7 @@ func _suite_souls() -> void:
 	await _frames(2)
 	check(SS.soul_in(belt) == "" and int(gp.souls["mavka"]) == 1, "душу вийнято в торбинку")
 	game.open_character()
-	game.char_tab = 1
+	game.char_tab = 0
 	game.char_do("select", -2)
 	await _frames(2)
 	var labels := ""
@@ -7423,6 +7424,115 @@ func _suite_difficulty() -> void:
 	check(c.is_dungeon() and c.loc.has("depth") and float(c.loc.get("min_std_hp", 0.0)) > Power.dps(p) * Far.DEPTH_FLOOR_TTK * 0.5, "Глибина знає силу героя (%s)" % str(c.loc.get("min_std_hp", "нема")))
 	if foe != null:
 		check(foe.max_hp >= float(c.loc.get("min_std_hp", 0.0)) * 0.99, "заражений першої глибини тримає щонайменше секунду шкоди героя сорокового рівня")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Екран героя: вдягнене, показники й торба на одному екрані =======================
+
+func _suite_hero_screen() -> void:
+	suite("Екран героя: клітинки речей, показники, торба")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var UI = load("res://scripts/ui/ui_kit.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	# Значок є для кожного виду зброї, кожного слота й артефакта (нова зброя без значка провалить перевірку)
+	var no_icon := []
+	for w in Data.WEAPON_TYPES:
+		if GfxS.icon_tex(UI.item_icon_id({"slot": "weapon", "type": w})) == null:
+			no_icon.append(w)
+	for sl in Data.SLOTS:
+		if sl != "weapon" and GfxS.icon_tex(UI.item_icon_id({"slot": sl, "type": ""})) == null:
+			no_icon.append(sl)
+	check(no_icon.is_empty() and GfxS.icon_tex(UI.item_icon_id(Arts.make("zmiiv_zub"))) != null and GfxS.icon_tex("it_soul") != null, "значок є для кожної зброї, слота, артефакта й душі: %s" % str(no_icon))
+	var icons_tex: Texture2D = load("res://assets/gfx/sprites/icons.png")
+	check(icons_tex.get_width() == GfxS.ICON_ORDER.size() * 16, "на аркуші значків здобичі є всі %d значків" % GfxS.ICON_ORDER.size())
+	# Клітинка речі: заточка, зірка золотої речі, гніздо й душа
+	var marks := func(item: Dictionary) -> String:
+		var b: Button = UI.item_cell(item, func(): pass)
+		var out := ""
+		for n in b.find_children("*", "Label", true, false):
+			out += n.text + " "
+		b.free()
+		return out
+	var gold: Dictionary = Uniques.make("shablia_sirka", 40)
+	gold["up"] = 7
+	gold["sock"] = 1
+	gold["soul"] = "b_vii"
+	var plain: Dictionary = Data.gen_item(10, 1, "boots")
+	plain["sock"] = 1
+	var m1: String = marks.call(gold)
+	var m2: String = marks.call(plain)
+	check("+7" in m1 and "★" in m1 and "◈" in m1 and "◇" in m2 and not "★" in m2 and not "+" in m2, "клітинка показує заточку, зірку золота й душу в гнізді (%s | %s)" % [m1, m2])
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 20
+	p.stat_points = 2
+	var worn: int = p.equipment.size()
+	for i in 5:
+		p.add_item(Data.gen_item(20, i % 4))
+	p.add_item(gold)
+	game.enter_city("sich")
+	await _frames(2)
+	game.open_character()
+	await _frames(2)
+	var root_c: Control = game.hud.screen_root
+	var tc: TabContainer = root_c.find_children("*", "TabContainer", true, false)[0]
+	var titles := []
+	for i in tc.get_tab_count():
+		titles.append(tc.get_tab_title(i))
+	check(str(titles[0]).begins_with("Герой") and not titles.any(func(t): return str(t).begins_with("Характеристики") or str(t).begins_with("Спорядження")), "характеристики й спорядження зведено в одну вкладку «Герой»: %s" % str(titles))
+	var page: Control = tc.get_tab_control(0)
+	var labels := ""
+	for n in page.find_children("*", "Label", true, false):
+		labels += n.text + "\n"
+	var buttons: Array = page.find_children("*", "Button", true, false)
+	var plus := buttons.filter(func(b): return b.text == "+")
+	var cells := buttons.filter(func(b): return b.text == "" and b.custom_minimum_size.x == b.custom_minimum_size.y and b.custom_minimum_size.x >= 60.0)
+	var empties := page.find_children("*", "Panel", true, false).filter(func(c): return c.custom_minimum_size.x == c.custom_minimum_size.y and c.custom_minimum_size.x >= 60.0)
+	check("Вдягнуто" in labels and "Шкода за секунду" in labels and ("Торба %d/%d" % [p.inventory.size(), p.bag_size()]) in labels and "Вампіризм" in labels and "Очки" in labels, "на одному екрані зведення, вдягнене, очки, показники й торба")
+	check(plus.size() == 4 and not plus[0].disabled, "чотири кнопки «+» для характеристик")
+	check(cells.size() == worn + p.inventory.size() and empties.size() == (6 - worn) + (p.bag_size() - p.inventory.size()), "клітинок із речами %d, порожніх %d: уся торба й усі шість слотів на видноті" % [cells.size(), empties.size()])
+	var str0: int = p.stat("str")
+	game.char_do("stat", "str")
+	check(p.stat("str") == str0 + 1 and p.stat_points == 1, "кнопка «+» додає силу")
+	game.char_do("select", gold["uid"])
+	await _frames(2)
+	var after := ""
+	for n in game.hud.screen_root.find_children("*", "Label", true, false):
+		after += n.text + "\n"
+	var acts := []
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		acts.append(b.text)
+	check("Шабля Сірка +7" in after and "✦ Звитяга" in after and "Вдягнути" in acts and "Викинути" in acts, "дотик до клітинки відкриває картку речі з діями")
+	game.char_do("equip", gold["uid"])
+	await _frames(2)
+	check(p.is_equipped(gold["uid"]) and game.hud.screen_root.find_children("*", "Button", true, false).any(func(b): return b.text == "Зняти"), "вдягнена річ стала в ляльку, її можна зняти")
+	# Коваль показує речі тими самими клітинками
+	game.close_character()
+	var ctc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in ctc.get_tab_count():
+		if ctc.get_tab_title(i).begins_with("Коваль"):
+			game.city_tab = i
+	game.city_do("select", gold["uid"])
+	await _frames(2)
+	var smith: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.city_tab)
+	var scells := smith.find_children("*", "Button", true, false).filter(func(b): return b.text == "" and b.custom_minimum_size.x == b.custom_minimum_size.y and b.custom_minimum_size.x >= 60.0)
+	check(scells.size() == p.equipment.size() + p.inventory.size(), "у коваля ті самі клітинки: %d" % scells.size())
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -7701,7 +7811,7 @@ func _suite_events_wiki_game() -> void:
 	game.go_back(true)
 	await _frames(2)
 	var tc_back: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0] if game.hud.screen_root != null else null
-	check(not game.wiki_open and game.state == game.State.CHARACTER and tc_back != null and tc_back.get_tab_title(0).begins_with("Характеристики"), "«Назад» повертає на екран героя")
+	check(not game.wiki_open and game.state == game.State.CHARACTER and tc_back != null and tc_back.get_tab_title(0).begins_with("Герой"), "«Назад» повертає на екран героя")
 	game.close_character()
 	await _frames(2)
 	# Пауза в бою → довідник → назад

@@ -208,18 +208,18 @@ static func _smith(game) -> Control:
 	var list := VBoxContainer.new()
 	list.add_theme_constant_override("separation", 6)
 	list.add_child(UI.label("Вдягнуте", 22, UI.GOLD, false))
-	var eg := UI.grid(3)
+	var eg := UI.grid(5)
 	for slot in Data.SLOTS:
 		if p.equipment.has(slot):
 			var it: Dictionary = p.equipment[slot]
-			eg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
+			eg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, 66))
 	list.add_child(eg)
 	list.add_child(UI.label("Торба", 22, UI.GOLD, false))
-	var bg := UI.grid(3)
+	var bg := UI.grid(5)
 	for it in p.inventory:
 		if it.has("artifact"):
 			continue  # артефакти не продають і не точать: вони лежать у торбі
-		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
+		bg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, 66))
 	list.add_child(bg)
 	h.add_child(list)
 

@@ -14,8 +14,7 @@ static func _pts(n: int) -> String:
 static func build(game) -> Control:
 	var p = game.player
 	var pages := [
-		["Характеристики" + _pts(p.stat_points), _stats(game)],
-		["Спорядження", _gear(game)],
+		["Герой" + _pts(p.stat_points), _hero(game)],
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Загартування" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
@@ -32,58 +31,159 @@ static func _do(game, action: String, arg = null) -> Callable:
 	return game.char_do.bind(action, arg)
 
 
-# ---------------- Характеристики ----------------
+# ---------------- Герой: вдягнене, показники й торба на одному екрані ----------------
 
-static func _stats(game) -> Control:
+const CELL := 70  # сторона клітинки торби
+const DOLL_SLOTS := ["weapon", "head", "amulet", "belt", "body", "boots"]  # вдягнене: два ряди по три
+
+
+static func _kv(key: String, value: String, size: int = 16) -> Control:
+	var row := HBoxContainer.new()
+	var k := UI.label(key, size, UI.MUTED, false)
+	k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(k)
+	row.add_child(UI.label(value, size, UI.TEXT, false))
+	return row
+
+
+static func _hero(game) -> Control:
 	var p = game.player
+	var sel: int = game.char_sel_uid
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 40)
-	var left := VBoxContainer.new()
-	left.add_theme_constant_override("separation", 12)
-	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	h.add_child(left)
-	left.add_child(UI.label("Вільні очки: %d   (+%d за рівень)" % [p.stat_points, Data.STAT_POINTS_PER_LEVEL], 24, UI.GOLD if p.stat_points > 0 else UI.MUTED, false))
-	for st in Data.STATS:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 16)
-		var info := VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var bonus := int(p.eq(st["id"]))
-		var extra := ("  (+%d від спорядження)" % bonus) if bonus > 0 else ""
-		info.add_child(UI.label("%s: %d%s" % [st["name"], p.stat(st["id"]), extra], 28, UI.TEXT, false))
-		info.add_child(UI.label(st["desc"], 17, UI.MUTED, false))
-		row.add_child(info)
-		row.add_child(UI.button("+", _do(game, "stat", st["id"]), Vector2(90, 70), 0, p.stat_points > 0))
-		left.add_child(row)
+	h.add_theme_constant_override("separation", 18)
 
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 3)
-	right.custom_minimum_size = Vector2(380, 0)
-	h.add_child(right)
-	right.add_child(UI.label("Бойові показники", 24, UI.GOLD, false))
+	# ----- Ліва панель: герой -----
+	var left := VBoxContainer.new()
+	left.custom_minimum_size = Vector2(470, 0)
+	left.add_theme_constant_override("separation", 6)
+	h.add_child(left)
+	var top := HBoxContainer.new()
+	top.add_theme_constant_override("separation", 14)
+	left.add_child(top)
+	var sum := VBoxContainer.new()
+	sum.custom_minimum_size = Vector2(190, 0)
+	sum.add_theme_constant_override("separation", 0)
+	top.add_child(sum)
+	for pair in [["Шкода за секунду", UI.num(int(p.Power.dps(p)))], ["Здоров'я", "%s / %s" % [UI.num(int(p.hp)), UI.num(int(p.max_hp))]],
+			["Захист", "%d%%" % roundi(p.armor * 100)], ["Наснага", "%d / %d" % [int(p.mana), int(p.max_mana)]]]:
+		sum.add_child(UI.label(pair[0], 14, UI.MUTED, false))
+		sum.add_child(UI.label(pair[1], 21, UI.GOLD if pair[0] == "Шкода за секунду" else UI.TEXT, false))
+	var doll_box := VBoxContainer.new()
+	doll_box.add_theme_constant_override("separation", 4)
+	doll_box.add_child(UI.label("Вдягнуто", 18, UI.GOLD, false))
+	var doll := UI.grid(3)
+	for slot in DOLL_SLOTS:
+		if p.equipment.has(slot):
+			var it: Dictionary = p.equipment[slot]
+			doll.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, CELL + 10))
+		else:
+			doll.add_child(UI.empty_cell(CELL + 10, "it_sabre" if slot == "weapon" else "it_" + slot))
+	doll_box.add_child(doll)
+	top.add_child(doll_box)
+
+	var bar := ProgressBar.new()
+	bar.min_value = 0.0
+	bar.max_value = maxf(1.0, float(p.xp_next))
+	bar.value = float(p.xp)
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 14)
+	left.add_child(_kv("Досвід до рівня %d" % (p.level + 1), "%s / %s" % [UI.num(p.xp), UI.num(p.xp_next)], 15))
+	left.add_child(bar)
+
+	# Очки характеристик: чотири коробки з «+»
+	var pts := HBoxContainer.new()
+	pts.add_theme_constant_override("separation", 8)
+	var free := VBoxContainer.new()
+	free.custom_minimum_size = Vector2(70, 0)
+	free.add_child(UI.label("Очки", 15, UI.MUTED))
+	free.add_child(UI.label(str(p.stat_points), 30, UI.GOLD if p.stat_points > 0 else UI.MUTED))
+	pts.add_child(free)
+	for st in Data.STATS:
+		var box := VBoxContainer.new()
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		box.add_theme_constant_override("separation", 0)
+		box.add_child(UI.label(st["name"], 14, UI.MUTED))
+		box.add_child(UI.label(str(p.stat(st["id"])), 22, UI.TEXT))
+		box.add_child(UI.button("+", _do(game, "stat", st["id"]), Vector2(88, 38), 22, p.stat_points > 0))
+		pts.add_child(box)
+	left.add_child(pts)
+
+	# Докладні показники у дві колонки
 	var lines := [
 		["Зброя", Data.WEAPON_TYPES[p.weapon_type]["name"]],
-		["Здоров'я", "%d / %d" % [int(p.hp), int(p.max_hp)]],
-		["Наснага", "%d / %d  (+%.1f/с)" % [int(p.mana), int(p.max_mana), p.mana_regen]],
-		["Шкода", "%.1f" % p.damage],
 		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
-		["Шанс криту", "%d%%  (x%.0f)" % [roundi(p.crit_chance * 100), p.crit_mult]],
-		["Дальність удару", "%d" % int(p.attack_range)],
-		["Захист", "%d%%" % roundi(p.armor * 100)],
-		["Швидкість бігу", "%d" % int(p.speed)],
+		["Шкода удару", "%.1f" % p.damage],
+		["Шанс криту", "%d%%  (x%s)" % [roundi(p.crit_chance * 100), ("%.2f" % p.crit_mult).trim_suffix("0").trim_suffix("0").trim_suffix(".")]],
 		["Сила вмінь", "%d%%" % roundi(p.skill_power * 100)],
 		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
+		["Наснага за секунду", "+%.1f" % p.mana_regen],
 		["Відновлення", "%.1f / с" % p.regen],
 		["Вампіризм", "%.1f%%" % (p.lifesteal * 100)],
-		["Бонус досвіду / гривень", "+%d%% / +%d%%" % [roundi((p.xp_mult - 1.0) * 100), roundi((p.gold_mult - 1.0) * 100)]],
+		["Швидкість бігу", "%d" % int(p.speed)],
+		["Дальність удару", "%d" % int(p.attack_range)],
+		["Бонус досвіду", "+%d%%" % roundi((p.xp_mult - 1.0) * 100)],
+		["Бонус гривень", "+%d%%" % roundi((p.gold_mult - 1.0) * 100)],
+		["Зілля з собою", "%d і %d" % [p.potion_max(), p.mana_potion_max()]],
 	]
+	var stats := GridContainer.new()
+	stats.columns = 2
+	stats.add_theme_constant_override("h_separation", 22)
+	stats.add_theme_constant_override("v_separation", 0)
 	for l in lines:
-		var row := HBoxContainer.new()
-		var k := UI.label(l[0], 19, UI.MUTED, false)
-		k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(k)
-		row.add_child(UI.label(l[1], 19, UI.TEXT, false))
-		right.add_child(row)
+		var cell := _kv(l[0], l[1], 14)
+		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		stats.add_child(cell)
+	left.add_child(stats)
+
+	# ----- Торба: сітка клітинок -----
+	var bag := VBoxContainer.new()
+	bag.add_theme_constant_override("separation", 6)
+	h.add_child(bag)
+	var bag_head := HBoxContainer.new()
+	bag_head.add_theme_constant_override("separation", 10)
+	var bl := UI.label("Торба %d/%d" % [p.inventory.size(), p.bag_size()], 20, UI.GOLD, false)
+	bl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bag_head.add_child(bl)
+	bag_head.add_child(UI.button("Душі: %d" % p.SoulService.pouch_count(p), _do(game, "select", -2), Vector2(130, 40), 16))
+	bag.add_child(bag_head)
+	var arts: Array = p.Artifacts.active_ids(p.inventory)
+	if not arts.is_empty():
+		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 15, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
+	var bg := UI.grid(6)
+	for it in p.inventory:
+		bg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, CELL))
+	for i in maxi(0, p.bag_size() - p.inventory.size()):
+		bg.add_child(UI.empty_cell(CELL))
+	bag.add_child(bg)
+
+	# ----- Картка вибраної речі -----
+	var det := VBoxContainer.new()
+	det.custom_minimum_size = Vector2(320, 0)
+	det.add_theme_constant_override("separation", 8)
+	h.add_child(det)
+	var item: Dictionary = p.find_item(sel) if sel > 0 else {}
+	if sel == -2:
+		det.add_child(load("res://scripts/ui/ui_souls.gd").codex(p))  # Пом'яник душ замість картки речі
+		return h
+	if item.is_empty():
+		det.add_child(UI.label("Торкнись речі,\nщоб побачити бонуси.", 19, UI.MUTED, false))
+		det.add_child(UI.label("Заточувати речі й пробивати\nгнізда для душ можна в коваля.", 16, UI.MUTED, false))
+		return h
+	var equipped: bool = p.is_equipped(sel)
+	var cmp: Dictionary = {} if equipped else p.equipment.get(item["slot"], {})
+	det.add_child(UI.item_card(item, cmp))
+	if item.has("artifact"):
+		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
+		return h
+	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, item, func(a: String, b): return _do(game, a, b), false))
+	if equipped:
+		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
+	else:
+		var usable: bool = p.can_use(item)
+		if not usable:
+			det.add_child(UI.label("Не для класу «%s»" % p.class_name_ua(), 18, UI.BAD, false))
+		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24, usable))
+		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
 	return h
 
 
@@ -339,72 +439,6 @@ static func _glory(game) -> Control:
 		table.add_child(UI.label(best, 18, UI.GOLD if row["holder"] else UI.TEXT, false))
 	v.add_child(table)
 	return v
-
-
-# ---------------- Спорядження ----------------
-
-static func _gear(game) -> Control:
-	var p = game.player
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 18)
-	var sel: int = game.char_sel_uid
-
-	var slots := VBoxContainer.new()
-	slots.add_theme_constant_override("separation", 6)
-	slots.add_child(UI.label("Вдягнуто", 22, UI.GOLD, false))
-	var sg := UI.grid(2)
-	for slot in Data.SLOTS:
-		if p.equipment.has(slot):
-			var it: Dictionary = p.equipment[slot]
-			sg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel, Data.SLOT_NAMES[slot]))
-		else:
-			sg.add_child(UI.empty_slot_button("%s\n—" % Data.SLOT_NAMES[slot]))
-	slots.add_child(sg)
-	h.add_child(slots)
-
-	var bag := VBoxContainer.new()
-	bag.add_theme_constant_override("separation", 6)
-	bag.add_child(UI.label("Торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
-	bag.add_child(UI.button("Душі: %d" % p.SoulService.pouch_count(p), _do(game, "select", -2), Vector2(200, 46), 17))
-	var arts: Array = p.Artifacts.active_ids(p.inventory)
-	if not arts.is_empty():
-		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 16, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
-	var bg := UI.grid(3)
-	for it in p.inventory:
-		bg.add_child(UI.item_button(it, _do(game, "select", it["uid"]), it["uid"] == sel))
-	if p.inventory.is_empty():
-		bag.add_child(UI.label("Порожньо. Речі падають з нечисті\nта продаються в містах.", 17, UI.MUTED, false))
-	bag.add_child(bg)
-	h.add_child(bag)
-
-	var det := VBoxContainer.new()
-	det.custom_minimum_size = Vector2(330, 0)
-	det.add_theme_constant_override("separation", 8)
-	h.add_child(det)
-	var item: Dictionary = p.find_item(sel) if sel > 0 else {}
-	if sel == -2:
-		det.add_child(load("res://scripts/ui/ui_souls.gd").codex(p))  # Пом'яник душ замість картки речі
-		return h
-	if item.is_empty():
-		det.add_child(UI.label("Торкнись речі,\nщоб побачити бонуси.", 20, UI.MUTED, false))
-		det.add_child(UI.label("Заточувати речі можна\nу коваля в будь-якому місті.", 17, UI.MUTED, false))
-		return h
-	var equipped: bool = p.is_equipped(sel)
-	var cmp: Dictionary = {} if equipped else p.equipment.get(item["slot"], {})
-	det.add_child(UI.item_card(item, cmp))
-	if item.has("artifact"):
-		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
-		return h
-	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, item, func(a: String, b): return _do(game, a, b), false))
-	if equipped:
-		det.add_child(UI.button("Зняти", _do(game, "unequip", sel), Vector2(300, 60), 24, not p.bag_full()))
-	else:
-		var usable: bool = p.can_use(item)
-		if not usable:
-			det.add_child(UI.label("Не для класу «%s»" % p.class_name_ua(), 18, UI.BAD, false))
-		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24, usable))
-		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
-	return h
 
 
 # ---------------- Вміння ----------------

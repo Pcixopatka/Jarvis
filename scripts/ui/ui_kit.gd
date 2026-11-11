@@ -70,6 +70,68 @@ static func item_button(item: Dictionary, cb: Callable, selected: bool = false, 
 	return b
 
 
+## Значок речі для клітинки: зброя за видом, одяг за слотом, артефакт окремо.
+static func item_icon_id(item: Dictionary) -> String:
+	if item.has("artifact"):
+		return "it_artifact"
+	if item.get("slot", "") == "weapon":
+		return "it_" + str(item.get("type", "sabre"))
+	return "it_" + str(item.get("slot", "amulet"))
+
+
+static func _cell_mark(text: String, col: Color, size: int, anchor: int, off: Vector2) -> Label:
+	var l := label(text, size, col, false)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_constant_override("outline_size", 4)
+	l.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
+	l.set_anchors_preset(anchor)
+	l.position += off
+	return l
+
+
+## Клітинка речі для сітки торби й вдягненого: значок на тлі кольору рідкості,
+## заточка в кутку, позначки золотої речі, артефакта й душі в гнізді.
+static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px: int = 72) -> Button:
+	var col: Color = Data.RARITY_COLORS[item["rarity"]]
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(px, px)
+	b.clip_contents = true
+	var bg := col.darkened(0.5) if selected else col.darkened(0.74)
+	var edge := Color(1.0, 0.95, 0.75) if selected else col.darkened(0.2)
+	b.add_theme_stylebox_override("normal", style(bg, edge, 8, 2))
+	b.add_theme_stylebox_override("hover", style(bg.lightened(0.08), edge, 8, 2))
+	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.15), edge, 8, 2))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var t := icon(item_icon_id(item), px - 22)
+	t.set_anchors_preset(Control.PRESET_CENTER)
+	t.position = Vector2(-(px - 22) / 2.0, -(px - 22) / 2.0)
+	b.add_child(t)
+	if int(item.get("up", 0)) > 0:
+		b.add_child(_cell_mark("+%d" % int(item["up"]), GOLD, 14, Control.PRESET_TOP_RIGHT, Vector2(-30, 2)))
+	if item.has("unique"):
+		b.add_child(_cell_mark("★", GOLD, 15, Control.PRESET_TOP_LEFT, Vector2(5, 1)))
+	if int(item.get("sock", 0)) > 0:
+		var sid: String = str(item.get("soul", ""))
+		var scol: Color = load("res://scripts/game/soul_service.gd").color(sid) if sid != "" else MUTED
+		b.add_child(_cell_mark("◈" if sid != "" else "◇", scol, 15, Control.PRESET_BOTTOM_LEFT, Vector2(5, -22)))
+	b.pressed.connect(cb)
+	return b
+
+
+## Порожня клітинка сітки; із блідим значком слота, якщо це місце для вдягненого.
+static func empty_cell(px: int = 72, icon_id: String = "") -> Panel:
+	var c := Panel.new()
+	c.custom_minimum_size = Vector2(px, px)
+	c.add_theme_stylebox_override("panel", style(Color(0.1, 0.085, 0.075), Color(0.28, 0.23, 0.18), 8, 2))
+	if icon_id != "":
+		var t := icon(icon_id, px - 26)
+		t.modulate = Color(1, 1, 1, 0.22)
+		t.set_anchors_preset(Control.PRESET_CENTER)
+		t.position = Vector2(-(px - 26) / 2.0, -(px - 26) / 2.0)
+		c.add_child(t)
+	return c
+
+
 static func empty_slot_button(text: String) -> Button:
 	var b := Button.new()
 	b.text = text
