@@ -19,7 +19,10 @@ static func build(game, city: String) -> Control:
 	if lvl < Data.LOYALTY_THRESHOLDS.size() - 1:
 		next = " (%d/%d)" % [pts, Data.LOYALTY_THRESHOLDS[lvl + 1]]
 	var title := "%s  •  Лояльність: %s%s  •  Гривні: %s" % [C["name"], Data.LOYALTY_NAMES[lvl], next, UI.num(game.player.gold)]
+	# Перша вкладка: ратуша. Тут чекають ті, хто має до героя справу; число в назві каже, скільки їх.
+	var waiting: Array = game.hall_rows(city)
 	var pages := [
+		[Data.hall_name(city) + ((" (%d)" % waiting.size()) if not waiting.is_empty() else ""), _hall(game, city, waiting)],
 		["Завдання", _quests(game, city)],
 		["Крамниця", _shop(game, city)],
 		["Коваль", _smith(game)],
@@ -27,7 +30,7 @@ static func build(game, city: String) -> Control:
 		["Шинок", _shynok(game, city)],
 	]
 	if game.BountyService.unlocked(game.player):
-		pages.insert(1, ["Розшук", _bounty_tab(game, city)])
+		pages.insert(2, ["Розшук", _bounty_tab(game, city)])
 	if game.TradeService.has_market(city) and not game.player.is_peasant():
 		pages.append(["Торг", _trade(game, city)])
 	if city == "sich":
@@ -38,10 +41,56 @@ static func build(game, city: String) -> Control:
 		pages.insert(0, ["★ Дорога", _path_tab(game)])
 	if not _city_specs(game, city).is_empty():
 		pages.append(["Наставники" if _city_specs(game, city).size() > 1 else "Наставник", _mentors(game, city)])
+	if game.city_tab_want != "":
+		for i in pages.size():
+			if str(pages[i][0]).begins_with(game.city_tab_want):
+				game.city_tab = i
+		game.city_tab_want = ""
 	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int):
 		game.city_tab = i
 		game.city_tab_changed(str(pages[i][0])),
 		[["Персонаж" + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
+
+
+# ---------------- Ратуша ----------------
+
+const HALL_TALK := "Поговорити"
+
+## Хто має справу до героя в цьому місті. Розмова починається лише з кнопки.
+static func _hall(game, city: String, rows: Array) -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(UI.label(Data.hall_name(city), 24, UI.GOLD, false))
+	var intro := UI.label("Тут чекають ті, хто має до тебе справу: люди з історії, побратими, наставники й оповідачі переказів. Розмова почнеться, коли сам підійдеш.", 17, UI.MUTED, false)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(intro)
+	if rows.is_empty():
+		v.add_child(UI.label("Зараз на тебе ніхто не чекає.", 20, UI.TEXT, false))
+		var story_line: String = game.StoryService.objective_line(game.world)
+		if story_line != "":
+			var next := UI.label("Історія веде далі: %s" % story_line, 17, UI.MUTED, false)
+			next.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			v.add_child(next)
+		return v
+	for r in rows:
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", UI.style(Color(0.16, 0.13, 0.1), UI.GOOD if r["ready"] else UI.GOLD, 10, 10))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 12)
+		panel.add_child(row)
+		var info := VBoxContainer.new()
+		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		info.add_theme_constant_override("separation", 2)
+		var who: String = str(r["name"]) + ((", " + str(r["role"])) if str(r["role"]) != "" else "")
+		info.add_child(UI.label(who, 21, UI.GOLD, false))
+		var what := UI.label(str(r["what"]), 17, UI.TEXT, false)
+		what.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.add_child(what)
+		info.add_child(UI.label("Чекає з нагородою" if r["ready"] else "Має до тебе справу", 15, UI.GOOD if r["ready"] else UI.MUTED, false))
+		row.add_child(info)
+		row.add_child(UI.button(HALL_TALK, game.hall_talk.bind(str(r["kind"]), str(r["line"])), Vector2(190, 58), 20))
+		v.add_child(panel)
+	return v
 
 
 static func _reward_text(q: Dictionary) -> String:

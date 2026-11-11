@@ -106,6 +106,7 @@ var _wiki_back := Callable()
 var char_sel_uid := -1
 var char_return := State.MAP
 var city_tab := 0
+var city_tab_want := ""  # назва вкладки, на якій має відкритися місто (UiCity.build знайде її номер)
 var city_sel_uid := -1
 var sell_multi := false  # крамниця: режим вибору кількох речей
 var sell_marked := {}  # uid -> true
@@ -650,13 +651,22 @@ func enter_city(id: String) -> void:
 	sell_marked.clear()
 	smith_msg = ""
 	var back := _expedition_news(true)
+	_story_event("visit", id)
+	# Розмови самі не починаються: хто має справу до героя, чекає в ратуші (див. hall_rows)
+	var waiting := hall_rows(id)
+	var names := []
+	for r in waiting:
+		if not str(r["name"]) in names:
+			names.append(str(r["name"]))
+		if str(r["kind"]) == "story":
+			city_tab_want = Data.hall_name(id)  # історія важлива: місто відкривається на вкладці ратуші
+	if not names.is_empty():
+		back.append("%s: на тебе чекають\n%s" % [Data.hall_name(id), ", ".join(names.slice(0, 3))])
 	_build_city()
 	if not back.is_empty():
 		hud.show_banner("\n".join(back), UI.GOLD)
-	_story_event("visit", id)
-	_story_dialogue(id)
 	save_game()
-	hint("city", "Це місто. На вкладці «Завдання» візьми доручення, у «Крамниці» купи спорядження, а потім натисни «На мапу».")
+	hint("city", "Це місто. Хто має до тебе справу, чекає на першій вкладці: підійди й поговори. На вкладці «Завдання» візьми доручення, у «Крамниці» купи спорядження, а потім натисни «На мапу».")
 
 
 func leave_city() -> void:
@@ -884,11 +894,78 @@ func _path_choose(cls: String) -> void:
 		_story_dialogue(city_id)  # кошовий одразу дає посвяту або лист до Велемира
 
 
+# ======================= Ратуша: хто має справу до героя =======================
+
+## Розмови в місті самі не починаються. Усі, хто має до героя справу (історія, побратими, наставник
+## після випробування, оповідачі переказів), чекають у ратуші: це перша вкладка міста (UiCity._hall).
+## Рядок: {"kind": "story"/"spec"/"hero"/"legend", "line": id лінійки переказу, "npc", "name", "role",
+## "what": чого він хоче, "ready": чи чекає з нагородою}.
+func hall_rows(city: String) -> Array:
+	var out := []
+	if player == null or world == null:
+		return out
+	world.hero_level = player.level
+	var sd := StoryService.city_dialogue(world, city)
+	if not sd.is_empty():
+		var chapter: String = StoryService.chapter_title(world)
+		out.append(_hall_row("story", "", sd["lines"], ("Історія. %s" % chapter) if chapter != "" else "Історія", str(sd["kind"]) in ["end", "saga_end"]))
+	var pd := SpecService.city_dialogue(world, city)
+	if not pd.is_empty():
+		out.append(_hall_row("spec", "", pd["lines"], "Посвята: випробування пройдено", true))
+	var hd := HeroService.city_dialogue(world, city)
+	if not hd.is_empty():
+		var wants := {"meet": "Проситься до тебе в загін", "quest": "Має особисте прохання", "end": "Хоче подякувати за допомогу"}
+		out.append(_hall_row("hero", "", hd["lines"], str(wants.get(str(hd["kind"]), "Хоче поговорити")), str(hd["kind"]) == "end"))
+	for ld in LegendService.city_dialogues(world, city):
+		var line: String = str(ld["line"])
+		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.LINES[line]["title"], LegendService.current(world, line)["title"]], str(ld["kind"]) == "legend_end"))
+	return out
+
+
+## Хто веде розмову: перший, хто говорить, крім самого героя.
+func _hall_npc(lines: Array) -> String:
+	for l in lines:
+		if not str(l[0]) in ["hero", "hero_volkhv", "selianyn"]:
+			return str(l[0])
+	return ""
+
+
+func _hall_row(kind: String, line: String, lines: Array, what: String, ready: bool) -> Dictionary:
+	var npc := _hall_npc(lines)
+	var info: Dictionary = StoryService.Story.NPCS.get(npc, {"name": "Гонець", "role": ""})
+	return {"kind": kind, "line": line, "npc": npc, "name": str(info["name"]), "role": str(info.get("role", "")), "what": what, "ready": ready}
+
+
+## Підійти до того, хто чекає в ратуші (кнопка «Поговорити»).
+func hall_talk(kind: String, line: String = "") -> void:
+	if state != State.CITY or (hud.dialogue_root != null and is_instance_valid(hud.dialogue_root)):
+		return
+	match kind:
+		"story":
+			_story_dialogue(city_id)
+		"spec":
+			_spec_dialogue(city_id)
+		"hero":
+			_hero_dialogue(city_id)
+		"legend":
+			_legend_dialogue(city_id, line)
+
+
+## Після розмови: якщо той самий співрозмовник має що сказати далі (подякував і одразу дає нову справу),
+## розмова триває. Інакше герой лишається в ратуші й сам вирішує, до кого підійти.
+func _hall_continue(kind: String, npc: String, line: String = "") -> void:
+	if state != State.CITY or npc == "":
+		return
+	for r in hall_rows(city_id):
+		if str(r["kind"]) == kind and str(r["npc"]) == npc and (kind != "legend" or str(r["line"]) == line):
+			hall_talk(kind, str(r["line"]))
+			return
+
+
 ## Посвята в спеціалізацію після випробування.
 func _spec_dialogue(city: String) -> void:
 	var d := SpecService.city_dialogue(world, city)
 	if d.is_empty():
-		_legend_dialogue(city)  # наставник мовчить — може, хтось хоче розказати переказ
 		return
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], [])
@@ -907,12 +984,14 @@ func _spec_dialogue(city: String) -> void:
 	hud.show_dialogue(dlg)
 
 
-## Перекази: оповідач у місті починає крок лінійки або дякує за виконаний (див. LegendService).
-func _legend_dialogue(city: String, offers := true) -> void:
+## Перекази: оповідач у ратуші починає крок лінійки або дякує за виконаний (див. LegendService).
+## line — котра лінійка ("" — перша з тих, що чекають у цьому місті).
+func _legend_dialogue(city: String, line: String = "") -> void:
 	world.hero_level = player.level
-	var d: Dictionary = LegendService.city_dialogue(world, city, offers)
+	var d: Dictionary = LegendService.city_dialogue(world, city, line)
 	if d.is_empty():
 		return
+	var npc := _hall_npc(d["lines"])
 	var dlg = DialogueScript.new()
 	dlg.setup(StoryService.lines(world, d["lines"]), [])
 	dlg.finished.connect(func(_c):
@@ -929,8 +1008,7 @@ func _legend_dialogue(city: String, offers := true) -> void:
 		save_game()
 		if state == State.CITY and city_id == city:
 			_build_city()
-			# подякували за крок — можна одразу почути наступний; щойно почали новий — інші зачекають
-			_legend_dialogue(city, str(d["kind"]) == "legend_end"))
+			_hall_continue("legend", npc, str(d["line"])))  # подякував за крок — одразу розкаже наступний
 	hud.show_dialogue(dlg)
 
 
@@ -982,12 +1060,12 @@ func _hero_event(type: String, arg: String) -> void:
 			combat.float_text(player.global_position + Vector2(0, -130), m["text"], Color(0.7, 0.9, 1.0))
 
 
-## Побратим хоче поговорити в цьому місті (зустріч, особисте завдання, його завершення).
+## Розмова з побратимом у ратуші (зустріч, особисте завдання, його завершення).
 func _hero_dialogue(city: String) -> void:
 	var d := HeroService.city_dialogue(world, city)
 	if d.is_empty():
-		_spec_dialogue(city)  # побратими мовчать — може, наставник чекає на посвяту
 		return
+	var npc := _hall_npc(d["lines"])
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], d["choices"])
 	dlg.finished.connect(func(choice: int):
@@ -1003,16 +1081,16 @@ func _hero_dialogue(city: String) -> void:
 		save_game()
 		if state == State.CITY and city_id == city:
 			_build_city()
-			_hero_dialogue(city))
+			_hall_continue("hero", npc))
 	hud.show_dialogue(dlg)
 
 
-## Якщо в цьому місті на козака чекає сюжетна розмова — показує її (і наступну, якщо їх кілька поспіль).
+## Сюжетна розмова в ратуші. Якщо той самий співрозмовник одразу має наступну справу, розмова триває.
 func _story_dialogue(city: String) -> void:
 	var d := StoryService.city_dialogue(world, city)
 	if d.is_empty():
-		_hero_dialogue(city)  # сюжет мовчить — може, побратим хоче поговорити
 		return
+	var npc := _hall_npc(d["lines"])
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], d["choices"])
 	dlg.finished.connect(func(choice: int):
@@ -1035,7 +1113,7 @@ func _story_dialogue(city: String) -> void:
 		save_game()
 		if state == State.CITY and city_id == city:
 			_build_city()
-			_story_dialogue(city))
+			_hall_continue("story", npc))
 	hud.show_dialogue(dlg)
 
 

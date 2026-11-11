@@ -186,6 +186,16 @@ func _frames(n: int) -> void:
 		await process_frame
 
 
+## Підійти до того, хто чекає в ратуші міста: розмови там самі не починаються (Game.hall_rows).
+## kind — котрого шукати ("" — першого). Повертає, чи було до кого підійти.
+func _hall_talk(game, kind: String = "", line: String = "") -> bool:
+	for r in game.hall_rows(game.city_id):
+		if (kind == "" or str(r["kind"]) == kind) and (line == "" or str(r["line"]) == line):
+			game.hall_talk(str(r["kind"]), str(r["line"]))
+			return true
+	return false
+
+
 # ======================= 1. Дані =======================
 
 func _suite_data() -> void:
@@ -10425,6 +10435,17 @@ func _suite_gameplay() -> void:
 	check(game.combat.field_cleared and game.world.story["step"] == 1, "рідне село відбито — веди вцілілих на Січ")
 	game.enter_city("sich")
 	await _frames(2)
+	var hall0: Array = game.hall_rows("sich")
+	check(game.hud.dialogue_root == null and hall0.size() == 1 and hall0[0]["kind"] == "story" and hall0[0]["name"] == StoryService.Story.NPCS["otaman"]["name"], "на Січі ніхто не заговорює сам: кошовий чекає в курені")
+	var hall_tab := ""
+	var hall_btn := false
+	var tc0 = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	hall_tab = tc0.get_tab_title(tc0.current_tab)
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		hall_btn = hall_btn or (not b.is_queued_for_deletion() and b.text == load("res://scripts/ui/ui_city.gd").HALL_TALK)
+	check(hall_tab == "%s (1)" % Data.hall_name("sich") and hall_btn, "місто відкрилось на вкладці «%s» із кнопкою «Поговорити»" % hall_tab)
+	_hall_talk(game)
+	await _frames(2)
 	check(game.hud.dialogue_root != null, "кошовий зустрічає втікача")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
@@ -10440,6 +10461,9 @@ func _suite_gameplay() -> void:
 	p.learn_skill("vyly")
 	check(p.sk("vyly") == 1 and "vyly" in p.active_skills(), "селянин вчить «Удар вилами»")
 	game.enter_city("sich")
+	await _frames(2)
+	check(game.hud.dialogue_root == null and game.hall_rows("sich")[0]["ready"], "кошовий чекає на звіт у курені й сам не заговорює")
+	_hall_talk(game)
 	await _frames(2)
 	check(game.hud.dialogue_root != null and game.hud.dialogue_root.choices.is_empty(), "кошовий радить поговорити з обома, а не питає одразу")
 	game.hud.dialogue_root._finish()
@@ -10474,6 +10498,8 @@ func _suite_gameplay() -> void:
 	for i in 8:
 		game._story_event("kill", "zarazhenyi")
 	game.enter_city("sich")
+	await _frames(2)
+	_hall_talk(game)
 	await _frames(2)
 	check(game.hud.dialogue_root != null, "посвята: урочиста розмова")
 	game.hud.dialogue_root._finish()
@@ -10541,10 +10567,14 @@ func _suite_gameplay() -> void:
 
 	# Місто: здача, крамниця, коваль, найм
 	game.enter_city("sich")
+	_hall_talk(game)
 	check(game.hud.dialogue_root != null, "кошовий чекає зі звітом")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["step"] == 1 and game.hud.dialogue_root != null, "одразу далі — розмова з кобзарем")
+	check(game.world.story["step"] == 1 and game.hud.dialogue_root == null and game.hall_rows("sich")[0]["npc"] == "kobzar", "далі має справу кобзар: він чекає в курені, а не перебиває")
+	_hall_talk(game)
+	await _frames(2)
+	check(game.world.story["step"] == 1 and game.hud.dialogue_root != null, "розмова з кобзарем починається, коли підійдеш")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
 	check(game.world.story["stage"] == "active" and game.hud.dialogue_root == null, "мета від кобзаря активна")
@@ -12940,6 +12970,9 @@ func _suite_saga() -> void:
 	check(game.hud.map_view.story_target == "sich", "зірка на мапі стоїть над Січчю")
 	game.enter_city("sich")
 	await _frames(3)
+	check(game.hud.dialogue_root == null and game.hall_rows("sich")[0]["kind"] == "story" and game.hall_rows("sich")[0]["npc"] == "kobzar", "на Січі кобзар чекає в курені з новою сагою")
+	_hall_talk(game, "story")
+	await _frames(3)
 	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "на Січі починається розмова з кобзарем")
 	game.queue_free()
 	await _frames(3)
@@ -13529,7 +13562,8 @@ func _suite_legends() -> void:
 	var prize: Dictionary = p.inventory[p.inventory.size() - 1] if p.inventory.size() > bag0 else {}
 	check(LS.finished(w, "drakula") and LS.done_count(w) == 1 and prize.get("name", "") == DL["steps"][2]["reward"]["item"]["name"] and int(prize.get("ilvl", 0)) == 50 and int(prize.get("rarity", 0)) == 3 and not fin.is_empty(), "переказ розказано: іменна легендарна річ рівня героя в торбі")
 	check(LS.city_dialogue(w, "verkhovyna").is_empty() and LS.target(w, "drakula") == "", "після кінця оповідач мовчить")
-	check(LS.city_dialogue(w, "cherkaskyi_stan").get("line", "") == "idolyshche" and LS.city_dialogue(w, "cherkaskyi_stan", false).is_empty(), "нових переказів за один прихід у місто починають один: другий оповідач зачекає")
+	var stan: Array = LS.city_dialogues(w, "cherkaskyi_stan")
+	check(stan.size() == 2 and stan[0]["line"] == "idolyshche" and stan[1]["line"] == "karachun" and LS.city_dialogue(w, "cherkaskyi_stan", "karachun")["line"] == "karachun" and LS.city_dialogue(w, "cherkaskyi_stan", "drakula").is_empty(), "у місті чекають усі оповідачі одразу, і до кожного можна підійти окремо")
 	# ---- Вбити N і дві лінійки разом ----
 	LS.on_dialogue_done(w, p, "legend_start", "bila_pani")
 	LS.on_dialogue_done(w, p, "legend_start", "shubin")
@@ -13570,6 +13604,7 @@ func _suite_legends() -> void:
 		var key := "Переказ «%s»" % Leg.LINES[line]["title"]
 		wiki_ok = wiki_ok and titles.has(key) and str(Leg.LINES[line]["source"]) in titles[key] and str(Leg.LINES[line]["title"]) in titles.get("Перекази", "")
 	check(wiki_ok, "довідник описує кожен переказ і його джерело")
+	check("самі не починаються" in titles.get("Ратуша", "") and "«Поговорити»" in titles.get("Ратуша", "") and Data.HALL_NAMES["sich"] in titles.get("Ратуша", "") and "в ратуші" in titles.get("Перекази", ""), "довідник має статтю «Ратуша»: розмови самі не починаються")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -13597,23 +13632,22 @@ func _suite_legends() -> void:
 	await _frames(2)
 	game.enter_city("kyiv")
 	await _frames(3)
-	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "у Києві кобзар сам починає переказ про Кожум'яку")
-	var guard0 := 0
-	while game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root) and guard0 < 6:
-		game.hud.dialogue_root.finished.emit(-1)
-		await _frames(2)
-		guard0 += 1
-	check(LS.state(gw, "kozhumiaka")["stage"] == "active" and not LS.started(gw, "vii") and guard0 == 1, "за один прихід починається один переказ: про Вія полковник розкаже наступного разу")
-	game.enter_map()
+	var kyiv_hall: Array = game.hall_rows("kyiv")
+	var hall_lines := []
+	for r in kyiv_hall:
+		hall_lines.append(str(r["line"]))
+	check(game.hud.dialogue_root == null and hall_lines == ["kozhumiaka", "vii"] and kyiv_hall[0]["kind"] == "legend" and kyiv_hall[0]["name"] == Story.NPCS["kobzar"]["name"] and "Кожум'яка" in str(kyiv_hall[0]["what"]), "у Києві ніхто не заговорює сам: у ратуші чекають кобзар і полковник із переказами")
+	var tck = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(tck.get_tab_title(0) == "Ратуша (2)" and Data.hall_name("kyiv") == "Ратуша" and Data.hall_name("sich") != "Ратуша", "перша вкладка міста «Ратуша (2)»; на Січі це курінь")
+	check(_hall_talk(game, "legend", "vii"), "герой сам обирає, кого слухати: спершу полковника")
 	await _frames(2)
-	game.enter_city("kyiv")
-	await _frames(3)
-	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "наступного разу полковник починає розмову про Вія")
+	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "полковник починає розмову про Вія")
 	var guard := 0
 	while game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root) and guard < 6:
 		game.hud.dialogue_root.finished.emit(-1)
 		await _frames(2)
 		guard += 1
+	check(guard == 1 and not LS.started(gw, "kozhumiaka") and game.hall_rows("kyiv").size() == 1 and game.state == game.State.CITY, "після розмови герой лишається в ратуші; кобзар чекає далі й не перебиває")
 	check(LS.state(gw, "vii")["stage"] == "active", "після розмови крок активний")
 	game.enter_map()
 	await _frames(2)
@@ -13653,6 +13687,39 @@ func _suite_legends() -> void:
 	for e in get_nodes_in_group("enemies"):
 		kinds[e.kind] = true
 	check(kinds.has("strygoi") or kinds.has("moroi"), "слуги Дракули — стригої й морої")
+	# ---- Ратуша: побратим теж чекає там, а не перестріває на вході ----
+	var HSv = load("res://scripts/game/hero_service.gd")
+	var UCity = load("res://scripts/ui/ui_city.gd")
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("chernihiv")
+	await _frames(3)
+	var hero_row := {}
+	for r in game.hall_rows("chernihiv"):
+		if r["kind"] == "hero":
+			hero_row = r
+	check(game.hud.dialogue_root == null and HSv.can_meet(gw, "oksana", "chernihiv") and hero_row.get("npc", "") == "oksana" and "загін" in str(hero_row.get("what", "")), "Оксана чекає в ратуші Чернігова й сама не заговорює")
+	_hall_talk(game, "hero")
+	await _frames(2)
+	check(game.hud.dialogue_root != null and game.hud.dialogue_root.choices.size() == 2, "підійшов до неї: розмова з вибором")
+	game.hud.dialogue_root.finished.emit(0)
+	await _frames(3)
+	var still_hero := false
+	for r in game.hall_rows("chernihiv"):
+		still_hero = still_hero or r["kind"] == "hero"
+	check(HSv.in_party(gw, "oksana") and not still_hero and game.state == game.State.CITY, "Оксана в загоні, у ратуші її більше нема")
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("poltava")
+	await _frames(3)
+	var quiet := false
+	var no_talk := true
+	for l in game.hud.screen_root.find_children("*", "Label", true, false):
+		quiet = quiet or (not l.is_queued_for_deletion() and l.text == "Зараз на тебе ніхто не чекає.")
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		no_talk = no_talk and not (not b.is_queued_for_deletion() and b.text == UCity.HALL_TALK)
+	var tcp = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(game.hall_rows("poltava").is_empty() and quiet and no_talk and tcp.get_tab_title(0) == "Ратуша", "де ніхто не чекає, ратуша порожня й без числа в назві")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

@@ -44,11 +44,11 @@ static func _count(st: Dictionary) -> int:
 	return int(st["objective"].get("count", 1))
 
 
-## Що сказати в цьому місті: {"kind": "legend_start"/"legend_end", "line", "lines"} або {}.
-## Спершу кінцеві розмови (нагорода чекає), потім нові. offers = false — лише кінцеві: за один прихід
-## у місто оповідачі починають не більше одного нового переказу, щоб розмови не йшли чергою.
-static func city_dialogue(world, city: String, offers := true) -> Dictionary:
-	for want in (["turnin", "offer"] if offers else ["turnin"]):
+## Усі розмови переказів, що чекають у цьому місті: [{"kind": "legend_start"/"legend_end", "line", "lines"}].
+## Спершу кінцеві (нагорода чекає), потім нові. Самі вони не починаються: герой підходить у ратуші.
+static func city_dialogues(world, city: String) -> Array:
+	var out := []
+	for want in ["turnin", "offer"]:
 		for line in Legends.ORDER:
 			if not unlocked(world, line) or finished(world, line):
 				continue
@@ -56,9 +56,15 @@ static func city_dialogue(world, city: String, offers := true) -> Dictionary:
 			var st := current(world, line)
 			if st.is_empty() or str(st["city"]) != city or str(s["stage"]) != want:
 				continue
-			if want == "turnin":
-				return {"kind": "legend_end", "line": line, "lines": st["end"]}
-			return {"kind": "legend_start", "line": line, "lines": st["start"]}
+			out.append({"kind": "legend_end" if want == "turnin" else "legend_start", "line": line, "lines": st["end"] if want == "turnin" else st["start"]})
+	return out
+
+
+## Розмова в цьому місті: перша з усіх або саме лінійки line ({} — нема).
+static func city_dialogue(world, city: String, line: String = "") -> Dictionary:
+	for d in city_dialogues(world, city):
+		if line == "" or str(d["line"]) == line:
+			return d
 	return {}
 
 
