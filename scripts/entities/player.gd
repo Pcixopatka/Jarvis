@@ -10,6 +10,8 @@ const Status := preload("res://scripts/game/status.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
+const Uniques := preload("res://scripts/data/uniques.gd")
+const Power := preload("res://scripts/game/power.gd")
 const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
 const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
 
@@ -93,6 +95,18 @@ var attack_timer := 0.0
 var dodge_timer := 0.0
 var skill_timers := {"whirl": 0.0, "lightning": 0.0, "musket": 0.0}
 var dodge_time_left := 0.0
+# Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
+var u_pow := {}
+var u_luck := 0  # лічильник Долі: скільки гідних босів поспіль не дали золота (зберігається)
+var u_stacks := 0
+var u_stack_t := 0.0
+var u_vypad_t := 0.0
+var u_ward_t := 0.0
+var u_ward_cd := 0.0
+var u_chain_cd := 0.0
+var u_wave_cd := 0.0
+var u_yadro_t := 2.0
+var _u_proc := false
 var push := Vector2.ZERO  # поштовх від босів Башти (посвист, ланцюг)
 var dodge_dir := Vector2.RIGHT
 var dodge_hits := []
@@ -204,10 +218,10 @@ func is_volkhv() -> bool:
 
 
 ## Додає річ у торбу. Повертає false, якщо місця немає.
-func add_item(item: Dictionary) -> bool:
+func add_item(item: Dictionary, force: bool = false) -> bool:
 	if not item.has("uid"):
 		assign_uid(item)
-	if bag_full():
+	if bag_full() and not force:
 		return false
 	inventory.append(item)
 	return true
@@ -287,10 +301,20 @@ func sharpen(uid: int, cost_mult: float = 1.0, chance_bonus: float = 0.0, safe: 
 
 func _calc_equipment() -> void:
 	_eq = {}
+	u_pow = {}
+	var pow_tier := {}
 	for slot in equipment:
 		var st := Data.item_stats(equipment[slot])
 		for id in st:
 			_eq[id] = _eq.get(id, 0.0) + st[id]
+		# сила золотої речі; дві однакові сили не складаються — діє сильніша
+		var it: Dictionary = equipment[slot]
+		if Uniques.is_unique(it):
+			var pid := Uniques.power_id(it)
+			var t := Uniques.tier(it)
+			if t > int(pow_tier.get(pid, 0)):
+				pow_tier[pid] = t
+				u_pow[pid] = Uniques.DEFS[str(it["unique"])]["params"]
 	weapon_type = equipment["weapon"]["type"] if equipment.has("weapon") else "sabre"
 	weapon = Data.WEAPON_TYPES[weapon_type]
 
@@ -306,7 +330,7 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel}
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -781,6 +805,8 @@ func charged_strike(power: float) -> void:
 		Events.charged_hit.emit()
 	if full:
 		combat.float_text(global_position + Vector2(0, -70), "Козацький удар!", Color(1.0, 0.85, 0.3))
+		if hits > 0:
+			_unique_wave()
 
 
 ## Ідеальне парирування: ворожий удар зірвано, ворог приголомшений, у відповідь — критичний удар.
@@ -814,6 +840,7 @@ func _tick_effects(delta: float) -> void:
 	zamova_timer = maxf(0.0, zamova_timer - delta)
 	zahyst_timer = maxf(0.0, zahyst_timer - delta)
 	cleanse_timer = maxf(0.0, cleanse_timer - delta)
+	_tick_unique(delta)
 	if burya_timer > 0.0:
 		burya_timer -= delta
 		_burya_tick -= delta
@@ -836,8 +863,14 @@ func _roll(mult: float) -> Array:
 		crit = true
 		mult *= 1.2 + 0.2 * sk("tin")
 		tin_timer = 0.0
+	if u_vypad_t > 0.0:
+		# Пластунський випад: після перекиду кожен удар критичний і сильніший
+		crit = true
+		mult *= 1.0 + float(u_pow.get("vypad", {}).get("bonus", 0.0))
 	var dmg := damage * mult * (crit_mult if crit else 1.0) * randf_range(0.9, 1.1) * (1.0 + (cry_bonus if cry_timer > 0.0 else 0.0))
 	dmg *= Status.damage_mult(self)
+	if u_stacks > 0:
+		dmg *= 1.0 + u_stacks * float(u_pow.get("zvytiaha", {}).get("dmg", 0.0))  # Звитяга
 	if wolf_timer > 0.0:
 		dmg *= 1.25
 	if pk("nevhamovnyi") > 0:
@@ -852,6 +885,8 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 	if pk("h_execute") > 0 and e.hp < e.max_hp * 0.3:
 		dmg *= 1.2
 	e.take_damage(dmg, kb, crit)
+	if not _u_proc:
+		_unique_on_hit(e, dmg, crit)
 	if zamova_timer > 0.0 and not _chaining:
 		_zamova_chain(e, dmg)
 	if wolf_timer > 0.0:
@@ -860,6 +895,105 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		Status.apply(e, "bleed", 3.0, dmg * 0.1)  # критичний удар лишає кровотечу
 	if lifesteal > 0.0:
 		heal(dmg * lifesteal, false)
+
+
+## Сили золотих речей, що спрацьовують від удару: Звитяга (за вбитого) і Перунова блискавка (за крит).
+func _unique_on_hit(e, dmg: float, crit: bool) -> void:
+	if e.dead and u_pow.has("zvytiaha"):
+		var z: Dictionary = u_pow["zvytiaha"]
+		u_stacks = mini(int(z["max"]), u_stacks + 1)
+		u_stack_t = float(z["dur"])
+	if crit and u_pow.has("perun") and u_chain_cd <= 0.0:
+		var pr: Dictionary = u_pow["perun"]
+		if randf() < float(pr["chance"]):
+			u_chain_cd = float(pr["icd"])
+			var from = e
+			var seen := [e]
+			var pts := PackedVector2Array([e.global_position])
+			_u_proc = true
+			for i in int(pr["jumps"]):
+				var best = null
+				var best_d := 260.0
+				for o in _alive_enemies():
+					if o in seen:
+						continue
+					var dd: float = o.global_position.distance_to(from.global_position)
+					if dd < best_d:
+						best_d = dd
+						best = o
+				if best == null:
+					break
+				seen.append(best)
+				pts.append(best.global_position)
+				best.take_damage(dmg * float(pr["pct"]), Vector2.ZERO, false)
+				from = best
+			_u_proc = false
+			if pts.size() > 1:
+				combat.spawn_bolt(pts)
+				Audio.play("lightning", 0.1, -8.0)
+
+
+## Громовий удар: хвиля довкола героя від завершального й повного зарядженого удару.
+func _unique_wave() -> void:
+	if not u_pow.has("hrim") or u_wave_cd > 0.0:
+		return
+	var h: Dictionary = u_pow["hrim"]
+	u_wave_cd = 0.8
+	var r: float = float(h["radius"])
+	_u_proc = true
+	for e in _alive_enemies():
+		var to: Vector2 = e.global_position - global_position
+		if to.length() > r + e.radius:
+			continue
+		var roll := _roll(float(h["pct"]))
+		hit(e, roll[0], to.normalized() * 520.0, roll[1])
+		if not e.dead and not e.is_boss:
+			e.stun = maxf(e.stun, float(h["stun"]))
+	_u_proc = false
+	combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 36, r, 7, 0.4)
+	combat.shake(7.0)
+	Audio.play("clash", 0.1, -4.0)
+
+
+## Таймери сил золотих речей: Звитяга спадає, Покрова вмикається, Вогняне ядро падає.
+func _tick_unique(delta: float) -> void:
+	u_chain_cd = maxf(0.0, u_chain_cd - delta)
+	u_wave_cd = maxf(0.0, u_wave_cd - delta)
+	u_vypad_t = maxf(0.0, u_vypad_t - delta)
+	u_ward_t = maxf(0.0, u_ward_t - delta)
+	u_ward_cd = maxf(0.0, u_ward_cd - delta)
+	if u_stacks > 0:
+		u_stack_t -= delta
+		if u_stack_t <= 0.0 or not u_pow.has("zvytiaha"):
+			u_stacks = 0
+	if u_pow.has("pokrova") and u_ward_cd <= 0.0 and alive and hp > 0.0 and hp < max_hp * float(u_pow["pokrova"]["threshold"]):
+		var pk0: Dictionary = u_pow["pokrova"]
+		u_ward_t = float(pk0["dur"])
+		u_ward_cd = float(pk0["cd"])
+		combat.float_text(global_position + Vector2(0, -80), "Покрова", Color(1.0, 0.85, 0.3))
+		combat.fx.ring(global_position, Color(1.0, 0.85, 0.3), 24, 90, 5, 0.5)
+	if u_pow.has("yadro"):
+		u_yadro_t -= delta
+		if u_yadro_t <= 0.0:
+			var y: Dictionary = u_pow["yadro"]
+			var target = combat.nearest_enemy(global_position, 520.0)
+			if target == null:
+				u_yadro_t = 0.5
+			else:
+				u_yadro_t = float(y["period"])
+				var c: Vector2 = target.global_position
+				var dmg: float = Power.dps(self) / 1.6 * float(y["sec"])
+				_u_proc = true
+				for e in _alive_enemies():
+					if e.global_position.distance_to(c) <= float(y["r"]) + e.radius:
+						e.take_damage(dmg, (e.global_position - c).normalized() * 200.0, false)
+						if not e.dead:
+							Status.apply(e, "burn", 3.0, dmg * 0.1)
+				_u_proc = false
+				combat.fx.burst(c, Color(1.0, 0.55, 0.15), 26, 260, 8, 0.5)
+				combat.fx.ring(c, Color(1.0, 0.7, 0.2), 24, float(y["r"]), 5, 0.3)
+				combat.shake(5.0)
+				Audio.play("musket", 0.1, -6.0)
 
 
 func _alive_enemies() -> Array:
@@ -917,6 +1051,7 @@ func attack() -> void:
 		if finisher:
 			combat.fx.ring(global_position + facing * 40.0, Color(1.0, 0.8, 0.4), 16, reach, 4, 0.25)
 			combat.shake(4.0)
+			_unique_wave()
 	else:
 		combo_step = 0
 	if hits > 0:
@@ -992,6 +1127,8 @@ func dodge() -> void:
 	dodge_time_left = 0.18
 	dodge_hits.clear()
 	invuln = maxf(invuln, 0.32)
+	if u_pow.has("vypad"):
+		u_vypad_t = float(u_pow["vypad"]["window"])
 	Audio.play("dodge", 0.1)
 	combat.fx.burst(global_position + Vector2(0, 16), Color(0.75, 0.7, 0.55, 0.7), 10, 160, 7, 0.45, 0, (-dodge_dir).angle(), 1.4)
 
@@ -1107,6 +1244,9 @@ func use_skill(id: String) -> void:
 	if used:
 		mana -= skill_cost(id)
 		skill_timers[id] = skill_cooldown(id)
+		if u_pow.has("vidlunnia") and randf() < float(u_pow["vidlunnia"]["chance"]):
+			skill_timers[id] *= 0.5  # Відлуння золотої речі
+			combat.float_text(global_position + Vector2(0, -80), "Відлуння", Color(1.0, 0.85, 0.3))
 
 
 ## Усі вивчені активні вміння (свого класу і набуті раніше), у порядку дерев.
@@ -1752,6 +1892,8 @@ func take_damage(amount: float, source = null) -> bool:
 			return false
 	if stina_timer > 0.0:
 		amount *= 1.0 - (0.4 + 0.05 * (sk("stina") - 1))
+	if u_ward_t > 0.0:
+		amount *= 1.0 - float(u_pow.get("pokrova", {}).get("ward", 0.0))  # Покрова золотої речі
 	if zahyst_timer > 0.0:
 		amount *= zahyst_mult
 	if source != null and thorns > 0.0 and not source.dead:

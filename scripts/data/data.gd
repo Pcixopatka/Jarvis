@@ -143,9 +143,10 @@ const SHARPEN_CHANCE := [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
 const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
 const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гривні: у стільки разів дорожча
 
-const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна"]
-const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15)]
-const LEGEND_EPITHETS := ["Громовиця", "Вовча", "Чорноморська", "Січова", "Перунова", "Хортицька", "Буревісна", "Сіркова"]
+const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна", "Унікальна"]
+const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15), Color(1.0, 0.85, 0.3)]
+const RARITY_MAX_RANDOM := 3  # випадкова річ не буває унікальною: золоті речі іменні (див. Uniques)
+const LEGEND_EPITHETS := ["Громовиця", "Вовча", "Чорноморська", "Січова", "Перунова", "Хортицька", "Буревісна", "Гайдамацька"]
 
 # Типи зброї: множники шкоди, перезарядки удару, дальності, ширини дуги та відкидання.
 const WEAPON_TYPES := {
@@ -242,6 +243,7 @@ static func roll_rarity(wave: int, min_rarity: int = 0) -> int:
 
 ## Створює випадкову річ. slot/type можна задати явно.
 static func gen_item(ilvl: int, rarity: int, slot: String = "", type: String = "") -> Dictionary:
+	rarity = mini(rarity, RARITY_MAX_RANDOM)
 	if slot == "":
 		slot = ["weapon", "weapon", "head", "body", "belt", "boots", "amulet"][randi() % 7]
 	var name := ""

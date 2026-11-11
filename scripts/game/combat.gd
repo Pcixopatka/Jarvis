@@ -29,6 +29,7 @@ const TrailService := preload("res://scripts/game/trail_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const Sounds := preload("res://scripts/data/sounds.gd")
 const TrailScript := preload("res://scripts/world/trail.gd")
+const LootService := preload("res://scripts/game/loot_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const DEFENSE_ARENA := Rect2(-900, -800, 1800, 1300)
 const GroundScript := preload("res://scripts/world/ground.gd")
@@ -1199,7 +1200,14 @@ func _drop_loot(e: Node2D) -> void:
 		shake(14.0)
 		Audio.jingle("victory")
 		Audio.play_music("map")  # бій скінчено: замість бойової теми — спокійна
-		Events.banner.emit("Перемога!\n%s" % Data.BOSS_NAMES.get(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
+		var golden: Dictionary = LootService.on_boss(self, player, e)
+		if golden.is_empty():
+			Events.banner.emit("Перемога!\n%s" % Data.BOSS_NAMES.get(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
+		else:
+			# золота річ: окремий банер і дзвін, щоб таку здобич не проґавити
+			spawn_pickup(pos, "item", 0, golden)
+			Events.banner.emit("Золота здобич!\n%s" % golden["name"], Data.RARITY_COLORS[int(golden["rarity"])])
+			Audio.play("coin", 0.0, 2.0)
 		for i in 10:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 10))
 		for i in (3 if drop_boost > 1.0 else 2):
@@ -1283,7 +1291,8 @@ func pick_item(item: Dictionary) -> void:
 		player.gold += g0
 		float_text(player.global_position + Vector2(0, -70), "Мотлох продано: +%d грн" % g0, col)
 		return
-	if player.add_item(item):
+	# золоту річ ніколи не продаємо за повну торбу: вона лягає понад місце
+	if player.add_item(item, int(item["rarity"]) > Data.RARITY_MAX_RANDOM):
 		float_text(player.global_position + Vector2(0, -70), item["name"], col)
 		Audio.play("item", 0.0)
 		Events.item_found.emit(item)

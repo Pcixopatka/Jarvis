@@ -12,6 +12,7 @@ const Classes := preload("res://scripts/data/classes.gd")
 const Story := preload("res://scripts/data/story.gd")
 const Elites := preload("res://scripts/data/elites.gd")
 const Status := preload("res://scripts/game/status.gd")
+const Uniques := preload("res://scripts/data/uniques.gd")
 
 static var _cache: Array = []
 
@@ -427,7 +428,7 @@ static func _items() -> Array:
 		var W: Dictionary = Data.WEAPON_TYPES[w]
 		out.append(_e(W["name"], "зброя", "%s. Шкода ×%s, швидкість ×%s, довжина ×%s." % [W["hint"], _num(W["dmg"]), _num(1.0 / float(W["cd"])), _num(W["range"])]))
 	var rar := []
-	for i in Data.RARITY_NAMES.size():
+	for i in Data.RARITY_MAX_RANDOM + 1:
 		rar.append("%s (%d властив.)" % [Data.RARITY_NAMES[i], i])
 	out.append(_e("Рідкість", "колір назви речі", "Від звичайної до легендарної: " + ", ".join(rar) + ". Що рідкісніша річ, то більше в неї властивостей і дорожча вона в продажу."))
 	var props := []
@@ -448,6 +449,30 @@ static func _items() -> Array:
 	out.append(_e(SS.NAMES["alatyr"], "камінь долі", Camp.STONE_TEXT["alatyr"] + " Козак може стати Волхвом і навпаки, спеціалізація — іншою спеціалізацією своєї гілки.", {"loot": "stone_alatyr"}))
 	out.append(_e("Де взяти камені", "", "Рідко падають із босів, перша перемога над сюжетним босом дає камінь напевно. Ще — нагороди рангів слави, великих свят і Башти, а в скарбника на хуторі — за гривні."))
 	out.append(_e("Продаж", "крамниця в місті", "Речі продаються в крамниці, кілька разом — кнопками «Продати звичайні» й далі. Під час ярмарку продаж удвічі дорожчий. Можна ввімкнути автопродаж звичайних речей, коли торба повна."))
+	return out + _uniques()
+
+
+## Золоті (унікальні) речі: правила й усі речі з їхніми силами.
+static func _uniques() -> Array:
+	var out := []
+	var head := "Золоті речі"
+	var ch := []
+	for t in range(1, Uniques.BASE_CHANCE.size()):
+		ch.append("«%s» %s%%" % [Uniques.TIER_NAMES[t], _num(float(Uniques.BASE_CHANCE[t]) * 100.0)])
+	out.append(_e("Золоті речі", "унікальні, з власним ім'ям", "Найрідкісніша здобич: назва золота, перед нею зірка. У кожної сталі властивості, сильніші за легендарні, і одна сила, що міняє бій. Падають лише з босів у їхніх лігвах і з супербосів Башти Кощія. Ватажки варти, оборони й чудовиська Кола Кожум'яки золота не дають.", {}, head))
+	out.append(_e("Ступені золота", "що лютіший бос, то краща річ", "Ступенів п'ять: " + ", ".join(Uniques.TIER_NAMES.slice(1)) + ". Ступінь боса залежить від того, хто він. У Глибинах зарази ступінь росте на один за кожні 8 глибин, у Башті супербос дає на один більше, а з 40-го поверху на два. Бос дає річ свого ступеня або нижчого, найчастіше свого. Свою улюблену річ бос дає втричі частіше, а ту, що в тебе вже є, вчетверо рідше."))
+	out.append(_e("Шанс золота", "малий, але чесний", "За одну перемогу: " + ", ".join(ch) + ". Кожен бос без золота наближає удачу: за %d таких поспіль шанс подвоюється, а %d-й дає річ напевно. Бос має бути не нижчий за героя більш як на %d рівнів, тож старі печери золота не дадуть. Реклама «×2 здобичі», свята й зараза на цей шанс не впливають." % [int(Uniques.LUCK_STEP), Uniques.LUCK_SURE + 1, Uniques.LEVEL_GAP]))
+	out.append(_e("Що можна робити із золотом", "заточка, оновлення, продаж", "Золоту річ точать і оновлюють у кузні до свого рівня, як будь-яку іншу: властивості лишаються ті самі, росте лише сила. Масовий продаж і автопродаж її не чіпають, а при повній торбі вона лягає понад місце. Дві речі з однаковою силою не складаються: діє сильніша."))
+	for id in Uniques.ORDER:
+		var D: Dictionary = Uniques.DEFS[id]
+		var kind: String = str(Data.SLOT_NAMES[D["slot"]]).to_lower()
+		if D["slot"] == "weapon":
+			kind = str(Data.WEAPON_TYPES[D["type"]]["name"]).to_lower()
+		var props := []
+		for a in D["affixes"]:
+			props.append(PROP_NAMES.get(a, a))
+		var text := "✦ %s. %s\nВластивості: %s.\nНайчастіше дає: %s.\n%s" % [Uniques.power_name(id), Uniques.power_text(id), ", ".join(props), Uniques.boss_names(id), D["lore"]]
+		out.append(_e(str(D["name"]), "«%s» • %s" % [Uniques.TIER_NAMES[int(D["tier"])], kind], text, {}, "Золоті речі: усі %d" % Uniques.ORDER.size() if id == Uniques.ORDER[0] else ""))
 	return out
 
 

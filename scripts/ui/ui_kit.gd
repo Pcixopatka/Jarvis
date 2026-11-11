@@ -55,7 +55,7 @@ static func item_button(item: Dictionary, cb: Callable, selected: bool = false, 
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	var b := Button.new()
 	var up: String = (" +%d" % item["up"]) if item["up"] > 0 else ""
-	b.text = item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
+	b.text = ("★ " if item.has("unique") else "") + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
 	b.custom_minimum_size = Vector2(150, 62)
 	b.clip_text = true
 	b.add_theme_font_size_override("font_size", 15)
@@ -85,7 +85,12 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 	v.add_theme_constant_override("separation", 4)
 	var col: Color = Data.RARITY_COLORS[item["rarity"]]
 	v.add_child(label(Data.item_title(item), 24, col, false))
-	v.add_child(label("%s • %s • рівень речі %d" % [Data.RARITY_NAMES[item["rarity"]], Data.SLOT_NAMES[item["slot"]], item["ilvl"]], 16, MUTED, false))
+	var Uniq = load("res://scripts/data/uniques.gd")
+	var golden: bool = Uniq.is_unique(item)
+	var rar: String = Data.RARITY_NAMES[item["rarity"]]
+	if golden:
+		rar += " «%s»" % Uniq.TIER_NAMES[Uniq.tier(item)]
+	v.add_child(label("%s • %s • рівень речі %d" % [rar, Data.SLOT_NAMES[item["slot"]], item["ilvl"]], 16, MUTED, false))
 	if item["slot"] == "weapon":
 		v.add_child(label(Data.WEAPON_TYPES[item["type"]]["hint"], 16, MUTED, false))
 	var st := Data.item_stats(item)
@@ -113,6 +118,15 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		v.add_child(label("Зараз вдягнуто: " + Data.item_title(compare), 15, MUTED, false))
 	if item["up"] > 0:
 		v.add_child(label("Заточка +%d: усі бонуси +%d%%" % [item["up"], roundi(item["up"] * Data.UPGRADE_BONUS * 100)], 15, GOLD, false))
+	if golden:
+		# сила золотої речі й переказ про неї
+		var uid: String = str(item["unique"])
+		v.add_child(label("✦ " + Uniq.power_name(uid), 18, GOLD, false))
+		for txt in [[Uniq.power_text(uid), 16, TEXT], [str(Uniq.DEFS[uid]["lore"]), 15, MUTED]]:
+			var pl := label(txt[0], txt[1], txt[2], false)
+			pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			pl.custom_minimum_size = Vector2(290, 0)
+			v.add_child(pl)
 	return v
 
 

@@ -115,6 +115,11 @@ static func renew(world, player, uid: int) -> bool:
 	if not can_pay(player, cost):
 		return false
 	_pay(player, cost)
+	if it.has("unique"):
+		# золота річ не перекидає властивості: вони сталі, росте лише сила
+		load("res://scripts/data/uniques.gd").rescale(it, player.level)
+		player.recalc()
+		return true
 	it["ilvl"] = player.level
 	var primary: String = Data.SLOT_PRIMARY[it["slot"]]
 	it["base"] = {primary: Data._primary_value(it["slot"], player.level, int(it["rarity"]))}

@@ -75,7 +75,7 @@ static func sell(player: Player, uid: int) -> int:
 static func sell_junk(player: Player) -> int:
 	var total := 0
 	for it in player.inventory.duplicate():
-		if it["rarity"] == 0:
+		if it["rarity"] == 0 and not it.has("unique"):
 			total += sell(player, it["uid"])
 	return total
 
@@ -101,7 +101,7 @@ static func is_upgrade(player: Player, it: Dictionary) -> bool:
 static func bulk_candidates(player: Player, max_rarity: int) -> Array:
 	var out := []
 	for it in player.inventory:
-		if int(it["rarity"]) <= max_rarity and not is_upgrade(player, it):
+		if int(it["rarity"]) <= max_rarity and not it.has("unique") and not is_upgrade(player, it):
 			out.append(it)
 	return out
 

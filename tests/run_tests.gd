@@ -109,6 +109,8 @@ func _run() -> void:
 	await _suite_far_lands_game()
 	_suite_muscovy()
 	await _suite_muscovy_game()
+	_suite_uniques()
+	await _suite_uniques_game()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -6526,6 +6528,317 @@ func _suite_muscovy_game() -> void:
 	check(wide.is_empty(), "панель мапи вміщається на екрані для кожного місця: %s" % str(wide))
 	var hits2: Array = game.WikiService.search("Карачун")
 	check(not hits2.is_empty() and str(hits2[0]["entry"]["title"]).begins_with("Карачун"), "довідник знає Карачуна")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Золоті (унікальні) речі =======================
+
+func _suite_uniques() -> void:
+	suite("Золоті речі: дані й правила")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Loot = load("res://scripts/game/loot_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Tower = load("res://scripts/game/tower_service.gd")
+	var Depth = load("res://scripts/game/depth_service.gd")
+	check(Uniques.ORDER.size() == Uniques.DEFS.size() and Uniques.ORDER.size() >= 24, "золотих речей %d, порядок збігається з таблицею" % Uniques.DEFS.size())
+	var ok := true
+	var names := {}
+	var slots := {}
+	var wtypes := {}
+	var per_tier := {}
+	var bad := []
+	for id in Uniques.ORDER:
+		var D: Dictionary = Uniques.DEFS[id]
+		var good: bool = Data.SLOTS.has(D["slot"]) and int(D["tier"]) >= 1 and int(D["tier"]) <= 5 and Uniques.POWERS.has(D["power"]) and str(D["lore"]) != "" and not names.has(D["name"])
+		if D["slot"] == "weapon":
+			good = good and Data.WEAPON_TYPES.has(D["type"])
+			wtypes[D["type"]] = true
+		for a in D["affixes"]:
+			good = good and (a in Data.INT_STATS or Uniques.MID.has(a)) and a != Data.SLOT_PRIMARY[D["slot"]] and not a in ["lifesteal", "regen"]
+		for b in D["bosses"]:
+			good = good and Data.BOSS_NAMES.has(b)
+		good = good and not "{" in Uniques.power_text(id) and D["affixes"].size() >= 3
+		names[D["name"]] = true
+		slots[D["slot"]] = true
+		per_tier[int(D["tier"])] = int(per_tier.get(int(D["tier"]), 0)) + 1
+		if not good:
+			bad.append(id)
+		ok = ok and good
+	check(ok, "кожна золота річ: слот, ступінь, сила з числами, властивості без вампіризму й загоєння, переказ: %s" % str(bad))
+	check(slots.size() == Data.SLOTS.size() and wtypes.size() == Data.WEAPON_TYPES.size(), "золото є для кожного слота й кожного виду зброї")
+	var tiers_ok := true
+	for t in range(1, 6):
+		tiers_ok = tiers_ok and int(per_tier.get(t, 0)) >= 3
+	check(tiers_ok, "у кожному з п'яти ступенів щонайменше три речі: %s" % str(per_tier))
+	# Кожен бос гри має свій ступінь (новий бос без ступеня провалить цю перевірку)
+	var bosses := {}
+	for id in Data.LOCATIONS:
+		if Data.LOCATIONS[id].has("boss"):
+			bosses[Data.LOCATIONS[id]["boss"]] = true
+	for b in Tower.SUPER_BOSSES + Depth.BOSSES:
+		bosses[b] = true
+	var no_tier := []
+	for b in bosses:
+		if not Uniques.BOSS_TIER.has(b):
+			no_tier.append(b)
+	check(no_tier.is_empty() and bosses.size() >= 19, "усі %d босів мають ступінь золота: %s" % [bosses.size(), str(no_tier)])
+	# Річ: стала, сильніша за легендарну, вищий ступінь — сильніша зброя
+	var a1: Dictionary = Uniques.make("kotyhoroshko", 60)
+	var a2: Dictionary = Uniques.make("kotyhoroshko", 60)
+	var top: Dictionary = Uniques.make("bulava_mazepy", 60)
+	check(a1 == a2 and int(a1["rarity"]) == 4 and a1["unique"] == "kotyhoroshko" and a1["name"] == "Булава Котигорошка", "золота річ стала: без випадкових кидків")
+	check(float(a1["base"]["flat_dmg"]) > Data._primary_value("weapon", 60, 3) and float(top["base"]["flat_dmg"]) > float(a1["base"]["flat_dmg"]) * 1.1, "зброя сильніша за легендарну, «Характерницька» сильніша за «Сотницьку»")
+	check(float(top["base"]["flat_dmg"]) < Data._primary_value("weapon", 60, 3) * 1.35, "але не більш як на третину: гра не стає легшою стрибком")
+	Uniques.rescale(a1, 70)
+	check(int(a1["ilvl"]) == 70 and float(a1["base"]["flat_dmg"]) > float(a2["base"]["flat_dmg"]) and a1["affixes"].keys() == a2["affixes"].keys(), "оновлення до рівня: ті самі властивості, більша сила")
+	check(int(Data.gen_item(30, 4)["rarity"]) == 3 and int(Data.gen_item(30, 9)["rarity"]) == 3, "випадкова річ не буває унікальною")
+	# Шанс і Доля
+	check(is_equal_approx(Loot.chance(1, 0), 0.01) and is_equal_approx(Loot.chance(4, 0), 0.024) and is_equal_approx(Loot.chance(1, 20), 0.02) and Loot.chance(3, 99) == 1.0 and Loot.chance(5, 0) < 0.04, "шанси малі, Доля їх підіймає, сотий бос дає напевно")
+	# Вибір речі: клас і ступінь
+	var p = _new_player()
+	p.change_class("cossack")
+	var pick_ok := true
+	for i in 300:
+		var pid: String = Loot.pick(p, 2, "solovei")
+		var PD: Dictionary = Uniques.DEFS[pid]
+		pick_ok = pick_ok and int(PD["tier"]) <= 2 and not (PD["slot"] == "weapon" and PD["type"] in ["staff", "pishchal"])
+	check(pick_ok, "козакові не падає посох чи пищаль, ступінь не вищий за ступінь боса")
+	var fav := 0
+	for i in 400:
+		if Loot.pick(p, 1, "vovkulaka") == "vovcha_kuchma":
+			fav += 1
+	check(fav > 150, "улюблену річ бос дає частіше за інші (%d із 400)" % fav)
+	# Сила вдягненої речі
+	var sirko: Dictionary = Uniques.make("shablia_sirka", 40)
+	p.assign_uid(sirko)
+	p.equipment["weapon"] = sirko
+	p.recalc()
+	check(p.u_pow.has("zvytiaha") and int(p.u_pow["zvytiaha"]["max"]) == 10, "вдягнена Шабля Сірка дає Звитягу")
+	var body1: Dictionary = Uniques.make("kolchuha_bohuna", 40)
+	p.assign_uid(body1)
+	p.equipment["body"] = body1
+	p.recalc()
+	check(int(p.u_pow["zvytiaha"]["max"]) == 10 and p.u_pow.size() == 1, "дві однакові сили не складаються: діє сильніша")
+	# Продаж і збереження
+	var spare: Dictionary = Uniques.make("poias_baidy", 40)
+	p.add_item(spare)
+	p.add_item(Data.gen_item(5, 0))
+	var n0: int = p.inventory.size()
+	CityService.sell_up_to(p, 4)
+	CityService.sell_junk(p)
+	check(not p.find_item(spare["uid"]).is_empty() and p.inventory.size() < n0, "масовий продаж золота не чіпає")
+	p.u_luck = 37
+	var q = _new_player()
+	q.from_dict(p.to_dict().duplicate(true))
+	check(q.u_luck == 37 and q.u_pow.has("zvytiaha") and not q.find_item(spare["uid"]).is_empty(), "Доля, сили й золоті речі переживають збереження")
+	var old = _new_player()
+	var od: Dictionary = old.to_dict().duplicate(true)
+	od.erase("u_luck")
+	old.from_dict(od)
+	check(old.u_luck == 0 and old.u_pow.is_empty(), "старе збереження без золота вантажиться")
+	# Довідник
+	var titles := {}
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			titles[str(e["title"])] = str(e["text"])
+	var wiki_ok := titles.has("Золоті речі") and titles.has("Шанс золота") and titles.has("Ступені золота")
+	for id in Uniques.ORDER:
+		var nm: String = str(Uniques.DEFS[id]["name"])
+		wiki_ok = wiki_ok and titles.has(nm) and Uniques.power_name(id) in str(titles.get(nm, ""))
+	check(wiki_ok, "у довіднику є правила золота й кожна золота річ із її силою")
+	var UI = load("res://scripts/ui/ui_kit.gd")
+	var card: Control = UI.item_card(sirko)
+	var ctext := ""
+	for n in card.find_children("*", "Label", true, false):
+		ctext += n.text + "\n"
+	card.free()
+	var btn: Button = UI.item_button(sirko, func(): pass)
+	check("Унікальна «Гетьманська»" in ctext and "✦ Звитяга" in ctext and "Іван Сірко" in ctext and btn.text.begins_with("★ Шабля Сірка"), "картка золотої речі: ступінь, сила, переказ, зірка на кнопці")
+	btn.free()
+
+
+func _suite_uniques_game() -> void:
+	suite("Золоті речі: у грі")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Loot = load("res://scripts/game/loot_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 40
+	p.stats["str"] = 120
+	p.stats["vit"] = 150
+	p.recalc()
+	p.hp = p.max_hp
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	var golden_on_floor := func() -> Dictionary:
+		for ch in c.entities.get_children():
+			if ch.get_script() == c.PickupScript and ch.kind == "item" and ch.item.has("unique") and not ch.is_queued_for_deletion():
+				return ch.item
+		return {}
+	var boss_of := func():
+		for e in c.get_tree().get_nodes_in_group("enemies"):
+			if e.is_boss:
+				return e
+		return null
+	var to_boss_room := func() -> void:
+		_clear_enemies(game)
+		if c.portal != null and is_instance_valid(c.portal):
+			c.portal.queue_free()
+		c.portal = null
+		c.room = int(c.loc["rooms"])
+		c._spawn_room()
+	# Гідний бос далекого краю на сотій спробі дає золото напевно
+	game.enter_location("zmiinyi")
+	await _frames(3)
+	to_boss_room.call()
+	await _frames(2)
+	var boss = boss_of.call()
+	check(boss != null and Loot.is_lair_boss(c, boss) and Loot.worthy(c, p, boss) and Loot.boss_tier(c, boss) == 4, "Морський цар у своєму лігві: гідний бос четвертого ступеня")
+	p.u_luck = 99
+	c._drop_loot(boss)
+	var g: Dictionary = golden_on_floor.call()
+	check(not g.is_empty() and int(g["rarity"]) == 4 and int(g["ilvl"]) == int(boss.level) and Uniques.tier(g) <= 4 and p.u_luck == 0, "золота річ упала, Доля скинулась")
+	p.u_luck = 0
+	var dry := 0
+	for i in 30:
+		if Loot.on_boss(c, p, boss).is_empty():
+			dry += 1
+	check(dry >= 22 and (dry < 30 or p.u_luck == 30), "зазвичай бос золота не дає, а Доля росте (%d із 30 порожні)" % dry)
+	# Повна торба золоту річ не продає
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 0))
+	var gold0: int = p.gold
+	var n0: int = p.inventory.size()
+	c.pick_item(Uniques.make("poias_baidy", 40))
+	check(p.inventory.size() == n0 + 1 and p.gold == gold0, "при повній торбі золота річ лягає понад місце, а не продається")
+	p.inventory.clear()
+	game.enter_map()
+	await _frames(2)
+	# Стара печера високому героєві золота не дає, ватажок у полі теж
+	game.enter_location("zmii_cave")
+	await _frames(3)
+	to_boss_room.call()
+	await _frames(2)
+	boss = boss_of.call()
+	p.u_luck = 99
+	check(boss != null and Loot.is_lair_boss(c, boss) and not Loot.worthy(c, p, boss) and Loot.on_boss(c, p, boss).is_empty() and p.u_luck == 99, "Змій третього рівня героєві сорокового золота не дає")
+	game.enter_map()
+	await _frames(2)
+	game.enter_location("oleshky")
+	await _frames(3)
+	_clear_enemies(game)
+	c.spawn_enemy("upyr", 40, true, p.global_position + Vector2(300, 0))
+	var leader = c._last_enemy()
+	check(not Loot.is_lair_boss(c, leader) and Loot.on_boss(c, p, leader).is_empty(), "ватажок у полі — не господар лігва")
+	# Глибини й Башта піднімають ступінь
+	c.loc = {"type": "dungeon", "boss": "zmii", "depth": 16, "level": 52}
+	check(Loot.boss_tier(c, {"kind": "zmii"}) == 3, "Змій на 16-й глибині — уже третього ступеня")
+	c.loc = {"type": "tower", "floor": 40, "level": 54}
+	check(Loot.boss_tier(c, {"kind": "lykho"}) == 5 and Loot.boss_tier(c, {"kind": "solovei"}) == 4, "супербос Башти з 40-го поверху: на два ступені вище")
+	game.enter_map()
+	await _frames(2)
+	# Сили в бою
+	game.enter_location("oleshky")
+	await _frames(3)
+	var wear := func(id: String) -> void:
+		var it: Dictionary = Uniques.make(id, 40)
+		p.assign_uid(it)
+		p.equipment[it["slot"]] = it
+		p.recalc()
+		p.hp = p.max_hp
+	var foe := func(dx: float):
+		c.spawn_enemy("upyr", 40, false, p.global_position + Vector2(dx, 0))
+		var e = c._last_enemy()
+		e.set_process(false)
+		return e
+	# Звитяга
+	_clear_enemies(game)
+	wear.call("shablia_sirka")
+	var e1 = foe.call(60.0)
+	p.hit(e1, e1.max_hp * 10.0, Vector2.ZERO, false)
+	check(e1.dead and p.u_stacks == 1 and p.u_stack_t > 5.0, "Звитяга: убитий ворог дає заряд")
+	p.u_stacks = 10
+	p.crit_chance = 0.0
+	var boosted: float = p._roll(1.0)[0]
+	check(boosted > p.damage * 0.9 * 1.29, "десять зарядів Звитяги: +30% шкоди")
+	p.u_stack_t = 0.01
+	await _frames(3)
+	check(p.u_stacks == 0, "Звитяга спадає, коли час минув")
+	# Перунова блискавка
+	_clear_enemies(game)
+	wear.call("shablia_bohdana")
+	var ea = foe.call(60.0)
+	var eb = foe.call(160.0)
+	var hp_b: float = eb.hp
+	for i in 60:
+		p.u_chain_cd = 0.0
+		p.hit(ea, 1.0, Vector2.ZERO, true)
+		if eb.hp < hp_b:
+			break
+	check(eb.hp < hp_b, "Перунова блискавка перескакує з критичного удару на сусіда")
+	# Громовий удар
+	_clear_enemies(game)
+	wear.call("bulava_mazepy")
+	var ew = foe.call(200.0)
+	var far = foe.call(900.0)
+	var hp_w: float = ew.hp
+	var hp_f: float = far.hp
+	p._unique_wave()
+	check(ew.hp < hp_w and is_equal_approx(far.hp, hp_f) and p.u_wave_cd > 0.0, "Громовий удар б'є всіх довкола, далеких не дістає")
+	# Пластунський випад
+	wear.call("vovcha_kuchma")
+	p.crit_chance = 0.0
+	p.dodge_timer = 0.0
+	p.dodge()
+	check(p.u_vypad_t > 1.0 and p._roll(1.0)[1], "після перекиду кожен удар критичний")
+	p.u_vypad_t = 0.0
+	check(not p._roll(1.0)[1], "без перекиду — як завжди")
+	# Покрова
+	_clear_enemies(game)
+	wear.call("zhupan_polubotka")
+	p.invuln = 0.0
+	p.hp = p.max_hp * 0.4
+	await _frames(2)
+	check(p.u_ward_t > 0.0 and p.u_ward_cd > 10.0, "Покрова вмикається, коли здоров'я нижче половини")
+	p.invuln = 0.0
+	p.hp = p.max_hp
+	var h0: float = p.hp
+	p.take_damage(100.0, null)
+	var with_ward: float = h0 - p.hp
+	p.u_ward_t = 0.0
+	p.invuln = 0.0
+	p.hp = p.max_hp
+	p.take_damage(100.0, null)
+	check(with_ward > 0.0 and with_ward < (p.max_hp - p.hp) * 0.75, "під Покровою шкода менша на 30%")
+	# Вогняне ядро
+	_clear_enemies(game)
+	p.equipment.erase("body")
+	wear.call("shapka_nalyvaika")
+	var ey = foe.call(260.0)
+	var hp_y: float = ey.hp
+	p.u_yadro_t = 0.05
+	p.invuln = 5.0
+	await _frames(6)
+	check(ey.hp < hp_y and p.u_yadro_t > 3.0, "Вогняне ядро саме падає на найближчого ворога")
+	# Відлуння
+	p.change_class("volkhv")
+	wear.call("posokh_molfara")
+	check(p.u_pow.has("vidlunnia") and float(p.u_pow["vidlunnia"]["chance"]) > 0.2, "Посох мольфара дає Відлуння")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
