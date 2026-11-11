@@ -94,7 +94,17 @@ var slot := 1  # активний слот персонажа (1..5)
 var use_slots := true  # false у тестах зі своїм save_path
 
 var city_id := ""
-var map_here := "sich"
+## Де герой на мапі. Зазвичай це місце (map_here), та він може стояти й просто на мапі, у вільній точці:
+## тоді map_at_point = true, точка лежить у map_point, а map_here тримає найближче місце (для порадника
+## й подій). Будь-яке присвоєння map_here означає «герой у цьому місці» й знімає вільну точку.
+const POINT_ID := "@point"  # travel_to під час поїздки у вільну точку
+var map_at_point := false
+var map_point := Vector2.ZERO  # довгота й широта вільної точки
+var travel_point := Vector2.ZERO  # куди їдемо, коли travel_to == POINT_ID
+var map_here := "sich":
+	set(v):
+		map_here = v
+		map_at_point = false
 var map_sel := ""
 
 # Стан екранів (читають ui_character.gd та ui_city.gd)
@@ -174,6 +184,7 @@ func _ready() -> void:
 		map_legend = not map_legend
 		_build_map_panel())
 	hud.map_view.travel_tapped.connect(_travel_speed_up)
+	hud.map_view.point_tapped.connect(_go_point)
 
 	Events.enemy_killed.connect(_on_enemy_killed)
 	Events.tower_cleared.connect(_on_tower_cleared)
@@ -518,8 +529,12 @@ func enter_map() -> void:
 	map_menu = false
 	hud.show_map(true)
 	var mv = hud.map_view
-	mv.current = map_here
-	mv.focus_on(map_here)
+	mv.current = "" if map_at_point else map_here
+	mv.current_ll = map_point if map_at_point else null
+	if map_at_point:
+		mv.focus_ll(map_point)
+	else:
+		mv.focus_on(map_here)
 	mv.selected = map_sel
 	mv.hero_level = player.level
 	mv.targets = world.quest_targets()
@@ -1307,7 +1322,7 @@ func _build_map_panel() -> void:
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 8)
 		v.add_child(UI.label("У дорозі", 28, UI.GOLD, false))
-		var l := UI.label("Їдемо: %s. Торкнись мапи, щоб поквапитись." % Data.place_name(travel_to), 18, UI.TEXT, false)
+		var l := UI.label(("Їдемо навпростець. Торкнись мапи, щоб поквапитись." if travel_to == POINT_ID else "Їдемо: %s. Торкнись мапи, щоб поквапитись." % Data.place_name(travel_to)), 18, UI.TEXT, false)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(l)
 		hud.set_map_panel(v)
@@ -1332,7 +1347,7 @@ func _build_map_panel() -> void:
 		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block())
 		return
 	if PerilService.is_peril(map_sel):
-		hud.set_map_panel(MapPanel.build_peril(map_sel, world, player, map_here == map_sel, _go_to, enter_peril, peril_camp_do), _sponsor_block())
+		hud.set_map_panel(MapPanel.build_peril(map_sel, world, player, _at(map_sel), _go_to, enter_peril, peril_camp_do), _sponsor_block())
 		return
 	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort, quick_raid), _sponsor_block())
 
@@ -1382,10 +1397,10 @@ func _go_to(id: String, escort: bool = false) -> void:
 	if travel_to != "":
 		return  # уже їдемо
 	escort_go = id if escort else ""
-	if id == map_here:
+	if _at(id):
 		_arrive(id)
 		return
-	var a: Vector2 = hud.map_view._place_ll(map_here)
+	var a: Vector2 = _here_ll()
 	var b: Vector2 = hud.map_view._place_ll(id)
 	var dist: float = a.distance_to(b)  # градуси; Січ–Київ ≈ 5.3
 	travel_to = id
@@ -1400,9 +1415,72 @@ func _go_to(id: String, escort: bool = false) -> void:
 		if not pending_event.is_empty():
 			travel_event_at = randf_range(0.4, 0.65)
 	hud.map_view.travel = {"from": map_here, "to": id, "t": 0.0}
+	if map_at_point:
+		hud.map_view.travel["from_ll"] = map_point  # виїжджаємо з вільної точки, а не з місця
 	hud.map_view.selected = ""
 	_build_map_panel()
 	Audio.play("portal", 0.1, -8.0)
+
+
+## Чи герой стоїть саме в цьому місці (а не просто десь на мапі неподалік).
+func _at(id: String) -> bool:
+	return map_here == id and not map_at_point
+
+
+## Де герой зараз: довгота й широта місця або вільної точки.
+func _here_ll() -> Vector2:
+	return map_point if map_at_point else hud.map_view._place_ll(map_here)
+
+
+## Вільне пересування: дотик до порожнього місця мапи, і герой їде просто туди. Пригод дорогою нема,
+## бо це не похід. Далі до будь-якого місця він їде вже від цієї точки.
+func _go_point(ll: Vector2) -> void:
+	if state != State.MAP or travel_to != "" or player == null:
+		return
+	var mv = hud.map_view
+	ll = Vector2(clampf(ll.x, mv.LON0 + mv.EDGE, mv.LON1 - mv.EDGE), clampf(ll.y, mv.LAT0 + mv.EDGE, mv.LAT1 - mv.EDGE))
+	var a: Vector2 = _here_ll()
+	var dist: float = a.distance_to(ll)
+	if dist < 0.05:
+		return
+	escort_go = ""
+	pending_event = {}
+	travel_event_at = -1.0
+	travel_to = POINT_ID
+	travel_point = ll
+	travel_t = 0.0
+	travel_dur = clampf(0.3 + dist * 0.45, 0.5, 4.0) / (1.0 + 0.15 * player.pk("h_horse") + float(player.art.get("travel", 0.0)))
+	travel_boost = 1.0
+	travel_paused = false
+	mv.travel = {"from": map_here, "to": POINT_ID, "t": 0.0, "from_ll": a, "to_ll": ll}
+	mv.current_ll = null
+	_build_map_panel()
+	Audio.play("portal", 0.1, -14.0)
+
+
+## Приїхали у вільну точку: герой стоїть просто на мапі.
+func _arrive_point() -> void:
+	travel_to = ""
+	var mv = hud.map_view
+	mv.travel = {}
+	map_here = _nearest_place(travel_point)  # найближче місце: для порадника й подій
+	map_at_point = true
+	map_point = travel_point
+	mv.current = ""
+	mv.current_ll = map_point
+	_build_map_panel()
+
+
+## Найближче до точки місце мапи: місто, місцевість, хутір чи заняття.
+func _nearest_place(ll: Vector2) -> String:
+	var best := "sich"
+	var best_d := INF
+	for id in Data.CITIES.keys() + Data.LOCATIONS.keys() + Acts.SPOTS.keys() + [Camp.CAMP_ID]:
+		var d: float = hud.map_view._place_ll(id).distance_to(ll)
+		if d < best_d:
+			best_d = d
+			best = id
+	return best
 
 
 var pending_event := {}
@@ -1508,6 +1586,9 @@ func _travel_tick(delta: float) -> void:
 			travel_paused = false)
 		return
 	if travel_t >= 1.0:
+		if travel_to == POINT_ID:
+			_arrive_point()
+			return
 		map_here = travel_to
 		_arrive(travel_to)
 
@@ -1555,9 +1636,11 @@ func start_boss(kind: String) -> void:
 		return
 	map_bosses = false
 	var here := map_here
+	var was_point := map_at_point
 	combat.custom_loc = BossService.loc_for(player, kind)
 	enter_location(DepthService.LOC_ID)
 	map_here = here
+	map_at_point = was_point  # бій із босом іде поза мапою: герой лишається там, де стояв, хоч би й у чистому полі
 	Audio.play_music("boss")
 	hint("boss_hunt", "Бос дня й бос тижня рівнем дорівнюють тобі й мають особливі властивості, щоразу інші. Перемогти кожного можна раз на день чи тиждень. Поразка спроби не забирає.")
 

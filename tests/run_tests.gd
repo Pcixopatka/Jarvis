@@ -5658,6 +5658,78 @@ func _suite_travel_ride() -> void:
 		if str(e["title"]) == "Подорож мапою":
 			ride_art = str(e["text"])
 	check("Башти Кощія" in ride_art and "Глибин зарази" in ride_art and "«Піднятися»" in ride_art and "де вже стоїть" in ride_art, "довідник має статтю «Подорож мапою»: до кожного місця треба доїхати")
+	# ---- Вільне пересування: дотик до порожнього місця мапи ----
+	var mv = game.hud.map_view
+	game.map_here = "sich"
+	game.enter_map()
+	await _frames(2)
+	# порожня точка: найдальша на екрані від усіх значків місць (розкладка мапи в тесті своя)
+	var free_ll := Vector2.ZERO
+	var free_gap := 0.0
+	for xi in 40:
+		for yi in 26:
+			var cand := Vector2(22.0 + xi * 0.45, 43.6 + yi * 0.42)
+			var sp: Vector2 = mv._proj(cand)
+			if not mv.map_rect.grow(-20.0).has_point(sp):
+				continue
+			var gap := 1e9
+			for mid in mv._markers:
+				gap = minf(gap, sp.distance_to(mv._markers[mid]))
+			if gap > free_gap:
+				free_gap = gap
+				free_ll = cand
+	if free_gap <= 40.0 * mv._k:
+		free_ll = Vector2.ZERO
+	check(free_ll != Vector2.ZERO, "на мапі є порожнє місце для перевірки")
+	var heard := []
+	var catch := func(ll: Vector2): heard.append(ll)
+	mv.point_tapped.connect(catch)
+	mv._tap(mv._proj(free_ll))
+	check(heard.size() == 1 and heard[0].distance_to(free_ll) < 0.05 and game.travel_to == game.POINT_ID and game.state == game.State.MAP, "дотик до порожнього місця мапи: герой рушає просто туди")
+	check(mv.travel.has("to_ll") and mv.travel["to_ll"].distance_to(free_ll) < 0.05 and mv._travel_ll(0.0).distance_to(Data.CITIES["sich"]["pos"]) < 0.01 and mv._travel_ll(1.0).distance_to(free_ll) < 0.05, "шлях на мапі веде від Січі до цієї точки")
+	game._go_point(Vector2(36.0, 50.5))
+	check(game.travel_point.distance_to(free_ll) < 0.05, "у дорозі другий дотик маршруту не міняє")
+	frames = 0
+	while game.travel_to != "" and frames < 1500:
+		await process_frame
+		frames += 1
+	check(game.map_at_point and game.map_point.distance_to(free_ll) < 0.05 and game.state == game.State.MAP and mv.current_ll != null and mv.current == "" and mv.travel.is_empty() and frames > 10, "приїхав і стоїть просто на мапі (кадрів: %d)" % frames)
+	var near: String = game.map_here
+	check(Data.place_name(near) != "" and not game._at(near) and game._here_ll().distance_to(free_ll) < 0.05, "найближче місце (%s) знане пораднику, та герой у ньому не стоїть" % Data.place_name(near))
+	game.open_character()
+	await _frames(2)
+	game.close_character()
+	await _frames(2)
+	check(game.map_at_point and mv.current_ll != null and mv.current_ll.distance_to(free_ll) < 0.05, "після екрана героя він стоїть там само")
+	# дотик до значка місця лише обирає його, а не веде у вільну точку
+	mv._tap(mv._proj(Data.CITIES["poltava"]["pos"]))
+	await _frames(1)
+	check(game.map_sel == "poltava" and game.travel_to == "" and heard.size() == 1, "дотик до значка місця обирає місце, а не точку поруч")
+	game._go_to(near)
+	check(game.travel_to == near and mv.travel.get("from_ll", Vector2.ZERO).distance_to(free_ll) < 0.05, "до найближчого місця теж треба доїхати: дорога починається з вільної точки")
+	var short_dur: float = game.travel_dur
+	frames = 0
+	while game.travel_to != "" and frames < 1500:
+		if game.hud.dialogue_root != null:
+			game.hud.dialogue_root._finish()
+		await process_frame
+		frames += 1
+	check(not game.map_at_point and game.map_here == near and game._at(near), "приїхав у місце: вільної точки більше нема")
+	game.hud.close_dialogue()
+	game.map_here = "sich"
+	game.enter_map()
+	await _frames(2)
+	game._go_point(Vector2(35.42, 47.50))
+	check(game.travel_dur < 1.0 and game.travel_dur >= 0.5 / 1.5, "коротка вільна дорога швидка: %.2f с" % game.travel_dur)
+	game.travel_to = ""
+	mv.travel = {}
+	game._go_point(Vector2(5.0, 99.0))
+	check(game.travel_point.distance_to(Vector2(mv.LON0 + mv.EDGE, mv.LAT1 - mv.EDGE)) < 0.01, "за край мапи виїхати не можна: точка стає на межу %s" % str(game.travel_point))
+	game.travel_to = ""
+	mv.travel = {}
+	check(mv.at_sea(Vector2(33.6, 43.2)) and mv.at_sea(Vector2(37.2, 46.3)) and not mv.at_sea(Vector2(31.65, 49.4)) and not mv.at_sea(Data.CITIES["kyiv"]["pos"]), "над морем пливе чайка, суходолом їде вершник")
+	check("порожнього місця" in ride_art and "чайка" in ride_art, "довідник каже про вільне пересування мапою")
+	mv.point_tapped.disconnect(catch)
 	game.enter_map()
 	await _frames(2)
 	game.queue_free()

@@ -271,7 +271,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		v.add_child(_wrapped(story_line, 18, UI.GOLD))
 	if sel == "":
 		v.add_child(UI.label("Мапа земель", 28, UI.GOLD, false))
-		v.add_child(UI.label("Торкнись місця на мапі.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
+		v.add_child(UI.label("Торкнись місця на мапі.\nДотик до порожнього місця:\nгерой їде просто туди.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
 		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Хата з прапором — твій хутір", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return v

@@ -3,6 +3,7 @@ extends Control
 ## Координати — довгота/широта, спроєктовані на екран.
 
 signal location_selected(id: String)
+signal point_tapped(ll: Vector2)  # дотик до порожнього місця мапи: довгота й широта точки
 signal travel_tapped  # дотик під час подорожі — прискорити
 signal guide_pressed  # дотик до кнопки «Далі: …» (головна порада порадника)
 signal legend_pressed  # дотик до «?»: що означають позначки
@@ -204,6 +205,7 @@ const HOME := Vector2(31.65, 49.4)  # де відкривається мапа: 
 
 var selected := ""
 var current := ""  # де зараз козак
+var current_ll = null  # Vector2, якщо козак стоїть не в місці, а просто на мапі (вільна точка)
 var targets := {}  # місцевості з активними завданнями
 var turn_ins := {}  # місто -> скільки виконаного там можна здати (зелена позначка з галочкою)
 var story_target := ""  # куди веде сюжет (зірка)
@@ -297,8 +299,33 @@ func _place_ll(id: String) -> Vector2:
 	return Vector2(31, 49)
 
 
+## Початок і кінець поїздки: місце або вільна точка мапи ("from_ll" / "to_ll").
+func _travel_from() -> Vector2:
+	return travel["from_ll"] if travel.has("from_ll") else _place_ll(travel["from"])
+
+
+func _travel_to() -> Vector2:
+	return travel["to_ll"] if travel.has("to_ll") else _place_ll(travel["to"])
+
+
 func _travel_ll(t: float) -> Vector2:
-	return _place_ll(travel["from"]).lerp(_place_ll(travel["to"]), clampf(t, 0.0, 1.0))
+	return _travel_from().lerp(_travel_to(), clampf(t, 0.0, 1.0))
+
+
+## Чи точка лежить у морі чи великому озері: там замість вершника пливе чайка.
+static func at_sea(ll: Vector2) -> bool:
+	for sea in SEAS:
+		if Geometry2D.is_point_in_polygon(ll, PackedVector2Array(sea)):
+			return true
+	return false
+
+
+## Точка мапи під пальцем: довгота й широта, не ближче ніж EDGE до краю мапи.
+const EDGE := 0.6
+
+func ll_at(screen: Vector2) -> Vector2:
+	var u := _to_unit(screen)
+	return Vector2(clampf(u.x / KX + LON0, LON0 + EDGE, LON1 - EDGE), clampf(LAT1 - u.y, LAT0 + EDGE, LAT1 - EDGE))
 
 
 # ---------- Проєкція і масштаб ----------
@@ -343,6 +370,10 @@ func _zoom_at(screen_pt: Vector2, factor: float) -> void:
 	var after := _to_unit(screen_pt)
 	center += before - after
 	queue_redraw()
+
+
+func focus_ll(ll: Vector2) -> void:
+	center = _unit(ll)
 
 
 func focus_on(id: String) -> void:
@@ -412,6 +443,8 @@ func _tap(pos: Vector2) -> void:
 	if best != "":
 		selected = best
 		location_selected.emit(best)
+	elif map_rect.has_point(pos):
+		point_tapped.emit(ll_at(pos))  # порожнє місце: козак може їхати просто туди
 
 
 # ---------- Малювання ----------
@@ -596,6 +629,8 @@ func _draw() -> void:
 	# Де козак: прапорець на місці або фігурка в дорозі
 	if not travel.is_empty():
 		_draw_traveler(k)
+	elif current_ll != null:
+		_draw_rider(_proj(current_ll), 1.0, 0.0, k, at_sea(current_ll))  # стоїть просто на мапі
 	elif _markers.has(current):
 		_icon("flag", _markers[current] + Vector2(-18, -22) * k, 36.0 * k)
 	# Рамка старовинної мапи
@@ -611,8 +646,8 @@ func _draw() -> void:
 ## Фігурка героя в дорозі: пунктирний шлях, вершник із хоругвою, підскок у такт.
 func _draw_traveler(k: float) -> void:
 	var t: float = travel["t"]
-	var a := _proj(_place_ll(travel["from"]))
-	var b := _proj(_place_ll(travel["to"]))
+	var a := _proj(_travel_from())
+	var b := _proj(_travel_to())
 	# Пунктир шляху: пройдене — яскраве, попереду — бліде
 	var seg := 14.0 * k
 	var n := maxi(2, int(a.distance_to(b) / seg))
@@ -623,19 +658,26 @@ func _draw_traveler(k: float) -> void:
 		var f1 := float(i + 1) / n
 		var col := Color(1.0, 0.85, 0.3, 0.9) if f1 <= t else Color(1.0, 1.0, 1.0, 0.35)
 		draw_line(a.lerp(b, f0), a.lerp(b, f1), col, 3.0 * k)
-	var p := a.lerp(b, t)
+	if travel.has("to_ll"):
+		draw_arc(b, (9.0 + sin(_pulse) * 2.0) * k, 0, TAU, 20, Color(1.0, 0.85, 0.3, 0.9), 2.5 * k)  # куди їдемо, коли там порожньо
 	var bob := absf(sin(_pulse * 2.5)) * 4.0 * k
-	var side := 1.0 if b.x >= a.x else -1.0
+	_draw_rider(a.lerp(b, t), 1.0 if b.x >= a.x else -1.0, bob, k, at_sea(_travel_ll(t)))
+
+
+## Фігурка героя на мапі: вершник із хоругвою, а над морем чайка. side — куди дивиться (1 праворуч, -1 ліворуч).
+func _draw_rider(p: Vector2, side: float, bob: float, k: float, sea: bool) -> void:
 	draw_set_transform(p + Vector2(0, 6 * k), 0.0, Vector2(1.0, 0.4))
 	draw_circle(Vector2.ZERO, 12.0 * k, Color(0, 0, 0, 0.3))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-	# Вершник із хоругвою: значок дивиться праворуч, ліворуч віддзеркалюємо довкола точки на шляху.
+	# Значок дивиться праворуч, ліворуч віддзеркалюємо довкола точки на шляху.
 	# (Від'ємна ширина прямокутника лише перевертає кадр, а лівий край лишає на місці — фігурка з'їжджала вбік.)
 	var sz := 48.0 * k
-	var i := ICON_ORDER.find(rider_frame(_pulse))
-	draw_set_transform(p + Vector2(0, -bob), 0.0, Vector2(side, 1.0))
+	var i := ICON_ORDER.find("ship" if sea else (rider_frame(_pulse) if bob > 0.0 else "rider"))
+	draw_set_transform(p + Vector2(0, -(bob * 0.4 if sea else bob)), 0.0, Vector2(side, 1.0))
 	draw_texture_rect_region(ICONS, Rect2(Vector2(-sz / 2.0, -sz * 0.7), Vector2(sz, sz)), Rect2(i * 24, 0, 24, 24))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	if sea:
+		_icon("flag", p + Vector2(10, -38) * k, 26.0 * k)  # прапорець, щоб чайку героя не сплутати з іншими кораблями
 
 
 ## Кадр вершника: у верхній точці підскоку кінь летить із витягнутими ногами, внизу — ноги на землі.
