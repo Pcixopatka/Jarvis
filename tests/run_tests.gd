@@ -143,6 +143,8 @@ func _run() -> void:
 	await _suite_enchant_fair()
 	await _suite_auto()
 	await _suite_saga()
+	await _suite_loot_rates()
+	await _suite_divine()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -1852,7 +1854,16 @@ func _suite_endgame() -> void:
 	var a = DS.loc_for(1)
 	var b = DS.loc_for(20)
 	check(b["level"] > a["level"] and b["rooms"] >= a["rooms"] and b["elite_bonus"] > a["elite_bonus"], "глибше — сильніше")
-	check(DS.loc_for(200)["level"] == 99, "рівень глибини не вище 99")
+	var deep: Dictionary = DS.loc_for(200)
+	var edge_d := 1
+	while DS.level_of(edge_d + 1) <= Data.ENDLESS_SOFT:
+		edge_d += 1
+	check(int(deep["level"]) == DS.BASE_LEVEL + 2 * 199 and int(deep["level"]) > 400 and int(deep["loot_level"]) == Data.ENDLESS_SOFT, "дна нема: глибина 200 має %d-й рівень, а здобич лишається %d-го" % [int(deep["level"]), Data.ENDLESS_SOFT])
+	check(int(DS.loc_for(10)["loot_level"]) == int(DS.loc_for(10)["level"]) and is_equal_approx(float(DS.loc_for(edge_d)["hp_mult"]), 1.1 + 0.02 * edge_d), "до %d-го рівня глибини ростуть, як і раніше" % Data.ENDLESS_SOFT)
+	var d1: Dictionary = DS.loc_for(edge_d + 10)
+	var d2: Dictionary = DS.loc_for(edge_d + 11)
+	check(float(d2["hp_mult"]) / float(d1["hp_mult"]) > pow(Data.ENDLESS_HP_PER_LEVEL, 2.0) * 0.999 and float(d2["dmg_mult"]) / float(d1["dmg_mult"]) > pow(Data.ENDLESS_DMG_PER_LEVEL, 2.0) * 0.999, "понад %d-й рівень кожна глибина множить здоров'я й удар нечисті" % Data.ENDLESS_SOFT)
+	check(Data.endless_hp(Data.ENDLESS_SOFT) == 1.0 and Data.endless_hp(Data.ENDLESS_SOFT + 50) > 2.5 and Data.endless_dmg(Data.ENDLESS_SOFT + 50) > 2.0 and Data.enemy_std_hp(400) > Data.enemy_std_hp(99), "мірка нечисті росте й на сотих рівнях")
 	check(DS.loc_for(7)["enemies"] == DS.loc_for(7)["enemies"], "та сама глибина — та сама печера")
 	for d in [1, 5, 12]:
 		var L: Dictionary = DS.loc_for(d)
@@ -1928,7 +1939,11 @@ func _suite_tower() -> void:
 	var b = TS.loc_for(30)
 	check(a["type"] == "tower" and a["level"] == 15 and a["boss"] == "" and a["mini"] != "" and a["waves"] == 2, "поверх 1: рівень 15, хвилі, міні-бос")
 	check(b["level"] > a["level"] and b["waves"] > a["waves"] and b["hp_mult"] > a["hp_mult"] and b["mini_affixes"] == 3, "вище — сильніше")
-	check(TS.loc_for(200)["level"] == 99, "рівень поверху не вище 99")
+	var high: Dictionary = TS.loc_for(200)
+	check(int(high["level"]) == TS.BASE_LEVEL + 200 and int(high["loot_level"]) == Data.ENDLESS_SOFT and TS.loot_level(30) == TS.level_of(30), "вершини нема: поверх 200 має %d-й рівень, а здобич лишається %d-го" % [int(high["level"]), Data.ENDLESS_SOFT])
+	var f1: Dictionary = TS.loc_for(120)
+	var f2: Dictionary = TS.loc_for(121)
+	check(float(f2["hp_mult"]) / float(f1["hp_mult"]) > Data.ENDLESS_HP_PER_LEVEL * 0.999 and float(TS.loc_for(60)["hp_mult"]) == 1.0 + 0.012 * 60 and TS.first_gold(200) > TS.first_gold(85), "понад %d-й рівень кожен поверх множить силу нечисті, нагорода теж росте" % Data.ENDLESS_SOFT)
 	check(TS.loc_for(7)["enemies"] == TS.loc_for(7)["enemies"], "той самий поверх — ті самі вороги")
 	var supers := {}
 	for f in [5, 10, 15, 20]:
@@ -2185,7 +2200,8 @@ func _suite_event_battles() -> void:
 	cb.drop_boost = 2.0
 	cb._drop_loot(tboss)
 	var r2: int = count_kind.call("res")
-	check(r1 - r0 == 3 and r2 - r1 == 5, "елітний: 2 жмені й трофей, з ×2 — 4 жмені й трофей (%d, %d)" % [r1 - r0, r2 - r1])
+	# трофей з еліти падає через раз, тож підборів 2 чи 3 без ×2 і 4 чи 5 з ним
+	check(r1 - r0 in [2, 3] and r2 - r1 in [4, 5], "елітний: 2 жмені й, може, трофей; з ×2 — 4 жмені (%d, %d)" % [r1 - r0, r2 - r1])
 	tboss.queue_free()
 	game.queue_free()
 	await _frames(2)
@@ -7781,7 +7797,9 @@ func _suite_hero_screen() -> void:
 	var empties := page.find_children("*", "Panel", true, false).filter(func(c): return c.custom_minimum_size.x == c.custom_minimum_size.y and c.custom_minimum_size.x >= 60.0)
 	check("Вдягнуто" in labels and "Шкода за секунду" in labels and ("Торба %d/%d" % [p.inventory.size(), p.bag_size()]) in labels and "Вампіризм" in labels and "Очки" in labels, "на одному екрані зведення, вдягнене, очки, показники й торба")
 	check(plus.size() == 4 and not plus[0].disabled, "чотири кнопки «+» для характеристик")
-	check(cells.size() == worn + p.inventory.size() and empties.size() == (6 - worn) + (p.bag_size() - p.inventory.size()), "клітинок із речами %d, порожніх %d: уся торба й усі шість слотів на видноті" % [cells.size(), empties.size()])
+	# до клітинок речей додались чотири гнізда божих дарів (вони трохи менші, але теж квадратні кнопки)
+	var gift_slots: int = load("res://scripts/data/divine.gd").SLOTS.size()
+	check(cells.size() == worn + p.inventory.size() + gift_slots and empties.size() == (6 - worn) + (p.bag_size() - p.inventory.size()), "клітинок із речами %d, порожніх %d: уся торба й усі шість слотів на видноті" % [cells.size(), empties.size()])
 	var str0: int = p.stat("str")
 	game.char_do("stat", "str")
 	check(p.stat("str") == str0 + 1 and p.stat_points == 1, "кнопка «+» додає силу")
@@ -11272,7 +11290,7 @@ func _suite_shop_game() -> void:
 	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 	for i in tc.get_tab_count():
 		tabs.append(tc.get_tab_title(i))
-	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Вбрання", "Універсал"], "крамницю відкрито: вкладки %s" % str(tabs))
+	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Божі дари", "Вбрання", "Універсал"], "крамницю відкрито: вкладки %s" % str(tabs))
 	game.shop_do("pack", "coins_1200")
 	await _frames(3)
 	check(SH.coins(w) == 1200 and int(game.account.shop["coins"]) == 1200, "набір червінців оплачено й зараховано")
@@ -12846,6 +12864,311 @@ func _suite_saga() -> void:
 	game.enter_city("sich")
 	await _frames(3)
 	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "на Січі починається розмова з кобзарем")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_loot_rates() -> void:
+	suite("Рідша здобич і нескінченні Башта й Глибини в бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var DS = load("res://scripts/game/depth_service.gd")
+	var Uniq = load("res://scripts/data/uniques.gd")
+	# ---- Числа ----
+	check(Camp.RESOURCE_DROP_CHANCE <= 0.1 and Data.POTION_DROP_CHANCE <= 0.01 and Data.POTION_ELITE_CHANCE <= 0.15 and Data.MANA_POTION_DROP_CHANCE <= 0.006 and Data.VARENYK_DROP_CHANCE <= 0.03 and Camp.TROPHY_ELITE_CHANCE <= 0.5, "шанси ресурсів, зілля, вареників і трофеїв зменшено")
+	check(Camp.bundle_amount(92) == 10 and Camp.bundle_amount(5) == 1 and Camp.boss_trophies(92) == 11 and Camp.boss_trophies(10) == 3, "жменя ресурсів і трофеї боса на 92-му рівні: %d і %d" % [Camp.bundle_amount(92), Camp.boss_trophies(92)])
+	var art := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Здобич із нечисті":
+			art = str(e["text"])
+	check("%d%%" % roundi(Camp.RESOURCE_DROP_CHANCE * 100.0) in art and "рівень/%d" % Camp.BUNDLE_LEVEL_STEP in art and "Вареник: %d%%" % roundi(Data.VARENYK_DROP_CHANCE * 100.0) in art and "0,6%" in art and "Золота річ" in art and "Душа" in art, "довідник називає всі шанси здобичі")
+	var map_art := ""
+	for e in WS._entries("map"):
+		if str(e["title"]) == "Глибини зарази":
+			map_art = str(e["text"])
+	check("Стелі нема" in map_art and str(DS.level_of(150)) in map_art, "довідник пояснює, що Глибини не мають дна")
+	# ---- У бою ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "dungeon", "depths", "potion", "mana_potion", "varenyk", "res", "depths_open"]:
+		w.hints[k] = true
+	p.change_class("cossack")
+	game._sync_class()
+	p.level = 99
+	p.stats["str"] = 5000
+	p.stats["vit"] = 5000
+	p.recalc()
+	p.hp = p.max_hp
+	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	# статистика падіння з рядових ворогів на 92-му рівні
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(2)
+	c.loc = c.loc.duplicate()
+	c.loc["level"] = 92
+	c.spawn_timer = 9999.0
+	seed(4242)
+	var kills := 600
+	for i in kills:
+		c.spawn_enemy("zarazhenyi", 92, false, p.global_position + Vector2(900, 0))
+		var e = c._last_enemy()
+		c._drop_loot(e)
+		e.remove_from_group("enemies")
+		e.free()
+	var res_n := 0
+	var pot_n := 0
+	var var_n := 0
+	for n in c.entities.get_children():
+		if n.get_script() == c.PickupScript:
+			if n.kind == "res" and str(n.item.get("res", "")) != Camp.TROPHY:
+				res_n += int(n.value)
+			elif n.kind == "potion":
+				pot_n += 1
+			elif n.kind == "varenyk":
+				var_n += 1
+	check(res_n > kills * 0.05 and res_n < kills * 0.17 and pot_n < kills * 0.03 and var_n < kills * 0.06, "із 600 рядових ворогів: ресурсів %d, зілля %d, вареників %d" % [res_n, pot_n, var_n])
+	for n in c.entities.get_children():
+		if n.get_script() == c.PickupScript:
+			n.queue_free()
+	await _frames(2)
+	# еліта: трофей через раз, жменя за новою міркою
+	seed(77)
+	var trophies := 0
+	var elite_res := 0
+	for i in 200:
+		c.spawn_enemy("zarazhenyi", 92, false, p.global_position + Vector2(900, 0))
+		var e = c._last_enemy()
+		e.make_elite(load("res://scripts/data/elites.gd").roll_affixes(92))
+		c._drop_loot(e)
+		e.remove_from_group("enemies")
+		e.free()
+	for n in c.entities.get_children():
+		if n.get_script() == c.PickupScript and n.kind == "res":
+			if str(n.item.get("res", "")) == Camp.TROPHY:
+				trophies += int(n.value)
+			else:
+				elite_res += int(n.value)
+	check(trophies > 60 and trophies < 140 and elite_res == 200 * 2 * Camp.bundle_amount(92), "із 200 еліт: трофеїв %d, ресурсів %d (по дві жмені з %d)" % [trophies, elite_res, Camp.bundle_amount(92)])
+	game.enter_map()
+	await _frames(2)
+	# Глибина понад 99-й рівень: нечисть сильніша, здобич 99-го
+	DS.state(w)["max"] = 80
+	game.start_depth(60)
+	await _frames(4)
+	var foe = null
+	for e in get_nodes_in_group("enemies"):
+		if not e.is_boss and not e.elite:
+			foe = e
+	var L60: Dictionary = DS.loc_for(60)
+	check(game.state == game.State.PLAYING and int(c.loc["level"]) == DS.level_of(60) and int(c.loc["level"]) > 99 and c.loot_level() == Data.ENDLESS_SOFT and foe != null and int(foe.level) == DS.level_of(60), "глибина 60 у бою: нечисть %d-го рівня, здобич %d-го" % [int(c.loc["level"]), c.loot_level()])
+	c._drop_loot(foe)
+	var item_lvls := []
+	for i in 40:
+		item_lvls.append(int(c._loot(c.loot_level(), 3)["ilvl"]))
+	check(item_lvls.max() <= Data.ENDLESS_SOFT + 1, "речі з глибини не вищі за %d-й рівень" % Data.ENDLESS_SOFT)
+	var fake_boss = null
+	c.spawn_enemy(str(c.loc["boss"]), int(c.loc["level"]), true, p.global_position + Vector2(900, 0))
+	fake_boss = c._last_enemy()
+	p.u_luck = Uniq.LUCK_SURE
+	var gold_item: Dictionary = load("res://scripts/game/loot_service.gd").on_boss(c, p, fake_boss)
+	check(not gold_item.is_empty() and int(gold_item["ilvl"]) == Data.ENDLESS_SOFT and int(fake_boss.level) > 99, "золота річ із глибинного боса теж %d-го рівня" % Data.ENDLESS_SOFT)
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_divine() -> void:
+	suite("Божі дари: чотири речі у власних гніздах")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Div = load("res://scripts/data/divine.gd")
+	var DS = load("res://scripts/game/divine_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var Camp = load("res://scripts/game/camp_service.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var UD = load("res://scripts/ui/ui_divine.gd")
+	# ---- Дані ----
+	var data_ok := true
+	var slots := {}
+	for id in Div.ORDER:
+		var D: Dictionary = Div.DEFS[id]
+		slots[D["slot"]] = id
+		data_ok = data_ok and D["slot"] in Div.SLOTS and str(D["name"]) != "" and int(D["price"]) > 0 and GfxS.icon_tex(str(D["icon"])) != null and not D["lines"].is_empty() and Div.for_slot(D["slot"]) == id
+		for k in D.get("fx", {}):
+			data_ok = data_ok and Classes.FX_TEXT.has(k)
+	check(data_ok and slots.size() == Div.SLOTS.size() and Div.ORDER.size() == 4, "чотири дари, кожен зі своїм гніздом, значком і ціною")
+	# ---- Купівля й гнізда ----
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 50
+	p.stats["str"] = 100
+	p.stats["agi"] = 60
+	Camp.apply_effects(w, p)
+	var bag0: int = p.bag_size()
+	var str0: int = p.stat("str")
+	var agi0: int = p.stat("agi")
+	var dmg0: float = p.damage
+	var pick0: float = p.pickup_radius
+	var crit0: float = p.crit_mult
+	check(not DS.buy(w, p, "mazha") and "бракує" in DS.block_reason(w, "mazha") and not DS.equip(w, p, "mazha") and p.divine.is_empty(), "без червінців дар не купити й не вдягнути")
+	SH.state(w)["coins"] = 100000
+	check(DS.buy(w, p, "mazha") and DS.owned(w, "mazha") and DS.wears(p, "mazha") and p.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]) and SH.coins(w) == 100000 - DS.price("mazha"), "чумацьку мажу куплено: вона у своєму гнізді, торба більша на %d" % int(Div.DEFS["mazha"]["bag"]))
+	check(p.inventory.is_empty() and DS.block_reason(w, "mazha") == "уже куплено", "дар не займає місця в торбі й удруге не продається")
+	check(DS.buy(w, p, "kryla") and p.stat("str") == int(round(str0 * 1.1)) and p.stat("agi") == int(round(agi0 * 1.1)) and p.damage > dmg0 * 1.05, "крила: усі характеристики +10%% (Сила %d → %d)" % [str0, p.stat("str")])
+	var dmg1: float = p.damage
+	check(DS.buy(w, p, "molot") and p.damage > dmg1 * 1.11 and is_equal_approx(p.fx("dmg"), float(Div.DEFS["molot"]["fx"]["dmg"])) and is_equal_approx(p.crit_mult, crit0 + float(Div.DEFS["molot"]["fx"]["crit_dmg"]) / 100.0), "громовий молот: бойові показники ростуть")
+	check(DS.buy(w, p, "khovanets") and is_equal_approx(p.pickup_radius, pick0 * (1.0 + float(Div.DEFS["khovanets"]["pickup"]))) and DS.remote_shop(p), "Хованець: радіус збору вп'ятеро більший, крамниця будь-де")
+	check(p.divine.size() == 4 and p.inventory.is_empty(), "усі чотири гнізда зайнято, торба порожня")
+	# ---- Зняти й вдягнути ----
+	DS.unequip(w, p, "wings")
+	check(p.stat("str") == str0 and not DS.wears(p, "kryla") and DS.owned(w, "kryla"), "зняті крила не діють, але лишаються в роду")
+	check(DS.equip(w, p, "kryla") and p.stat("str") == int(round(str0 * 1.1)), "вдягнули знову")
+	DS.unequip(w, p, "cart")
+	check(p.bag_size() == bag0 and not DS.remote_shop(_new_player()), "без мажі торба звичайна")
+	DS.equip(w, p, "mazha")
+	# ---- Рід і збереження ----
+	var p2 = _new_player()
+	p2.change_class("cossack")
+	check(DS.equip(w, p2, "molot") and p2.divine.size() == 1 and p2.fx("dmg") > 0.0, "інший герой роду вдягає куплене без оплати")
+	var p3 = _new_player()
+	p3.from_dict(p.to_dict())
+	Camp.apply_effects(w, p3)
+	check(p3.divine.size() == 4 and p3.bag_size() == p.bag_size() and DS.remote_shop(p3) and p3.fx("dmg") > 0.0, "вдягнені дари зберігаються з героєм і діють після завантаження")
+	Camp.apply_effects(WorldState.new(), p3)
+	check(p3.divine.is_empty() and p3.bag_size() == Data.INVENTORY_SIZE and not DS.remote_shop(p3) and p3.fx("dmg") == 0.0, "у роду без цих дарів вони знімаються")
+	# ---- Екран героя: гнізда ----
+	check(UD.slot_of(UD.sel_of("wings")) == "wings" and UD.slot_of(-2) == "" and UD.slot_of(5) == "", "гніздо вибирається окремим номером, не плутаючись із речами")
+	# ---- Довідник ----
+	var art := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Божі дари":
+			art = str(e["text"])
+	var art_ok := art != ""
+	for id in Div.ORDER:
+		art_ok = art_ok and str(Div.DEFS[id]["name"]) in art and str(int(Div.DEFS[id]["price"])) in art
+	check(art_ok, "довідник описує всі дари з цінами")
+	# ---- У грі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "depths_open"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.level = 40
+	gp.recalc()
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	SH.state(gw)["coins"] = 10000
+	game.enter_map()
+	await _frames(2)
+	game.open_character()
+	await _frames(2)
+	var slot_labels := 0
+	for l in game.hud.screen_root.find_children("*", "Label", true, false):
+		if l.text == "Божі дари":
+			slot_labels += 1
+	check(slot_labels >= 1, "на екрані героя є ряд гнізд «Божі дари»")
+	game.char_do("select", UD.sel_of("relic"))
+	await _frames(2)
+	var to_shop := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		to_shop = to_shop or b.text.begins_with("До крамниці")
+	check(to_shop, "некуплений дар веде до крамниці")
+	game.char_do("divine_shop", "molot")
+	await _frames(2)
+	check(game.shop_open and game.shop_tab == game._shop_tab_index("Божі дари"), "крамниця відкрилась на вкладці «Божі дари»")
+	game.shop_do("divine", "molot")
+	check(game.shop_confirm == "divine:molot" and not DS.owned(gw, "molot"), "перший дотик лише просить підтвердити")
+	game.shop_do("divine", "molot")
+	game.shop_do("divine", "khovanets")
+	game.shop_do("divine", "khovanets")
+	game.shop_do("divine", "mazha")
+	game.shop_do("divine", "mazha")
+	game.shop_do("divine", "kryla")
+	game.shop_do("divine", "kryla")
+	await _frames(2)
+	check(gp.divine.size() == 4 and bool(game.account.shop.get("divine", {}).get("molot", false)), "усі чотири дари куплено й вдягнено")
+	game.close_shop()
+	await _frames(2)
+	game.char_do("select", UD.sel_of("relic"))
+	game.char_do("divine_toggle", "molot")
+	check(not DS.wears(gp, "molot"), "на екрані героя дар знімається")
+	game.char_do("divine_toggle", "molot")
+	check(DS.wears(gp, "molot"), "і вдягається знову")
+	game.close_character()
+	await _frames(2)
+	# крамниця Хованця на мапі
+	var trader_btn = null
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text.begins_with("Хованець"):
+			trader_btn = b
+	check(trader_btn != null, "на мапі є кнопка «Хованець: крамниця будь-де»")
+	var worn_head: Dictionary = Data.gen_item(40, 3, "head")
+	gp.add_item(worn_head, true)
+	gp.equip(worn_head["uid"])
+	var junk: Dictionary = Data.gen_item(20, 0, "head")
+	var keep: Dictionary = Data.gen_item(40, 3, "body")
+	gp.add_item(junk, true)
+	gp.add_item(keep, true)
+	gp.gold = 100000
+	gp.potions = 0
+	trader_btn.pressed.emit()
+	await _frames(2)
+	check(game.trader_open, "крамниця Хованця відкрилась")
+	var gold0: int = gp.gold
+	game.trader_do("buy_potion", 0)
+	check(gp.potions == 1 and gp.gold == gold0 - Data.potion_price(40), "зілля куплено за звичайну ціну")
+	gold0 = gp.gold
+	game.trader_do("select", keep["uid"])
+	game.trader_do("sell", keep["uid"])
+	check(gp.find_item(keep["uid"]).is_empty() and gp.gold == gold0 + Data.sell_price(keep), "вибрану річ продано")
+	gold0 = gp.gold
+	game.trader_do("sell_upto", 0)
+	check(gp.find_item(junk["uid"]).is_empty() and gp.gold > gold0, "звичайні речі продано гуртом")
+	game.close_trader()
+	await _frames(2)
+	check(not game.trader_open and game.state == game.State.MAP, "«Назад» вертає на мапу")
+	# у бою: супутники біля героя
+	game.enter_location("wild_field")
+	await _frames(4)
+	var kinds := []
+	for n in game.combat.entities.get_children():
+		if n.get_script() == game.combat.PetScript:
+			kinds.append(n.kind)
+	check("khovanets" in kinds and "mazha" in kinds, "Хованець і мажа йдуть за героєм у бою: %s" % str(kinds))
+	game._show_pause()
+	await _frames(2)
+	var pause_trader := false
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		pause_trader = pause_trader or (not b.is_queued_for_deletion() and b.text.begins_with("Хованець"))
+	check(pause_trader, "у паузі теж є крамниця Хованця")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

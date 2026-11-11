@@ -25,7 +25,24 @@ static func res_name(r: String) -> String:
 # Який ресурс найчастіше дає ландшафт
 const BIOME_RESOURCE := {"steppe": "wood", "river": "herbs", "forest": "wood", "swamp": "herbs",
 	"mountain": "iron", "cave": "iron", "plague": "iron", "sand": "iron", "snow": "wood"}
-const RESOURCE_DROP_CHANCE := 0.25
+## Скільки добра падає з нечисті. У версії 0.45 усе це вдвічі-втричі рідше: розвинений герой збирав
+## ресурси десятками тисяч, і витратити їх було нікуди.
+const RESOURCE_DROP_CHANCE := 0.1  # шанс ресурсу з рядового ворога (було 0,25)
+const BUNDLE_LEVEL_STEP := 10  # у жмені ресурсів з еліти, боса чи зачистки 1 + рівень/10 одиниць (було рівень/4)
+const TROPHY_ELITE_CHANCE := 0.5  # еліта лишає трофей через раз (було завжди)
+const TROPHY_BOSS_BASE := 2  # бос: 2 + рівень/10 трофеїв (було 3 + рівень/5)
+const TROPHY_BOSS_LEVEL_STEP := 10
+const TROPHY_BOUNTY := 1  # голова з дошки розшуку (було 2)
+
+
+## Скільки одиниць ресурсу в одній жмені на цьому рівні.
+static func bundle_amount(level: int) -> int:
+	return 1 + level / BUNDLE_LEVEL_STEP
+
+
+## Скільки трофеїв лишає бос цього рівня.
+static func boss_trophies(level: int) -> int:
+	return TROPHY_BOSS_BASE + level / TROPHY_BOSS_LEVEL_STEP
 
 # Будівлі: назва, опис, ціни рівнів (гривні + ресурси) і що дає кожен рівень
 const BUILDINGS := {

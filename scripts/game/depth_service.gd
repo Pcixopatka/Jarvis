@@ -23,8 +23,14 @@ static func unlocked(world) -> bool:
 	return StoryService.state(world)["stage"] == "done"
 
 
+## Рівень нечисті на глибині: росте без межі, по два рівні на глибину.
 static func level_of(depth: int) -> int:
-	return mini(Data.Classes.BASE_LEVEL_MAX, BASE_LEVEL + 2 * (depth - 1))
+	return BASE_LEVEL + 2 * (depth - 1)
+
+
+## Рівень здобичі на глибині: не вище за Data.ENDLESS_SOFT.
+static func loot_level(depth: int) -> int:
+	return mini(Data.ENDLESS_SOFT, level_of(depth))
 
 
 ## Опис печери на цій глибині (як місцевість у Data.LOCATIONS).
@@ -39,12 +45,13 @@ static func loc_for(depth: int) -> Dictionary:
 		pool[i] = pool[j]
 		pool[j] = t
 	return {"name": "Глибина %d" % depth, "type": "dungeon", "biome": "plague" if depth % 3 != 0 else "cave",
-		"level": lvl, "rooms": mini(8, 4 + depth / 5), "enemies": pool.slice(0, 3),
+		"level": lvl, "loot_level": loot_level(depth), "rooms": mini(8, 4 + depth / 5), "enemies": pool.slice(0, 3),
 		"boss": BOSSES[(depth - 1) % BOSSES.size()], "depth": depth,
 		"elite_bonus": minf(0.25, 0.04 + 0.01 * depth),
 		# Глибше — нечисть лютіша понад свій рівень (і щедріша на досвід). Надбавки малі: сама мірка нечисті
 		# тепер росте разом із рівнем глибини (Data.enemy_std_*), а не лінійно, як раніше.
-		"hp_mult": 1.1 + 0.02 * depth, "dmg_mult": 1.05 + 0.01 * depth, "xp_mult": 1.0 + 0.05 * depth,
+		# Понад 99-й рівень здоров'я й удар ще й множаться за кожен рівень (Data.endless_hp, endless_dmg): дна нема.
+		"hp_mult": (1.1 + 0.02 * depth) * Data.endless_hp(lvl), "dmg_mult": (1.05 + 0.01 * depth) * Data.endless_dmg(lvl), "xp_mult": 1.0 + 0.05 * depth,
 		"desc": "Корені зарази під Кремлем. Що глибше — то лютіше."}
 
 

@@ -31,6 +31,23 @@ const STD_DMG := 13.0
 const OLD_DMG_PER_LEVEL := 0.16  # стара лінійна шкода нечисті: під неї зроблені формули брам і возів (див. FarService.guard_mult)
 
 
+## Башта Кощія й Глибини зарази не мають стелі. До ENDLESS_SOFT-го рівня нечисть росте за звичайною міркою.
+## Вище рівень росте далі, а здоров'я й удар ще й множаться за кожен рівень понад межу: так сходинки
+## лишаються відчутними, хоч мірка після 50-го рівня вже рівна. Здобич вище за ENDLESS_SOFT-й рівень не росте:
+## речі 100–140-го рівня дають лише надважкі печери.
+const ENDLESS_SOFT := 99
+const ENDLESS_HP_PER_LEVEL := 1.02
+const ENDLESS_DMG_PER_LEVEL := 1.015
+
+
+static func endless_hp(lvl: int) -> float:
+	return pow(ENDLESS_HP_PER_LEVEL, float(maxi(0, lvl - ENDLESS_SOFT)))
+
+
+static func endless_dmg(lvl: int) -> float:
+	return pow(ENDLESS_DMG_PER_LEVEL, float(maxi(0, lvl - ENDLESS_SOFT)))
+
+
 ## Шкода за секунду еталонного героя рівня lvl.
 static func ref_dps(lvl: int) -> float:
 	return REF_DPS_BASE + REF_DPS_K * pow(float(maxi(1, lvl)), REF_DPS_POW)
@@ -101,12 +118,13 @@ const POTION_MAX := 5  # скільки зілля можна нести
 const POTION_HEAL := 0.4  # частка здоров'я, яку відновлює зілля
 const POTION_CD := 6.0  # секунд між ковтками
 const POTION_START := 2
-const POTION_DROP_CHANCE := 0.02
+const POTION_DROP_CHANCE := 0.01  # зілля з рядового ворога (до 0.45 було 0,02)
+const POTION_ELITE_CHANCE := 0.15  # зілля з еліти (було 0,3); бос лишає одне завжди
 ## Вареник із нечисті лікує частку здоров'я героя (не менш як VARENYK_MIN): раніше це були ті самі 20
 ## здоров'я на будь-якому рівні, і на високих рівнях вареник нічого не важив. З боса вареник удвічі ситніший.
 const VARENYK_HEAL := 0.08
 const VARENYK_MIN := 20
-const VARENYK_DROP_CHANCE := 0.05
+const VARENYK_DROP_CHANCE := 0.03  # до 0.45 було 0,05
 ## Зілля наснаги: окремий запас, відновлює частку наснаги (здоров'я не лікує).
 const MANA_POTION_MAX := 3  # волхви несуть на одне більше
 const MANA_POTION_RESTORE := 0.7
@@ -116,7 +134,7 @@ const MEAL_TIME := 1200.0  # страва, секунд бою
 const BREW_TIME := 900.0  # зілля сили й зілля проти зарази
 const INSPIRED_TIME := 600.0  # натхнення від кобзаря в дорозі
 const BUFF_CAP := 3600.0  # більше години наперед не запасти
-const MANA_POTION_DROP_CHANCE := 0.012  # у волхвів удвічі частіше
+const MANA_POTION_DROP_CHANCE := 0.006  # у волхвів удвічі частіше (до 0.45 було 0,012)
 
 
 static func potion_price(hero_level: int) -> int:

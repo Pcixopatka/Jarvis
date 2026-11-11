@@ -31,8 +31,12 @@ func _process(delta: float) -> void:
 	var home: Vector2 = player.position - player.facing * 46.0 + Vector2(0, 22)
 	if kind == "voron":
 		home = player.position + Vector2(-player.facing.x * 30.0, -8.0)
+	elif kind == "mazha":
+		home = player.position - player.facing * 62.0 + Vector2(0, 6)  # мажа котиться просто за спиною
+	elif kind == "khovanets":
+		home = player.position - player.facing * 30.0 + Vector2(34.0, 26.0)
 	_goal = home
-	if kind == "pes":
+	if kind in ["pes", "khovanets"]:
 		_fetch_t -= delta
 		if _fetch_t <= 0.0:
 			_fetch_t = 0.3
@@ -83,6 +87,10 @@ func _draw() -> void:
 	var bob := sin(_step) * 1.5 if _moving else 0.0
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	match kind:
+		"mazha":
+			_draw_cart()
+		"khovanets":
+			_draw_khovanets(bob)
 		"kit":
 			_draw_cat(bob)
 		"voron":
@@ -138,3 +146,34 @@ func _draw_raven() -> void:
 	_px(-9, hover + 1, 4, 3, body)  # хвіст
 	_px(-5, hover - (6.0 if flap > 0.0 else -4.0), 9, 4, wing)  # крило
 	_fills.append([Rect2((7.0 if _face > 0.0 else -9.0), hover - 1, 2, 2), Color(0.9, 0.9, 0.9)])
+
+
+## Чумацька мажа: дощатий кузов із клунками на двох колесах і дишель до героя.
+func _draw_cart() -> void:
+	var wood := Color(0.6, 0.4, 0.22)
+	var dark := Color(0.38, 0.25, 0.14)
+	draw_circle(Vector2(0, 9), 13.0, Color(0, 0, 0, 0.22))
+	_px(-13, -8, 24, 10, wood)  # кузов
+	_px(-13, -8, 24, 2, Color(0.75, 0.55, 0.32))
+	_px(11, -4, 9, 2, dark)  # дишель
+	_px(-9, -15, 9, 7, Color(0.92, 0.88, 0.78))  # клунок
+	_px(-1, -13, 8, 5, Color(0.8, 0.74, 0.6))
+	var spin := int(_step) % 2 if _moving else 0
+	for wx in [-10.0, 5.0]:
+		_px(wx, 1, 7, 7, Color(0.28, 0.2, 0.14))
+		_px(wx + 2 + spin, 3, 2, 2, Color(0.9, 0.72, 0.25))
+
+
+## Хованець: рудий дух із торбою за плечима.
+func _draw_khovanets(bob: float) -> void:
+	var fur := Color(0.8, 0.43, 0.18)
+	var dark := Color(0.55, 0.28, 0.1)
+	draw_circle(Vector2(0, 8), 7.0, Color(0, 0, 0, 0.22))
+	_legs(-5, 2, 2, dark)
+	_px(-6, -6 + bob, 12, 9, fur)  # тулуб
+	_px(-5, -14 + bob, 10, 8, fur)  # голова
+	_px(-5, -17 + bob, 2, 3, dark)  # вуха
+	_px(3, -17 + bob, 2, 3, dark)
+	_px(-10, -8 + bob, 5, 7, Color(0.6, 0.45, 0.25))  # торба
+	_fills.append([Rect2((1.0 if _face > 0.0 else -3.0), -11 + bob, 2, 2), Color(1.0, 0.95, 0.5)])
+	_fills.append([Rect2((-3.0 if _face > 0.0 else 1.0), -11 + bob, 2, 2), Color(1.0, 0.95, 0.5)])

@@ -883,7 +883,7 @@ func _defense_complete() -> void:
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 3)
-	spawn_pickup(pos, "item", 0, Data.gen_item(int(loc["level"]), Data.roll_rarity(int(loc["level"]), 1)))
+	spawn_pickup(pos, "item", 0, Data.gen_item(loot_level(), Data.roll_rarity(loot_level(), 1)))
 	_spawn_portal("До брами" if not (loc.has("event") or loc.has("escort")) else "На мапу", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
 	Events.defense_won.emit(loc["target"])
 
@@ -974,12 +974,21 @@ func _spawn_companions(companions: Array) -> void:
 
 ## Улюбленець героя (пес, кіт чи ворон) ходить за ним у бою. Лише для ока: у бійку не лізе.
 func _spawn_pet() -> void:
-	if not str(player.pet) in Pets.FOLLOWERS or is_duel():
+	if is_duel():
 		return
-	var pet = PetScript.new()
-	pet.setup(self, player, str(player.pet))
-	pet.position = player.position + Vector2(-40, 24)
-	entities.add_child(pet)
+	var kinds := []
+	if str(player.pet) in Pets.FOLLOWERS:
+		kinds.append(str(player.pet))
+	# божі дари, які видно в бою: Хованець бігає поруч, чумацька мажа котиться за спиною
+	if str(player.divine.get("pet", "")) == "khovanets":
+		kinds.append("khovanets")
+	if str(player.divine.get("cart", "")) == "mazha":
+		kinds.append("mazha")
+	for i in kinds.size():
+		var pet = PetScript.new()
+		pet.setup(self, player, str(kinds[i]))
+		pet.position = player.position + Vector2(-40 - 20 * i, 24)
+		entities.add_child(pet)
 
 
 func _setup_atmosphere(biome: String) -> void:
@@ -1180,7 +1189,7 @@ func _field_complete() -> void:
 	Events.banner.emit("%s очищено!\n+%d грн і скарб" % [loc["name"], g], Color(1.0, 0.85, 0.3))
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	for i in 2:
-		spawn_pickup(pos, "item", 0, Data.gen_item(loc["level"], Data.roll_rarity(loc["level"], 1)))
+		spawn_pickup(pos, "item", 0, Data.gen_item(loot_level(), Data.roll_rarity(loot_level(), 1)))
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 2)
 	_resource_bundle(pos, 5)
@@ -1287,7 +1296,7 @@ func _drop_loot(e: Node2D) -> void:
 				spawn_pickup(e.global_position, "coin", maxi(1, e.xp_value / 12))
 		return
 	var pos: Vector2 = e.global_position
-	var ilvl: int = loc.get("level", 1)
+	var ilvl: int = loot_level()
 	var heal_value := varenyk_heal()
 	if e.is_boss:
 		shake(14.0)
@@ -1315,13 +1324,13 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "item", 0, _loot(ilvl + 1, Data.roll_rarity(ilvl, 2)))
 		spawn_pickup(pos, "varenyk", heal_value * 2)
 		spawn_pickup(pos, "potion", 1)
-		spawn_pickup(pos, "res", 3 + int(loc.get("level", 1)) / 5 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", Camp.boss_trophies(loot_level()) + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 	elif e.bounty_id > 0:
 		for i in 6:
 			spawn_pickup(pos, "coin", maxi(2, e.xp_value / 5))
 		spawn_pickup(pos, "item", 0, _loot(ilvl, maxi(1, Data.roll_rarity(ilvl, 1))))
 		_resource_bundle(pos, roundi(3 * drop_boost))
-		spawn_pickup(pos, "res", 2 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
+		spawn_pickup(pos, "res", Camp.TROPHY_BOUNTY + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
 		Events.bounty_killed.emit(e.bounty_id)
 	elif e.treasure_guard:
 		Events.banner.emit("Сторожа скарбу вбито!\nСкриня твоя", Color(1.0, 0.85, 0.35))
@@ -1341,8 +1350,11 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "item", 0, piece)
 			float_text(pos + Vector2(0, -90), "Річ набору: %s" % piece["name"], Sets.COLOR)
 		_resource_bundle(pos, roundi(2 * drop_boost))
-		spawn_pickup(pos, "res", 1 + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0)), {"res": Camp.TROPHY})
-		if randf() < 0.3:
+		# трофей з еліти падає через раз; перк, артефакт і свято додають свої понад це
+		var elite_trophies: int = (1 if randf() < Camp.TROPHY_ELITE_CHANCE else 0) + player.pk("h_trophy") + int(player.art.get("trophy", 0)) + int(festive.get("trophy", 0))
+		if elite_trophies > 0:
+			spawn_pickup(pos, "res", elite_trophies, {"res": Camp.TROPHY})
+		if randf() < Data.POTION_ELITE_CHANCE:
 			spawn_pickup(pos, "potion", 1)
 	else:
 		spawn_pickup(pos, "coin", e.xp_value)
@@ -1393,9 +1405,14 @@ func _roll_resource() -> String:
 	return Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
 
 
+## Рівень здобичі цього місця. У Башті й Глибинах він не росте вище 99-го, хоч нечисть росте далі.
+func loot_level() -> int:
+	return int(loc.get("loot_level", loc.get("level", 1)))
+
+
 func _resource_bundle(pos: Vector2, n: int) -> void:
 	for i in n:
-		spawn_pickup(pos, "res", _res_amount(1 + int(loc.get("level", 1)) / 4), {"res": _roll_resource()})
+		spawn_pickup(pos, "res", _res_amount(Camp.bundle_amount(loot_level())), {"res": _roll_resource()})
 
 
 func add_resource(r: String, amount: int) -> void:

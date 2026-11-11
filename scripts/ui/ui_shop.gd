@@ -27,6 +27,7 @@ static func build(game) -> Control:
 	var pages := [["Червінці", _packs(game)]]
 	for kind in Shop.KINDS:
 		pages.append([Shop.KIND_NAMES[kind], _sets(game) if kind == "set" else _goods(game, kind)])
+	pages.append(["Божі дари", load("res://scripts/ui/ui_divine.gd").shop_page(game)])
 	pages.append(["Вбрання", _costumes(game)])
 	pages.append(["Універсал", _premium(game)])
 	var title := "Крамниця   •   %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))]

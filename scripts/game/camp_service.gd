@@ -101,6 +101,13 @@ static func apply_effects(world, player) -> void:
 	if str(player.pet) != "" and not PetS.owned(world, str(player.pet)):
 		player.pet = ""
 	player.pet_fx = PetS.fx(world, player)  # хист улюбленця, якого герой узяв із собою
+	var DivS = load("res://scripts/game/divine_service.gd")
+	for dslot in player.divine.keys():
+		if not DivS.owned(world, str(player.divine[dslot])):
+			player.divine.erase(dslot)  # дар, якого в роду нема, знімається
+	player.divine_fx = DivS.fx_of(world, player)
+	player.bag_divine = int(player.divine_fx["bag"])
+	player.recalc()  # крила, молот і хист улюбленця мають одразу лягти в показники
 	load("res://scripts/game/kleinod_service.gd").apply(world, player)  # клейноди роду діють на кожного героя
 	load("res://scripts/game/peril_service.gd").apply(world, player)  # іменні звитяги за надважких босів
 

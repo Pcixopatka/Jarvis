@@ -117,6 +117,36 @@ static func search(query: String, limit: int = 40) -> Array:
 
 # ---------------- Розділи ----------------
 
+static func _pct(v: float) -> String:
+	var p := v * 100.0
+	return (str(int(round(p))) if is_equal_approx(p, round(p)) else ("%.1f" % p).replace(".", ",")) + "%"
+
+
+## Стаття «Здобич із нечисті»: усі шанси з таблиць гри, тож числа завжди справжні.
+static func _loot_entry() -> Dictionary:
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var Elites = load("res://scripts/data/elites.gd")
+	var Uniq = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var Souls = load("res://scripts/data/souls.gd")
+	var shares := []
+	for lvl in [20, 60, 99]:
+		shares.append("на %d-му рівні звичайна %s, добротна %s, рідкісна %s, легендарна %s" % [lvl, _pct(Data.rarity_share(lvl, 0)), _pct(Data.rarity_share(lvl, 1)), _pct(Data.rarity_share(lvl, 2)), _pct(Data.rarity_share(lvl, 3))])
+	var lines := [
+		"Річ із рядового ворога: %s. Якою вона буде: %s." % [_pct(Data.ITEM_DROP_CHANCE), "; ".join(shares)],
+		"Річ з еліти: %s, не гірша за добротну. Бос лишає дві речі, рідкісні або легендарні." % _pct(Elites.ITEM_CHANCE),
+		"Дерево, залізо чи трави з рядового ворога: %s, одна одиниця. Еліта, бос і зачистка дають жмені: в одній жмені 1 + рівень/%d одиниць." % [_pct(Camp.RESOURCE_DROP_CHANCE), Camp.BUNDLE_LEVEL_STEP],
+		"Трофеї: еліта лишає один із шансом %s, бос %d + рівень/%d, голова з розшуку %d." % [_pct(Camp.TROPHY_ELITE_CHANCE), Camp.TROPHY_BOSS_BASE, Camp.TROPHY_BOSS_LEVEL_STEP, Camp.TROPHY_BOUNTY],
+		"Зілля здоров'я: рядовий ворог %s, еліта %s, бос завжди одне." % [_pct(Data.POTION_DROP_CHANCE), _pct(Data.POTION_ELITE_CHANCE)],
+		"Зілля наснаги: %s, у волхвів удвічі частіше." % _pct(Data.MANA_POTION_DROP_CHANCE),
+		"Вареник: %s, лікує %s здоров'я; з боса завжди, удвічі ситніший." % [_pct(Data.VARENYK_DROP_CHANCE), _pct(Data.VARENYK_HEAL)],
+		"Золота річ із боса: від %s на першому ступені до %s на шостому. Кожні %d босів без золота подвоюють шанс." % [_pct(Uniq.BASE_CHANCE[1]), _pct(Uniq.BASE_CHANCE[Uniq.BASE_CHANCE.size() - 1]), int(Uniq.LUCK_STEP)],
+		"Артефакт із боса: %s, у надважкій печері %s." % [_pct(Arts.CHANCE), _pct(Arts.CHANCE_PERIL)],
+		"Душа: рядовий ворог %s, еліта %s, бос %s, надважкий бос %s. Невдачі підіймають шанс, найбільше втричі." % [("%.3f" % (float(Souls.CHANCE["regular"]) * 100.0)).replace(".", ",") + "%", ("%.3f" % (float(Souls.CHANCE["elite"]) * 100.0)).replace(".", ",") + "%", _pct(Souls.CHANCE["boss"]), _pct(Souls.CHANCE_PERIL)],
+	]
+	return _e("Здобич із нечисті", "що й як часто падає", "Усі шанси разом. «×2 здобичі» подвоює шанс речі й ресурсу, а босові додає третю річ; на зілля, трофеї, золото, артефакти й душі воно не діє. Улюбленець ворон додає до шансу ресурсу.\n• %s" % "\n• ".join(lines))
+
+
 static func _basics() -> Array:
 	var out := []
 	for b in Wiki.BASICS:
@@ -129,6 +159,7 @@ static func _basics() -> Array:
 		var st: Dictionary = Way.Path.STEPS[i]
 		way_lines.append("%d. %s. Нагорода: %s." % [i + 1, st["title"], Way.reward_text(st)])
 	out.append(_e("Шлях козака", "ланцюжок перших цілей", "Ланцюжок із %d цілей, що по черзі вчить усьому в грі. Нинішній крок стоїть угорі вкладки «Журнал»: що зробити, як саме й яка нагорода. Виконав умову, і кнопка «Забрати нагороду» відкриє наступний крок. Бувалий герой забирає все вже зроблене одним дотиком. Порадник і кнопка «Далі» на мапі теж ведуть до наступного кроку.\n%s" % [Way.total(), "\n".join(way_lines)]))
+	out.append(_loot_entry())
 	var QS = load("res://scripts/game/quick_service.gd")
 	out.append(_e("Швидкий похід", "за перегляд реклами", "Місце, яке ти вже пройшов %d рази, можна зачистити миттю, без бою. На панелі місця з'являється кнопка «Швидкий похід за рекламу»: переглянь рекламу, і герой одразу дістане досвід, гривні, речі й ресурси, як за звичайний похід. Здобич рахується тими самими шансами, що й у бою, реклама «×2 здобичі» й свята на неї діють. Рідкісного з босів тут нема: золоті речі, артефакти, камені долі й душі дає лише справжній бій. Зараза, ніч, розшук і скарб у швидкому поході теж не діють, історія не просувається. Завдання міст на нечисть і печери він зараховує, а світ рахує його як похід: події й облоги чекають на один похід менше. На день дається %d швидких походів. Працює для диких місцевостей і печер, не сильніших за героя." % [QS.MIN_CLEARS, QS.PER_DAY]))
 	var SagaD = load("res://scripts/data/saga.gd")
@@ -168,6 +199,11 @@ static func _basics() -> Array:
 	for pid in PetD.ORDER:
 		pet_lines.append("%s: %s, на найвищому ступені %s. Купити: %s." % [PetD.DEFS[pid]["name"], PetD.text(pid, 1), PetD.text(pid, PetD.MAX_LEVEL), PetS.cost_text(PetD.cost(pid, 1))])
 	out.append(_e("Улюбленці", "помічники з хутора", "На хуторі є вкладка «Стайня». Там за гривні й ресурси беруть улюбленців, а потім годують: ступенів %d, кожен наступний коштує стільки ж, помножене на свій номер. Улюбленці спільні для роду, а з собою герой бере одного. Сили в бою вони не додають. Пес, кіт і ворон ходять за героєм у бою, кінь чекає на узліссі.\n• %s" % [PetD.MAX_LEVEL, "\n• ".join(pet_lines)]))
+	var Div = load("res://scripts/data/divine.gd")
+	var div_lines := []
+	for did in Div.ORDER:
+		div_lines.append("%s, гніздо «%s», %d червінців. %s Дає: %s." % [Div.DEFS[did]["name"], Div.SLOT_NAMES[Div.DEFS[did]["slot"]], int(Div.DEFS[did]["price"]), Div.DEFS[did]["desc"], "; ".join(Div.DEFS[did]["lines"])])
+	out.append(_e("Божі дари", "чотири власні гнізда", "У крамниці на вкладці «Божі дари» продаються чотири речі за червінці. Вони вдягаються не в звичайні клітинки спорядження, а у власні гнізда під ним на екрані героя: супутник, віз, крила й реліквія. Місця в торбі не займають. Купуються раз на весь рід, а вдягає їх кожен герой окремо: торкнись гнізда, і картка покаже кнопку «Вдягнути» чи «Зняти». На відміну від вбрання, дари дають силу й зручність. Хованця й мажу видно поруч із героєм у бою, крила й молот видно на ньому самому. Із Хованцем на мапі й у паузі з'являється кнопка «Хованець: крамниця будь-де»: там можна продати речі поодинці чи гуртом і купити зілля.\n• %s" % "\n• ".join(div_lines), {}))
 	var Cost = load("res://scripts/data/costumes.gd")
 	var cost_lines := []
 	for cid in Cost.ORDER:
@@ -408,7 +444,16 @@ static func _loc_entry(id: String, head: String) -> Dictionary:
 	var foes := []
 	for e in L["enemies"]:
 		foes.append(Data.ENEMY_NAMES[e])
-	return _e(L["name"], sub, "%s\nНечисть: %s." % [L["desc"], ", ".join(foes)], {"map": _map_icon(L)}, head)
+	var more := ""
+	if L.get("endless", false):
+		# Башта й Глибини: стелі нема, складність росте з кожною сходинкою
+		var tower: bool = L.get("tower", false)
+		var svc = _svc("tower_service") if tower else _svc("depth_service")
+		var step := "поверх" if tower else "глибину"
+		more = "\nСтелі нема: нечисть росте на %d %s за кожну наступну %s і стає лютішою понад це. До %d-го рівня сходинки помірні; далі за кожен рівень її здоров'я множиться на %s, а удар на %s, тож рано чи пізно впирається кожен герой. Наприклад, %s %d це %d-й рівень, а %s %d уже %d-й. Здобич вище за %d-й рівень не росте (речі 100–140-го рівня дають лише надважкі печери), зате досвід і гривні ростуть далі." % [
+			1 if tower else 2, "рівень" if tower else "рівні", step, Data.ENDLESS_SOFT, _num(Data.ENDLESS_HP_PER_LEVEL), ("%.3f" % Data.ENDLESS_DMG_PER_LEVEL).replace(".", ","),
+			"поверх" if tower else "глибина", 50, int(svc.level_of(50)), "поверх" if tower else "глибина", 150, int(svc.level_of(150)), Data.ENDLESS_SOFT]
+	return _e(L["name"], sub, "%s\nНечисть: %s.%s" % [L["desc"], ", ".join(foes), more], {"map": _map_icon(L)}, head)
 
 
 ## Той самий значок, що й на мапі (world_map.gd _loc_icon).

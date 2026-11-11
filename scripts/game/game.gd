@@ -69,6 +69,8 @@ const PremiumService := preload("res://scripts/game/premium_service.gd")
 const CostumeService := preload("res://scripts/game/costume_service.gd")
 const PetService := preload("res://scripts/game/pet_service.gd")
 const AutoService := preload("res://scripts/game/auto_service.gd")
+const DivineService := preload("res://scripts/game/divine_service.gd")
+const UiDivine := preload("res://scripts/ui/ui_divine.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
@@ -689,6 +691,83 @@ func enter_location(id: String) -> void:
 	hint("combat", "Ліва частина екрана — рух. Тримай «Удар» — козак сам б'є найближчу нечисть. Коли ворог червоніє — він замахується: тисни «Перекид»!")
 
 
+# ======================= Крамниця Хованця =======================
+
+var trader_open := false
+var trader_sel := -1
+var _trader_back := Callable()
+
+
+## Номер вкладки крамниці за назвою (вкладки можуть додаватися, тож шукаємо за іменем).
+func _shop_tab_index(title: String) -> int:
+	var names := ["Червінці"]
+	for kind in ShopService.Shop.KINDS:
+		names.append(str(ShopService.Shop.KIND_NAMES[kind]))
+	names.append_array(["Божі дари", "Вбрання", "Універсал"])
+	return maxi(0, names.find(title))
+
+
+## Хованець торгує будь-де: продати зайве й купити зілля без дороги до міста.
+func open_trader(back: Callable) -> void:
+	if not DivineService.remote_shop(player):
+		return
+	_trader_back = back
+	trader_open = true
+	trader_sel = -1
+	hud.close_overlay()
+	Audio.play("coins", 0.05)
+	hud.set_screen(_trader_screen())
+
+
+func _trader_screen() -> Control:
+	# крамниця відкривається й посеред бою (з паузи), тож під нею суцільне тло
+	var bg := PanelContainer.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.add_theme_stylebox_override("panel", UI.style(Color(0.13, 0.11, 0.08), Color(0.13, 0.11, 0.08), 0, 0))
+	bg.add_child(UiDivine.trader(self))
+	return bg
+
+
+func close_trader() -> void:
+	if not trader_open:
+		return
+	trader_open = false
+	hud.clear_screen()
+	save_game()
+	var back := _trader_back
+	_trader_back = Callable()
+	if back.is_valid():
+		back.call()
+
+
+func trader_do(action: String, arg) -> void:
+	if not trader_open:
+		return
+	match action:
+		"select":
+			trader_sel = int(arg)
+		"sell":
+			if CityService.sell(player, int(arg)) > 0:
+				Audio.play("coins", 0.05)
+				trader_sel = -1
+		"sell_upto":
+			var got: int = CityService.sell_up_to(player, int(arg))
+			if got > 0:
+				Audio.play("coins", 0.05)
+				hud.show_banner("Продано гуртом: +%s грн" % UI.num(got), UI.GOLD)
+		"buy_potion":
+			var pp: int = Data.potion_price(int(player.level))
+			if player.gold >= pp and player.potions < player.potion_max() and player.add_potion():
+				player.gold -= pp
+				Audio.play("coins", 0.05)
+		"buy_mana":
+			var mp: int = Data.mana_potion_price(int(player.level))
+			if player.gold >= mp and player.mana_potions < player.mana_potion_max() and player.add_mana_potion():
+				player.gold -= mp
+				Audio.play("coins", 0.05)
+	hud.set_screen(_trader_screen(), true)
+
+
 # ======================= Автобій =======================
 
 var auto_on := false  # гравець увімкнув автобій; діє лише там, де він дозволений (AutoService)
@@ -1162,6 +1241,10 @@ func _build_map_panel() -> void:
 func _sponsor_block() -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
+	if DivineService.remote_shop(player) and travel_to == "":
+		var tb := UI.button("Хованець: крамниця будь-де", func(): open_trader(enter_map), Vector2(340, 46), 16)
+		tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		v.add_child(tb)
 	if not player.is_peasant() and not map_bosses and travel_to == "":
 		var free: int = BossService.available(world, player)
 		var bb := UI.button("Боси дня й тижня" + ("  •  чекають: %d" % free if free > 0 else ""), func():
@@ -1412,7 +1495,7 @@ func _on_tower_cleared(floor_: int) -> void:
 	tower_sel = clampi(floor_ + 1, 1, int(TowerService.state(world)["max"]))
 	_record("tower", floor_)
 	_record("tower_floor")
-	var lvl := TowerService.level_of(floor_)
+	var lvl := TowerService.loot_level(floor_)
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	if first:
 		var g := TowerService.first_gold(floor_)
@@ -2157,6 +2240,19 @@ func char_do(action: String, arg) -> void:
 			player.add_valor(arg)
 		"select":
 			char_sel_uid = arg
+		"divine_toggle":
+			# вдягнути чи зняти божий дар у його гнізді
+			var dslot: String = str(DivineService.Divine.DEFS[str(arg)]["slot"])
+			if DivineService.wears(player, str(arg)):
+				DivineService.unequip(world, player, dslot)
+			else:
+				DivineService.equip(world, player, str(arg))
+			Audio.play("item", 0.05)
+		"divine_shop":
+			# некуплений дар: веде в крамницю на вкладку «Божі дари»
+			shop_tab = _shop_tab_index("Божі дари")
+			open_shop(open_character)
+			return
 		"equip":
 			player.equip(arg)
 			_check_full_set()
@@ -2509,6 +2605,8 @@ func _show_pause() -> void:
 			continue
 		ads.append(UI.button(("%s\nще %s" % [bname, AdRewards.format_time(AdRewards.boost_left(world, id))]) if not AdRewards.can_boost(world, id) else "%s на годину\nза рекламу" % bname, _watch_boost.bind(id, _show_pause), HALF_BTN, 18))
 	hud.add_row(ads)
+	if DivineService.remote_shop(player):
+		hud.add_button("Хованець: крамниця будь-де", func(): open_trader(_show_pause), WIDE_BTN)
 	_add_sound_toggles(_show_pause, true)
 	var leave_text := "Покинути печеру (прогрес втратиться)" if combat.is_dungeon() else "Повернутися на мапу"
 	if combat.is_duel() and not combat.duel_over:
@@ -2724,6 +2822,27 @@ func close_shop() -> void:
 ## "premium" — купити чи продовжити Гетьманський універсал.
 func shop_do(action: String, arg) -> void:
 	match action:
+		"divine":
+			# куплений дар вдягається й знімається одним дотиком, купівля просить підтвердження
+			var did: String = str(arg)
+			if DivineService.owned(world, did):
+				if DivineService.wears(player, did):
+					DivineService.unequip(world, player, str(DivineService.Divine.DEFS[did]["slot"]))
+				else:
+					DivineService.equip(world, player, did)
+				shop_confirm = ""
+				Audio.play("item", 0.05)
+				save_game()
+			elif DivineService.block_reason(world, did) != "":
+				shop_confirm = ""
+			elif shop_confirm != "divine:" + did:
+				shop_confirm = "divine:" + did
+			else:
+				shop_confirm = ""
+				if DivineService.buy(world, player, did):
+					save_game()
+					Audio.play("quest", 0.0)
+					hud.show_banner("%s тепер у твого роду.\nГерой уже вдягнув: глянь гнізда на екрані героя" % DivineService.Divine.DEFS[did]["name"], UI.GOLD)
 		"costume":
 			# куплене вбрання вдягається й знімається одним дотиком, купівля просить підтвердження
 			var cid: String = str(arg)

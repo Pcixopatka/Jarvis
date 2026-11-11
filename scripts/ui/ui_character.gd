@@ -81,6 +81,8 @@ static func _hero(game) -> Control:
 		else:
 			doll.add_child(UI.empty_cell(CELL + 10, "it_sabre" if slot == "weapon" else "it_" + slot))
 	doll_box.add_child(doll)
+	# Божі дари з крамниці: чотири власні гнізда під спорядженням
+	doll_box.add_child(load("res://scripts/ui/ui_divine.gd").slots_row(game, sel, CELL - 6))
 	top.add_child(doll_box)
 
 	var bar := ProgressBar.new()
@@ -196,6 +198,10 @@ static func _hero(game) -> Control:
 	var item: Dictionary = p.find_item(sel) if sel > 0 else {}
 	if sel == -2:
 		det.add_child(load("res://scripts/ui/ui_souls.gd").codex(p))  # Пом'яник душ замість картки речі
+		return h
+	var dslot: String = load("res://scripts/ui/ui_divine.gd").slot_of(sel)
+	if dslot != "":
+		det.add_child(load("res://scripts/ui/ui_divine.gd").detail(game, dslot))  # картка божого дару
 		return h
 	if item.is_empty():
 		det.add_child(UI.label("Торкнись речі,\nщоб побачити бонуси.", 19, UI.MUTED, false))

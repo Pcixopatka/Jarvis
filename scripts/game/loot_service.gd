@@ -104,7 +104,7 @@ static func on_boss(combat, player, e) -> Dictionary:
 	if id == "":
 		return {}
 	player.u_luck = 0
-	return Uniques.make(id, int(e.level))
+	return Uniques.make(id, mini(int(e.level), int(combat.loc.get("loot_level", e.level))))  # у Башті й Глибинах здобич не росте вище 99-го
 
 
 ## Шанс артефакта з боса: основа (гідний бос, слабкий чи супербос Башти) з поправкою на долю трофея.

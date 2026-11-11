@@ -125,6 +125,9 @@ var valor_fx := {}  # сума вкладених очок та іменних �
 var art_luck := {}  # доля трофея: бос -> скільки перемог поспіль без його артефакта (зберігається)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
+var divine := {}  # вдягнені божі дари: {гніздо: id} (див. Divine), зберігається
+var divine_fx := {}  # що вони дають: {"bag", "stats", "pickup", "shop", "fx"} (виставляє DivineService, у збереження не йде)
+var bag_divine := 0  # місця в торбі від чумацької мажі (не зберігається)
 var pet := ""  # улюбленець, якого герой бере з собою (див. Pets), зберігається
 var pet_fx := {}  # хист цього улюбленця: {"pickup"|"travel"|"xp"|"res": частка} (виставляє PetService, у збереження не йде)
 var costume := ""  # вдягнене вбрання з крамниці: лише вигляд (див. Costumes), зберігається
@@ -231,7 +234,7 @@ func is_equipped(uid: int) -> bool:
 
 
 func bag_size() -> int:
-	return Data.INVENTORY_SIZE + bag_bonus
+	return Data.INVENTORY_SIZE + bag_bonus + bag_divine
 
 
 func bag_full() -> bool:
@@ -432,7 +435,7 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "costume": costume, "pet": pet, "u_luck": u_luck, "art_luck": art_luck,
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "costume": costume, "pet": pet, "divine": divine, "u_luck": u_luck, "art_luck": art_luck,
 		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found,
 		"valor": valor, "valor_xp": valor_xp, "valor_spent": valor_spent}
 
@@ -620,7 +623,9 @@ func change_class(cls: String) -> bool:
 
 ## Значення характеристики з урахуванням перків і спорядження.
 func stat(id: String) -> int:
-	return stats[id] + 2 * pk("sich") + int(eq(id))
+	var base: int = stats[id] + 2 * pk("sich") + int(eq(id))
+	var wings: float = float(divine_fx.get("stats", 0.0))  # Крила Рарога: частка до всіх характеристик
+	return base if wings <= 0.0 else int(round(base * (1.0 + wings)))
 
 
 func _bonus(id: String) -> int:
@@ -640,6 +645,9 @@ func recalc() -> void:
 	var ench: Dictionary = EnchantService.fx_of_equipment(equipment)  # зачарування вдягнених речей
 	for k in ench:
 		_fx[k] = float(_fx.get(k, 0.0)) + float(ench[k])
+	var dfx: Dictionary = divine_fx.get("fx", {})  # бойові показники божих дарів
+	for k in dfx:
+		_fx[k] = float(_fx.get(k, 0.0)) + float(dfx[k])
 	for bid in buffs:
 		for k in buffs[bid]["fx"]:
 			_fx[k] = float(_fx.get(k, 0.0)) + float(buffs[bid]["fx"][k])
@@ -703,7 +711,7 @@ func recalc() -> void:
 	varenyk_bonus = pk("varenyk")
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0) * (1.0 + fx("speed") / 100.0)
-	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0)))
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0))) * (1.0 + float(divine_fx.get("pickup", 0.0)))
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0))
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
@@ -2819,6 +2827,52 @@ func sprite_id() -> String:
 	return "cossack_%s" % wt if Gfx.has("cossack_%s" % wt) else "cossack"
 
 
+const DIVINE_OUTLINE := Color(0.106, 0.078, 0.125)
+
+
+## Крила Рарога за спиною героя: два білі крила із золотою крайкою, що повільно махають.
+func _draw_wings(tint: Color) -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	var flap := sin(t * 3.2) * 3.0
+	var d := Gfx.dir_of(facing)
+	var white := Color(0.95, 0.95, 1.0) * tint
+	var gold := Color(0.92, 0.72, 0.25) * tint
+	var sides := [-1.0, 1.0]
+	if d[0] == "side":
+		sides = [-1.0 if d[1] else 1.0]  # збоку видно одне крило, за спиною
+	for sgn in sides:
+		var root := Vector2(sgn * 5.0, -10.0)
+		var tip := root + Vector2(sgn * 20.0, -12.0 - flap)
+		var low := root + Vector2(sgn * 16.0, 10.0 + flap * 0.5)
+		var mid := root + Vector2(sgn * 8.0, 8.0)
+		var shape := PackedVector2Array([root, tip, low, mid])
+		var edge := PackedVector2Array()
+		for v in shape:
+			edge.append(v + (v - (root + Vector2(sgn * 10.0, 0.0))).normalized() * 1.6)
+		draw_colored_polygon(edge, DIVINE_OUTLINE)
+		draw_colored_polygon(shape, white)
+		draw_line(root, tip, gold, 2.0)
+		draw_line(root + Vector2(sgn * 4.0, 4.0), low, Color(0.75, 0.78, 0.9) * tint, 1.5)
+
+
+## Громовий молот на поясі героя, час від часу по ньому пробігає іскра.
+func _draw_relic(tint: Color) -> void:
+	var d := Gfx.dir_of(facing)
+	var sx := 12.0 if (d[0] != "side" or d[1]) else -12.0
+	var at := Vector2(sx, 0.0)
+	draw_rect(Rect2(at + Vector2(-5, -9), Vector2(10, 7)), DIVINE_OUTLINE)
+	draw_rect(Rect2(at + Vector2(-2, -3), Vector2(4, 11)), DIVINE_OUTLINE)
+	draw_rect(Rect2(at + Vector2(-4, -8), Vector2(8, 5)), Color(0.6, 0.62, 0.7) * tint)
+	draw_rect(Rect2(at + Vector2(-4, -6), Vector2(8, 1)), Color(0.92, 0.72, 0.25) * tint)
+	draw_rect(Rect2(at + Vector2(-1, -3), Vector2(2, 9)), Color(0.5, 0.32, 0.18) * tint)
+	var t := fmod(Time.get_ticks_msec() / 1000.0, 2.4)
+	if t < 0.25:
+		var c := Color(0.5, 0.85, 1.0, 1.0 - t * 4.0)
+		draw_line(at + Vector2(4, -10), at + Vector2(7, -15), c, 1.5)
+		draw_line(at + Vector2(7, -15), at + Vector2(5, -17), c, 1.5)
+		draw_line(at + Vector2(-4, -10), at + Vector2(-7, -14), c, 1.5)
+
+
 func _draw_sprite(tint: Color) -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)  # лежачий кадр уже намальовано на листі
 	var frame := Gfx.IDLE
@@ -2830,7 +2884,16 @@ func _draw_sprite(tint: Color) -> void:
 		frame = Gfx.attack_frame(1.0 - swing_time / swing_duration)
 	elif moving:
 		frame = Gfx.walk_frame(walk_phase)
+	# Крила Рарога: за спиною, тож спершу малюються вони, а коли герой стоїть спиною до нас, то поверх нього
+	var winged: bool = alive and str(divine.get("wings", "")) != ""
+	var back_view: bool = Gfx.dir_of(facing)[0] == "up"
+	if winged and not back_view:
+		_draw_wings(tint)
 	Gfx.draw(self, sprite_id(), facing, frame, Vector2(-24, -30), tint)
+	if winged and back_view:
+		_draw_wings(tint)
+	if alive and str(divine.get("relic", "")) != "":
+		_draw_relic(tint)
 	# Накладки: вдягнена шапка (шлик кольору рідкості) і вовча подоба
 	if equipment.has("head") and costume == "" and not Classes.is_volkhv_line(job) and wolf_timer <= 0.0 and Gfx.has("overlay_hat"):
 		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]

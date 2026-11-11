@@ -30,8 +30,14 @@ static func is_super(floor_: int) -> bool:
 	return floor_ % SUPER_EVERY == 0
 
 
+## Рівень нечисті на поверсі: росте без межі, по рівню на поверх.
 static func level_of(floor_: int) -> int:
-	return mini(Data.Classes.BASE_LEVEL_MAX, BASE_LEVEL + floor_)
+	return BASE_LEVEL + floor_
+
+
+## Рівень здобичі на поверсі: не вище за Data.ENDLESS_SOFT.
+static func loot_level(floor_: int) -> int:
+	return mini(Data.ENDLESS_SOFT, level_of(floor_))
 
 
 static func waves_of(floor_: int) -> int:
@@ -56,13 +62,14 @@ static func loc_for(floor_: int) -> Dictionary:
 	var sup := is_super(floor_)
 	var ring := floor_ / SUPER_EVERY  # скільки кіл по 5 поверхів уже пройдено
 	return {"name": "Башта, поверх %d" % floor_, "type": "tower", "biome": "plague" if sup else "cave",
-		"level": lvl, "floor": floor_, "waves": waves_of(floor_), "enemies": pool.slice(0, 3),
+		"level": lvl, "loot_level": loot_level(floor_), "floor": floor_, "waves": waves_of(floor_), "enemies": pool.slice(0, 3),
 		"boss": super_boss(floor_) if sup else "", "mini": pool[3],
 		"mini_title": MINI_TITLES[(floor_ - 1) % MINI_TITLES.size()],
 		"mini_affixes": 2 if floor_ < 20 else 3,
 		"elite_bonus": minf(0.3, 0.05 + 0.01 * floor_),
 		# Вище — нечисть лютіша понад свій рівень. Надбавки малі: сама мірка нечисті росте з рівнем поверху.
-		"hp_mult": 1.0 + 0.012 * floor_, "dmg_mult": 1.0 + 0.006 * floor_ + 0.01 * ring, "xp_mult": 1.0 + 0.05 * floor_,
+		# Понад 99-й рівень здоров'я й удар ще й множаться за кожен рівень (Data.endless_hp, endless_dmg): вершини нема.
+		"hp_mult": (1.0 + 0.012 * floor_) * Data.endless_hp(lvl), "dmg_mult": (1.0 + 0.006 * floor_ + 0.01 * ring) * Data.endless_dmg(lvl), "xp_mult": 1.0 + 0.05 * floor_,
 		"boss_hp_mult": 2.2, "boss_dmg_mult": 1.35,
 		"desc": "Кістяна башта Кощія посеред Москви. Що вище — то лютіше."}
 

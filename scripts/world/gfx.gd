@@ -59,7 +59,7 @@ const ICON_ORDER := ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "ma
 	"tok_zdvyzhennia", "tok_didy", "tok_mykhaila", "tok_kuzma", "tok_kateryny", "tok_mykolai",
 	"kl_lytavry", "kl_korohva", "kl_pernach", "kl_bunchuk", "kl_bulava", "kl_pechatka", "kl_surmy", "stone_zabuttia", "stone_alatyr",
 	"it_sabre", "it_mace", "it_pike", "it_staff", "it_pishchal", "it_head", "it_body", "it_belt", "it_boots", "it_amulet", "it_artifact", "it_soul",
-	"it_bow", "it_pistols"]
+	"it_bow", "it_pistols", "dv_pet", "dv_cart", "dv_wings", "dv_hammer"]
 static var _loot_tex := {}
 
 

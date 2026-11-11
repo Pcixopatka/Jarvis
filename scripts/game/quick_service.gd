@@ -111,8 +111,8 @@ static func run(world, player, loc_id: String, drop_boost: float = 1.0, festive:
 			if randf() < Elites.ITEM_CHANCE * loot_mult:
 				loot.append(_item(lvl, Data.roll_rarity(lvl, 1), festive))
 			_bundle(out, player, L, roundi(2 * drop_boost), festive)
-			out["trophy"] += 1 + trophy_bonus
-			if randf() < 0.3 and player.add_potion():
+			out["trophy"] += (1 if randf() < Camp.TROPHY_ELITE_CHANCE else 0) + trophy_bonus
+			if randf() < Data.POTION_ELITE_CHANCE and player.add_potion():
 				out["potions"] += 1
 			continue
 		xp += exp_one
@@ -135,7 +135,7 @@ static func run(world, player, loc_id: String, drop_boost: float = 1.0, festive:
 			loot.append(_item(lvl + 1, Data.roll_rarity(lvl, 2), festive))
 		if player.add_potion():
 			out["potions"] += 1
-		out["trophy"] += 3 + lvl / 5 + trophy_bonus
+		out["trophy"] += Camp.boss_trophies(lvl) + trophy_bonus
 		plain_gold += 40 * lvl
 		_bundle(out, player, L, 7, festive)
 		for m in world.on_dungeon(loc_id):
@@ -198,7 +198,7 @@ static func _res(out: Dictionary, player, res: String, amount: int) -> void:
 
 static func _bundle(out: Dictionary, player, L: Dictionary, n: int, festive: Dictionary) -> void:
 	for i in n:
-		_res(out, player, _roll_resource(L), _res_amount(1 + int(L["level"]) / 4, player, festive))
+		_res(out, player, _roll_resource(L), _res_amount(Camp.bundle_amount(int(L["level"])), player, festive))
 
 
 ## Підсумок словами для банера.
