@@ -104,6 +104,7 @@ var soul_found := 0
 var soul_fx := {}
 var leech_pool := 0.0  # скільки здоров'я вампіризм ще може повернути просто зараз
 var art := {}  # бонуси артефактів, що лежать у торбі (ключ -> значення; рахує recalc)
+var art_luck := {}  # доля трофея: бос -> скільки перемог поспіль без його артефакта (зберігається)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
 var u_luck := 0  # лічильник Долі: скільки гідних босів поспіль не дали золота (зберігається)
@@ -407,7 +408,7 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck,
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck, "art_luck": art_luck,
 		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found}
 
 

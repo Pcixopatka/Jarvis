@@ -221,6 +221,17 @@ func _suite_data() -> void:
 		prev = c
 	for i in 200:
 		check(Data.roll_rarity(5, 2) >= 2, "мінімальна рідкість")
+	# Рідкість: легендарних із рівнем більшає, але повільно; частки сходяться в одиницю
+	var share_sum := 0.0
+	for r in 4:
+		share_sum += Data.rarity_share(75, r)
+	check(is_equal_approx(share_sum, 1.0) and is_equal_approx(Data.rarity_share(75, 0, 2), 0.0) and is_equal_approx(Data.rarity_share(75, 2, 2) + Data.rarity_share(75, 3, 2), 1.0), "частки рідкостей сходяться в одиницю, нижчих за найменшу нема")
+	check(Data.rarity_share(1, 3) > 0.01 and Data.rarity_share(75, 3) > Data.rarity_share(20, 3) and Data.rarity_share(20, 3) > Data.rarity_share(1, 3) and Data.rarity_share(99, 3) < 0.05, "легендарна з рядової нечисті: від %.1f%% на 1-му рівні до %.1f%% на 99-му" % [Data.rarity_share(1, 3) * 100.0, Data.rarity_share(99, 3) * 100.0])
+	check(Data.rarity_share(75, 3, 2) > 0.1 and Data.rarity_share(75, 3, 2) < 0.25 and Data.rarity_share(75, 3, 1) > Data.rarity_share(75, 3), "бос і еліта дають легендарну частіше: з боса %.0f%% речей на 75-му рівні" % (Data.rarity_share(75, 3, 2) * 100.0))
+	var rolled := [0, 0, 0, 0]
+	for i in 4000:
+		rolled[Data.roll_rarity(75)] += 1
+	check(absf(float(rolled[3]) / 4000.0 - Data.rarity_share(75, 3)) < 0.015 and absf(float(rolled[2]) / 4000.0 - Data.rarity_share(75, 2)) < 0.04, "кидок рідкості відповідає часткам (легендарних %d із 4000)" % rolled[3])
 	# Завдання
 	var w = WorldState.new()
 	for city in Data.CITIES:
@@ -7073,11 +7084,27 @@ func _suite_artifacts() -> void:
 	var got := 0
 	var kinds := {}
 	for i in 400:
+		gp.art_luck = {}  # без долі трофея: міряємо основний шанс
 		var a: Dictionary = Loot.artifact_on_boss(c, gp, boss)
 		if not a.is_empty():
 			got += 1
 			kinds[a["artifact"]] = true
 	check(got >= 4 and got <= 40 and kinds.keys() == ["perlyna_tsaria"], "Морський цар лишає свою Перлину приблизно в 4%% перемог (%d із 400)" % got)
+	# Доля трофея: невдачі з цим босом наближають удачу саме з ним, а після LUCK_SURE трофей напевно
+	check(is_equal_approx(Loot.artifact_chance(Arts.CHANCE, 0), Arts.CHANCE) and is_equal_approx(Loot.artifact_chance(Arts.CHANCE, int(Arts.LUCK_STEP)), Arts.CHANCE * 2.0) and is_equal_approx(Loot.artifact_chance(Arts.CHANCE, Arts.LUCK_SURE), 1.0) and Loot.artifact_chance(Arts.CHANCE, Arts.LUCK_SURE - 1) < 0.2, "шанс артефакта подвоюється за %d перемог без нього, після %d — напевно" % [int(Arts.LUCK_STEP), Arts.LUCK_SURE])
+	gp.art_luck = {}
+	var fails := 0
+	while Loot.artifact_on_boss(c, gp, boss).is_empty() and fails < 500:
+		fails += 1
+		if int(gp.art_luck.get(str(boss.kind), 0)) != fails or gp.art_luck.size() != 1:
+			fails = 9999
+	check(fails <= Arts.LUCK_SURE and not gp.art_luck.has(str(boss.kind)), "кожна перемога без трофея рахується для цього боса; трофей не пізніше ніж за %d перемог (вийшло %d), лічильник скинуто" % [Arts.LUCK_SURE + 1, fails + 1])
+	gp.art_luck = {str(boss.kind): Arts.LUCK_SURE}
+	check(str(Loot.artifact_on_boss(c, gp, boss).get("artifact", "")) == "perlyna_tsaria" and gp.art_luck.is_empty(), "після %d перемог без трофея наступна дає його напевно" % Arts.LUCK_SURE)
+	gp.art_luck = {"zmii": 7}
+	var saved_luck: Dictionary = gp.to_dict()
+	check(saved_luck.has("art_luck") and int(saved_luck["art_luck"]["zmii"]) == 7, "доля трофея зберігається разом із героєм")
+	gp.art_luck = {}
 	gp.add_item(Arts.make("perlyna_tsaria"))
 	var again := 0
 	for i in 200:
@@ -7561,6 +7588,10 @@ func _suite_difficulty() -> void:
 			if str(e["title"]) == "Перунів жрець":
 				perun_art = str(e["text"])
 	check(("сила вмінь ×%s" % WSv._num(Data.Classes.CLASSES["perun_zhrets"]["skill_mult"])) in perun_art, "довідник показує множник сили вмінь класу")
+	var drop_rule: String = str(arts.get("Шанси здобичі", ""))
+	check(("шансом %s%%" % WSv._num(Data.ITEM_DROP_CHANCE * 100.0)) in drop_rule and ("%s%%" % WSv._num(snappedf(Data.rarity_share(99, 3) * 100.0, 0.1))) in drop_rule and "Бос завжди дає дві речі" in drop_rule, "довідник називає шанси здобичі з балансу")
+	var art_rule: String = str(arts.get("Де взяти артефакт", ""))
+	check(("за %d таких поспіль шанс подвоюється" % int(load("res://scripts/data/artifacts.gd").LUCK_STEP)) in art_rule and ("після %d наступна дає трофей напевно" % load("res://scripts/data/artifacts.gd").LUCK_SURE) in art_rule, "довідник пояснює долю трофея")
 	var soul_rule: String = str(arts.get("Шанс душі", ""))
 	check("слабша за звичайну нечисть твого рівня" in soul_rule and "Від спорядження це не залежить" in soul_rule, "довідник: душі залежать від рівня нечисті, а не від спорядження")
 	# Мірка сили нечисті: еталонний герой у середньому спорядженні

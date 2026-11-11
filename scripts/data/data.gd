@@ -335,8 +335,35 @@ static func _primary_value(slot: String, ilvl: int, rarity: int) -> float:
 	return 0.0
 
 
+## Ваги рідкості випадкової речі: звичайна, добротна, рідкісна, легендарна, і приріст ваги за рівень.
+## Рідкісних і легендарних із рівнем більшає, але повільно. Стара крива (10 + 0,8 і 2 + 0,3 за рівень)
+## робилася для гри до 22-го рівня: на 75-му кожна восьма річ була легендарною, і за годину їх падало
+## від 25 до 50 (tools/loot_probe.gd). Тепер легендарна на 75-му — кожна тридцята з рядової нечисті.
+const RARITY_BASE := [60.0, 28.0, 10.0, 1.5]
+const RARITY_PER_LEVEL := [0.0, 0.0, 0.15, 0.03]
+
+
+## Ваги рідкості для рівня (див. RARITY_BASE).
+static func rarity_weights(level: int) -> Array:
+	var w := []
+	for i in RARITY_BASE.size():
+		w.append(float(RARITY_BASE[i]) + float(RARITY_PER_LEVEL[i]) * level)
+	return w
+
+
+## Частка рідкості rarity серед речей рівня level, якщо рідкість не нижча за min_rarity (0..1).
+static func rarity_share(level: int, rarity: int, min_rarity: int = 0) -> float:
+	var w := rarity_weights(level)
+	if rarity < min_rarity or rarity >= w.size():
+		return 0.0
+	var total := 0.0
+	for i in range(min_rarity, w.size()):
+		total += float(w[i])
+	return float(w[rarity]) / total
+
+
 static func roll_rarity(wave: int, min_rarity: int = 0) -> int:
-	var w := [60.0, 28.0, 10.0 + 0.8 * wave, 2.0 + 0.3 * wave]
+	var w := rarity_weights(wave)
 	var total := 0.0
 	for i in range(min_rarity, 4):
 		total += w[i]

@@ -105,14 +105,26 @@ static func on_boss(combat, player, e) -> Dictionary:
 	return Uniques.make(id, int(e.level))
 
 
+## Шанс артефакта з боса: основа (гідний бос, слабкий чи супербос Башти) з поправкою на долю трофея.
+static func artifact_chance(base: float, luck: int) -> float:
+	if luck >= Artifacts.LUCK_SURE:
+		return 1.0
+	return minf(1.0, base * (1.0 + luck / Artifacts.LUCK_STEP))
+
+
 ## Бос упав: чи лишає він свій трофей-артефакт. Того, що вже лежить у торбі, удруге не дає.
+## Веде лічильник долі трофея для цього боса (player.art_luck).
 static func artifact_on_boss(combat, player, e) -> Dictionary:
 	if not is_lair_boss(combat, e):
 		return {}
 	var id: String = Artifacts.by_boss(e.kind)
 	if id == "" or Artifacts.has(player.inventory, id):
 		return {}
-	var ch: float = Artifacts.CHANCE_TOWER if combat.is_tower() else (Artifacts.CHANCE if worthy(combat, player, e) else Artifacts.CHANCE_GREY)
-	if randf() >= ch:
+	var base: float = Artifacts.CHANCE_TOWER if combat.is_tower() else (Artifacts.CHANCE if worthy(combat, player, e) else Artifacts.CHANCE_GREY)
+	var kind := str(e.kind)
+	var luck: int = int(player.art_luck.get(kind, 0))
+	if randf() >= artifact_chance(base, luck):
+		player.art_luck[kind] = luck + 1
 		return {}
+	player.art_luck.erase(kind)
 	return Artifacts.make(id)
