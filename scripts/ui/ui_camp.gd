@@ -292,8 +292,14 @@ static func _craft_item_actions(game, det: VBoxContainer, it: Dictionary) -> voi
 			var txt: String = fmt[0] % (("%." + str(fmt[1]) + "f") % it["affixes"][a])
 			det.add_child(UI.button("↻ " + txt, _do(game, "reforge", [it["uid"], a]), Vector2(370, 46), 15, CraftService.can_pay(p, cost)))
 	if CraftService.can_renew(w, it, p.level):
-		var rc := CraftService.renew_cost(it, p.level)
-		det.add_child(UI.button("Оновити до рівня %d\n%s" % [p.level, _craft_cost_text(rc)], _do(game, "renew", it["uid"]), Vector2(370, 70), 15, CraftService.can_pay(p, rc)))
+		# кожен рівень речі коштує окремо й дорожче за попередній: можна підняти на один або одразу до свого
+		var next_lvl: int = int(it["ilvl"]) + 1
+		var one := CraftService.renew_cost(it, next_lvl)
+		det.add_child(UI.label("Оновлення: рівень речі %d, твій %d. Кожен наступний рівень дорожчий." % [int(it["ilvl"]), p.level], 14, UI.MUTED, false))
+		det.add_child(UI.button("Оновити на один рівень, до %d\n%s" % [next_lvl, _craft_cost_text(one)], _do(game, "renew_one", it["uid"]), Vector2(370, 70), 15, CraftService.can_pay(p, one)))
+		if next_lvl < p.level:
+			var rc := CraftService.renew_cost(it, p.level)
+			det.add_child(UI.button("Оновити до свого рівня %d\n%s" % [p.level, _craft_cost_text(rc)], _do(game, "renew", it["uid"]), Vector2(370, 70), 15, CraftService.can_pay(p, rc)))
 
 
 # ---------- Кування ----------

@@ -125,6 +125,7 @@ func _run() -> void:
 	await _suite_gear_best()
 	await _suite_quick_raid()
 	await _suite_pickup_filter()
+	await _suite_renew_cost()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7915,6 +7916,121 @@ func _suite_skills_tab() -> void:
 
 
 # ======================= Повна торба, викинути й знищити, гортання з будь-якої точки =======================
+
+func _suite_renew_cost() -> void:
+	suite("Оновлення речей: ціна росте з кожним рівнем")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var CR = load("res://scripts/game/craft_service.gd")
+	var CampS = load("res://scripts/game/camp_service.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var leg := {"ilvl": 1, "rarity": 3}
+	# Кожен рівень дорожчий за попередній, від першого ж рівня й до 99-го, для кожної якості
+	var grows := true
+	var first_bad := ""
+	for r in 5:
+		var it := {"ilvl": 1, "rarity": r}
+		for lvl in range(2, 100):
+			if int(CR.renew_step(it, lvl)["gold"]) <= int(CR.renew_step(it, lvl - 1)["gold"]):
+				grows = false
+				first_bad = "якість %d, рівень %d" % [r, lvl]
+	check(grows, "кожен наступний рівень коштує більше за попередній, від 1-го до 99-го %s" % first_bad)
+	var g5: int = int(CR.renew_step(leg, 5)["gold"])
+	var g50: int = int(CR.renew_step(leg, 50)["gold"])
+	var g99: int = int(CR.renew_step(leg, 99)["gold"])
+	check(g99 == roundi(CR.RENEW_BASE + CR.RENEW_GOLD * 99 * 99) and g99 >= 30000 and g99 > g50 * 3 and g50 > g5 * 50, "рівень 99 відчутно дорогий: %d грн проти %d на 50-му й %d на 5-му" % [g99, g50, g5])
+	check(int(CR.renew_step(leg, 99)["iron"]) > int(CR.renew_step(leg, 5)["iron"]) and int(CR.renew_step(leg, 99)["trophy"]) > int(CR.renew_step(leg, 5)["trophy"]), "заліза й трофеїв на вищих рівнях теж треба більше")
+	var by_rarity := []
+	for r in 5:
+		by_rarity.append(int(CR.renew_step({"ilvl": 1, "rarity": r}, 60)["gold"]))
+	check(by_rarity[0] < by_rarity[1] and by_rarity[1] < by_rarity[2] and by_rarity[2] < by_rarity[3] and by_rarity[3] < by_rarity[4], "краща якість дорожча, золота найдорожча: %s" % str(by_rarity))
+	# Кілька рівнів одразу: сума за кожен рівень
+	var total: Dictionary = CR.renew_cost({"ilvl": 60, "rarity": 3}, 75)
+	var sum_gold := 0
+	var sum_iron := 0
+	for lvl in range(61, 76):
+		sum_gold += int(CR.renew_step(leg, lvl)["gold"])
+		sum_iron += int(CR.renew_step(leg, lvl)["iron"])
+	check(int(total["gold"]) == sum_gold and int(total["iron"]) == sum_iron and CR.renew_cost({"ilvl": 98, "rarity": 3}, 99) == CR.renew_step(leg, 99), "до свого рівня одразу: ціни всіх рівнів складаються (%d грн за 60→75)" % sum_gold)
+	# У кузні: на один рівень і одразу до свого
+	var w = load("res://scripts/game/world_state.gd").new()
+	CampS.state(w)["buildings"]["kuznia"] = 3
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 50
+	p.recalc()
+	var it: Dictionary = Data.gen_item(40, 3, "weapon", "sabre")
+	it["up"] = 3
+	p.add_item(it, true)
+	p.gold = 0
+	p.resources = {"iron": 9999, "trophy": 9999}
+	check(not CR.renew(w, p, it["uid"], 1) and int(it["ilvl"]) == 40, "без гривень річ не оновити")
+	var one: Dictionary = CR.renew_cost(it, 41)
+	p.gold = int(one["gold"]) + 5
+	var dmg0: float = it["base"]["flat_dmg"]
+	var sell0: int = Data.sell_price(it)
+	check(CR.renew(w, p, it["uid"], 1) and int(it["ilvl"]) == 41 and p.gold == 5 and int(p.resources["iron"]) == 9999 - int(one["iron"]) and int(p.resources["trophy"]) == 9999 - int(one["trophy"]) and it["base"]["flat_dmg"] > dmg0 and int(it["up"]) == 3, "на один рівень: річ 41-го, заплачено рівно за цей рівень, заточка лишилась")
+	check(Data.sell_price(it) > sell0, "вкладені гривні частково вертаються при продажу")
+	var rest: Dictionary = CR.renew_cost(it, 50)
+	p.gold = int(rest["gold"])
+	check(CR.renew(w, p, it["uid"]) and int(it["ilvl"]) == 50 and p.gold == 0 and not CR.can_renew(w, it, 50), "одразу до свого рівня: річ 50-го, заплачено суму за дев'ять рівнів")
+	# Золота річ: ті самі властивості, дорожче
+	var gold_it: Dictionary = Uniques.make("poias_baidy", 30)
+	p.add_item(gold_it, true)
+	var affix_keys: Array = gold_it["affixes"].keys()
+	var uc: Dictionary = CR.renew_cost(gold_it, 31)
+	p.gold = int(uc["gold"])
+	check(int(uc["gold"]) == roundi((CR.RENEW_BASE + CR.RENEW_GOLD * 31 * 31) * 1.5) and CR.renew(w, p, gold_it["uid"], 1) and int(gold_it["ilvl"]) == 31 and gold_it["affixes"].keys() == affix_keys, "золота річ оновлюється в півтора раза дорожче й не міняє властивостей")
+	# Кнопки в кузні
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var h = game.player
+	h.change_class("cossack")
+	h.level = 30
+	h.recalc()
+	CampS.state(game.world)["buildings"]["kuznia"] = 3
+	var far_it: Dictionary = Data.gen_item(20, 2, "head")
+	var near_it: Dictionary = Data.gen_item(29, 2, "belt")
+	h.add_item(far_it, true)
+	h.add_item(near_it, true)
+	var UiCamp = load("res://scripts/ui/ui_camp.gd")
+	var texts := func(item: Dictionary) -> Array:
+		var box := VBoxContainer.new()
+		UiCamp._craft_item_actions(game, box, item)
+		var out := []
+		for b in box.find_children("*", "Button", true, false):
+			out.append(b.text.split("\n")[0])
+		box.free()
+		return out
+	var tf: Array = texts.call(far_it)
+	var tn: Array = texts.call(near_it)
+	check("Оновити на один рівень, до 21" in tf and "Оновити до свого рівня 30" in tf, "стара річ: кнопки «на один рівень» і «до свого рівня» (%s)" % ", ".join(tf))
+	check("Оновити на один рівень, до 30" in tn and not tn.any(func(t): return str(t).begins_with("Оновити до свого рівня")), "річ на рівень нижче: лише одна кнопка")
+	h.gold = 10000000
+	h.resources = {"iron": 999, "trophy": 999}
+	game.camp_do("renew_one", far_it["uid"])
+	check(int(far_it["ilvl"]) == 21 and "тепер 21" in game.smith_msg, "кнопка піднімає річ на один рівень: «%s»" % game.smith_msg)
+	game.camp_do("renew", far_it["uid"])
+	check(int(far_it["ilvl"]) == 30, "кнопка піднімає річ одразу до свого рівня")
+	var rw := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Оновлення речі":
+				rw = str(e["text"])
+	check(WS._num(g99) in rw and WS._num(g5) in rw and "щораз дорожче" in rw and "на один рівень" in rw, "довідник пояснює ціну оновлення з числами")
+	p.free()
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
 
 func _suite_pickup_filter() -> void:
 	suite("Фільтр автопідбору")

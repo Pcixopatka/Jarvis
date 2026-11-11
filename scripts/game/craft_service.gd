@@ -97,33 +97,56 @@ static func reforge(world, player, uid: int, affix: String) -> String:
 
 # ---------- Оновлення до свого рівня ----------
 
+## Кожен рівень речі коштує окремо й щораз дорожче: гривні ростуть як квадрат рівня, від першого ж рівня.
+## Так підняти річ із 98-го на 99-й рівень відчутно б'є по кишені, а з 4-го на 5-й ще ні.
+## RENEW_RARITY — множник за якість: звичайна, добротна, рідкісна, легендарна, золота.
+const RENEW_BASE := 20
+const RENEW_GOLD := 4.0
+const RENEW_RARITY := [0.4, 0.6, 0.8, 1.0, 1.5]
+
+
+## Ціна підняти річ на один рівень, до рівня level з попереднього.
+static func renew_step(item: Dictionary, level: int) -> Dictionary:
+	var r: int = clampi(int(item["rarity"]), 0, RENEW_RARITY.size() - 1)
+	return {"gold": roundi((RENEW_BASE + RENEW_GOLD * level * level) * float(RENEW_RARITY[r])),
+		"iron": 2 + level / 5, "trophy": 1 + level / 40 + r / 3}
+
+
+## Ціна підняти річ до рівня lvl: сума за кожен рівень від її нинішнього.
 static func renew_cost(item: Dictionary, lvl: int) -> Dictionary:
-	var gap := maxi(1, lvl - int(item["ilvl"]))
-	return {"gold": (25 + 10 * lvl) * gap / 2 + 50, "iron": 3 + gap * 2, "trophy": 2 + int(item["rarity"])}
+	var out := {"gold": 0, "iron": 0, "trophy": 0}
+	for level in range(int(item["ilvl"]) + 1, maxi(lvl, int(item["ilvl"]) + 1) + 1):
+		var st := renew_step(item, level)
+		for k in out:
+			out[k] += int(st[k])
+	return out
 
 
 static func can_renew(world, item: Dictionary, lvl: int) -> bool:
 	return CampService.level(world, "kuznia") >= 3 and int(item["ilvl"]) < lvl and not item.has("artifact")
 
 
-## Ті самі властивості, але сила — як у речі рівня козака. Заточка зберігається.
-static func renew(world, player, uid: int) -> bool:
+## Ті самі властивості, але сила — як у речі вищого рівня. Заточка зберігається.
+## levels — на скільки рівнів підняти (0 — одразу до рівня козака).
+static func renew(world, player, uid: int, levels: int = 0) -> bool:
 	var it: Dictionary = player.find_item(uid)
 	if it.is_empty() or not can_renew(world, it, player.level):
 		return false
-	var cost := renew_cost(it, player.level)
+	var target: int = int(player.level) if levels <= 0 else mini(int(player.level), int(it["ilvl"]) + levels)
+	var cost := renew_cost(it, target)
 	if not can_pay(player, cost):
 		return false
 	_pay(player, cost)
+	it["spent"] = int(it.get("spent", 0)) + int(cost["gold"])
 	if it.has("unique"):
 		# золота річ не перекидає властивості: вони сталі, росте лише сила
-		load("res://scripts/data/uniques.gd").rescale(it, player.level)
+		load("res://scripts/data/uniques.gd").rescale(it, target)
 		player.recalc()
 		return true
-	it["ilvl"] = player.level
+	it["ilvl"] = target
 	var primary: String = Data.SLOT_PRIMARY[it["slot"]]
-	it["base"] = {primary: Data._primary_value(it["slot"], player.level, int(it["rarity"]))}
+	it["base"] = {primary: Data._primary_value(it["slot"], target, int(it["rarity"]))}
 	for a in it["affixes"].keys():
-		it["affixes"][a] = Data._roll_value(a, player.level, int(it["rarity"]))
+		it["affixes"][a] = Data._roll_value(a, target, int(it["rarity"]))
 	player.recalc()
 	return true

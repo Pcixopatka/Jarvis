@@ -2575,6 +2575,11 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("sharpen_ok", 0.03)
 				smith_msg = "Річ оновлено до твого рівня!"
 				smith_msg_color = UI.GOOD
+		"renew_one":
+			if CraftService.renew(world, player, arg, 1):
+				Audio.play("sharpen_ok", 0.03)
+				smith_msg = "Річ піднято на рівень: тепер %d" % int(player.find_item(arg)["ilvl"])
+				smith_msg_color = UI.GOOD
 		"chest_put":
 			if account.chest_full(CampService.level(world, "sklad")):
 				smith_msg = "Скриня повна"
