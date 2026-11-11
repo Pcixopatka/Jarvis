@@ -10,7 +10,7 @@ const StoryService := preload("res://scripts/game/story_service.gd")
 
 static func state(world) -> Dictionary:
 	# Заповнюємо наявний словник, а не підміняємо: хутір спільний на всіх персонажів (посилання з акаунта)
-	if world.camp.is_empty():
+	if not world.camp.has("buildings"):
 		world.camp["buildings"] = {}
 		world.camp["pasika_ts"] = Time.get_unix_time_from_system()
 	return world.camp
@@ -93,9 +93,14 @@ static func forge_chance_bonus(world) -> float:
 
 ## Застосовує пасивні бонуси будівель і наслідки сюжетних виборів до героя.
 static func apply_effects(world, player) -> void:
-	player.bag_bonus = bag_bonus(world)
+	player.bag_bonus = bag_bonus(world) + load("res://scripts/game/premium_service.gd").bag_bonus(world)  # склад на хуторі й універсал
 	player.potion_bonus = potion_bonus(world) + int(StoryService.effect(world, "potion_max"))
 	player.plague_resist = clampf(StoryService.effect(world, "plague_resist"), 0.0, 0.9)
+	load("res://scripts/game/costume_service.gd").check(world, player)  # вбрання, якого в роду нема, знімається
+	var PetS = load("res://scripts/game/pet_service.gd")
+	if str(player.pet) != "" and not PetS.owned(world, str(player.pet)):
+		player.pet = ""
+	player.pet_fx = PetS.fx(world, player)  # хист улюбленця, якого герой узяв із собою
 	load("res://scripts/game/kleinod_service.gd").apply(world, player)  # клейноди роду діють на кожного героя
 	load("res://scripts/game/peril_service.gd").apply(world, player)  # іменні звитяги за надважких босів
 

@@ -10,6 +10,8 @@ const EnemyScript := preload("res://scripts/entities/enemy.gd")
 const CompanionScript := preload("res://scripts/entities/companion.gd")
 const ProjectileScript := preload("res://scripts/entities/projectile.gd")
 const PickupScript := preload("res://scripts/entities/pickup.gd")
+const PetScript := preload("res://scripts/entities/pet.gd")
+const Pets := preload("res://scripts/data/pets.gd")
 const PortalScript := preload("res://scripts/entities/portal.gd")
 const FxSpriteScript := preload("res://scripts/world/fx_sprite.gd")
 const FloatTextScript := preload("res://scripts/world/float_text.gd")
@@ -624,7 +626,7 @@ func _update_ring(delta: float) -> void:
 	ring_stage += 1
 	cheer(2.0)
 	Audio.play("quest", 0.0)
-	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))
+	var heal_value := varenyk_heal()
 	if ring_stage >= int(Acts.RING_STAGES):
 		ring_done = true
 		field_cleared = true
@@ -916,6 +918,7 @@ func _setup_arena(companions: Array) -> void:
 	camera.global_position = player.global_position
 	camera.reset_smoothing()
 	_spawn_companions(companions)
+	_spawn_pet()
 
 
 func _arena_rect() -> Rect2:
@@ -967,6 +970,16 @@ func _spawn_companions(companions: Array) -> void:
 		c.position = player.position + CompanionScript.OFFSETS[c.index % CompanionScript.OFFSETS.size()]
 		entities.add_child(c)
 		companion_nodes.append(c)
+
+
+## Улюбленець героя (пес, кіт чи ворон) ходить за ним у бою. Лише для ока: у бійку не лізе.
+func _spawn_pet() -> void:
+	if not str(player.pet) in Pets.FOLLOWERS or is_duel():
+		return
+	var pet = PetScript.new()
+	pet.setup(self, player, str(player.pet))
+	pet.position = player.position + Vector2(-40, 24)
+	entities.add_child(pet)
 
 
 func _setup_atmosphere(biome: String) -> void:
@@ -1083,7 +1096,7 @@ func _spawn_room() -> void:
 	var en: Array = loc["enemies"]
 	# Рядова нечисть у печері на рівень нижча — головна загроза тут бос
 	var minion_level := maxi(1, int(loc["level"]))
-	for i in Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER:
+	for i in roundi((Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER) * float(loc.get("minions", 1.0))):
 		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 80, arena.position.y + arena.size.y * 0.55))
 		spawn_enemy(en[randi() % en.size()], minion_level, false, pos)
 		_maybe_elite(_last_enemy())
@@ -1096,6 +1109,15 @@ func _spawn_room() -> void:
 			b.hp = b.max_hp
 			b.damage *= float(loc.get("boss_dmg_mult", 1.0))
 			b.enrage_after = float(loc.get("enrage_after", 0.0)) + float(player.art.get("enrage", 0.0))  # «Громовий камінь» відсуває лють
+		elif loc.has("hunt"):
+			# Бос дня чи тижня: міцніший за звичайного боса свого рівня, з властивостями цього періоду (BossService.MODS)
+			var hb = _last_enemy()
+			hb.max_hp *= float(loc.get("boss_hp_mult", 1.0))
+			hb.hp = hb.max_hp
+			hb.damage *= float(loc.get("boss_dmg_mult", 1.0))
+			hb.speed *= float(loc.get("boss_speed_mult", 1.0))
+			if loc.has("enrage_after"):
+				hb.enrage_after = float(loc["enrage_after"]) + float(player.art.get("enrage", 0.0))
 		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
 	else:
 		Events.banner.emit("%s\nКімната %d/%d" % [loc["name"], room, loc["rooms"]], Color(1, 0.92, 0.7))
@@ -1266,7 +1288,7 @@ func _drop_loot(e: Node2D) -> void:
 		return
 	var pos: Vector2 = e.global_position
 	var ilvl: int = loc.get("level", 1)
-	var heal_value := int(20 * (1.0 + 0.5 * player.varenyk_bonus))
+	var heal_value := varenyk_heal()
 	if e.is_boss:
 		shake(14.0)
 		Audio.jingle("victory")
@@ -1324,9 +1346,9 @@ func _drop_loot(e: Node2D) -> void:
 			spawn_pickup(pos, "potion", 1)
 	else:
 		spawn_pickup(pos, "coin", e.xp_value)
-		if randf() < 0.05 * (1 + player.varenyk_bonus) * (1.0 + float(festive.get("varenyk", 0.0))):
+		if randf() < Data.VARENYK_DROP_CHANCE * (1 + player.varenyk_bonus) * (1.0 + float(festive.get("varenyk", 0.0))):
 			spawn_pickup(pos, "varenyk", heal_value)
-		if randf() < Camp.RESOURCE_DROP_CHANCE * drop_boost:
+		if randf() < Camp.RESOURCE_DROP_CHANCE * drop_boost * (1.0 + float(player.pet_fx.get("res", 0.0))):  # ворон бачить, де лежить добро
 			spawn_pickup(pos, "res", _res_amount(1), {"res": _roll_resource()})
 		if randf() < Data.POTION_DROP_CHANCE:
 			spawn_pickup(pos, "potion", 1)
@@ -1344,6 +1366,11 @@ func _drop_loot(e: Node2D) -> void:
 		float_text(pos + Vector2(0, -60), SoulService.soul_name(soul_id), scol)
 		Events.banner.emit("%s!\nУ торбинці душ. Коваль проб'є для неї гніздо" % SoulService.soul_name(soul_id), scol)
 		Audio.play("quest", 0.0)
+
+
+## Скільки здоров'я лікує вареник: частка здоров'я героя; перк «Бабусині вареники» робить його ситнішим.
+func varenyk_heal() -> int:
+	return int(maxf(float(Data.VARENYK_MIN), player.max_hp * Data.VARENYK_HEAL) * (1.0 + 0.5 * player.varenyk_bonus))
 
 
 ## Річ із нечисті. На Катерини доля всміхається: частина речей на рідкість краща.

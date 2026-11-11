@@ -102,6 +102,11 @@ const POTION_HEAL := 0.4  # частка здоров'я, яку відновл�
 const POTION_CD := 6.0  # секунд між ковтками
 const POTION_START := 2
 const POTION_DROP_CHANCE := 0.02
+## Вареник із нечисті лікує частку здоров'я героя (не менш як VARENYK_MIN): раніше це були ті самі 20
+## здоров'я на будь-якому рівні, і на високих рівнях вареник нічого не важив. З боса вареник удвічі ситніший.
+const VARENYK_HEAL := 0.08
+const VARENYK_MIN := 20
+const VARENYK_DROP_CHANCE := 0.05
 ## Зілля наснаги: окремий запас, відновлює частку наснаги (здоров'я не лікує).
 const MANA_POTION_MAX := 3  # волхви несуть на одне більше
 const MANA_POTION_RESTORE := 0.7

@@ -230,7 +230,7 @@ static func _smith(game) -> Control:
 	det.add_child(UI.label("Заточка робить усі бонуси речі сильнішими\n(+%d%% за рівень, максимум +%d).\nЗ +%d невдача знижує заточку на 1." % [roundi(Data.UPGRADE_BONUS * 100), Data.MAX_UPGRADE, Data.SHARPEN_RISK_FROM], 16, UI.MUTED, false))
 	var safe_n: int = game.AdRewards.safe_tokens(game.world)
 	det.add_child(UI.label("Безпечних заточок: %d" % safe_n, 16, UI.TEXT, false))
-	det.add_child(UI.button("Реклама: +1 безпечна заточка (сьогодні ще %d)" % game.AdRewards.safe_left_today(game.world), _do(game, "ad_safe"), Vector2(360, 52), 15, game.AdRewards.safe_left_today(game.world) > 0))
+	det.add_child(UI.button(game.AdRewards.safe_button_text(game.world), _do(game, "ad_safe"), Vector2(360, 52), 15, game.AdRewards.safe_left_today(game.world) > 0))
 	var it: Dictionary = p.find_item(sel) if sel > 0 else {}
 	if it.is_empty():
 		det.add_child(UI.label("Обери річ для заточки.", 20, UI.MUTED, false))

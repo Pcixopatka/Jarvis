@@ -9,6 +9,7 @@ const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Elites := preload("res://scripts/data/elites.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
+const Premium := preload("res://scripts/game/premium_service.gd")
 
 const MIN_CLEARS := 3  # скільки разів треба пройти місце по-справжньому, щоб відкрився швидкий похід
 const PER_DAY := 10  # швидких походів на день
@@ -24,8 +25,13 @@ static func used_today(world) -> int:
 	return int(world.ads.get("quick_used", 0)) if str(world.ads.get("quick_day", "")) == _today() else 0
 
 
+## Скільки швидких походів на день: з Гетьманським універсалом більше.
+static func per_day(world) -> int:
+	return Premium.QUICK_PER_DAY if Premium.active(world) else PER_DAY
+
+
 static func left_today(world) -> int:
-	return maxi(0, PER_DAY - used_today(world))
+	return maxi(0, per_day(world) - used_today(world))
 
 
 ## Чи буває в цьому місці швидкий похід узагалі: звичайна місцевість чи печера, не Глибини, не Башта й не надважка печера.
@@ -46,7 +52,7 @@ static func block_reason(world, player, loc_id: String) -> String:
 	if int(Data.LOCATIONS[loc_id]["level"]) > int(player.level):
 		return "місце ще надто сильне для тебе"
 	if left_today(world) <= 0:
-		return "на сьогодні скінчились, завтра буде ще %d" % PER_DAY
+		return "на сьогодні скінчились, завтра буде ще %d" % per_day(world)
 	return ""
 
 

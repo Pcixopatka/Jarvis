@@ -46,6 +46,7 @@ var spec_trial := {}  # випробування в наставника (див
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
 var heroes := {}  # побратими: зустріч, дружба, особисті завдання (див. HeroService)
+var boss_hunt := {}  # бос дня й бос тижня: кого вже переможено й найкращий час (див. BossService)
 var peril := {}  # надважкі печери: пройдені, найкращий час, звання (див. PerilService)
 
 
@@ -265,12 +266,13 @@ func has_companion(type: String) -> bool:
 # ---------- Збереження ----------
 
 func to_dict() -> Dictionary:
-	return {"peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
+	return {"boss_hunt": boss_hunt, "peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
 		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "ring": ring, "muster": muster, "trade": trade, "outdoors": outdoors, "tavern": tavern, "way": way}
 
 
 func from_dict(d: Dictionary) -> void:
 	peril = d.get("peril", {})
+	boss_hunt = d.get("boss_hunt", {})
 	loyalty = d.get("loyalty", {})
 	boards = d.get("boards", {})
 	quests = d.get("quests", [])

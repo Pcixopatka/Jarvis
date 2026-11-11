@@ -136,6 +136,10 @@ func _run() -> void:
 	await _suite_skill_engine_game()
 	_suite_strilets()
 	await _suite_strilets_game()
+	await _suite_premium()
+	await _suite_boss_hunt()
+	await _suite_costumes()
+	await _suite_pets()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -4946,7 +4950,7 @@ func _suite_escort_game() -> void:
 	texts = []
 	for b in game.hud.map_panel.find_children("*", "Button", true, false):
 		texts.append(b.text)
-	var place_btns := texts.filter(func(t): return not str(t).begins_with("×2"))
+	var place_btns := texts.filter(func(t): return not str(t).begins_with("×2") and not str(t).begins_with("Боси дня"))
 	check("Вирушити" in texts and place_btns.size() == 1, "в іншій місцевості кнопки супроводу нема")
 	check(texts.any(func(t): return str(t).begins_with("×2 досвіду")) and texts.any(func(t): return str(t).begins_with("×2 здобичі")), "реклама ×2 досвіду і ×2 здобичі видно й з обраним місцем: %s" % str(texts))
 	var ad_sc: ScrollContainer = game.hud.map_panel.find_children("*", "ScrollContainer", true, false)[0]
@@ -11263,7 +11267,7 @@ func _suite_shop_game() -> void:
 	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 	for i in tc.get_tab_count():
 		tabs.append(tc.get_tab_title(i))
-	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі"], "крамницю відкрито: вкладки %s" % str(tabs))
+	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Вбрання", "Універсал"], "крамницю відкрито: вкладки %s" % str(tabs))
 	game.shop_do("pack", "coins_1200")
 	await _frames(3)
 	check(SH.coins(w) == 1200 and int(game.account.shop["coins"]) == 1200, "набір червінців оплачено й зараховано")
@@ -11745,6 +11749,11 @@ func _suite_strilets() -> void:
 	for a in load("res://scripts/data/wiki_data.gd").BASICS:
 		if str(a["title"]).begins_with("Стрільці"):
 			shooter_art = str(a["text"])
+	var potion_art := ""
+	for a in load("res://scripts/data/wiki_data.gd").BASICS:
+		if str(a["title"]) == "Зілля й вареники":
+			potion_art = str(a["text"])
+	check("%d%% здоров'я, вареник" % roundi(Data.VARENYK_HEAL * 100.0) in potion_art and "шансом %d%%, з еліти" % roundi(Data.POTION_DROP_CHANCE * 100.0) in potion_art and "шансом %d%% і одразу" % roundi(Data.VARENYK_DROP_CHANCE * 100.0) in potion_art and ("%.1f%%" % (Data.MANA_POTION_DROP_CHANCE * 100.0)).replace(".", ",") in potion_art, "довідник називає справжні шанси зілля й вареників")
 	check("перші %d очок" % int(Data.AGI_ASPD_SOFT) in shooter_art and "Батурині" in str(load("res://scripts/data/wiki_data.gd").BASICS), "довідник розповідає про стрільців і третю дорогу")
 	# ---- Камінь долі: сусідні дороги ----
 	check("samopalnyk" in Stones.siblings(v) and "opryshok" in Stones.siblings(v) and not "plastun" in Stones.siblings(v), "Алатир-камінь міняє спеціалізацію в межах гілки стрільців")
@@ -11859,6 +11868,12 @@ func _suite_strilets_game() -> void:
 		if z.get_script() == c.ZoneScript and z.kind == "falcon" and z != bird:
 			strong = z
 	check(strong != null and strong.damage > base_dmg * 1.25, "«Гострі кігті» підсилюють сокола")
+	# ---- Вареник лікує частку здоров'я ----
+	p.varenyk_bonus = 0
+	check(c.varenyk_heal() == int(p.max_hp * Data.VARENYK_HEAL) and c.varenyk_heal() > Data.VARENYK_MIN * 5, "вареник лікує %d%% здоров'я героя (%d), а не 20 на будь-якому рівні" % [roundi(Data.VARENYK_HEAL * 100.0), c.varenyk_heal()])
+	p.varenyk_bonus = 2
+	check(c.varenyk_heal() == int(p.max_hp * Data.VARENYK_HEAL * 2.0), "перк «Бабусині вареники» робить вареник ситнішим")
+	p.varenyk_bonus = 0
 	# ---- Пістолі й постріл упритул ----
 	game.enter_map()
 	await _frames(2)
@@ -11895,3 +11910,519 @@ func _suite_strilets_game() -> void:
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
+
+
+func _suite_premium() -> void:
+	suite("Гетьманський універсал: преміум на місяць")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var PR = load("res://scripts/game/premium_service.gd")
+	var AR = load("res://scripts/game/ad_rewards.gd")
+	var QS = load("res://scripts/game/quick_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var Camp = load("res://scripts/game/camp_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	PR.now_override = 1800000000.0
+	var w = WorldState.new()
+	var p = _new_player()
+	check(not PR.active(w) and PR.days_left(w) == 0 and "бракує" in PR.block_reason(w) and not PR.buy(w), "без червінців універсал не купити")
+	check(AR.xp_mult(w) == 1.0 and AR.drop_mult(w) == 1.0 and AR.safe_left_today(w) == AR.SAFE_PER_DAY and QS.left_today(w) == QS.PER_DAY and PR.stipend(w) == 0, "без універсалу все як було")
+	SH.state(w)["coins"] = PR.PRICE + 100
+	check(PR.buy(w) and PR.active(w) and PR.days_left(w) == PR.DAYS and SH.coins(w) == 100 and int(w.shop["spent"]) == PR.PRICE, "куплено на %d днів за %d червінців" % [PR.DAYS, PR.PRICE])
+	check(not PR.buy(w) and PR.days_left(w) == PR.DAYS, "на друге продовження червінців бракує")
+	# без реклами: подвоєння діють постійно, межі більші
+	check(AR.xp_mult(w) == 2.0 and AR.drop_mult(w) == 2.0 and not AR.can_boost(w, "xp2") and "універсал" in AR.boost_button_text(w, "drop2"), "×2 досвіду й ×2 здобичі діють без реклами")
+	w.boosts["xp2"] = 600.0
+	AR.tick(w, 100.0)
+	check(AR.xp2_left(w) == 600.0, "години, зароблені рекламою, з універсалом не згорають")
+	check(AR.safe_left_today(w) == PR.SAFE_PER_DAY and QS.left_today(w) == PR.QUICK_PER_DAY and QS.per_day(w) == PR.QUICK_PER_DAY, "на день %d швидких походів і %d безпечних заточок" % [PR.QUICK_PER_DAY, PR.SAFE_PER_DAY])
+	for i in PR.SAFE_PER_DAY:
+		AR.grant_safe(w)
+	check(AR.safe_tokens(w) == PR.SAFE_PER_DAY and not AR.grant_safe(w) and AR.safe_left_today(w) == 0 and "Універсал" in AR.safe_button_text(w), "денна межа безпечних заточок усе одно є")
+	# платня
+	check(PR.stipend(w) == PR.STIPEND and SH.coins(w) == 100 + PR.STIPEND and PR.stipend(w) == 0, "платня раз на день")
+	PR.now_override += PR.DAY
+	check(PR.stipend(w) == PR.STIPEND and PR.days_left(w) == PR.DAYS - 1, "наступного дня платня знову")
+	# торба й дорога
+	Camp.apply_effects(w, p)
+	check(p.bag_size() == Data.INVENTORY_SIZE + PR.BAG_BONUS and PR.travel_mult(w) == PR.TRAVEL_MULT, "торба більша на %d місць, дорога швидша" % PR.BAG_BONUS)
+	# продовження додає дні
+	SH.state(w)["coins"] = PR.PRICE
+	check(PR.buy(w) and PR.days_left(w) == 2 * PR.DAYS - 1 and int(w.shop["premium_bought"]) == 2, "продовження додає дні до решти")
+	# скінчився
+	PR.now_override += 2.0 * PR.DAYS * PR.DAY
+	Camp.apply_effects(w, p)
+	check(not PR.active(w) and AR.xp_mult(w) == 2.0 and AR.safe_per_day(w) == AR.SAFE_PER_DAY and QS.per_day(w) == QS.PER_DAY and p.bag_size() == Data.INVENTORY_SIZE and PR.stipend(w) == 0, "універсал скінчився: межі звичайні, лишились години з реклами")
+	AR.tick(w, 100.0)
+	check(AR.xp2_left(w) == 500.0, "без універсалу годинник подарунка знову йде")
+	# довідник
+	var found := false
+	for e in WS._entries("basics"):
+		if str(e["title"]) == PR.NAME:
+			found = str(PR.PRICE) in str(e["text"]) and str(PR.QUICK_PER_DAY) in str(e["text"]) and "Автобій" in str(e["text"])
+	check(found, "довідник описує універсал із числами")
+	# ---- У грі ----
+	PR.now_override = 1800000000.0
+	var ads = root.get_node("Ads")
+	ads.instant = false
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way"]:
+		gw.hints[k] = true
+	game.player.change_class("cossack")
+	game.player.level = 30
+	game.player.recalc()
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	SH.state(gw)["coins"] = PR.PRICE
+	game.enter_map()
+	await _frames(2)
+	game.open_shop(game.enter_map)
+	await _frames(2)
+	game.shop_do("premium", "")
+	await _frames(2)
+	check(game.shop_confirm == "premium" and not PR.active(gw), "перший дотик лише просить підтвердити")
+	game.shop_do("premium", "")
+	await _frames(2)
+	check(PR.active(gw) and SH.coins(gw) == PR.STIPEND and game.player.bag_size() == Data.INVENTORY_SIZE + PR.BAG_BONUS, "куплено в крамниці: діє, платня за сьогодні, торба більша")
+	var seen := false
+	for l in game.hud.screen_root.find_children("*", "Label", true, false):
+		seen = seen or "Лишилось днів: %d" % PR.DAYS in l.text
+	check(seen, "вкладка «Універсал» показує, скільки днів лишилось")
+	game.close_shop()
+	await _frames(2)
+	# реклама не потрібна
+	var views0: int = ads.views
+	var got := [false]
+	game._ad("quick", func(ok: bool): got[0] = ok)
+	check(got[0] and not ads.is_busy() and ads.views == views0, "нагорода за рекламу дається одразу, без реклами")
+	gw.cleared["wild_field"] = QS.MIN_CLEARS
+	var xp0: int = game.player.xp
+	game.quick_raid("wild_field")
+	await _frames(3)
+	check(QS.used_today(gw) == 1 and QS.left_today(gw) == PR.QUICK_PER_DAY - 1 and not ads.is_busy() and (game.player.xp != xp0 or game.player.level > 30), "швидкий похід одним дотиком")
+	var f := FileAccess.open(TEST_ACCOUNT, FileAccess.READ)
+	var saved: Dictionary = f.get_var() if f != null else {}
+	check(float(saved.get("shop", {}).get("premium_until", 0.0)) > PR.now(), "універсал збережено у файлі роду: діє для всіх героїв")
+	ads.instant = true
+	PR.now_override = -1.0
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_boss_hunt() -> void:
+	suite("Бос дня й бос тижня")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var BS = load("res://scripts/game/boss_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var day0 := 1800000000 - 1800000000 % 86400 + 3600
+	CS.now_override = day0
+	# ---- Дані ----
+	var pool_ok := true
+	for b in BS.POOL:
+		pool_ok = pool_ok and Data.BOSS_NAMES.has(b) and not BS.home_of(b).is_empty() and str(BS.home_of(b)["boss"]) == b
+	check(pool_ok and BS.POOL.size() >= 12, "кожен бос зі списку має ім'я й рідне лігво (%d босів)" % BS.POOL.size())
+	var mods_ok := true
+	for m in BS.MOD_ORDER:
+		mods_ok = mods_ok and BS.MODS.has(m) and str(BS.MODS[m]["name"]) != "" and str(BS.MODS[m]["desc"]) != ""
+	check(mods_ok and BS.MOD_ORDER.size() == BS.MODS.size(), "властивості босів описано")
+	# ---- Вибір за датою ----
+	var d1: String = BS.boss_id("day")
+	var w1: String = BS.boss_id("week")
+	check(d1 in BS.POOL and w1 in BS.POOL and d1 != w1 and BS.boss_id("day") == d1, "бос дня й бос тижня різні й сталі протягом періоду: %s, %s" % [d1, w1])
+	check(BS.mods("day").size() == 1 and BS.mods("week").size() == 2 and BS.mods("week") == BS.mods("week") and BS.mods("week")[0] != BS.mods("week")[1], "у боса дня одна властивість, у боса тижня дві різні")
+	var seen := {}
+	var seen_mods := {}
+	for i in 40:
+		CS.now_override = day0 + i * 86400
+		seen[BS.boss_id("day")] = true
+		seen_mods[BS.mods("day")[0]] = true
+	check(seen.size() >= 8 and seen_mods.size() == BS.MOD_ORDER.size(), "за сорок днів боси й властивості міняються (%d босів, %d властивостей)" % [seen.size(), seen_mods.size()])
+	CS.now_override = day0
+	# ---- Правила ----
+	var w = WorldState.new()
+	var p = _new_player()
+	check(BS.block_reason(w, p, "day") != "" and BS.available(w, p) == 0, "селянин на боса не йде")
+	p.change_class("cossack")
+	p.level = int(BS.MIN_LEVEL["day"]) - 1
+	check("рівня" in BS.block_reason(w, p, "day"), "бос дня відкривається з %d-го рівня" % int(BS.MIN_LEVEL["day"]))
+	p.level = int(BS.MIN_LEVEL["day"])
+	check(BS.block_reason(w, p, "day") == "" and BS.block_reason(w, p, "week") != "" and BS.available(w, p) == 1, "бос тижня відкривається пізніше")
+	p.level = 60
+	p.recalc()
+	var L: Dictionary = BS.loc_for(p, "week")
+	check(L["type"] == "dungeon" and int(L["rooms"]) == 1 and int(L["level"]) == 60 and L["boss"] == w1 and L["hunt"] == "week" and not L["enemies"].is_empty(), "бій: печера на одну кімнату, бос рівня героя")
+	var hp_want: float = float(BS.HP_MULT["week"])
+	var dmg_want: float = float(BS.DMG_MULT["week"])
+	for m in BS.mods("week"):
+		hp_want *= float(BS.MODS[m].get("boss_hp_mult", 1.0))
+		dmg_want *= float(BS.MODS[m].get("boss_dmg_mult", 1.0))
+	check(is_equal_approx(float(L["boss_hp_mult"]), hp_want) and is_equal_approx(float(L["boss_dmg_mult"]), dmg_want), "властивості множать силу боса (здоров'я ×%.2f, удар ×%.2f)" % [hp_want, dmg_want])
+	# ---- Перемога й період ----
+	var gold0: int = p.gold
+	var tr0: int = int(p.resources.get("trophy", 0))
+	var r: Dictionary = BS.on_win(w, p, "day", 83.4)
+	check(BS.done(w, "day") and p.gold == gold0 + BS.gold_for("day", 60) and int(p.resources["trophy"]) == tr0 + int(BS.TROPHIES["day"]) and r["items"].size() == 1 and int(r["items"][0]["rarity"]) == 3, "бос дня: гривні, трофеї й легендарна річ")
+	check(BS.best_time(w, d1) == 83 and BS.time_text(83) == "1:23" and "уже переможено" in BS.block_reason(w, p, "day") and BS.available(w, p) == 1, "переможеного сьогодні вдруге не викличеш; час запам'ятано")
+	var rw: Dictionary = BS.on_win(w, p, "week", 200.0)
+	var gold_item := false
+	for it in rw["items"]:
+		gold_item = gold_item or it.has("unique")
+	check(BS.done(w, "week") and rw["items"].size() == BS.WEEK_ITEMS + 1 and gold_item and BS.available(w, p) == 0, "бос тижня: дві легендарні речі й золота")
+	CS.now_override = day0 + 86400
+	check(not BS.done(w, "day") and int(BS.state(w)["day_wins"]) == 1, "наступного дня виходить новий бос дня")
+	var week_same: bool = CS.week_key(day0) == CS.week_key(day0 + 86400)
+	check(BS.done(w, "week") == week_same, "бос тижня чекає нового тижня")
+	CS.now_override = day0 + 8 * 86400
+	check(not BS.done(w, "week") and int(BS.state(w)["week_wins"]) == 1, "за тиждень виходить новий бос тижня")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	check(int(w2.boss_hunt.get("day_wins", 0)) == 1 and int(w2.boss_hunt["best"][d1]) == 83, "стан босів зберігається з героєм")
+	# ---- Досягнення, рекорди, довідник ----
+	var ach := 0
+	for a in Ach.ACHIEVEMENTS:
+		if str(a["stat"]) in ["boss_day", "boss_week"]:
+			ach += 1
+	check(ach >= 4 and Acts.RECORDS.has("boss_day") and "boss_week" in Acts.RECORD_ORDER and load("res://scripts/game/record_service.gd").hero_values(w, p)["boss_day"] == 1, "досягнення й рекорди за босів")
+	var art := ""
+	for e in WS._entries("bosses"):
+		if str(e["title"]) == "Бос дня й бос тижня":
+			art = str(e["text"])
+	var art_ok := art != ""
+	for m in BS.MOD_ORDER:
+		art_ok = art_ok and str(BS.MODS[m]["name"]) in art
+	check(art_ok and str(int(BS.GOLD_PER_LEVEL["week"])) in art, "довідник описує босів і всі властивості")
+	# ---- У грі ----
+	CS.now_override = day0
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gp = game.player
+	var gw = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "boss_hunt", "dungeon"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	while gp.level < 40:
+		gp.add_xp(gp.xp_next - gp.xp)
+	gp.stats["str"] = 400
+	gp.stats["vit"] = 400
+	gp.recalc()
+	gp.hp = gp.max_hp
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	game.enter_map()
+	await _frames(2)
+	var here: String = game.map_here
+	var foot_btn = null
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text.begins_with("Боси дня й тижня"):
+			foot_btn = b
+	check(foot_btn != null and "чекають: 2" in foot_btn.text, "на мапі є кнопка босів із лічильником")
+	foot_btn.pressed.emit()
+	await _frames(2)
+	var go_btns := []
+	for b in game.hud.map_panel.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text == "До бою":
+			go_btns.append(b)
+	check(game.map_bosses and go_btns.size() == 2, "панель показує обох босів із кнопкою «До бою»")
+	go_btns[0].pressed.emit()
+	await _frames(4)
+	var c = game.combat
+	var boss = null
+	for e in get_nodes_in_group("enemies"):
+		if e.is_boss:
+			boss = e
+	check(game.state == game.State.PLAYING and c.loc.get("hunt", "") == "day" and boss != null and boss.kind == BS.boss_id("day") and int(boss.level) == gp.level and game.map_here == here, "бій із босом дня почався: бос рівня героя, герой на мапі лишився на місці")
+	var cleared0: int = int(gw.cleared.get("hlybyny", 0))
+	var depth0: Dictionary = gw.depths.duplicate()
+	for e in get_nodes_in_group("enemies"):
+		if not e.is_boss:
+			e.take_damage(e.max_hp * 100.0, Vector2.ZERO)
+	await _frames(3)
+	var guard := 0
+	while is_instance_valid(boss) and not boss.dead and guard < 40:
+		boss.take_damage(boss.max_hp * 100.0, Vector2.ZERO)
+		await _frames(3)
+		for e in get_nodes_in_group("enemies"):
+			if is_instance_valid(e) and not e.dead:
+				e.take_damage(e.max_hp * 100.0, Vector2.ZERO)
+		guard += 1
+	await _frames(30)
+	check(BS.done(gw, "day") and int(gw.stats.get("boss_day", 0)) == 1 and c.portal != null, "боса дня переможено: зараховано, відкрито вихід")
+	check(int(gw.cleared.get("hlybyny", 0)) == cleared0 and gw.depths == depth0, "Глибини зарази цей бій не зачіпає")
+	var drops := 0
+	for n in c.entities.get_children():
+		if n.get_script() == c.PickupScript and n.kind == "item" and int(n.item.get("rarity", 0)) == 3:
+			drops += 1
+	check(drops >= 1 or gp.inventory.size() > 0, "нагородна річ упала біля героя")
+	game.enter_map()
+	await _frames(3)
+	check(game.map_here == here and game.state == game.State.MAP, "після бою герой там само на мапі")
+	game.start_boss("day")
+	await _frames(2)
+	check(game.state == game.State.MAP, "удруге за день боса дня не викликати")
+	CS.now_override = 0
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_costumes() -> void:
+	suite("Вбрання героя")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Cost = load("res://scripts/data/costumes.gd")
+	var CS = load("res://scripts/game/costume_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var Camp = load("res://scripts/game/camp_service.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	# ---- Дані й листи ----
+	var sheets_ok := true
+	for id in Cost.ORDER:
+		sheets_ok = sheets_ok and Cost.DEFS.has(id) and str(Cost.DEFS[id]["name"]) != "" and int(Cost.DEFS[id]["price"]) > 0 and GfxS.has(Cost.plain(id))
+		for wt in Cost.WEAPONS:
+			sheets_ok = sheets_ok and GfxS.has(Cost.sprite(id, wt))
+	check(sheets_ok and Cost.ORDER.size() == Cost.DEFS.size() and Cost.ORDER.size() >= 5, "кожне вбрання має назву, ціну й листи для всієї зброї (%d вбрань)" % Cost.ORDER.size())
+	var all_weapons := true
+	for wt in Data.WEAPON_TYPES:
+		all_weapons = all_weapons and wt in Cost.WEAPONS
+	check(all_weapons, "вбрання намальовано для кожного виду зброї в грі")
+	# ---- Купівля й вдягання ----
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	var sabre: Dictionary = Data.gen_item(10, 1, "weapon", "sabre")
+	p.add_item(sabre, true)
+	p.equip(sabre["uid"])
+	p.recalc()
+	var look0: String = p.sprite_id()
+	var power0: float = Power.score(p)
+	var first: String = Cost.ORDER[0]
+	check("бракує" in CS.block_reason(w, first) and not CS.buy(w, p, first) and not CS.wear(w, p, first) and p.costume == "", "без червінців вбрання не купити й не вдягнути")
+	SH.state(w)["coins"] = CS.price(first) + 10
+	check(CS.buy(w, p, first) and CS.owned(w, first) and SH.coins(w) == 10 and p.costume == first, "куплено: вбрання в роду, герой одразу вдягнув")
+	check(p.sprite_id() == Cost.sprite(first, "sabre") and p.sprite_id() != look0, "постать героя змінилась: %s" % p.sprite_id())
+	p.recalc()
+	check(is_equal_approx(Power.score(p), power0), "сили героя вбрання не міняє")
+	check(CS.block_reason(w, first) == "уже куплено" and not CS.buy(w, p, first) and SH.coins(w) == 10, "удруге те саме не купити")
+	var bow: Dictionary = Data.gen_item(10, 1, "weapon", "bow")
+	p.change_class("strilets")
+	p.add_item(bow, true)
+	p.equip(bow["uid"])
+	check(p.sprite_id() == Cost.sprite(first, "bow"), "зброя в руці лишається своя: тепер лук")
+	check(CS.wear(w, p, "") and p.sprite_id() == "strilets_bow", "вбрання знято: вигляд класу")
+	# ---- Рід і збереження ----
+	var p2 = _new_player()
+	check(CS.wear(w, p2, first) and p2.sprite_id().begins_with("costume_" + first) and GfxS.has(p2.sprite_id()), "інший герой роду вдягає куплене без оплати: %s" % p2.sprite_id())
+	var p3 = _new_player()
+	p3.from_dict(p2.to_dict())
+	check(p3.costume == first, "вдягнене вбрання зберігається з героєм")
+	var w2 = WorldState.new()
+	Camp.apply_effects(w2, p3)
+	check(p3.costume == "", "у роду без цього вбрання воно знімається")
+	# ---- Довідник ----
+	var art := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Вбрання героя":
+			art = str(e["text"])
+	var art_ok := art != ""
+	for id in Cost.ORDER:
+		art_ok = art_ok and str(Cost.DEFS[id]["name"]) in art and str(int(Cost.DEFS[id]["price"])) in art
+	check(art_ok, "довідник перелічує всі вбрання з цінами")
+	# ---- У грі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way"]:
+		gw.hints[k] = true
+	game.player.change_class("cossack")
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	var top: String = Cost.ORDER[Cost.ORDER.size() - 1]
+	SH.state(gw)["coins"] = CS.price(top)
+	game.enter_map()
+	await _frames(2)
+	game.open_shop(game.enter_map)
+	await _frames(2)
+	game.shop_do("costume", top)
+	await _frames(2)
+	check(game.shop_confirm == "costume:" + top and not CS.owned(gw, top), "перший дотик лише просить підтвердити")
+	game.shop_do("costume", top)
+	await _frames(2)
+	check(CS.owned(gw, top) and game.player.costume == top and SH.coins(gw) == 0, "куплено в крамниці й вдягнено")
+	var btn_texts := []
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		btn_texts.append(b.text)
+	check("Зняти" in btn_texts, "куплене вбрання має кнопку «Зняти»")
+	game.shop_do("costume", top)
+	await _frames(2)
+	check(game.player.costume == "", "зняли")
+	game.shop_do("costume", top)
+	await _frames(2)
+	check(game.player.costume == top and game._peace_sheet("plain") == Cost.plain(top) and game._peace_sheet("hunter") == Cost.sprite(top, "bow"), "на рибалці й полюванні герой теж у вбранні")
+	game.close_shop()
+	await _frames(2)
+	var f := FileAccess.open(TEST_ACCOUNT, FileAccess.READ)
+	var saved: Dictionary = f.get_var() if f != null else {}
+	check(bool(saved.get("shop", {}).get("costumes", {}).get(top, false)), "куплене вбрання збережено у файлі роду")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_pets() -> void:
+	suite("Улюбленці")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Pets = load("res://scripts/data/pets.gd")
+	var PS = load("res://scripts/game/pet_service.gd")
+	var Camp = load("res://scripts/game/camp_service.gd")
+	var CampD = load("res://scripts/data/camp_data.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	# ---- Дані ----
+	var data_ok := true
+	var stats := {}
+	for id in Pets.ORDER:
+		var D: Dictionary = Pets.DEFS[id]
+		stats[D["stat"]] = true
+		data_ok = data_ok and str(D["name"]) != "" and "%d" in str(D["text"]) and Pets.value(id, Pets.MAX_LEVEL) > Pets.value(id, 1) and Pets.value(id, 1) > 0.0 and int(Pets.cost(id, 2)["gold"]) == 2 * int(Pets.cost(id, 1)["gold"])
+		for r in D["res"]:
+			data_ok = data_ok and (CampD.RESOURCES.has(r) or r == CampD.TROPHY)
+	check(data_ok and Pets.ORDER.size() == Pets.DEFS.size() and stats.size() == 4, "чотири улюбленці з різним хистом, ціни ростуть зі ступенем")
+	var goal_ok := false
+	for a in Ach.ACHIEVEMENTS:
+		if str(a["id"]) == "pet_20":
+			goal_ok = int(a["goal"]) == Pets.ORDER.size() * Pets.MAX_LEVEL
+	check(goal_ok, "досягнення «Повна стайня» рахує всіх улюбленців і ступені")
+	# ---- Купівля, годування, вибір ----
+	var w = WorldState.new()
+	var p = _new_player()
+	p.change_class("cossack")
+	p.recalc()
+	var power0: float = Power.score(p)
+	var r0: float = p.pickup_radius
+	var xp0: float = p.xp_mult
+	check(not PS.upgrade(w, p, "pes") and not PS.choose(w, p, "pes") and PS.fx(w, p).is_empty(), "без грошей улюбленця не взяти")
+	p.gold = 10000000
+	p.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	var c1: Dictionary = Pets.cost("pes", 1)
+	check(PS.upgrade(w, p, "pes") and PS.level(w, "pes") == 1 and p.gold == 10000000 - int(c1["gold"]) and int(p.resources["trophy"]) == 100000 - int(c1["trophy"]) and p.pet == "pes", "пса куплено: гривні й ресурси списано, він одразу з героєм")
+	check(is_equal_approx(p.pickup_radius, r0 * (1.0 + Pets.value("pes", 1))) and is_equal_approx(Power.score(p), power0), "пес збільшує радіус збору на %d%%, сили не додає" % roundi(Pets.value("pes", 1) * 100.0))
+	check(PS.upgrade(w, p, "pes") and PS.level(w, "pes") == 2 and is_equal_approx(p.pickup_radius, r0 * (1.0 + Pets.value("pes", 2))), "нагодований пес збирає ще далі")
+	check(PS.upgrade(w, p, "kit") and p.pet == "pes" and PS.owned_count(w) == 2, "другий улюбленець чекає на хуторі: з героєм лише один")
+	check(PS.choose(w, p, "kit") and is_equal_approx(p.pickup_radius, r0) and is_equal_approx(p.xp_mult, xp0 + Pets.value("kit", 1)), "кіт замість пса: досвід +%d%%, радіус збору звичайний" % roundi(Pets.value("kit", 1) * 100.0))
+	check(PS.upgrade(w, p, "kin") and PS.choose(w, p, "kin") and is_equal_approx(PS.travel_mult(p), 1.0 + Pets.value("kin", 1)), "кінь скорочує дорогу мапою")
+	check(PS.upgrade(w, p, "voron") and PS.choose(w, p, "voron") and is_equal_approx(float(p.pet_fx["res"]), Pets.value("voron", 1)) and PS.travel_mult(p) == 1.0, "ворон додає ресурсів")
+	for i in 10:
+		PS.upgrade(w, p, "voron")
+	check(PS.level(w, "voron") == Pets.MAX_LEVEL and PS.next_cost(w, "voron").is_empty() and not PS.upgrade(w, p, "voron"), "вище за %d-й ступінь не вигодувати" % Pets.MAX_LEVEL)
+	check(PS.choose(w, p, "") and p.pet == "" and p.pet_fx.is_empty(), "можна лишити всіх удома")
+	# ---- Рід і збереження ----
+	PS.choose(w, p, "voron")
+	var p2 = _new_player()
+	check(PS.choose(w, p2, "pes") and is_equal_approx(float(p2.pet_fx["pickup"]), Pets.value("pes", 2)), "інший герой роду бере того самого пса з тим самим ступенем")
+	var p3 = _new_player()
+	p3.from_dict(p.to_dict())
+	Camp.apply_effects(w, p3)
+	check(p3.pet == "voron" and is_equal_approx(float(p3.pet_fx["res"]), Pets.value("voron", Pets.MAX_LEVEL)), "узятий улюбленець зберігається з героєм")
+	Camp.apply_effects(WorldState.new(), p3)
+	check(p3.pet == "" and p3.pet_fx.is_empty(), "на хуторі без цього улюбленця герой лишається сам")
+	# ---- Довідник ----
+	var art := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Улюбленці":
+			art = str(e["text"])
+	var art_ok := art != ""
+	for id in Pets.ORDER:
+		art_ok = art_ok and str(Pets.DEFS[id]["name"]) in art and str(int(Pets.DEFS[id]["gold"])) in art
+	check(art_ok, "довідник описує всіх улюбленців із цінами")
+	# ---- У грі ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	gp.level = 30
+	gp.gold = 1000000
+	gp.resources = {"wood": 10000, "iron": 10000, "herbs": 10000, "trophy": 10000}
+	gp.recalc()
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	game.enter_camp()
+	await _frames(2)
+	var tabs := []
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		tabs.append(tc.get_tab_title(i))
+	check("Стайня" in tabs, "на хуторі є вкладка «Стайня»")
+	game.camp_do("pet_up", "pes")
+	await _frames(2)
+	check(PS.level(gw, "pes") == 1 and gp.pet == "pes" and int(gw.stats.get("pet_level", 0)) == 1 and bool(game.account.camp.get("pets", {}).has("pes")), "пса взято на хутір: він у роду й із героєм")
+	game.camp_do("pet_pick", "pes")
+	check(gp.pet == "", "другий дотик лишає пса вдома")
+	game.camp_do("pet_pick", "pes")
+	game.enter_location("wild_field")
+	await _frames(4)
+	var c = game.combat
+	var follower = null
+	for n in c.entities.get_children():
+		if n.get_script() == c.PetScript:
+			follower = n
+	check(follower != null and follower.kind == "pes", "пес біжить за героєм у бою")
+	var start: Vector2 = follower.position
+	gp.position += Vector2(400, 0)
+	await _frames(60)
+	check(follower.position.distance_to(gp.position) < 140.0 and follower.position != start, "пес наздоганяє героя")
+	game.enter_map()
+	await _frames(2)
+	PS.upgrade(gw, gp, "kin")
+	PS.choose(gw, gp, "kin")
+	game.enter_location("wild_field")
+	await _frames(4)
+	var horse := false
+	for n in game.combat.entities.get_children():
+		horse = horse or n.get_script() == game.combat.PetScript
+	check(not horse, "кінь у бій не йде")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)

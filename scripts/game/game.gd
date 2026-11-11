@@ -21,6 +21,7 @@ const CraftService := preload("res://scripts/game/craft_service.gd")
 const SpecService := preload("res://scripts/game/spec_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
 const DepthService := preload("res://scripts/game/depth_service.gd")
+const BossService := preload("res://scripts/game/boss_service.gd")
 const TowerService := preload("res://scripts/game/tower_service.gd")
 const EventService := preload("res://scripts/game/event_service.gd")
 const DuelService := preload("res://scripts/game/duel_service.gd")
@@ -64,6 +65,9 @@ const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const AdRewards := preload("res://scripts/game/ad_rewards.gd")
+const PremiumService := preload("res://scripts/game/premium_service.gd")
+const CostumeService := preload("res://scripts/game/costume_service.gd")
+const PetService := preload("res://scripts/game/pet_service.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
@@ -527,6 +531,10 @@ func enter_map() -> void:
 		hud.show_banner(theft_notice, UI.BAD)
 		theft_notice = ""
 	var back := _expedition_news()
+	var pay: int = PremiumService.stipend(world)
+	if pay > 0:
+		back.append("Платня за Гетьманським універсалом: +%d червінців" % pay)
+		save_game()
 	if not from_trip and (leave_notice != "" or not back.is_empty()):
 		if leave_notice != "":
 			back.push_front(leave_notice)
@@ -544,6 +552,7 @@ func enter_map() -> void:
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
 	mv.sieges = DefenseService.state(world)["sieges"]
 	map_legend = false
+	map_bosses = false
 	_build_map_panel()
 	_refresh_guide()
 	_announce_unlocks()
@@ -573,11 +582,19 @@ func _trip_tick() -> Array:
 func quick_raid(loc_id: String) -> void:
 	if state != State.MAP or travel_to != "" or QuickService.block_reason(world, player, loc_id) != "":
 		return
-	Ads.show_rewarded("quick", func(ok: bool):
+	_ad("quick", func(ok: bool):
 		if ok:
 			_quick_done(loc_id)
 		else:
 			_build_map_panel())
+
+
+## Нагорода за рекламу: звичайно показує рекламу, а з Гетьманським універсалом дає нагороду одразу.
+func _ad(placement: String, on_done: Callable) -> void:
+	if PremiumService.active(world):
+		on_done.call(true)
+		return
+	Ads.show_rewarded(placement, on_done)
 
 
 func _quick_done(loc_id: String) -> void:
@@ -901,6 +918,9 @@ func _on_location_cleared(loc_id: String) -> void:
 
 
 func _on_dungeon_cleared(loc_id: String) -> void:
+	if combat.loc.has("hunt"):
+		_on_boss_hunt_won(str(combat.loc["hunt"]))  # бос дня чи тижня: це не печера з мапи
+		return
 	for m in world.on_dungeon(loc_id):
 		combat.float_text(player.global_position + Vector2(0, -110), m, UI.GOLD)
 	if loc_id == DepthService.LOC_ID and combat.loc.has("depth"):
@@ -1009,6 +1029,7 @@ func hint(id: String, text: String) -> void:
 func _on_map_select(id: String) -> void:
 	map_sel = id
 	map_legend = false
+	map_bosses = false
 	hud.map_view.selected = id
 	_build_map_panel()
 
@@ -1016,6 +1037,7 @@ func _on_map_select(id: String) -> void:
 # ---------- Порадник ----------
 
 var map_legend := false  # на панелі мапи показано пояснення позначок
+var map_bosses := false  # на панелі мапи показано боса дня й боса тижня
 
 
 ## Оновити кнопку «Далі: …» на мапі: головна порада порадника.
@@ -1061,6 +1083,11 @@ func _build_map_panel() -> void:
 			map_legend = false
 			_build_map_panel()), _sponsor_block())
 		return
+	if map_bosses and travel_to == "":
+		hud.set_map_panel(MapPanel.build_bosses(world, player, func():
+			map_bosses = false
+			_build_map_panel(), start_boss), _sponsor_block())
+		return
 	if travel_to != "":
 		var v := VBoxContainer.new()
 		v.add_theme_constant_override("separation", 8)
@@ -1093,6 +1120,22 @@ func _build_map_panel() -> void:
 func _sponsor_block() -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
+	if not player.is_peasant() and not map_bosses and travel_to == "":
+		var free: int = BossService.available(world, player)
+		var bb := UI.button("Боси дня й тижня" + ("  •  чекають: %d" % free if free > 0 else ""), func():
+			map_bosses = true
+			map_legend = false
+			_build_map_panel(), Vector2(340, 50), 17)
+		bb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if free > 0:
+			bb.modulate = Color(1.0, 0.95, 0.7)
+		v.add_child(bb)
+	if PremiumService.active(world):
+		var pl := UI.label("%s: ×2 досвіду й ×2 здобичі діють постійно. Лишилось днів: %d" % [PremiumService.NAME, PremiumService.days_left(world)], 15, UI.GOLD, false)
+		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		pl.custom_minimum_size = Vector2(320, 0)
+		v.add_child(pl)
+		return v
 	v.add_child(UI.label("Подарунки спонсора за рекламу", 16, UI.GOLD, false))
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
@@ -1231,7 +1274,7 @@ func _wake_at_camp(id: String) -> void:
 func _travel_tick(delta: float) -> void:
 	if travel_to == "" or travel_paused:
 		return
-	travel_t += delta / travel_dur * travel_boost
+	travel_t += delta / travel_dur * travel_boost * PremiumService.travel_mult(world) * PetService.travel_mult(player)  # універсал і кінь скорочують дорогу
 	hud.map_view.travel["t"] = travel_t
 	if travel_event_at > 0.0 and travel_t >= travel_event_at:
 		travel_event_at = -1.0
@@ -1277,6 +1320,33 @@ func start_depth(depth: int) -> void:
 	combat.custom_loc.merge(FarService.floor_mods(player, FarService.DEPTH_FLOOR))
 	enter_location(DepthService.LOC_ID)
 	hint("depths", "Глибини зарази: що глибше — то сильніші вороги й щедріша здобич. Пройдеш глибину — відкриється наступна.")
+
+
+# ======================= Бос дня й бос тижня =======================
+
+## Вийти на боса дня ("day") чи тижня ("week"). Бій іде поза мапою: герой лишається там, де стояв.
+func start_boss(kind: String) -> void:
+	if state != State.MAP or travel_to != "" or BossService.block_reason(world, player, kind) != "":
+		return
+	map_bosses = false
+	var here := map_here
+	combat.custom_loc = BossService.loc_for(player, kind)
+	enter_location(DepthService.LOC_ID)
+	map_here = here
+	Audio.play_music("boss")
+	hint("boss_hunt", "Бос дня й бос тижня рівнем дорівнюють тобі й мають особливі властивості, щоразу інші. Перемогти кожного можна раз на день чи тиждень. Поразка спроби не забирає.")
+
+
+func _on_boss_hunt_won(kind: String) -> void:
+	var r: Dictionary = BossService.on_win(world, player, kind, combat.run_time)
+	var pos: Vector2 = player.global_position + Vector2(0, -120)
+	var items: Array = r["items"]
+	for i in items.size():
+		combat.spawn_pickup(pos + Vector2(70.0 * (i - (items.size() - 1) / 2.0), 0), "item", 0, items[i])
+	hud.show_banner("\n".join(r["msgs"]), UI.GOLD)
+	_record("boss_" + kind)
+	_record("dungeon")
+	save_game()
 
 
 # ======================= Башта Кощія =======================
@@ -1547,6 +1617,11 @@ func _open_activity(c: Control) -> void:
 
 ## Лист героя для мирних занять: «hunter» — з луком, «plain» — без зброї (вудку домальовує мініігра).
 func _peace_sheet(kind: String) -> String:
+	if player.costume != "":
+		# у вбранні з крамниці герой і на полюванні, і на рибалці
+		var cid: String = player.Costumes.sprite(player.costume, "bow") if kind == "hunter" else player.Costumes.plain(player.costume)
+		if Gfx.has(cid):
+			return cid
 	var id := "%s_%s" % [kind, player.job]
 	return id if Gfx.has(id) else player.sprite_id()
 
@@ -1899,9 +1974,9 @@ func city_do(action: String, arg) -> void:
 			if CityService.buy_mana_potion(world, player, city_id):
 				Audio.play("coins", 0.05)
 		"ad_safe":
-			Ads.show_rewarded("safe_sharpen", func(ok: bool):
+			_ad("safe_sharpen", func(ok: bool):
 				if ok and AdRewards.grant_safe(world):
-					hud.show_banner("Дякуємо! +1 безпечна заточка", UI.GOOD)
+					hud.show_banner("+1 безпечна заточка" if PremiumService.active(world) else "Дякуємо! +1 безпечна заточка", UI.GOOD)
 				save_game()
 				if state == State.CITY:
 					_build_city())
@@ -2387,6 +2462,9 @@ func _show_pause() -> void:
 	var ads := []
 	for id in ["xp2", "drop2"]:
 		var bname: String = AdRewards.BOOST_NAMES[id]
+		if PremiumService.active(world):
+			ads.append(UI.button("%s\nдіє: універсал" % bname, func(): pass, HALF_BTN, 18, false))
+			continue
 		ads.append(UI.button(("%s\nще %s" % [bname, AdRewards.format_time(AdRewards.boost_left(world, id))]) if not AdRewards.can_boost(world, id) else "%s на годину\nза рекламу" % bname, _watch_boost.bind(id, _show_pause), HALF_BTN, 18))
 	hud.add_row(ads)
 	_add_sound_toggles(_show_pause, true)
@@ -2600,9 +2678,41 @@ func close_shop() -> void:
 		back.call()
 
 
-## Дії в крамниці: "pack" — купити набір червінців за гроші, "buy" — купити товар [вид, id] за червінці.
+## Дії в крамниці: "pack" — купити набір червінців за гроші, "buy" — купити товар [вид, id] за червінці,
+## "premium" — купити чи продовжити Гетьманський універсал.
 func shop_do(action: String, arg) -> void:
 	match action:
+		"costume":
+			# куплене вбрання вдягається й знімається одним дотиком, купівля просить підтвердження
+			var cid: String = str(arg)
+			if CostumeService.owned(world, cid):
+				CostumeService.wear(world, player, "" if player.costume == cid else cid)
+				shop_confirm = ""
+				Audio.play("item", 0.05)
+				save_game()
+			elif CostumeService.block_reason(world, cid) != "":
+				shop_confirm = ""
+			elif shop_confirm != "costume:" + cid:
+				shop_confirm = "costume:" + cid
+			else:
+				shop_confirm = ""
+				if CostumeService.buy(world, player, cid):
+					save_game()
+					Audio.play("quest", 0.0)
+					hud.show_banner("%s тепер у твого роду.\nГерой уже вдягнув" % player.Costumes.name_of(cid), UI.GOLD)
+		"premium":
+			if PremiumService.block_reason(world) != "":
+				shop_confirm = ""
+			elif shop_confirm != "premium":
+				shop_confirm = "premium"  # перший дотик лише питає
+			else:
+				shop_confirm = ""
+				if PremiumService.buy(world):
+					CampService.apply_effects(world, player)  # торба більшає одразу
+					var pay: int = PremiumService.stipend(world)
+					save_game()
+					Audio.play("quest", 0.0)
+					hud.show_banner("%s діє %d днів%s" % [PremiumService.NAME, PremiumService.days_left(world), ("\nПлатня за сьогодні: +%d червінців" % pay) if pay > 0 else ""], UI.GOLD)
 		"pack":
 			var p: Dictionary = ShopService.pack(str(arg))
 			if p.is_empty():
@@ -2824,6 +2934,16 @@ func camp_do(action: String, arg) -> void:
 			if g > 0:
 				Audio.play("coin", 0.0)
 				hud.show_banner("Мед продано: +%d грн" % g, UI.GOLD)
+		"pet_up":
+			var was: int = PetService.level(world, str(arg))
+			if PetService.upgrade(world, player, str(arg)):
+				Audio.play("quest", 0.0)
+				var PD: Dictionary = player.Pets.DEFS[str(arg)]
+				hud.show_banner(("%s тепер живе на хуторі" % PD["name"]) if was == 0 else "%s: ступінь %d. %s" % [PD["name"], was + 1, player.Pets.text(str(arg), was + 1).capitalize()], UI.GOLD)
+				_record("pet_level")
+		"pet_pick":
+			if PetService.choose(world, player, "" if str(player.pet) == str(arg) else str(arg)):
+				Audio.play("item", 0.05)
 		"ad_xp2":
 			_watch_boost("xp2", _build_camp)
 			return
@@ -2831,9 +2951,9 @@ func camp_do(action: String, arg) -> void:
 			_watch_boost("drop2", _build_camp)
 			return
 		"ad_safe":
-			Ads.show_rewarded("safe_sharpen", func(ok: bool):
+			_ad("safe_sharpen", func(ok: bool):
 				if ok and AdRewards.grant_safe(world):
-					hud.show_banner("Дякуємо! +1 безпечна заточка", UI.GOOD)
+					hud.show_banner("+1 безпечна заточка" if PremiumService.active(world) else "Дякуємо! +1 безпечна заточка", UI.GOOD)
 				save_game()
 				if state == State.CAMP:
 					_build_camp(true))

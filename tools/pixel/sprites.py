@@ -606,6 +606,26 @@ _LOOKS = {"peasant": "peasant", "cossack": "cossack_sabre", "volkhv": "volkhv_st
 for _job, _src in _LOOKS.items():
     CHARS["hunter_" + _job] = dict(CHARS[_src], weapon="bow")
     CHARS["plain_" + _job] = dict(CHARS[_src], weapon=None)
+# Вбрання героя з крамниці: цілий вигляд, однаковий для будь-якого класу. Зброя в руці та, що вдягнена.
+# Ті самі id, що в scripts/data/costumes.gd (ORDER). Листи: costume_<id>_<зброя> і plain_costume_<id>.
+COSTUMES = {
+    "hetman": coss(hexc("a01830"), hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("c6281e"), sash=hexc("f2c23a"), vyshyvka=hexc("f2c23a"),
+                   pants=hexc("26347a"), boots=hexc("b3261e"), mustache=True, brows=True),
+    "sotnyk": coss(hexc("1e3a6e"), hat="shapka", hat_col=hexc("3a2a22"), shlyk=hexc("d8d8e0"), sash=hexc("d8d8e0"), vyshyvka=hexc("d8d8e0"),
+                   pants=hexc("7a1a1a"), boots=hexc("2a2220"), mustache=True, brows=True),
+    "hutsul": dict(CHARS["cossack"], body=hexc("f2ecdc"), sleeve=hexc("f2ecdc"), vyshyvka=hexc("d87a1e"), sash=hexc("8a2a1a"), pants=hexc("a8322a"),
+                   wide_pants=False, boots=hexc("5a3a22"), hat="hutsul", hat_col=hexc("141010"), hair=hexc("3a2a1a"), mustache=True, brows=True),
+    "chumak": dict(CHARS["cossack"], body=hexc("efe6d2"), sleeve=hexc("efe6d2"), vyshyvka=hexc("2a2a34"), sash=hexc("3a6a9a"), pants=hexc("2a2a34"),
+                   boots=hexc("3a2a20"), hat="straw", hat_col=hexc("e0c070"), hair=hexc("3a2518"), mustache=True, brows=True),
+    "chernets": dict(CHARS["cossack"], body=hexc("1e1a22"), sleeve=hexc("1e1a22"), vyshyvka=None, sash=hexc("8a6a2a"), pants=hexc("16141a"), wide_pants=False,
+                     robe=True, boots=hexc("2a2018"), hat="hood", hat_col=hexc("1e1a22"), hair=hexc("5a5048"), beard=hexc("5a5048"), mustache=False, brows=True),
+    "zoloto": coss(hexc("e8b83a"), hat="shapka", hat_col=hexc("b8862a"), shlyk=hexc("fff0a0"), sash=hexc("a01830"), vyshyvka=hexc("fff0a0"),
+                   pants=hexc("8a1a2a"), boots=hexc("b8862a"), mustache=True, brows=True, aura=hexc("ffe060")),
+}
+for _cid, _look in COSTUMES.items():
+    for _w, _wk in (("sabre", "sabre"), ("mace", "mace"), ("pike", "pike"), ("staff", "staff"), ("pishchal", "musket"), ("bow", "bow"), ("pistols", "pistols")):
+        CHARS["costume_%s_%s" % (_cid, _w)] = dict(_look, weapon=_wk, orb=hexc("ffb347") if _wk == "staff" else None)
+    CHARS["plain_costume_" + _cid] = dict(_look, weapon=None)
 # Мандрівники для завдань на супровід: кобзар, чумак, гонець, знахарка
 CHARS["trav_kobzar"] = dict(pants=hexc("8a8478"), boots=hexc("5a4030"), body=hexc("7a6a58"), sleeve=hexc("7a6a58"), robe=True, sash=hexc("b8261c"),
                             hair=hexc("d9d2c4"), hat="straw", hat_col=hexc("c9a85a"), beard=hexc("d9d2c4"), mustache=True, brows=True, weapon="stick", carry="kobza")

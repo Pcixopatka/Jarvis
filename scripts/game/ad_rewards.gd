@@ -1,5 +1,9 @@
 extends RefCounted
 ## Нагороди за добровільний перегляд реклами. Стан — world.boosts і world.ads.
+## Із Гетьманським універсалом (PremiumService) реклама не потрібна: ×2 досвіду й ×2 здобичі діють
+## постійно, накопичені години не згорають, а безпечних заточок на день більше.
+
+const Premium := preload("res://scripts/game/premium_service.gd")
 
 const XP2_SECONDS := 3600.0  # ×2 досвіду на годину гри (час іде лише в поході)
 const XP2_MAX := 3.0 * 3600.0  # можна накопичити до 3 годин
@@ -35,6 +39,8 @@ static func grant_drop2(world) -> void:
 
 ## Час іде лише під час гри в поході.
 static func tick(world, delta: float) -> void:
+	if Premium.active(world):
+		return  # з універсалом куплені за рекламу години чекають, поки він скінчиться
 	if xp2_left(world) > 0.0:
 		world.boosts["xp2"] = maxf(0.0, xp2_left(world) - delta)
 	if drop2_left(world) > 0.0:
@@ -42,21 +48,31 @@ static func tick(world, delta: float) -> void:
 
 
 static func xp_mult(world) -> float:
-	return 2.0 if xp2_left(world) > 0.0 else 1.0
+	return 2.0 if xp2_left(world) > 0.0 or Premium.active(world) else 1.0
 
 
 static func drop_mult(world) -> float:
-	return 2.0 if drop2_left(world) > 0.0 else 1.0
+	return 2.0 if drop2_left(world) > 0.0 or Premium.active(world) else 1.0
 
 
 static func _today() -> String:
 	return Time.get_date_string_from_system()
 
 
+## Скільки безпечних заточок можна взяти за день: з універсалом більше.
+static func safe_per_day(world) -> int:
+	return Premium.SAFE_PER_DAY if Premium.active(world) else SAFE_PER_DAY
+
+
 static func safe_left_today(world) -> int:
 	if world.ads.get("day", "") != _today():
-		return SAFE_PER_DAY
-	return SAFE_PER_DAY - int(world.ads.get("safe_used", 0))
+		return safe_per_day(world)
+	return maxi(0, safe_per_day(world) - int(world.ads.get("safe_used", 0)))
+
+
+## Напис на кнопці безпечної заточки в коваля.
+static func safe_button_text(world) -> String:
+	return ("Універсал: +1 безпечна заточка (сьогодні ще %d)" if Premium.active(world) else "Реклама: +1 безпечна заточка (сьогодні ще %d)") % safe_left_today(world)
 
 
 static func grant_safe(world) -> bool:
@@ -91,6 +107,8 @@ static func boost_left(world, id: String) -> float:
 
 
 static func can_boost(world, id: String) -> bool:
+	if Premium.active(world):
+		return false  # і так діє постійно
 	return can_drop2(world) if id == "drop2" else can_xp2(world)
 
 
@@ -103,6 +121,8 @@ static func grant_boost(world, id: String) -> void:
 
 ## Напис на кнопці: назва й скільки лишилося (або що дасть перегляд).
 static func boost_button_text(world, id: String) -> String:
+	if Premium.active(world):
+		return "%s\nдіє: універсал" % BOOST_NAMES[id]
 	var left := boost_left(world, id)
 	return "%s\n%s" % [BOOST_NAMES[id], ("ще " + format_time(left)) if left > 0.0 else "година гри"]
 

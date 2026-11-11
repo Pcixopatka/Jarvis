@@ -139,6 +139,20 @@ static func _basics() -> Array:
 	out.append(_e("Крамниця", "усе рідкісне за червінці", "Крамниця відкривається з привалу на мапі, з паузи в бою й з екрана героя. За червінці тут продається все рідкісне: усі золоті речі, речі трьох наборів, артефакти всіх босів і душі всієї нечисті. Червінці купують за справжні гроші наборами від %s до %s. Вони спільні для всіх героїв роду й не зникають. Ціни в червінцях: золота річ %d–%d залежно від ступеня, річ набору %d, увесь набір одразу %d, артефакт %d, трофей надважкого боса %d, душа %d–%d залежно від ступеня. Куплена річ має рівень героя, що її купив, і лягає в торбу навіть понад місце. Душа летить у торбинку душ. Зброю, що не до руки твоєму класу, теж можна купити й передати іншому героєві через спільну скриню. Покупку за червінці треба підтвердити другим дотиком. Усе, що є в крамниці, можна здобути й у грі без жодної покупки." % [
 		_big(int(packs[0]["coins"])), _big(int(packs[packs.size() - 1]["coins"])), int(Shop.UNIQUE_PRICE[1]), int(Shop.UNIQUE_PRICE[Shop.UNIQUE_PRICE.size() - 1]), Shop.SET_PIECE_PRICE, Shop.SET_FULL_PRICE,
 		Shop.ARTIFACT_PRICE, Shop.ARTIFACT_PERIL_PRICE, int(Shop.SOUL_PRICE[1]), int(Shop.SOUL_PRICE[Shop.SOUL_PRICE.size() - 1])]))
+	var PetD = load("res://scripts/data/pets.gd")
+	var PetS = _svc("pet_service")
+	var pet_lines := []
+	for pid in PetD.ORDER:
+		pet_lines.append("%s: %s, на найвищому ступені %s. Купити: %s." % [PetD.DEFS[pid]["name"], PetD.text(pid, 1), PetD.text(pid, PetD.MAX_LEVEL), PetS.cost_text(PetD.cost(pid, 1))])
+	out.append(_e("Улюбленці", "помічники з хутора", "На хуторі є вкладка «Стайня». Там за гривні й ресурси беруть улюбленців, а потім годують: ступенів %d, кожен наступний коштує стільки ж, помножене на свій номер. Улюбленці спільні для роду, а з собою герой бере одного. Сили в бою вони не додають. Пес, кіт і ворон ходять за героєм у бою, кінь чекає на узліссі.\n• %s" % [PetD.MAX_LEVEL, "\n• ".join(pet_lines)]))
+	var Cost = load("res://scripts/data/costumes.gd")
+	var cost_lines := []
+	for cid in Cost.ORDER:
+		cost_lines.append("%s, %d червінців. %s" % [Cost.DEFS[cid]["name"], int(Cost.DEFS[cid]["price"]), Cost.DEFS[cid]["desc"]])
+	out.append(_e("Вбрання героя", "лише вигляд", "У крамниці на вкладці «Вбрання» продаються костюми. Вбрання міняє постать героя цілком, однаково для будь-якого класу, а зброя в руці лишається та, що вдягнена. Сили воно не додає. Купується раз на весь рід, а вдягає його кожен герой окремо: там само кнопки «Вдягнути» й «Зняти». У вбранні героя видно в бою, на полюванні й на рибалці.\n• %s" % "\n• ".join(cost_lines), {"sprite": Cost.sprite(Cost.ORDER[Cost.ORDER.size() - 2], "sabre")}))
+	var Prem = load("res://scripts/game/premium_service.gd")
+	out.append(_e(Prem.NAME, "преміум на %d днів" % Prem.DAYS, "Купується в крамниці на вкладці «Універсал» за %d червінців і діє %d днів для всіх героїв роду одразу. Продовження додає нові дні до решти, нічого не згорає. Сили героя універсал не додає: він знімає рекламу й очікування.\n• %s" % [
+		Prem.PRICE, Prem.DAYS, "\n• ".join(Prem.perks(QS.PER_DAY, load("res://scripts/game/ad_rewards.gd").SAFE_PER_DAY))]))
 	# Складність, смерть і шлях до останнього рівня: числа з балансу
 	var full: int = int(Data.ENEMY_CURVE[Data.ENEMY_CURVE.size() - 1][0])
 	var FarS = load("res://scripts/game/far_service.gd")
@@ -324,6 +338,17 @@ static func _boss_where(kind: String) -> Array:
 
 static func _bosses() -> Array:
 	var out := []
+	var BS = _svc("boss_service")
+	var mod_lines := []
+	for m in BS.MOD_ORDER:
+		mod_lines.append("%s: %s" % [BS.MODS[m]["name"], BS.MODS[m]["desc"]])
+	var pool := []
+	for b in BS.POOL:
+		pool.append(Data.BOSS_NAMES[b])
+	out.append(_e("Бос дня й бос тижня", "раз на день і раз на тиждень", "На мапі внизу панелі є кнопка «Боси дня й тижня». Щодня й щотижня виходить один із відомих босів, той самий для всіх гравців. Рівнем він дорівнює героєві, тож не буває ні заслабким, ні задужим. Бос дня відкривається з %d-го рівня героя, бос тижня з %d-го. Перемогти кожного можна раз на період, а герой рахує своїх окремо. Поразка спроби не забирає, але ціна смерті звичайна.\nБос дня має у %s більше здоров'я за звичайного боса свого рівня й одну властивість. Бос тижня має у %s більше здоров'я, б'є на %d%% сильніше й має дві властивості. Властивості щоразу інші:\n• %s\nНагорода боса дня: %d грн за кожен рівень героя, %d трофеїв, %d%% досвіду рівня й легендарна річ. Бос тижня дає %d грн за рівень, %d трофеїв, %d%% досвіду рівня, %d легендарні речі й золоту річ напевно. Крім того, бос кидає звичайну здобич: шанс на золоту річ, трофей-артефакт і душу. Найкращий час на кожного боса запам'ятовується, а перемоги йдуть у «Літопис слави».\nХто може вийти: %s. Надважких босів серед них нема." % [
+		int(BS.MIN_LEVEL["day"]), int(BS.MIN_LEVEL["week"]), _num(BS.HP_MULT["day"]) + " раза", _num(BS.HP_MULT["week"]) + " раза", roundi((float(BS.DMG_MULT["week"]) - 1.0) * 100.0),
+		"\n• ".join(mod_lines), int(BS.GOLD_PER_LEVEL["day"]), int(BS.TROPHIES["day"]), roundi(float(BS.XP_PART["day"]) * 100.0),
+		int(BS.GOLD_PER_LEVEL["week"]), int(BS.TROPHIES["week"]), roundi(float(BS.XP_PART["week"]) * 100.0), int(BS.WEEK_ITEMS), ", ".join(pool)], {}))
 	var phase2 := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani", "pushkar", "lisovyi_did", "idolyshche", "karachun"]
 	for kind in Wiki.BOSS_ORDER:
 		var W: Dictionary = Wiki.BOSSES[kind]

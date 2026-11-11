@@ -12,6 +12,8 @@ const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
 const GardenService := preload("res://scripts/game/garden_service.gd")
 const KleinodService := preload("res://scripts/game/kleinod_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
+const Pets := preload("res://scripts/data/pets.gd")
+const PetService := preload("res://scripts/game/pet_service.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -37,6 +39,7 @@ static func build(game) -> Control:
 		pages.append(["Город" + ((" (%d)" % ripe) if ripe > 0 else ""), _garden(game)])
 	pages.append(["Казан", _kazan(game)])
 	pages.append(["Клейноди", _kleinody(game)])
+	pages.append(["Стайня", _pets(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,
@@ -85,6 +88,11 @@ static func _buildings(game) -> Control:
 static func _ad_row(game, v: VBoxContainer) -> void:
 	var w = game.world
 	var texts := {"xp2": "×2 досвіду на годину гри", "drop2": "×2 здобичі на годину гри: удвічі частіше речі й ресурси"}
+	if AdRewards.Premium.active(w):
+		var pl := UI.label("%s: ×2 досвіду й ×2 здобичі діють постійно, реклама не потрібна. Лишилось днів: %d" % [AdRewards.Premium.NAME, AdRewards.Premium.days_left(w)], 18, UI.GOLD, false)
+		pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		v.add_child(pl)
+		return
 	for id in ["xp2", "drop2"]:
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
@@ -247,7 +255,7 @@ static func _forge(game) -> Control:
 		bonus += ", шанс +%d%%" % roundi(CampService.forge_chance_bonus(w) * 100)
 	det.add_child(UI.label(bonus, 16, UI.GOOD, false))
 	det.add_child(UI.label("Безпечних заточок: %d (рівень не падає при невдачі)" % AdRewards.safe_tokens(w), 16, UI.TEXT, false))
-	det.add_child(UI.button("Реклама: +1 безпечна заточка (сьогодні ще %d)" % AdRewards.safe_left_today(w), _do(game, "ad_safe"), Vector2(370, 52), 15, AdRewards.safe_left_today(w) > 0))
+	det.add_child(UI.button(AdRewards.safe_button_text(w), _do(game, "ad_safe"), Vector2(370, 52), 15, AdRewards.safe_left_today(w) > 0))
 	var it: Dictionary = p.find_item(sel) if sel > 0 else {}
 	if it.is_empty():
 		det.add_child(UI.label("Обери річ.", 20, UI.MUTED, false))
@@ -476,6 +484,56 @@ static func buff_time(secs: float) -> String:
 
 
 # ---------- Пасіка ----------
+
+## Стайня: улюбленці роду. Купити, нагодувати до наступного ступеня, узяти з собою.
+static func _pets(game) -> Control:
+	var w = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var cur: String = str(p.pet)
+	var head := "З героєм зараз: %s." % (str(Pets.DEFS[cur]["name"]) if cur != "" else "нікого")
+	var hl := UI.label("Улюбленці живуть на хуторі й служать усьому роду. Кожен герой бере з собою одного. Сили в бою вони не додають: це помічники в дорозі й господарстві. %s" % head, 17, UI.MUTED, false)
+	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(hl)
+	var grid := UI.grid(2)
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 10)
+	v.add_child(grid)
+	for id in Pets.ORDER:
+		var D: Dictionary = Pets.DEFS[id]
+		var lvl: int = PetService.level(w, id)
+		var panel := PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), UI.GOLD if cur == id else Color(0.45, 0.36, 0.22), 10, 10))
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 4)
+		panel.add_child(box)
+		box.add_child(UI.label(str(D["name"]) + ((" • ступінь %d із %d" % [lvl, Pets.MAX_LEVEL]) if lvl > 0 else ""), 21, UI.GOLD, false))
+		var dl := UI.label(str(D["desc"]), 15, UI.TEXT, false)
+		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		box.add_child(dl)
+		if lvl > 0:
+			box.add_child(UI.label("Зараз: " + Pets.text(id, lvl), 16, UI.GOOD, false))
+		var cost: Dictionary = PetService.next_cost(w, id)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		box.add_child(row)
+		if cost.is_empty():
+			row.add_child(UI.label("Найвищий ступінь", 16, UI.MUTED, false))
+		else:
+			var nl := UI.label(("Далі: " if lvl > 0 else "Дасть: ") + Pets.text(id, lvl + 1), 15, UI.MUTED, false)
+			nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			box.add_child(nl)
+			box.move_child(nl, box.get_child_count() - 2)
+			var b := UI.button(("Нагодувати" if lvl > 0 else "Узяти на хутір") + "\n" + PetService.cost_text(cost), _do(game, "pet_up", id), Vector2(330, 62), 15, PetService.can_pay(p, cost))
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.add_child(b)
+		if lvl > 0:
+			row.add_child(UI.button("Лишити вдома" if cur == id else "Узяти з собою", _do(game, "pet_pick", id), Vector2(190, 62), 16))
+		grid.add_child(panel)
+	return v
+
 
 static func _pasika(game) -> Control:
 	var w = game.world

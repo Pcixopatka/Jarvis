@@ -12,6 +12,11 @@ const Artifacts := preload("res://scripts/data/artifacts.gd")
 const Sets := preload("res://scripts/data/sets.gd")
 const Souls := preload("res://scripts/data/souls.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
+const Premium := preload("res://scripts/game/premium_service.gd")
+const Costumes := preload("res://scripts/data/costumes.gd")
+const CostumeService := preload("res://scripts/game/costume_service.gd")
+const QuickService := preload("res://scripts/game/quick_service.gd")
+const AdRewards := preload("res://scripts/game/ad_rewards.gd")
 
 const CARD_BG := Color(0.14, 0.11, 0.09)
 const CARD_LINE := Color(0.45, 0.36, 0.22)
@@ -22,7 +27,11 @@ static func build(game) -> Control:
 	var pages := [["Червінці", _packs(game)]]
 	for kind in Shop.KINDS:
 		pages.append([Shop.KIND_NAMES[kind], _sets(game) if kind == "set" else _goods(game, kind)])
+	pages.append(["Вбрання", _costumes(game)])
+	pages.append(["Універсал", _premium(game)])
 	var title := "Крамниця   •   %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))]
+	if Premium.active(game.world):
+		title += "   •   універсал: ще %d дн." % Premium.days_left(game.world)
 	var screen := UI.screen(title, "Назад", game.close_shop, pages, game.shop_tab, func(i: int): game.shop_tab = i)
 	# Крамниця відкривається й посеред бою (з паузи), тож під нею суцільне тло, а не арена
 	var bg := PanelContainer.new()
@@ -74,6 +83,102 @@ static func _packs(game) -> Control:
 		col.add_child(_wrap("%s червінців%s" % [UI.num(int(p["coins"])), ("   •   на %d%% більше за ті самі гроші" % int(p["bonus"])) if int(p["bonus"]) > 0 else ""], 17, COIN_COLOR))
 		h.add_child(UI.button("Купити\n%s" % str(p["price"]), game.shop_do.bind("pack", str(p["id"])), Vector2(170, 64), 18))
 		grid.add_child(panel)
+	return v
+
+
+# ---------------- Вбрання ----------------
+
+## Вбрання героя: постать у вбранні, опис і кнопка. Куплене вдягається й знімається тут само.
+static func _costumes(game) -> Control:
+	var world = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(_wrap("Вбрання міняє лише вигляд героя, сили не додає. Купується раз на весь рід: кожен герой вдягає його окремо. Зброя в руці лишається твоя. Зараз на герої: %s." % Costumes.name_of(str(p.costume)).to_lower(), 16, UI.TEXT))
+	var grid := _grid()
+	v.add_child(grid)
+	var wt: String = "pike" if p.is_peasant() else str(p.weapon_type)
+	for id in Costumes.ORDER:
+		var D: Dictionary = Costumes.DEFS[id]
+		var have: bool = CostumeService.owned(world, id)
+		var worn: bool = str(p.costume) == id
+		var panel := PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", UI.style(CARD_BG, COIN_COLOR if worn else CARD_LINE, 10, 10))
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 12)
+		panel.add_child(h)
+		h.add_child(UI.sprite_icon(Costumes.sprite(id, wt), 96))
+		var left := VBoxContainer.new()
+		left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		left.add_theme_constant_override("separation", 2)
+		h.add_child(left)
+		left.add_child(_wrap(str(D["name"]), 20, UI.GOLD))
+		left.add_child(_wrap(str(D["desc"]), 15, UI.TEXT))
+		if worn:
+			left.add_child(_wrap("Вдягнено", 14, UI.GOOD))
+		elif have:
+			left.add_child(_wrap("Куплено для всього роду", 14, UI.MUTED))
+		var right := VBoxContainer.new()
+		right.custom_minimum_size = Vector2(170, 0)
+		right.alignment = BoxContainer.ALIGNMENT_CENTER
+		right.add_theme_constant_override("separation", 2)
+		h.add_child(right)
+		if have:
+			right.add_child(UI.button("Зняти" if worn else "Вдягнути", game.shop_do.bind("costume", id), Vector2(170, 64), 19))
+		else:
+			var why: String = CostumeService.block_reason(world, id)
+			var confirm: bool = game.shop_confirm == "costume:" + id and why == ""
+			var b := UI.button(("Підтвердити\n%d %s" if confirm else "Купити\n%d %s") % [CostumeService.price(id), Shop.COIN_SHORT], game.shop_do.bind("costume", id), Vector2(170, 64), 18, why == "")
+			if confirm:
+				b.modulate = Color(1.0, 1.0, 0.6)
+			right.add_child(b)
+			if why != "":
+				right.add_child(_wrap(why, 13, UI.BAD))
+		grid.add_child(panel)
+	return v
+
+
+# ---------------- Гетьманський універсал ----------------
+
+## Преміум на 30 днів: що дає, скільки лишилось і кнопка купити чи продовжити (другий дотик підтверджує).
+static func _premium(game) -> Control:
+	var world = game.world
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", UI.style(CARD_BG, COIN_COLOR if Premium.active(world) else CARD_LINE, 12, 10))
+	v.add_child(panel)
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 14)
+	panel.add_child(h)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_theme_constant_override("separation", 4)
+	h.add_child(left)
+	left.add_child(_wrap(Premium.NAME, 24, UI.GOLD))
+	if Premium.active(world):
+		left.add_child(_wrap("Діє. Лишилось днів: %d. Продовження додає ще %d днів до решти." % [Premium.days_left(world), Premium.DAYS], 16, UI.GOOD))
+	else:
+		left.add_child(_wrap("Грамота гетьмана на %d днів для всього твого роду: кожен герой користується нею одразу." % Premium.DAYS, 16, UI.TEXT))
+	for line in Premium.perks(QuickService.PER_DAY, AdRewards.SAFE_PER_DAY):
+		left.add_child(_wrap("•  " + str(line), 16, UI.TEXT))
+	var why: String = Premium.block_reason(world)
+	var confirm: bool = game.shop_confirm == "premium" and why == ""
+	var right := VBoxContainer.new()
+	right.custom_minimum_size = Vector2(190, 0)
+	right.alignment = BoxContainer.ALIGNMENT_CENTER
+	right.add_theme_constant_override("separation", 2)
+	h.add_child(right)
+	var verb := "Продовжити" if Premium.active(world) else "Купити"
+	var b := UI.button(("Підтвердити\n%d %s" if confirm else verb + "\n%d %s") % [Premium.PRICE, Shop.COIN_SHORT], game.shop_do.bind("premium", ""), Vector2(190, 72), 19, why == "")
+	if confirm:
+		b.modulate = Color(1.0, 1.0, 0.6)
+	right.add_child(b)
+	if why != "":
+		right.add_child(_wrap(why, 13, UI.BAD))
+	v.add_child(_wrap("Усе це можна мати й без універсалу: реклама дає ті самі подарунки, лише повільніше. Сили героя універсал не додає.", 14, UI.MUTED))
 	return v
 
 

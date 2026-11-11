@@ -51,6 +51,43 @@ static func build_legend(on_close: Callable) -> Control:
 	return v
 
 
+## Бос дня й бос тижня: хто вийшов, з якими властивостями, що дає перемога й кнопка «До бою».
+static func build_bosses(world, player, on_back: Callable, on_go: Callable) -> Control:
+	var BS = load("res://scripts/game/boss_service.gd")
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	var title := UI.label("Боси дня й тижня", 24, UI.GOLD, false)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(title)
+	head.add_child(UI.button("Назад", on_back, Vector2(110, 48), 17))
+	v.add_child(head)
+	v.add_child(_wrapped("Бос рівнем дорівнює тобі. Перемогти кожного можна раз на день чи тиждень. Поразка спроби не забирає.", 15, UI.MUTED))
+	for kind in BS.KINDS:
+		var boss: String = BS.boss_id(kind)
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.09), Color(0.45, 0.36, 0.22), 10, 8))
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 4)
+		panel.add_child(box)
+		box.add_child(UI.label(BS.NAMES[kind], 16, UI.MUTED, false))
+		box.add_child(_wrapped(str(Data.BOSS_NAMES[boss]), 21, UI.GOLD))
+		for m in BS.mods(kind):
+			box.add_child(_wrapped("%s: %s" % [BS.MODS[m]["name"], BS.MODS[m]["desc"]], 15, UI.BAD))
+		box.add_child(_wrapped("Нагорода: " + "; ".join(BS.reward_lines(player, kind)) + ".", 14, UI.TEXT))
+		var best: int = BS.best_time(world, boss)
+		if best > 0:
+			box.add_child(_wrapped("Твій найкращий час: %s" % BS.time_text(best), 14, UI.MUTED))
+		var why: String = BS.block_reason(world, player, kind)
+		if why == "":
+			box.add_child(UI.button("До бою", on_go.bind(kind), Vector2(320, 56), 22))
+		else:
+			box.add_child(_wrapped(why.substr(0, 1).to_upper() + why.substr(1), 16, UI.GOOD if BS.done(world, kind) else UI.BAD))
+		v.add_child(panel)
+	return v
+
+
 static func build_depths(world, player, sel: int, on_change: Callable, on_go: Callable) -> Control:
 	var DS = load("res://scripts/game/depth_service.gd")
 	var v := VBoxContainer.new()
@@ -331,8 +368,8 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	if on_quick.is_valid() and QS.applies(sel):
 		var why: String = QS.block_reason(world, player, sel)
 		if why == "":
-			v.add_child(UI.button("Швидкий похід за рекламу", on_quick.bind(sel), Vector2(350, 56), 19))
-			v.add_child(_wrapped("Миттєва зачистка без бою. Сьогодні лишилось: %d із %d." % [QS.left_today(world), QS.PER_DAY], 14, UI.MUTED))
+			v.add_child(UI.button("Швидкий похід" if QS.Premium.active(world) else "Швидкий похід за рекламу", on_quick.bind(sel), Vector2(350, 56), 19))
+			v.add_child(_wrapped("Миттєва зачистка без бою. Сьогодні лишилось: %d із %d." % [QS.left_today(world), QS.per_day(world)], 14, UI.MUTED))
 		else:
 			v.add_child(_wrapped("Швидкий похід: %s." % why, 14, UI.MUTED))
 	return v

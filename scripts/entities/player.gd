@@ -12,6 +12,8 @@ const Gfx := preload("res://scripts/world/gfx.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
+const Costumes := preload("res://scripts/data/costumes.gd")
+const Pets := preload("res://scripts/data/pets.gd")
 const Sets := preload("res://scripts/data/sets.gd")
 const Valor := preload("res://scripts/data/valor.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
@@ -122,6 +124,9 @@ var valor_fx := {}  # сума вкладених очок та іменних �
 var art_luck := {}  # доля трофея: бос -> скільки перемог поспіль без його артефакта (зберігається)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
+var pet := ""  # улюбленець, якого герой бере з собою (див. Pets), зберігається
+var pet_fx := {}  # хист цього улюбленця: {"pickup"|"travel"|"xp"|"res": частка} (виставляє PetService, у збереження не йде)
+var costume := ""  # вдягнене вбрання з крамниці: лише вигляд (див. Costumes), зберігається
 var u_luck := 0  # лічильник Долі: скільки гідних босів поспіль не дали золота (зберігається)
 var u_stacks := 0
 var u_stack_t := 0.0
@@ -426,7 +431,7 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "u_luck": u_luck, "art_luck": art_luck,
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "costume": costume, "pet": pet, "u_luck": u_luck, "art_luck": art_luck,
 		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found,
 		"valor": valor, "valor_xp": valor_xp, "valor_spent": valor_spent}
 
@@ -694,8 +699,8 @@ func recalc() -> void:
 	varenyk_bonus = pk("varenyk")
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0) * (1.0 + fx("speed") / 100.0)
-	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0)
-	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0))
+	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0)))
+	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0))
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0
 	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
 	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0) * (1.0 - fx("cd") / 100.0))
@@ -2791,6 +2796,11 @@ func _draw() -> void:
 
 ## Який лист спрайтів у героя: селянин, козацька чи волхівська дорога.
 func sprite_id() -> String:
+	if costume != "":
+		# вбрання з крамниці міняє постать цілком; зброя в руці та, що вдягнена
+		var cid: String = Costumes.sprite(costume, "pike" if is_peasant() else weapon_type)
+		if cid != "" and Gfx.has(cid):
+			return cid
 	if is_peasant():
 		return "peasant"
 	var wt := "pishchal" if weapon_type == "pishchal" else ("staff" if weapon_type == "staff" else weapon_type)
@@ -2818,7 +2828,7 @@ func _draw_sprite(tint: Color) -> void:
 		frame = Gfx.walk_frame(walk_phase)
 	Gfx.draw(self, sprite_id(), facing, frame, Vector2(-24, -30), tint)
 	# Накладки: вдягнена шапка (шлик кольору рідкості) і вовча подоба
-	if equipment.has("head") and not Classes.is_volkhv_line(job) and wolf_timer <= 0.0 and Gfx.has("overlay_hat"):
+	if equipment.has("head") and costume == "" and not Classes.is_volkhv_line(job) and wolf_timer <= 0.0 and Gfx.has("overlay_hat"):
 		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
 		Gfx.draw(self, "overlay_hat", facing, frame, Vector2(-24, -30), hc * tint)
 	if wolf_timer > 0.0 and Gfx.has("overlay_wolf"):
