@@ -230,7 +230,7 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 	if boss or k == "zmii":
 		is_boss = true
 		max_hp *= Data.BOSS_HP_MULT
-		damage *= 1.5
+		damage *= Data.BOSS_DMG_MULT
 		xp_value *= Data.BOSS_XP_MULT
 		if k != "zmii":
 			base_scale = 2.0

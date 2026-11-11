@@ -113,6 +113,7 @@ func _run() -> void:
 	await _suite_uniques_game()
 	await _suite_artifacts()
 	await _suite_souls()
+	await _suite_difficulty()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7314,6 +7315,114 @@ func _suite_souls() -> void:
 		labels += n.text + "\n"
 	check("Пом'яник душ" in labels and "Душа мавки  ×1 у торбинці" in labels and "ще не знайдено" in labels and texts.call().any(func(t): return str(t) == "Душі: 2"), "Пом'яник: що в торбинці й чого ще нема")
 	game.close_character()
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Складність: запас сил не вічний =======================
+
+func _suite_difficulty() -> void:
+	suite("Складність: вампіризм, наснага, захист, Глибини")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Far = load("res://scripts/game/far_service.gd")
+	var Power = load("res://scripts/game/power.gd")
+	var Depth = load("res://scripts/game/depth_service.gd")
+	check(Data.ARMOR_CAP < 0.75 and Data.LIFESTEAL_MAX_HPS <= 0.02 and Data.BOSS_DMG_MULT > 1.5 and Data.BOSS_HP_MULT > 8.0 and Data.ENEMY_DMG_PER_LEVEL > 0.12, "ручки складності: захист, вампіризм, боси, шкода ворогів")
+	var tank = _new_player()
+	tank.stats["vit"] = 500
+	tank.recalc()
+	check(is_equal_approx(tank.armor, Data.ARMOR_CAP), "захист не гасить більше %d%% удару" % roundi(Data.ARMOR_CAP * 100.0))
+	check(is_equal_approx(Power.hit(tank, 0.1), tank.max_hp * 0.1 / (1.0 - Data.ARMOR_CAP)), "мірило удару рахує ту саму стелю захисту")
+	var mage = _new_player()
+	var plain_dps: float = Power.dps(mage)
+	mage.skill_power = 4.0
+	check(Power.dps(mage) > plain_dps * 1.15 and Power.dps(mage) < plain_dps * 1.25, "мірило сили бачить силу вмінь, але в межах")
+	var fm: Dictionary = Far.floor_mods(tank, 1.0, 0.028)
+	check(is_equal_approx(float(fm["min_std_hp"]), Power.dps(tank)) and is_equal_approx(float(fm["min_std_dmg"]), Power.hit(tank, 0.028)), "підлога сили нечисті рахується від героя")
+	var d23: Dictionary = Depth.loc_for(23)
+	check(float(d23["hp_mult"]) > 12.0 and float(d23["dmg_mult"]) > 3.0, "Глибини лютіші, ніж були")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "depths"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 40
+	p.stats["str"] = 120
+	p.stats["vit"] = 150
+	p.recalc()
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	game.enter_location("oleshky")
+	await _frames(3)
+	_clear_enemies(game)
+	# Вампіризм: лише від справжньої шкоди й не більше запасу
+	p.lifesteal = 0.5
+	p.leech_pool = p.max_hp
+	c.spawn_enemy("upyr", 40, false, p.global_position + Vector2(200, 0))
+	var e = c._last_enemy()
+	e.set_process(false)
+	e.max_hp = 100.0
+	e.hp = 100.0
+	p.hp = 1.0
+	p.statuses.clear()
+	p.hit(e, 1.0e6, Vector2.ZERO, false)
+	check(e.dead and is_equal_approx(p.hp, 51.0), "вампіризм рахує лише справді завдану шкоду, а не надлишок (здоров'я %s)" % str(p.hp))
+	c.spawn_enemy("upyr", 40, false, p.global_position + Vector2(200, 0))
+	var e2 = c._last_enemy()
+	e2.set_process(false)
+	e2.max_hp = 1.0e9
+	e2.hp = 1.0e9
+	p.hp = 1.0
+	p.leech_pool = p.max_hp * 0.02
+	for i in 50:
+		p.hit(e2, 1.0e5, Vector2.ZERO, false)
+	check(p.hp <= 1.0 + p.max_hp * 0.02 + 0.5 and p.leech_pool < 0.5, "запас вампіризму скінченний: п'ятдесят ударів поспіль лікують не більше за нього")
+	var pool0: float = p.leech_pool
+	await _frames(60)
+	check(p.leech_pool > pool0 and p.leech_pool <= p.max_hp * Data.LIFESTEAL_MAX_HPS * 2.0 + 0.01 and absf((p.leech_pool - pool0) - p.max_hp * Data.LIFESTEAL_MAX_HPS) < p.max_hp * 0.004, "запас поповнюється на %s%% здоров'я за секунду" % str(Data.LIFESTEAL_MAX_HPS * 100.0))
+	# Наснага за удар: швидкі удари не дають більше за секунду
+	_clear_enemies(game)
+	p.lifesteal = 0.0
+	c.spawn_enemy("upyr", 40, false, p.global_position + Vector2(60, 0))
+	var e3 = c._last_enemy()
+	e3.set_process(false)
+	e3.max_hp = 1.0e9
+	e3.hp = 1.0e9
+	p.attack_cooldown = Data.MANA_ON_HIT_CD
+	p.attack_timer = 0.0
+	p.mana = 0.0
+	p.attack()
+	var slow_gain: float = p.mana
+	p.attack_cooldown = Data.MANA_ON_HIT_CD / 4.0
+	p.attack_timer = 0.0
+	p.mana = 0.0
+	p.attack()
+	check(is_equal_approx(slow_gain, Data.MANA_ON_HIT) and is_equal_approx(p.mana, Data.MANA_ON_HIT / 4.0), "удар зі звичайною швидкістю дає %s наснаги, учетверо швидший — учетверо менше" % str(Data.MANA_ON_HIT))
+	# Глибини: проти сильного героя нечисть не слабша за підлогу
+	game.enter_map()
+	await _frames(2)
+	p.recalc()
+	game.world.story = {"chapter": 6, "step": 0, "stage": "done"}
+	game.world.depths = {"max": 2, "best": 1}
+	game.start_depth(1)
+	await _frames(3)
+	var foe = null
+	for x in c.get_tree().get_nodes_in_group("enemies"):
+		if x.kind == "zarazhenyi" and not x.is_boss and not x.elite:
+			foe = x
+	check(c.is_dungeon() and c.loc.has("depth") and float(c.loc.get("min_std_hp", 0.0)) > Power.dps(p) * Far.DEPTH_FLOOR_TTK * 0.5, "Глибина знає силу героя (%s)" % str(c.loc.get("min_std_hp", "нема")))
+	if foe != null:
+		check(foe.max_hp >= float(c.loc.get("min_std_hp", 0.0)) * 0.99, "заражений першої глибини тримає щонайменше секунду шкоди героя сорокового рівня")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

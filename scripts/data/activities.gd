@@ -94,7 +94,7 @@ const MUSTER_ORDER := ["cherkasy", "korsun", "uman", "kompaniitsi", "serdiuky"]
 const MUSTER_SIZE := [3, 4, 5]  # суперників у сутичці, коли в героя двоє й більше побратимів; без них — на одного-двох менше
 const MUSTER_SECONDS := [7.0, 8.0, 9.0]  # скільки секунд шкоди героя тримає один суперник
 const MUSTER_CAPTAIN := 1.5  # сотник у стільки разів здоровіший
-const MUSTER_HIT := [0.06, 0.075, 0.09]  # частка здоров'я героя за удар
+const MUSTER_HIT := [0.065, 0.08, 0.1]  # частка здоров'я героя за удар
 const MUSTER_ALLY_HIT := [0.09, 0.11, 0.13]  # частка здоров'я побратима за удар по ньому
 const MUSTER_GOLD := [40, 80, 160]  # × рівень героя
 const MUSTER_GLORY := [5, 10, 25]
@@ -110,8 +110,8 @@ const MUSTER_NICK := {"rubaka": ["Рубай", "Вихор", "Шабля"], "spy
 const RING_POOL := ["zmii", "upyr", "vovkulaka", "chaklun", "koshchii", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii"]
 const RING_STAGES := 3
 const RING_SECONDS := [20.0, 27.0, 36.0]
-const RING_HIT := [0.10, 0.13, 0.17]
-const RING_CAP := 0.6  # чудовисько не впаде швидше, ніж за цю частку розрахункового часу
+const RING_HIT := [0.1, 0.13, 0.17]
+const RING_CAP := 0.7  # чудовисько не впаде швидше, ніж за цю частку розрахункового часу
 const RING_STD_TTK := 1.1
 const RING_STD_HIT := 0.035
 const RING_XP := 0.3  # досвіду з кола менше: нагорода тут — гаманець і слава
@@ -145,8 +145,8 @@ const VIGIL_GLORY_GOAL := 10  # додатково за повну варту
 ## здоров'я героя забирає удар — на першій хвилині й приріст за кожну наступну.
 const VIGIL_TTK := 0.7
 const VIGIL_TTK_STEP := 0.22
-const VIGIL_HIT := 0.025
-const VIGIL_HIT_STEP := 0.007
+const VIGIL_HIT := 0.022
+const VIGIL_HIT_STEP := 0.006
 const VIGIL_XP := 0.3  # множник досвіду й гривень із ворогів на варті
 
 # ======================= Чумацький шлях (торгівля крамом) =======================

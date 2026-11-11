@@ -102,6 +102,7 @@ var souls := {}
 var soul_luck := 0.0
 var soul_found := 0
 var soul_fx := {}
+var leech_pool := 0.0  # скільки здоров'я вампіризм ще може повернути просто зараз
 var art := {}  # бонуси артефактів, що лежать у торбі (ключ -> значення; рахує recalc)
 # Золоті речі: сили вдягнених (id сили -> числа) і їхній стан у бою
 var u_pow := {}
@@ -549,7 +550,7 @@ func recalc() -> void:
 	elif meal == "borshch":
 		max_hp *= 1.1
 	max_hp *= (1.0 + float(festive.get("hp", 0.0))) * (1.0 + float(klein.get("hp", 0.0))) * (1.0 + float(soul_fx.get("hp", 0.0)))
-	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)), 0.0, 0.75)
+	armor = clampf(0.01 * s_vit + 0.05 * pk("ward") + 0.03 * pk("iron_skin") + 0.02 * pk("h_skin") + eq("armor") / 100.0 + float(festive.get("armor", 0.0)), 0.0, Data.ARMOR_CAP)
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0) + max_hp * float(festive.get("regen", 0.0))
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0))) * (1.0 - float(soul_fx.get("dodge_cd", 0.0)))
 	thorns = 0.25 * pk("thorns")
@@ -698,6 +699,7 @@ func _process(delta: float) -> void:
 	attack_timer = maxf(0.0, attack_timer - delta)
 	combo_timer = maxf(0.0, combo_timer - delta)
 	mana = minf(max_mana, mana + mana_regen * delta)
+	leech_pool = minf(max_hp * Data.LIFESTEAL_MAX_HPS * 2.0, leech_pool + max_hp * Data.LIFESTEAL_MAX_HPS * delta)
 	_tick_effects(delta)
 	var dot := Status.tick(self, delta)
 	if dot > 0.0:
@@ -905,6 +907,7 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		return
 	if pk("h_execute") > 0 and e.hp < e.max_hp * 0.3:
 		dmg *= 1.2
+	var hp_before: float = maxf(0.0, e.hp)
 	if not art.is_empty():
 		if e.is_boss:
 			dmg *= 1.0 + float(art.get("boss_dmg", 0.0))
@@ -922,12 +925,23 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		_unique_on_hit(e, dmg, crit)
 	if zamova_timer > 0.0 and not _chaining:
 		_zamova_chain(e, dmg)
+	# вампіризм лікує лише від справді завданої шкоди й не швидше за Data.LIFESTEAL_MAX_HPS
+	var dealt: float = maxf(0.0, hp_before - maxf(0.0, e.hp))
 	if wolf_timer > 0.0:
-		heal(dmg * 0.08, false)
+		_leech(dealt * 0.08)
 	if crit and not e.dead:
 		Status.apply(e, "bleed", 3.0, dmg * 0.1)  # критичний удар лишає кровотечу
 	if lifesteal > 0.0:
-		heal(dmg * lifesteal, false)
+		_leech(dealt * lifesteal)
+
+
+## Лікування вампіризмом із запасу, що поповнюється з часом (див. _process): не більш як Data.LIFESTEAL_MAX_HPS за секунду.
+func _leech(amount: float) -> void:
+	var h: float = minf(amount, leech_pool)
+	if h <= 0.0:
+		return
+	leech_pool -= h
+	heal(h, false)
 
 
 ## Душі у вдягнених речах: стани від удару (не частіше ніж раз на Souls.PROC_LOCK с на ворога) і вибух убитого.
@@ -1102,7 +1116,8 @@ func attack() -> void:
 			hits += 1
 			crit_any = crit_any or r[1]
 	if hits > 0:
-		mana = minf(max_mana, mana + 2.5)  # влучний удар трохи поповнює наснагу
+		# влучний удар трохи поповнює наснагу; швидші удари дають стільки ж за секунду, а не більше
+		mana = minf(max_mana, mana + Data.MANA_ON_HIT * minf(1.0, attack_cooldown / Data.MANA_ON_HIT_CD))
 		combo_step = (step + 1) % COMBO_MULT.size()
 		combo_timer = COMBO_WINDOW
 		if finisher:

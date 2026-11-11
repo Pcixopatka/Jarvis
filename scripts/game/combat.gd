@@ -94,6 +94,7 @@ var ring_time := 0.0  # скільки секунд тривали самі бо
 var ring_break := 0.0  # перепочинок до наступного чудовиська
 var ring_done := false
 var _ring_boss = null
+const FIELD_PAIR_CHANCE := 0.5  # шанс, що в далекому полі замість одного ворога вийдуть двоє
 var drop_boost := 1.0  # ×2 здобичі за рекламу (виставляє Game щокадру)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
 var gate = null
@@ -1038,6 +1039,10 @@ func _update_field(delta: float) -> void:
 				kind = "zarazhenyi"  # зараза жене своїх солдатів
 			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
 			_maybe_elite(_last_enemy())
+			# Далекий край, що міряється з героєм: нечисть часто суне парами, інакше герой косить її по одній
+			if loc.has("std_hp") and randf() < FIELD_PAIR_CHANCE and alive_enemy_count() < 7 + pace:
+				spawn_enemy(en[randi() % en.size()], loc["level"])
+				_maybe_elite(_last_enemy())
 
 
 ## Від якого рівня рахувати, скільки нечисті тримати на арені. Далекі краї ростуть із героєм ("base_level" —
@@ -1050,7 +1055,7 @@ func _spawn_room() -> void:
 	room_cleared = false
 	var en: Array = loc["enemies"]
 	# Рядова нечисть у печері на рівень нижча — головна загроза тут бос
-	var minion_level := maxi(1, int(loc["level"]) - 1)
+	var minion_level := maxi(1, int(loc["level"]))
 	for i in Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER:
 		var pos := Vector2(randf_range(arena.position.x + 80, arena.end.x - 80), randf_range(arena.position.y + 80, arena.position.y + arena.size.y * 0.55))
 		spawn_enemy(en[randi() % en.size()], minion_level, false, pos)
@@ -1390,9 +1395,16 @@ func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> vo
 		e.damage = e.damage / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))) * float(loc["std_dmg"])
 		e.xp_value = maxi(1, int(e.xp_value * float(loc.get("xp_mult", 1.0))))
 	elif loc.has("hp_mult"):
+		var hp0: float = e.max_hp
+		var dmg0: float = e.damage
 		e.max_hp *= float(loc["hp_mult"])
-		e.hp = e.max_hp
 		e.damage *= float(loc["dmg_mult"])
+		if loc.has("min_std_hp"):
+			# Глибини й Башта: проти героя, що їх переріс, нечисть не слабша, ніж у печері далекого краю
+			var s1: float = Data.ENEMY_HP_MULT * (1.0 + Data.ENEMY_HP_PER_LEVEL * (level - 1))
+			e.max_hp = maxf(e.max_hp, hp0 / (70.0 * s1) * float(loc["min_std_hp"]))
+			e.damage = maxf(e.damage, dmg0 / (13.0 * (1.0 + Data.ENEMY_DMG_PER_LEVEL * (level - 1))) * float(loc["min_std_dmg"]))
+		e.hp = e.max_hp
 		e.xp_value = int(e.xp_value * float(loc["xp_mult"]))
 	if plague > 0:
 		e.max_hp *= plague_mods["hp"]

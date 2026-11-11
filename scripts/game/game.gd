@@ -1065,6 +1065,7 @@ func start_depth(depth: int) -> void:
 		return
 	depth = clampi(depth, 1, int(DepthService.state(world)["max"]))
 	combat.custom_loc = DepthService.loc_for(depth)
+	combat.custom_loc.merge(FarService.floor_mods(player, FarService.DEPTH_FLOOR_TTK, FarService.DEPTH_FLOOR_HIT))
 	enter_location(DepthService.LOC_ID)
 	hint("depths", "Глибини зарази: що глибше — то сильніші вороги й щедріша здобич. Пройдеш глибину — відкриється наступна.")
 
@@ -1078,6 +1079,7 @@ func start_tower(floor_: int) -> void:
 	floor_ = clampi(floor_, 1, int(TowerService.state(world)["max"]))
 	tower_sel = floor_
 	combat.custom_loc = TowerService.loc_for(floor_)
+	combat.custom_loc.merge(FarService.floor_mods(player, FarService.TOWER_FLOOR_TTK, FarService.TOWER_FLOOR_HIT))
 	enter_location(TowerService.LOC_ID)
 	hint("tower", "Башта Кощія: кожен поверх — хвилі нечисті й міні-бос, кожен п'ятий — супербос. Пройшов поверх — портал веде вище; вийти можна кнопкою «На мапу», коли поруч нема ворогів.")
 
@@ -1113,7 +1115,9 @@ func _on_tower_next(floor_: int) -> void:
 	if nxt > int(TowerService.state(world)["max"]):
 		return
 	tower_sel = nxt
-	combat.next_floor(TowerService.loc_for(nxt))
+	var next_loc: Dictionary = TowerService.loc_for(nxt)
+	next_loc.merge(FarService.floor_mods(player, FarService.TOWER_FLOOR_TTK, FarService.TOWER_FLOOR_HIT))
+	combat.next_floor(next_loc)
 
 
 # ======================= Оборона =======================

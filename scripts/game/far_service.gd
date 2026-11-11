@@ -11,9 +11,14 @@ const Power := preload("res://scripts/game/power.gd")
 ## Скільки секунд чистої шкоди героя тримає «звичайний заражений» і яку частку здоров'я героя забирає його удар.
 ## Решта нечисті й боси — у своїй пропорції до нього (кам'яна баба втричі міцніша, злидень утричі кволіший).
 const TTK := 1.1
-const HIT := 0.03
+const HIT := 0.035
 const DUNGEON_TTK := 1.2
 const DUNGEON_HIT := 0.032
+# Підлога сили нечисті в Глибинах і Башті для героя, що їх переріс (кімнат і хвиль там більше, тож трохи м'якше за печеру краю)
+const DEPTH_FLOOR_TTK := 1.0
+const DEPTH_FLOOR_HIT := 0.028
+const TOWER_FLOOR_TTK := 0.9
+const TOWER_FLOOR_HIT := 0.028
 const GOAL_MAX := 110  # більше стількох на зачистку не просимо, хоч який рівень
 ## Нечисть тут легша за глибинну, тож бувалому героєві даємо надбавку до досвіду й гривень:
 ## +6% за кожен рівень понад рівень краю, але не більше ніж учетверо з половиною.
@@ -52,6 +57,12 @@ static func mods(L: Dictionary, player) -> Dictionary:
 		out["std_dmg"] = Power.hit(player, DUNGEON_HIT if dungeon else HIT)
 		out["xp_mult"] = xp_mult(base, player.level)
 	return out
+
+
+## Найменша сила нечисті в Глибинах і Башті: не слабша проти героя, ніж у печері далекого краю.
+## Формули глибини й поверху діють далі; це лише підлога для героя, що їх переріс.
+static func floor_mods(player, ttk: float, hit_frac: float) -> Dictionary:
+	return {"min_std_hp": Power.dps(player) * ttk, "min_std_dmg": Power.hit(player, hit_frac)}
 
 
 ## Край за місцем (місто чи місцевість) або "".
