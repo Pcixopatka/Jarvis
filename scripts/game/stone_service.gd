@@ -54,7 +54,9 @@ static func reset_points(player) -> bool:
 	for id in player.perks:
 		player.perk_points += int(player.perks[id])
 	player.perks = {}
-	_forget_tree(player, player.job)
+	for c in Classes.lineage(player.job):  # очки можна вкладати в усі дерева дороги, тож і вертаються вони з усіх
+		if Classes.TREES.has(c):
+			_forget_tree(player, c)
 	player.recalc()
 	return true
 

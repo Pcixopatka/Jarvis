@@ -514,6 +514,7 @@ static func _tree_button(text: String, rank: int, max_rank: int, can: bool, lock
 
 const SK_CELL := 68  # значок вміння в дереві
 const SK_STEP_X := 124  # крок між гілками
+const SK_STEP_ONE := 200  # ширина дерева з однією гілкою: щоб довга назва не налазила на сусідню колонку
 const SK_STEP_Y := 102  # крок між рядами
 const SK_TOP := 34  # місце під назву гілки
 
@@ -580,17 +581,35 @@ static func _skills(game) -> Control:
 	var shown: String = game.skill_tree if game.skill_tree in lineage else p.job
 	left.add_child(UI.label("Дерева", 15, UI.MUTED))
 	for c in lineage:
-		var tb := UI.button(str(Classes.CLASSES[c]["name"]), _do(game, "skill_tree", c), Vector2(170, 50), 17)
+		var tb := UI.button(str(Classes.CLASSES[c]["name"]), _do(game, "skill_tree", c), Vector2(170, 56), 17)
 		if c == shown:
 			tb.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 10, 6))
+		# у кутку кнопки: скільки рангів дерева вивчено, щоб було видно, куди ще можна вкласти очки
+		var prog: Array = p.tree_progress(c)
+		var pl := UI.label("%d/%d" % prog, 12, Color(0.6, 0.95, 0.5) if prog[0] >= prog[1] else UI.GOLD, false)
+		pl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		pl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		pl.offset_top = -19
+		pl.offset_bottom = -3
+		pl.offset_left = 8
+		pl.offset_right = -9
+		tb.add_child(pl)
 		left.add_child(tb)
 	var mastery := "Майстерність %d/%d" % [p.job_level, p.job_max()]
 	if p.job_level < p.job_max():
 		mastery += "\nдосвід %d/%d" % [p.job_xp, p.job_next()]
 	left.add_child(UI.label(mastery, 14, UI.MUTED))
 	var note := "Очко за кожен рівень майстерності."
+	var own: Array = p.tree_progress(p.job)
 	if shown != p.job:
-		note = "Це дерево вже пройдене: нових рангів тут не вивчити, але вивчене діє."
+		note = "Пройдене дерево. Вільні очки можна вкладати й сюди."
+	elif own[0] >= own[1] and p.skill_points > 0 and lineage.size() > 1:
+		var all_full := true
+		for c in lineage:
+			var pr: Array = p.tree_progress(c)
+			all_full = all_full and pr[0] >= pr[1]
+		note = "Усю дорогу вивчено до кінця. Очки лишились про запас." if all_full else "Це дерево вивчено до кінця. Вільні очки вклади в пройдені дерева: кнопки вище."
 	if p.can_change_class():
 		var names := []
 		for c in p.class_info()["next"]:
@@ -606,16 +625,17 @@ static func _skills(game) -> Control:
 	var rows := 1
 	for br in branches:
 		rows = maxi(rows, br["nodes"].size())
+	var step: float = SK_STEP_X if branches.size() > 1 else SK_STEP_ONE
 	var view: Control = load("res://scripts/ui/tree_lines.gd").new()
-	view.custom_minimum_size = Vector2(branches.size() * SK_STEP_X, SK_TOP + rows * SK_STEP_Y)
+	view.custom_minimum_size = Vector2(branches.size() * step, SK_TOP + rows * SK_STEP_Y)
 	var at := {}  # id вміння -> центр його значка
 	for bi in branches.size():
 		for ni in branches[bi]["nodes"].size():
-			at[branches[bi]["nodes"][ni]["id"]] = Vector2(bi * SK_STEP_X + SK_STEP_X / 2.0, SK_TOP + ni * SK_STEP_Y + SK_CELL / 2.0)
+			at[branches[bi]["nodes"][ni]["id"]] = Vector2(bi * step + step / 2.0, SK_TOP + ni * SK_STEP_Y + SK_CELL / 2.0)
 	for bi in branches.size():
 		var title := UI.label(str(branches[bi]["name"]), 18, UI.GOLD)
-		title.position = Vector2(bi * SK_STEP_X, 0)
-		title.size = Vector2(SK_STEP_X, 28)
+		title.position = Vector2(bi * step, 0)
+		title.size = Vector2(step, 28)
 		view.add_child(title)
 		var nodes: Array = branches[bi]["nodes"]
 		for ni in nodes.size():
@@ -629,8 +649,8 @@ static func _skills(game) -> Control:
 			view.add_child(cell)
 			var rank: int = p.sk(n["id"])
 			var rl := UI.label("%d/%d" % [rank, int(n["max"])], 15, (Color(0.6, 0.95, 0.5) if rank >= int(n["max"]) else UI.GOLD) if rank > 0 else UI.MUTED)
-			rl.position = Vector2(c.x - SK_STEP_X / 2.0, c.y + SK_CELL / 2.0 + 1.0)
-			rl.size = Vector2(SK_STEP_X, 20)
+			rl.position = Vector2(c.x - step / 2.0, c.y + SK_CELL / 2.0 + 1.0)
+			rl.size = Vector2(step, 20)
 			view.add_child(rl)
 	h.add_child(view)
 
@@ -720,6 +740,24 @@ static func _skill_card(game) -> Control:
 	if active:
 		sub += "  •  %s" % ("атака ⚔" if SI.kind(id) == "attack" else "баф ✦")
 	card.add_child(UI.label(sub, 16, UI.MUTED, false))
+	# Кнопка «Вивчити» стоїть одразу під назвою, щоб її не треба було шукати гортанням
+	if rank >= int(n["max"]):
+		card.add_child(UI.label("Максимальний ранг", 16, UI.GOOD, false))
+	else:
+		var why := "Вивчити (1 очко)"
+		if p.skill_points <= 0:
+			why = "Немає очок вмінь"
+		elif not p.skill_req_met(n):
+			why = "Спершу вивчи потрібне"
+		var lb := UI.button(why, _do(game, "skill", id), Vector2(340, 52), 18, p.can_learn_skill(n))
+		lb.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		card.add_child(lb)
+		if not p.skill_req_met(n):
+			var reqs := []
+			for r in n["req"]:
+				if p.sk(r) < n["req"][r]:
+					reqs.append("%s %d" % [p.Classes.find_node(r).get("name", r), n["req"][r]])
+			card.add_child(UI.label("Потрібно: " + ", ".join(reqs), 15, UI.BAD, false))
 	var what: String = SI.WHAT.get(id, n["desc"].replace("\n", " "))
 	var wl := UI.label(what, 17, UI.TEXT, false)
 	wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -752,16 +790,6 @@ static func _skill_card(game) -> Control:
 		var dl := UI.label(n["desc"].replace("\n", " "), 15, UI.MUTED, false)
 		dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		card.add_child(dl)
-	if not p.skill_req_met(n):
-		var reqs := []
-		for r in n["req"]:
-			if p.sk(r) < n["req"][r]:
-				reqs.append("%s %d" % [p.Classes.find_node(r).get("name", r), n["req"][r]])
-		card.add_child(UI.label("Потрібно: " + ", ".join(reqs), 15, UI.BAD, false))
-	if rank < n["max"]:
-		card.add_child(UI.button("Вивчити (%d очко)" % 1 if p.skill_points > 0 else "Немає очок вмінь", _do(game, "skill", id), Vector2(340, 56), 18, p.can_learn_skill(n)))
-	else:
-		card.add_child(UI.label("Максимальний ранг", 16, UI.GOOD, false))
 	if active and rank > 0:
 		var on: bool = id in p.panel["attack"] or id in p.panel["buff"]
 		card.add_child(UI.label("Стоїть на кнопці бою" if on else "Не на кнопці: торкнись зеленої кнопки бою вище", 14, UI.GOOD if on else UI.MUTED, false))

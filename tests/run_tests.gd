@@ -138,6 +138,15 @@ func suite(name: String) -> void:
 	print("— " + name)
 
 
+## Скільки всього рангів у дереві класу.
+func _tree_ranks(Classes, cls: String) -> int:
+	var total := 0
+	for br in Classes.TREES[cls]:
+		for n in br["nodes"]:
+			total += int(n["max"])
+	return total
+
+
 func _new_player():
 	var p = PlayerScript.new()
 	p._ready()  # стартова шабля і перерахунок без додавання в сцену
@@ -1134,7 +1143,9 @@ func _suite_classes() -> void:
 	check(p.change_class("volkhv") and p.job == "volkhv" and p.job_level == 1 and p.skill_points == pts_before, "зміна класу: майстерність з 1, очки лишились")
 	check(p.sk("vyly") == 1 and p.sk("hardy") == 2, "селянська наука лишається з волхвом")
 	check(p.max_mana > 60.0 and p.mana_regen > 3.0, "волхв має великий запас наснаги (%d)" % p.max_mana)
-	check(p.learn_skill("fireball") and not p.learn_skill("vyly"), "волхв вчить вогонь, а селянське — вже ні")
+	var vyly0: int = p.sk("vyly")
+	check(p.learn_skill("fireball") and p.learn_skill("vyly") and p.sk("vyly") == vyly0 + 1, "волхв вчить вогонь, а вільне очко може вкласти й у селянську науку")
+	check(not p.learn_skill("whirl"), "козацького волхв не вчить: це чужа дорога")
 	check("fireball" in p.active_skills() and "fireball" in p.panel["attack"], "нове вміння саме стає на панель атак")
 	# Панель бою: 3 атаки + 5 бафів, вибір і перенесення
 	var SI = load("res://scripts/data/skill_info.gd")
@@ -1393,8 +1404,27 @@ func _suite_specs() -> void:
 	check(t2 != "" and p.job == "plastun" and p.job_level == 1 and w.spec_trial.is_empty(), "посвячено в пластуни")
 	check(p.equipment["weapon"]["name"] == "Спис пластуна" and p.equipment["weapon"]["rarity"] == 2, "наставник дає зброю")
 	check(p.skills.has("whirl") and "cossack" in Classes.lineage("plastun"), "козацькі вміння лишаються")
-	p.skill_points = 1
-	check(p.learn_skill("kydok") and not p.learn_skill("whirl"), "пластун вчить свої вміння, а козацькі — вже ні")
+	p.skill_points = 4
+	var whirl0: int = p.sk("whirl")
+	check(p.learn_skill("kydok") and p.learn_skill("whirl") and p.sk("whirl") == whirl0 + 1, "пластун вчить свої вміння, а вільні очки вкладає й у козацькі")
+	check(not p.learn_skill("fireball") and not p.learn_skill(Classes.TREES["zaporozhets"][0]["nodes"][0]["id"]), "чужої дороги й сусідньої спеціалізації пластун не вчить")
+	# Очки понад дерево останнього класу не зависають: у пройдених деревах є куди їх вкласти.
+	# Самого дерева спеціалізації на її очки не вистачає, а всієї дороги вистачає майже до останнього:
+	# зайве лишається хіба тоді, коли вивчено геть усе.
+	var stuck := []
+	for cls3 in Classes.CLASSES:
+		if int(Classes.CLASSES[cls3]["tier"]) != 2:
+			continue
+		var ranks := 0
+		var earned := 0
+		for c3 in Classes.lineage(cls3):
+			earned += int(Classes.CLASSES[c3]["job_max"]) - 1
+			ranks += int(_tree_ranks(Classes, c3))
+		var own: int = _tree_ranks(Classes, cls3)
+		if int(Classes.CLASSES[cls3]["job_max"]) - 1 <= own or earned - ranks > 10:
+			stuck.append("%s: очок %d, рангів на дорозі %d, у своєму дереві %d" % [cls3, earned, ranks, own])
+	check(stuck.is_empty(), "очки спеціалізації переливаються в пройдені дерева, зайвих лишається не більш як 10: %s" % ", ".join(stuck))
+	p.skill_points = 0
 	check(SS.available(p).is_empty(), "з пластуна далі не обирають (поки)")
 	# Пищаль: лише для самопальника
 	var gun = Data.gen_item(10, 1, "weapon", "pishchal")
@@ -1726,6 +1756,19 @@ func _suite_stones() -> void:
 	var sp = _new_player()
 	sp.change_class("plastun")
 	check(ST.siblings(sp).size() == 3 and not "plastun" in ST.siblings(sp), "пластун може стати іншим козацьким майстром")
+	# Камінь забуття вертає очки з усієї дороги: і з пройдених дерев теж
+	var rp = _new_player()
+	rp.skills = {}
+	rp.skill_points = 3
+	rp.learn_skill("vyly")
+	rp.change_class("cossack")
+	rp.learn_skill("whirl")
+	rp.change_class("plastun")
+	rp.learn_skill("kydok")
+	ST.grant(rp, "zabuttia")
+	check(rp.skill_points == 0 and ST.reset_points(rp) and rp.skill_points == 3 and rp.sk("vyly") == 0 and rp.sk("whirl") == 0 and rp.sk("kydok") == 0, "Камінь забуття вертає очки з усіх дерев дороги")
+	check(rp.learn_skill("whirl") and rp.learn_skill("vyly") and rp.learn_skill("kydok"), "і їх можна розкласти наново в будь-яке дерево дороги")
+	rp.free()
 	# Боси
 	var msgs: Array = ST.on_boss(sp, "koshchii", true)
 	check(ST.count(sp, "alatyr") == 1 and not msgs.is_empty(), "перший Кощій — гарантований Алатир")
@@ -7613,6 +7656,7 @@ func _suite_journal() -> void:
 		for e in sx["entries"]:
 			titles[str(e["title"])] = str(e["text"])
 	check(titles.has("Екран героя й журнал") and "Журнал" in str(titles.get("Екран героя й журнал", "")), "довідник пояснює екран героя й журнал")
+	check("пройдені дерева" in str(titles.get("Дерева вмінь", "")) and "Камінь забуття" in str(titles.get("Дерева вмінь", "")), "довідник каже, що очки можна вкладати й у пройдені дерева")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -7739,10 +7783,31 @@ func _suite_skills_tab() -> void:
 	for br in Classes.TREES["peasant"]:
 		pnodes += br["nodes"].size()
 	view = page.call().find_children("*", "Control", true, false).filter(func(c): return c.get_script() != null and "links" in c)[0]
-	check(view.find_children("*", "Button", true, false).size() == pnodes and "Це дерево вже пройдене" in labels.call() and game.skill_tree == "peasant", "перемикач показує дерево селянина: %d значків" % pnodes)
+	check(view.find_children("*", "Button", true, false).size() == pnodes and "Пройдене дерево. Вільні очки можна вкладати й сюди." in labels.call() and game.skill_tree == "peasant", "перемикач показує дерево селянина: %d значків" % pnodes)
 	game.char_do("skill_pick", "vyly")
 	await _frames(2)
 	check("Удар вилами" in labels.call() and "Ранг 2/5" in labels.call(), "вивчене раніше вміння теж має картку")
+	# Вільне очко вкладається й у пройдене дерево просто з картки
+	p.skill_points = 2
+	game._build_character()
+	await _frames(2)
+	var learn_btn: Button = null
+	for b in page.call().find_children("*", "Button", true, false):
+		if b.text.begins_with("Вивчити"):
+			learn_btn = b
+	check(learn_btn != null and not learn_btn.disabled, "на картці вміння з пройденого дерева кнопка «Вивчити» жива")
+	game.char_do("skill", "vyly")
+	await _frames(2)
+	check(p.sk("vyly") == 3 and p.skill_points == 1 and "Ранг 3/5" in labels.call(), "вивчено ранг у пройденому дереві")
+	var prog: Array = p.tree_progress("peasant")
+	check(("%d/%d" % prog) in labels.call() and prog[1] == 16, "на кнопці дерева видно, скільки рангів вивчено: %d/%d" % prog)
+	# Дерево нинішнього класу вивчено до кінця: гра сама каже, куди подіти очки
+	for br in Classes.TREES[p.job]:
+		for n in br["nodes"]:
+			p.skills[n["id"]] = int(n["max"])
+	game.char_do("skill_tree", p.job)
+	await _frames(2)
+	check("Вільні очки вклади в пройдені дерева" in labels.call(), "повне дерево з вільними очками: підказка про пройдені дерева")
 	game.close_character()
 	game.queue_free()
 	await _frames(2)

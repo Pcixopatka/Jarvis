@@ -600,13 +600,26 @@ func is_peasant() -> bool:
 	return job == "peasant"
 
 
-## Вчити можна лише вміння свого нинішнього класу.
+## Вчити можна вміння своєї дороги: нинішнього класу й тих, які герой уже пройшов
+## (Селянин → Козак → Запорожець). Інакше очки, зароблені понад дерево останнього класу, нікуди подіти.
 func in_class_tree(id: String) -> bool:
-	for b in Classes.TREES[job]:
-		for n in b["nodes"]:
-			if n["id"] == id:
-				return true
+	for c in Classes.lineage(job):
+		for b in Classes.TREES.get(c, []):
+			for n in b["nodes"]:
+				if n["id"] == id:
+					return true
 	return false
+
+
+## Скільки рангів дерева класу вже вивчено і скільки їх усього: [вивчено, усього].
+func tree_progress(cls: String) -> Array:
+	var have := 0
+	var total := 0
+	for b in Classes.TREES.get(cls, []):
+		for n in b["nodes"]:
+			have += mini(sk(n["id"]), int(n["max"]))
+			total += int(n["max"])
+	return [have, total]
 
 
 func can_learn_skill(node: Dictionary) -> bool:
