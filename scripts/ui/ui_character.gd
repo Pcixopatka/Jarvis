@@ -502,106 +502,180 @@ static func _tree_button(text: String, rank: int, max_rank: int, can: bool, lock
 	return b
 
 
+const SK_CELL := 68  # значок вміння в дереві
+const SK_STEP_X := 124  # крок між гілками
+const SK_STEP_Y := 102  # крок між рядами
+const SK_TOP := 34  # місце під назву гілки
+
+
+## Значок вміння: рамка показує стан (зелена — вивчено до межі, золота — вивчено, сіра — ще ні, бліда — закрито).
+static func _skill_cell(p, n: Dictionary, selected: bool, cb: Callable, px: int = SK_CELL, plain: bool = false) -> Button:
+	var id: String = n["id"]
+	var rank: int = p.sk(id)
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(px, px)
+	b.size = Vector2(px, px)
+	var edge := Color(0.5, 0.9, 0.4) if rank >= int(n["max"]) else (Color(1.0, 0.8, 0.3) if rank > 0 else Color(0.42, 0.36, 0.3))
+	var bg := Color(0.2, 0.12, 0.1) if rank > 0 else Color(0.11, 0.095, 0.085)
+	if plain:
+		# кнопка бою: рамка не каже про ранг, щоб зелений лишався лише для «сюди можна поставити»
+		edge = Color(0.75, 0.6, 0.3)
+		bg = Color(0.16, 0.12, 0.1)
+	if selected:
+		edge = Color(1.0, 1.0, 0.92)
+		bg = bg.lightened(0.12)
+	b.add_theme_stylebox_override("normal", UI.style(bg, edge, 10, 2))
+	b.add_theme_stylebox_override("hover", UI.style(bg.lightened(0.06), edge, 10, 2))
+	b.add_theme_stylebox_override("pressed", UI.style(bg.darkened(0.1), edge, 10, 2))
+	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	var tex := Gfx.skill_icon_tex(id)
+	if tex != null:
+		var t := TextureRect.new()
+		t.texture = tex
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.stretch_mode = TextureRect.STRETCH_SCALE
+		t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		t.position = Vector2(8, 8)
+		t.size = Vector2(px - 16, px - 16)
+		b.add_child(t)
+	if n.get("active", false):
+		# активне вміння: позначка, атака це чи підсилення
+		var m := UI.label("⚔" if p.SkillInfo.kind(id) == "attack" else "✦", 15, Color(1.0, 0.95, 0.8), false)
+		m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		m.add_theme_constant_override("outline_size", 5)
+		m.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
+		m.position = Vector2(px - 21, 0)
+		b.add_child(m)
+	if not p.skill_req_met(n) and rank == 0:
+		b.modulate = Color(1, 1, 1, 0.45)
+	b.pressed.connect(cb)
+	return b
+
+
 static func _skills(game) -> Control:
 	var p = game.player
 	var Classes = p.Classes
-	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
-	var head := "%s — майстерність %d/%d" % [p.class_name_ua(), p.job_level, p.job_max()]
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 20)
+
+	# ----- Ліворуч: очки й перемикач дерев -----
+	var left := VBoxContainer.new()
+	left.custom_minimum_size = Vector2(170, 0)
+	left.add_theme_constant_override("separation", 6)
+	h.add_child(left)
+	left.add_child(UI.label("Очки вмінь", 15, UI.MUTED))
+	left.add_child(UI.label(str(p.skill_points), 38, UI.GOLD if p.skill_points > 0 else UI.MUTED))
+	var lineage: Array = Classes.lineage(p.job).filter(func(c): return Classes.TREES.has(c))
+	var shown: String = game.skill_tree if game.skill_tree in lineage else p.job
+	left.add_child(UI.label("Дерева", 15, UI.MUTED))
+	for c in lineage:
+		var tb := UI.button(str(Classes.CLASSES[c]["name"]), _do(game, "skill_tree", c), Vector2(170, 50), 17)
+		if c == shown:
+			tb.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 10, 6))
+		left.add_child(tb)
+	var mastery := "Майстерність %d/%d" % [p.job_level, p.job_max()]
 	if p.job_level < p.job_max():
-		head += "   (досвід %d/%d)" % [p.job_xp, p.job_next()]
-	v.add_child(UI.label(head, 24, UI.GOLD, false))
-	v.add_child(UI.label("Очки вмінь: %d — по одному за кожен рівень майстерності. Торкнись вміння, щоб побачити картку." % p.skill_points, 18, UI.GOLD if p.skill_points > 0 else UI.MUTED, false))
+		mastery += "\nдосвід %d/%d" % [p.job_xp, p.job_next()]
+	left.add_child(UI.label(mastery, 14, UI.MUTED))
+	var note := "Очко за кожен рівень майстерності."
+	if shown != p.job:
+		note = "Це дерево вже пройдене: нових рангів тут не вивчити, але вивчене діє."
 	if p.can_change_class():
 		var names := []
 		for c in p.class_info()["next"]:
 			names.append("%s (%s)" % [Classes.CLASSES[c]["name"], {"sich": "Січ", "kapyshche": "Карпати"}.get(Classes.CLASSES[c].get("where", ""), "")])
-		v.add_child(UI.label("Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника.", 19, UI.GOOD, false))
-	_stones_row(game, v)
-	_panel_row(game, v)
+		note = "Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника."
+	var nl := UI.label(note, 13, UI.GOOD if p.can_change_class() else UI.MUTED, false)
+	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	nl.custom_minimum_size = Vector2(170, 0)
+	left.add_child(nl)
 
-	var body := HBoxContainer.new()
-	body.add_theme_constant_override("separation", 16)
-	v.add_child(body)
-	var trees := HBoxContainer.new()
-	trees.alignment = BoxContainer.ALIGNMENT_BEGIN
-	trees.add_theme_constant_override("separation", 10)
-	trees.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_child(trees)
-	var branches: Array = Classes.TREES[p.job]
-	var w := 230.0 if branches.size() >= 3 else 270.0
-	for branch in branches:
-		var col := VBoxContainer.new()
-		col.add_theme_constant_override("separation", 0)
-		col.add_child(UI.label(branch["name"], 22, UI.GOLD))
-		for n in branch["nodes"]:
-			col.add_child(UI.connector())
+	# ----- Посередині: дерево значками -----
+	var branches: Array = Classes.TREES[shown]
+	var rows := 1
+	for br in branches:
+		rows = maxi(rows, br["nodes"].size())
+	var view: Control = load("res://scripts/ui/tree_lines.gd").new()
+	view.custom_minimum_size = Vector2(branches.size() * SK_STEP_X, SK_TOP + rows * SK_STEP_Y)
+	var at := {}  # id вміння -> центр його значка
+	for bi in branches.size():
+		for ni in branches[bi]["nodes"].size():
+			at[branches[bi]["nodes"][ni]["id"]] = Vector2(bi * SK_STEP_X + SK_STEP_X / 2.0, SK_TOP + ni * SK_STEP_Y + SK_CELL / 2.0)
+	for bi in branches.size():
+		var title := UI.label(str(branches[bi]["name"]), 18, UI.GOLD)
+		title.position = Vector2(bi * SK_STEP_X, 0)
+		title.size = Vector2(SK_STEP_X, 28)
+		view.add_child(title)
+		var nodes: Array = branches[bi]["nodes"]
+		for ni in nodes.size():
+			var n: Dictionary = nodes[ni]
+			var c: Vector2 = at[n["id"]]
+			for r in n.get("req", {}):
+				if at.has(r):
+					view.links.append([at[r], c, p.sk(r) >= int(n["req"][r])])
+			var cell := _skill_cell(p, n, n["id"] == game.skill_sel, _do(game, "skill_pick", n["id"]))
+			cell.position = c - Vector2(SK_CELL, SK_CELL) / 2.0
+			view.add_child(cell)
 			var rank: int = p.sk(n["id"])
-			var req_met: bool = p.skill_req_met(n)
-			var tag := ""
-			if n.get("active", false):
-				tag = "  ⚔" if p.SkillInfo.kind(n["id"]) == "attack" else "  ✦"
-			var text := "%s%s   %d/%d" % [n["name"], tag, rank, n["max"]]
-			var b := _tree_button(text, rank, n["max"], true, not req_met, 15, Vector2(w, 54), _do(game, "skill_pick", n["id"]))
-			_with_icon(b, n["id"], 40)
-			if n["id"] == game.skill_sel:
-				b.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 10, 6))
-			col.add_child(b)
-		trees.add_child(col)
-	body.add_child(_skill_card(game))
-	# Вміння попередніх класів лишаються з героєм
-	var earlier := []
-	for c in Classes.lineage(p.job):
-		if c == p.job:
-			continue
-		for b in Classes.TREES[c]:
-			for n in b["nodes"]:
-				if p.sk(n["id"]) > 0:
-					earlier.append(n)
-	if not earlier.is_empty():
-		var er := HFlowContainer.new()
-		er.add_theme_constant_override("h_separation", 6)
-		er.add_child(UI.label("Набуте раніше:", 17, UI.MUTED, false))
-		for n in earlier:
-			var eb := UI.button("%s %d" % [n["name"], p.sk(n["id"])], _do(game, "skill_pick", n["id"]), Vector2(0, 40), 14)
-			_with_icon(eb, n["id"], 28)
-			er.add_child(eb)
-		v.add_child(er)
-	return v
+			var rl := UI.label("%d/%d" % [rank, int(n["max"])], 15, (Color(0.6, 0.95, 0.5) if rank >= int(n["max"]) else UI.GOLD) if rank > 0 else UI.MUTED)
+			rl.position = Vector2(c.x - SK_STEP_X / 2.0, c.y + SK_CELL / 2.0 + 1.0)
+			rl.size = Vector2(SK_STEP_X, 20)
+			view.add_child(rl)
+	h.add_child(view)
+
+	# ----- Праворуч: кнопки бою й картка вміння -----
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 8)
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(right)
+	_panel_block(game, right)
+	right.add_child(_skill_card(game))
+	_stones_row(game, right)
+	return h
 
 
-## Панель бою: 3 атаки біля удару й 5 бафів знизу. Торкнись комірки, коли відкрита картка, — вміння стане туди.
-static func _panel_row(game, v: VBoxContainer) -> void:
+## Кнопки бою: три атаки біля «Удару» й п'ять підсилень знизу. Дотик до кнопки вибирає вміння на ній.
+## Коли вибрано вивчене активне вміння (у дереві чи на кнопці), кнопки його виду світяться зеленим:
+## дотик ставить вміння туди, а те, що там стояло, переходить на його місце.
+static func _panel_block(game, v: VBoxContainer) -> void:
 	var p = game.player
 	p.sync_panel()
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
 	var sel: String = game.skill_sel
 	var sel_kind: String = p.SkillInfo.kind(sel) if sel != "" else ""
-	var can_place: bool = sel != "" and p.sk(sel) > 0
+	var can_place: bool = sel != "" and p.sk(sel) > 0 and p.Classes.find_node(sel).get("active", false)
+	v.add_child(UI.label("Кнопки бою", 20, UI.GOLD, false))
 	for kind in ["attack", "buff"]:
-		var box := HBoxContainer.new()
-		box.add_theme_constant_override("separation", 4)
-		box.add_child(UI.label("⚔ Атаки:" if kind == "attack" else "✦ Бафи:", 16, UI.MUTED, false))
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		var cap := UI.label("⚔ Атаки\nбіля «Удару»" if kind == "attack" else "✦ Підсилення\nнижній ряд", 13, UI.MUTED, false)
+		cap.custom_minimum_size = Vector2(104, 0)
+		row.add_child(cap)
 		var arr: Array = p.panel[kind]
 		for i in arr.size():
 			var id: String = arr[i]
-			var text: String = Data.ACTIVE_LABELS.get(id, "—") if id != "" else "—"
+			var slot := VBoxContainer.new()
+			slot.add_theme_constant_override("separation", 0)
 			var b: Button
-			if can_place and sel_kind == kind:
-				b = UI.button(text, _do(game, "panel_set", [kind, i, sel]), Vector2(74, 48), 11)
-				b.add_theme_stylebox_override("normal", UI.style(Color(0.2, 0.3, 0.15), Color(0.5, 0.9, 0.4), 8, 4))
-			else:
-				b = UI.button(text, _do(game, "panel_clear", [kind, i]), Vector2(74, 48), 11, id != "")
+			var place: bool = can_place and sel_kind == kind
 			if id != "":
-				_with_icon(b, id, 36, true)
-			if id != "" and id == sel:
-				b.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 8, 4))
-			box.add_child(b)
-		row.add_child(box)
-	v.add_child(row)
-	if can_place:
-		v.add_child(UI.label("Торкнись підсвіченої комірки, щоб поставити туди «%s». Торкнись зайнятої без картки — прибрати." % Data.skill_name(sel), 14, UI.GOOD, false))
+				b = _skill_cell(p, p.Classes.find_node(id), id == sel, _do(game, "panel_set", [kind, i, sel]) if place and id != sel else _do(game, "skill_pick", id), 58, true)
+				b.modulate = Color.WHITE
+			else:
+				b = UI.button("", _do(game, "panel_set", [kind, i, sel]) if place else func(): pass, Vector2(58, 58), 14, place)
+			if place and id != sel:
+				for st in ["normal", "hover", "pressed"]:
+					b.add_theme_stylebox_override(st, UI.style(Color(0.16, 0.3, 0.13), Color(0.5, 0.95, 0.4), 10, 2))
+			slot.add_child(b)
+			var cl := UI.label(str(Data.ACTIVE_LABELS.get(id, "")) if id != "" else "вільно", 12, (UI.GOOD if place and id != sel else UI.TEXT) if id != "" else (UI.GOOD if place else UI.MUTED))
+			cl.custom_minimum_size = Vector2(58, 0)
+			slot.add_child(cl)
+			row.add_child(slot)
+		v.add_child(row)
+	var hint := "Торкнись зеленої кнопки, щоб поставити туди «%s». Те, що там стоїть, перейде на його місце." % Data.skill_name(sel) if can_place else "Щоб переставити вміння, торкнись його кнопки або вивченого активного вміння в дереві (з позначкою ⚔ чи ✦), а тоді зеленої кнопки."
+	var hl := UI.label(hint, 13, UI.GOOD if can_place else UI.MUTED, false)
+	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(hl)
 
 
 ## Картка вміння: що робить, цифри зараз → наступний ранг, ціна, перезарядка; «Вивчити».
@@ -680,7 +754,7 @@ static func _skill_card(game) -> Control:
 		card.add_child(UI.label("Максимальний ранг", 16, UI.GOOD, false))
 	if active and rank > 0:
 		var on: bool = id in p.panel["attack"] or id in p.panel["buff"]
-		card.add_child(UI.label("На панелі бою" if on else "Не на панелі: торкнись підсвіченої комірки вгорі", 14, UI.GOOD if on else UI.MUTED, false))
+		card.add_child(UI.label("Стоїть на кнопці бою" if on else "Не на кнопці: торкнись зеленої кнопки бою вище", 14, UI.GOOD if on else UI.MUTED, false))
 	return card
 
 
@@ -697,13 +771,13 @@ static func _stones_row(game, v: VBoxContainer) -> void:
 	row.add_theme_constant_override("v_separation", 8)
 	if z > 0:
 		var t := ("Камінь забуття ×%d: скинути очки" % z) if game.confirm_action != "stone_reset" else "Точно скинути? Ще раз"
-		row.add_child(UI.button(t, _do(game, "stone_reset"), Vector2(300, 52), 15))
+		row.add_child(UI.button(t, _do(game, "stone_reset"), Vector2(250, 44), 13))
 	if a > 0:
 		for cls in SS.siblings(p):
 			var key: String = "stone_path:" + cls
 			var nm: String = p.Classes.CLASSES[cls]["name"]
 			var t: String = ("Алатир ×%d: стати «%s»" % [a, nm]) if game.confirm_action != key else "Точно «%s»? Ще раз" % nm
-			row.add_child(UI.button(t, _do(game, "stone_path", cls), Vector2(290, 52), 15))
+			row.add_child(UI.button(t, _do(game, "stone_path", cls), Vector2(250, 44), 13))
 	v.add_child(row)
 	if game.confirm_action != "":
 		v.add_child(UI.label("Забуття повертає очки характеристик, Загартування й вмінь нинішнього класу. Алатир змінює дорогу: вміння старої забуваються з поверненням очок.", 15, UI.MUTED, false))

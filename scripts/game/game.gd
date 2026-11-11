@@ -99,6 +99,7 @@ var camp_tab := 0
 var craft_tier := 1  # якість у вкладці «Кування»
 var confirm_action := ""
 var skill_sel := ""
+var skill_tree := ""  # яке дерево вмінь показано ("" — дерево нинішнього класу)
 var path_card := "cossack"
 # Подорож мапою
 var travel_to := ""  # куди їдемо ("" — стоїмо)
@@ -854,7 +855,7 @@ func _record(stat: String, amount: int = 1) -> void:
 
 func _on_level_up(lvl: int) -> void:
 	_record("level", lvl)
-	hud.show_banner("Рівень %d!\nВідкрий «%s», щоб прокачатися" % [lvl, player.class_name_ua()], UI.GOLD)
+	hud.show_banner("Рівень %d!\nВідкрий «Персонаж», щоб прокачатися" % lvl, UI.GOLD)
 	hint("levelup", "Новий рівень! Натисни кнопку героя угорі праворуч: вклади очки в характеристики, вміння й перки.")
 
 
@@ -1854,6 +1855,15 @@ func char_do(action: String, arg) -> void:
 				save_game()
 		"skill_pick":
 			skill_sel = arg
+			# вміння вибрано з кнопки бою: показати дерево, де воно росте
+			for c in player.Classes.lineage(player.job):
+				for br in player.Classes.TREES.get(c, []):
+					for n in br["nodes"]:
+						if n["id"] == arg:
+							skill_tree = c
+		"skill_tree":
+			skill_tree = arg
+			skill_sel = ""
 		"panel_set":
 			# arg: [kind, index, id]
 			player.set_panel(arg[0], arg[1], arg[2])
@@ -2093,7 +2103,7 @@ func _show_pause() -> void:
 	_open_menu()
 	hud.add_title("Пауза")
 	hud.add_button("Продовжити", _resume_play)
-	hud.add_button(player.class_name_ua(), func():
+	hud.add_button("Персонаж", func():
 		hud.close_overlay()
 		state = State.PLAYING
 		open_character())

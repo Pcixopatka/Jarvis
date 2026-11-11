@@ -496,10 +496,10 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 	var pts: int = player.unspent_points() + ChallengeService.ready_count(world, player)
 	if pts > 0:
 		_pulse += maxf(delta, 0.016) * 5.0
-		char_btn.text = "%s +%d" % [player.class_name_ua(), pts]
+		char_btn.text = "Персонаж +%d" % pts
 		char_btn.modulate = Color(1, 1, 1).lerp(Color(1.4, 1.25, 0.6), 0.5 + 0.5 * sin(_pulse))
 	else:
-		char_btn.text = player.class_name_ua()
+		char_btn.text = "Персонаж"
 		char_btn.modulate = Color.WHITE
 
 

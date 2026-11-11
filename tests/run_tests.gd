@@ -116,6 +116,7 @@ func _run() -> void:
 	await _suite_difficulty()
 	await _suite_hero_screen()
 	await _suite_journal()
+	await _suite_skills_tab()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7604,6 +7605,137 @@ func _suite_journal() -> void:
 		for e in sx["entries"]:
 			titles[str(e["title"])] = str(e["text"])
 	check(titles.has("Екран героя й журнал") and "Журнал" in str(titles.get("Екран героя й журнал", "")), "довідник пояснює екран героя й журнал")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Вкладка вмінь: дерево значками й кнопки бою =======================
+
+func _suite_skills_tab() -> void:
+	suite("Вкладка вмінь: дерево значками, кнопки бою, кнопка «Персонаж»")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var Classes = p.Classes
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char"]:
+		game.world.hints[k] = true
+	p.level = 40
+	p.change_class("cossack")
+	p.job_level = 20
+	p.skill_points = 4
+	p.skills["vyly"] = 2
+	p.skills["whirl"] = 3
+	p.recalc()
+	p.sync_panel()
+	# Кнопка героя зветься «Персонаж», а не назвою класу
+	game.enter_map()
+	await _frames(3)
+	check(game.hud.char_btn.text.begins_with("Персонаж") and not "Козак" in game.hud.char_btn.text, "кнопка в кутку зветься «Персонаж»: «%s»" % game.hud.char_btn.text)
+	game.enter_city("sich")
+	await _frames(2)
+	var city_btns := []
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		city_btns.append(b.text)
+	check(city_btns.any(func(t): return str(t).begins_with("Персонаж")) and not city_btns.any(func(t): return str(t).begins_with("Козак")), "у місті кнопка теж «Персонаж»")
+	game.open_character()
+	await _frames(2)
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var tab := -1
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i).begins_with("Вміння"):
+			tab = i
+	game.char_tab = tab
+	game._build_character()
+	await _frames(2)
+	var page := func() -> Control:
+		return game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(tab)
+	var cells := func() -> Array:
+		return page.call().find_children("*", "Button", true, false).filter(func(b): return b.text == "" and b.custom_minimum_size.x == b.custom_minimum_size.y and b.custom_minimum_size.x >= 56.0)
+	var labels := func() -> String:
+		var out := ""
+		for n in page.call().find_children("*", "Label", true, false):
+			out += n.text + "\n"
+		return out
+	var btn_texts := func() -> Array:
+		var out := []
+		for b in page.call().find_children("*", "Button", true, false):
+			out.append(b.text)
+		return out
+	# Дерево нинішнього класу: значок на кожне вміння, ранг під значком, лінії за вимогами
+	var nodes := 0
+	var reqs := 0
+	for br in Classes.TREES["cossack"]:
+		nodes += br["nodes"].size()
+		for n in br["nodes"]:
+			reqs += n.get("req", {}).size()
+	var view = page.call().find_children("*", "Control", true, false).filter(func(c): return c.get_script() != null and "links" in c)[0]
+	var filled := 0
+	for kind in ["attack", "buff"]:
+		for id in p.panel[kind]:
+			if id != "":
+				filled += 1
+	var tree_cells: Array = view.find_children("*", "Button", true, false)
+	check(tree_cells.size() == nodes and view.links.size() == reqs and nodes >= 9, "дерево козака: %d значків і %d ліній" % [tree_cells.size(), view.links.size()])
+	var txt: String = labels.call()
+	check("Очки вмінь" in txt and "Кнопки бою" in txt and "3/5" in txt and "0/" in txt and "Шабля" in txt, "очки, назви гілок, ранги під значками й кнопки бою на одному екрані")
+	check(btn_texts.call().has("Селянин") and btn_texts.call().has("Козак") and not btn_texts.call().has("Запорожець"), "перемикач дерев: лише пройдені класи й нинішній")
+	var slots := func() -> Array:
+		return page.call().find_children("*", "Button", true, false).filter(func(b): return b.custom_minimum_size == Vector2(58, 58))
+	check(slots.call().size() == 8 and cells.call().size() == nodes + 8 and filled == 2, "кнопок бою вісім: три атаки й п'ять підсилень, зайняті показано значками вмінь (зайнято %d)" % filled)
+	# Дотик до значка: картка вміння
+	game.char_do("skill_pick", "whirl")
+	await _frames(2)
+	txt = labels.call()
+	check("Вихор" in txt and "Ранг 3/5" in txt and "Наснага" in txt and btn_texts.call().any(func(t): return str(t).begins_with("Вивчити")), "дотик до значка відкриває картку з числами й кнопкою «Вивчити»")
+	# Вибране вивчене вміння: кнопки бою його виду засвітилися
+	check("Торкнись зеленої кнопки" in txt, "підказка, як поставити вміння на кнопку")
+	# Дотик до кнопки бою вибирає вміння на ній і показує його дерево
+	var first: String = p.panel["attack"][0]
+	var second: String = p.panel["attack"][1]
+	game.skill_sel = ""
+	game._build_character()
+	await _frames(2)
+	slots.call()[0].pressed.emit()
+	await _frames(2)
+	check(first != "" and game.skill_sel == first and game.skill_tree == ("peasant" if first == "vyly" else "cossack"), "дотик до кнопки бою вибирає вміння на ній («%s») і відкриває його дерево" % first)
+	# Дотик до зеленої кнопки переносить вміння; зайняті міняються місцями
+	slots.call()[2].pressed.emit()
+	await _frames(2)
+	check(p.panel["attack"][2] == first and p.panel["attack"][0] == "", "вміння перейшло на вільну третю кнопку")
+	slots.call()[1].pressed.emit()
+	await _frames(2)
+	check(p.panel["attack"][1] == first and p.panel["attack"][2] == second, "на зайнятій кнопці вміння помінялися місцями")
+	game.char_do("skill_tree", "cossack")
+	game.char_do("skill_pick", "whirl")
+	await _frames(2)
+	check("Стоїть на кнопці бою" in labels.call(), "картка каже, що вміння вже на кнопці")
+	# Вивчити ранг просто з картки
+	var pts0: int = p.skill_points
+	game.char_do("skill", "whirl")
+	await _frames(2)
+	check(p.sk("whirl") == 4 and p.skill_points == pts0 - 1 and "4/5" in labels.call(), "вивчено ранг: число під значком оновилось")
+	# Пройдене дерево: видно, але лише для перегляду
+	game.char_do("skill_tree", "peasant")
+	await _frames(2)
+	var pnodes := 0
+	for br in Classes.TREES["peasant"]:
+		pnodes += br["nodes"].size()
+	view = page.call().find_children("*", "Control", true, false).filter(func(c): return c.get_script() != null and "links" in c)[0]
+	check(view.find_children("*", "Button", true, false).size() == pnodes and "Це дерево вже пройдене" in labels.call() and game.skill_tree == "peasant", "перемикач показує дерево селянина: %d значків" % pnodes)
+	game.char_do("skill_pick", "vyly")
+	await _frames(2)
+	check("Удар вилами" in labels.call() and "Ранг 2/5" in labels.call(), "вивчене раніше вміння теж має картку")
+	game.close_character()
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)

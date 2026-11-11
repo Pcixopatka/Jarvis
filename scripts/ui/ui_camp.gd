@@ -40,7 +40,7 @@ static func build(game) -> Control:
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,
-		[[game.player.class_name_ua() + ((" +%d" % pts) if pts > 0 else ""), game.open_character]])
+		[["Персонаж" + ((" +%d" % pts) if pts > 0 else ""), game.open_character]])
 
 
 static func _cost_text(cost: Dictionary) -> String:
