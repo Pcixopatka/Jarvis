@@ -213,11 +213,15 @@ static func migrate(d: Dictionary) -> Dictionary:
 
 static func load_settings() -> Dictionary:
 	var cfg := ConfigFile.new()
-	var out := {"sound": true, "music": true, "autosell": false}
+	var out := {"sound": true, "music": true, "autosell": false, "pickup": [true, true, true, true]}
 	if cfg.load(SETTINGS_PATH) == OK:
 		out["sound"] = cfg.get_value("audio", "sound", true)
 		out["music"] = cfg.get_value("audio", "music", true)
 		out["autosell"] = cfg.get_value("game", "autosell", false)
+		# фільтр автопідбору: рядок із чотирьох знаків, «1» — рідкість підбирається
+		var mask: String = str(cfg.get_value("game", "pickup", "1111"))
+		for i in 4:
+			out["pickup"][i] = i >= mask.length() or mask[i] != "0"
 	return out
 
 
@@ -226,4 +230,9 @@ static func save_settings(settings: Dictionary) -> void:
 	cfg.set_value("audio", "sound", settings.get("sound", true))
 	cfg.set_value("audio", "music", settings.get("music", true))
 	cfg.set_value("game", "autosell", settings.get("autosell", false))
+	var mask := ""
+	var pick: Array = settings.get("pickup", [true, true, true, true])
+	for i in 4:
+		mask += "1" if i >= pick.size() or bool(pick[i]) else "0"
+	cfg.set_value("game", "pickup", mask)
 	cfg.save(SETTINGS_PATH)

@@ -225,7 +225,7 @@ static func _siege_note(v: Control, world, sel: String) -> bool:
 
 
 ## on_go(id) викликається кнопкою «Вирушити» / «Увійти до міста».
-static func build(sel: String, world, player: Player, on_go: Callable, story_target: String = "", story_line: String = "", on_escort: Callable = Callable()) -> Control:
+static func build(sel: String, world, player: Player, on_go: Callable, story_target: String = "", story_line: String = "", on_escort: Callable = Callable(), on_quick: Callable = Callable()) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	if story_line != "" and (sel == "" or sel == story_target):
@@ -323,6 +323,15 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		v.add_child(_wrapped("%s чекає край дороги. Проведи через три засідки." % EscS.who(eq)["name"], 16, UI.GOLD))
 		v.add_child(UI.button("Провести %s" % EscS.who(eq)["acc"], on_escort.bind(sel), Vector2(350, 62), 22))
 	v.add_child(UI.button("Вирушити", on_go.bind(sel), Vector2(350, 70), 26))
+	# Швидкий похід: миттєва зачистка вже пройденого місця за перегляд реклами
+	var QS = load("res://scripts/game/quick_service.gd")
+	if on_quick.is_valid() and QS.applies(sel):
+		var why: String = QS.block_reason(world, player, sel)
+		if why == "":
+			v.add_child(UI.button("Швидкий похід за рекламу", on_quick.bind(sel), Vector2(350, 56), 19))
+			v.add_child(_wrapped("Миттєва зачистка без бою. Сьогодні лишилось: %d із %d." % [QS.left_today(world), QS.PER_DAY], 14, UI.MUTED))
+		else:
+			v.add_child(_wrapped("Швидкий похід: %s." % why, 14, UI.MUTED))
 	return v
 
 

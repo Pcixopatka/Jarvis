@@ -32,6 +32,7 @@ const FarService := preload("res://scripts/game/far_service.gd")
 const EventsBoard := preload("res://scripts/game/events_board.gd")
 const GuideService := preload("res://scripts/game/guide_service.gd")
 const WayService := preload("res://scripts/game/way_service.gd")
+const QuickService := preload("res://scripts/game/quick_service.gd")
 const WikiService := preload("res://scripts/game/wiki_service.gd")
 const UiWiki := preload("res://scripts/ui/ui_wiki.gd")
 const TradeService := preload("res://scripts/game/trade_service.gd")
@@ -130,6 +131,7 @@ func _ready() -> void:
 	combat = CombatScript.new()
 	add_child(combat)
 	combat.autosell = settings.get("autosell", false)
+	combat.pickup_filter = settings.get("pickup", [true, true, true, true]).duplicate()
 	combat.move_input = _move_input
 	combat.block_input = func() -> bool:
 		return hud.btn_block.held or Input.is_physical_key_pressed(KEY_E) or Input.is_physical_key_pressed(KEY_B)
@@ -529,15 +531,7 @@ func enter_map() -> void:
 			news.append(leave_notice)
 			leave_notice = ""
 		news.append_array(back)
-		var spread := PlagueService.tick(world)
-		if not spread.is_empty():
-			news.append("Зараза повзе далі: " + ", ".join(spread))
-		news.append_array(DefenseService.tick(world, player))
-		news.append_array(EventService.tick(world, player))
-		BountyService.tick(world)
-		TradeService.tick(world)
-		OutdoorService.tick(world)
-		TavernService.tick(world)
+		news.append_array(_trip_tick())
 		mv.events = EventService.map_marks(world)
 		if not news.is_empty():
 			hud.show_banner("\n".join(news), Color(1.0, 0.75, 0.4))
@@ -550,6 +544,53 @@ func enter_map() -> void:
 	if not WayService.finished(world):
 		hint("way", "Шлях козака: ланцюжок цілей із нагородами, що по черзі вчить усьому в грі. Він угорі вкладки «Журнал», а кнопка «Далі» внизу мапи веде до наступного кроку.")
 	hint("map", "Торкнись місця на мапі. «!» позначає мету завдання, зелена галочка — місто, де здати виконане. Почни з Дикого Поля поруч із Січчю.")
+
+
+## Похід скінчився: світ живе далі. Зараза повзе, облоги й події рахують походи, дошки оновлюються.
+## Повертає новини для гравця. Так само рахується й швидкий похід.
+func _trip_tick() -> Array:
+	var news := []
+	var spread := PlagueService.tick(world)
+	if not spread.is_empty():
+		news.append("Зараза повзе далі: " + ", ".join(spread))
+	news.append_array(DefenseService.tick(world, player))
+	news.append_array(EventService.tick(world, player))
+	BountyService.tick(world)
+	TradeService.tick(world)
+	OutdoorService.tick(world)
+	TavernService.tick(world)
+	return news
+
+
+## Швидкий похід: місце, пройдене кілька разів, зачищається миттю. Плата — перегляд реклами.
+func quick_raid(loc_id: String) -> void:
+	if state != State.MAP or travel_to != "" or QuickService.block_reason(world, player, loc_id) != "":
+		return
+	Ads.show_rewarded("quick", func(ok: bool):
+		if ok:
+			_quick_done(loc_id)
+		else:
+			_build_map_panel())
+
+
+func _quick_done(loc_id: String) -> void:
+	if QuickService.block_reason(world, player, loc_id) != "":
+		return
+	world.hero_level = player.level
+	var r: Dictionary = QuickService.run(world, player, loc_id, AdRewards.drop_mult(world), HolidayService.combat_mods(), combat.pickup_filter)
+	# виклики й досягнення рахують швидкий похід як звичайний
+	_record("kill", int(r["kills"]))
+	for kind in r["kinds"]:
+		_record("kill:" + str(kind), int(r["kinds"][kind]))
+	if int(r["elites"]) > 0:
+		_record("elite", int(r["elites"]))
+	_record("dungeon" if Data.LOCATIONS[loc_id]["type"] == "dungeon" else "field")
+	var lines := [QuickService.summary(r)]
+	lines.append_array(_trip_tick())
+	Audio.play("quest", 0.0)
+	enter_map()  # оновити позначки, пораду й панель місця
+	hud.show_banner("\n".join(lines), UI.GOLD)
+	save_game()
 
 
 func enter_city(id: String) -> void:
@@ -1006,7 +1047,7 @@ func _build_map_panel() -> void:
 	if Acts.SPOTS.has(map_sel):
 		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block())
 		return
-	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort), _sponsor_block())
+	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort, quick_raid), _sponsor_block())
 
 
 ## Подарунки спонсора внизу панелі мапи: видно завжди, хоч би яке місце обране.
@@ -2268,10 +2309,34 @@ func _add_sound_toggles(refresh: Callable) -> void:
 			_save_settings()
 			refresh.call(), Vector2(232, 64), 22),
 	])
+	var on := 0
+	for v in combat.pickup_filter:
+		on += 1 if v else 0
+	hud.add_button("Автопідбір: %s" % ("усе" if on == 4 else "%d із 4 рідкостей" % on), func(): _show_pickup_menu(refresh))
+
+
+## Фільтр автопідбору: речі яких рідкостей герой підбирає сам. back — меню, з якого прийшли.
+func _show_pickup_menu(back: Callable) -> void:
+	_open_menu()
+	hud.add_title("Фільтр автопідбору")
+	hud.add_title("Вимкнена рідкість не підбирається: річ лежить тьмяна,\nа коли йдеш із місця, продається. Золоті речі й артефакти беруться завжди.", 22, UI.TEXT)
+	for r in 4:
+		var b := hud.add_button(("☑ " if combat.pickup_filter[r] else "☐ ") + "%s речі" % Data.RARITY_PLURAL[r], func():
+			combat.pickup_filter[r] = not combat.pickup_filter[r]
+			_save_settings()
+			_show_pickup_menu(back), Vector2(480, 64))
+		b.add_theme_color_override("font_color", Data.RARITY_COLORS[r])
+	var lying: int = combat.ignored_count() if combat.active else 0
+	if lying > 0:
+		hud.add_button("Підібрати все, що лежить: %d" % lying, func():
+			var got: int = combat.collect_ignored()
+			hud.show_banner("Підібрано речей: %d" % got if got > 0 else "Торба повна", UI.GOLD if got > 0 else UI.BAD)
+			_show_pickup_menu(back), Vector2(480, 64))
+	hud.add_button("Назад", back, Vector2(480, 64))
 
 
 func _save_settings() -> void:
-	SaveSystem.save_settings({"sound": Audio.sound_on, "music": Audio.music_on, "autosell": combat.autosell})
+	SaveSystem.save_settings({"sound": Audio.sound_on, "music": Audio.music_on, "autosell": combat.autosell, "pickup": combat.pickup_filter})
 
 
 # ======================= Клавіатура й система =======================

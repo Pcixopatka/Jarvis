@@ -27,10 +27,12 @@ func _process(delta: float) -> void:
 	var to: Vector2 = p.global_position - global_position
 	var dist := to.length()
 	hold = maxf(0.0, hold - delta)
-	if not _wanted(p):
-		# нема куди покласти: здобич лежить далі, а не зникає
+	var block := _block(p)
+	modulate.a = 0.45 if block == "filter" else 1.0  # річ, яку фільтр не бере, лежить тьмяна
+	if block != "":
+		# нема куди покласти або фільтр не бере: здобич лежить далі, а не зникає
 		pull_speed = 0.0
-		if kind == "item" and dist < 70.0:
+		if block == "full" and kind == "item" and dist < 70.0:
 			combat.note_bag_full()
 		queue_redraw()
 		return
@@ -71,16 +73,21 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 
-## Чи є куди це покласти. Річ при повній торбі й зілля при повному запасі лишаються лежати.
-func _wanted(p) -> bool:
+## Чому це не підбирається: "" — підбирається, "full" — нема куди покласти (повна торба чи повний
+## запас зілля), "filter" — фільтр автопідбору не бере речі такої рідкості.
+func _block(p) -> String:
 	match kind:
 		"item":
-			return combat.can_pick_item(item)
+			return combat.pick_block(item, manual)
 		"potion":
-			return p.potions < p.potion_max()
+			return "" if p.potions < p.potion_max() else "full"
 		"mana":
-			return p.mana_potions < p.mana_potion_max()
-	return true
+			return "" if p.mana_potions < p.mana_potion_max() else "full"
+	return ""
+
+
+func _wanted(p) -> bool:
+	return _block(p) == ""
 
 
 func _draw() -> void:

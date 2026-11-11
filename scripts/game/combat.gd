@@ -96,6 +96,11 @@ var ring_break := 0.0  # перепочинок до наступного чуд
 var ring_done := false
 var _ring_boss = null
 var _bag_note_at := 0.0  # коли знову можна нагадати про повну торбу
+## Фільтр автопідбору (налаштування): які рідкості герой підбирає сам, за номером рідкості 0..3.
+## Золоті речі й артефакти беруться завжди. Що не підібрано, лежить далі, а на виході продається.
+var pickup_filter := [true, true, true, true]
+var _filter_sold := 0  # скільки речей продано на виході, бо фільтр їх не брав
+var _filter_gold := 0
 var _sweep_sold := 0  # скільки речей продано при прибиранні перед виходом, бо не вмістились
 var _sweep_gold := 0
 const FIELD_PAIR_CHANCE := 0.5  # шанс, що в далекому полі замість одного ворога вийдуть двоє
@@ -1159,7 +1164,14 @@ func collect_all() -> void:
 					player.add_xp(c.value)
 					player.add_gold(Data.coin_gold(c.value))
 				"item":
-					pick_item(c.item, true)
+					if not c.manual and not filter_allows(c.item):
+						# фільтр автопідбору цю річ не бере: на виході вона продається, а не зникає
+						var fg := Data.sell_price(c.item)
+						player.gold += fg
+						_filter_sold += 1
+						_filter_gold += fg
+					else:
+						pick_item(c.item, true)
 				"res":
 					add_resource(c.item["res"], c.value)
 				"potion":
@@ -1172,11 +1184,18 @@ func collect_all() -> void:
 				"token":
 					Events.holiday_token.emit(c.value, c.global_position)  # жетони свята не лишаються на полі
 			c.queue_free()
+	var sold_lines := []
 	if _sweep_sold > 0:
 		# що не вмістилось у торбу, перед виходом продано: інакше воно просто зникло б
-		Events.banner.emit("Торба повна: речей продано %d\n+%d грн" % [_sweep_sold, _sweep_gold], Color(1.0, 0.8, 0.5))
-		_sweep_sold = 0
-		_sweep_gold = 0
+		sold_lines.append("Торба повна: речей продано %d\n+%d грн" % [_sweep_sold, _sweep_gold])
+	if _filter_sold > 0:
+		sold_lines.append("Не підібрано за фільтром: продано %d\n+%d грн" % [_filter_sold, _filter_gold])
+	if not sold_lines.is_empty():
+		Events.banner.emit("\n".join(sold_lines), Color(1.0, 0.8, 0.5))
+	_sweep_sold = 0
+	_sweep_gold = 0
+	_filter_sold = 0
+	_filter_gold = 0
 
 
 # ======================= Нечисть і здобич =======================
@@ -1323,12 +1342,47 @@ func add_resource(r: String, amount: int) -> void:
 	player.resources[r] = int(player.resources.get(r, 0)) + amount
 
 
-## Чи підніме герой цю річ: є місце в торбі, або це золота річ чи артефакт (вони лягають понад місце,
-## щоб не загубитись), або ввімкнено автопродаж мотлоху і річ звичайна. Інакше річ лишається лежати.
-func can_pick_item(item: Dictionary) -> bool:
+## Чи бере фільтр автопідбору річ такої рідкості. Золоті речі й артефакти беруться завжди.
+func filter_allows(item: Dictionary) -> bool:
+	var r: int = int(item["rarity"])
+	return r > Data.RARITY_MAX_RANDOM or r < 0 or bool(pickup_filter[r])
+
+
+## Чому герой не підніме цю річ: "" — підніме, "filter" — фільтр автопідбору її не бере,
+## "full" — нема місця в торбі. manual — річ, яку гравець сам викинув: фільтр на неї не діє.
+## Золота річ і артефакт лягають понад місце; звичайна при автопродажу продається одразу.
+func pick_block(item: Dictionary, manual: bool = false) -> String:
+	if not manual and not filter_allows(item):
+		return "filter"
 	if not player.bag_full() or int(item["rarity"]) > Data.RARITY_MAX_RANDOM:
-		return true
-	return autosell and int(item["rarity"]) == 0
+		return ""
+	return "" if autosell and int(item["rarity"]) == 0 else "full"
+
+
+func can_pick_item(item: Dictionary, manual: bool = false) -> bool:
+	return pick_block(item, manual) == ""
+
+
+## Скільки речей лежить на землі, бо фільтр їх не бере.
+func ignored_count() -> int:
+	var n := 0
+	for c in entities.get_children():
+		if c.get_script() == PickupScript and c.kind == "item" and not c.is_queued_for_deletion() and not c.manual and not filter_allows(c.item):
+			n += 1
+	return n
+
+
+## Підібрати все, що фільтр лишив лежати (кнопка в налаштуваннях). Повертає, скільки взято.
+func collect_ignored() -> int:
+	var n := 0
+	for c in entities.get_children():
+		if c.get_script() == PickupScript and c.kind == "item" and not c.is_queued_for_deletion() and not c.manual and not filter_allows(c.item):
+			if player.bag_full():
+				break
+			if pick_item(c.item):
+				c.queue_free()
+				n += 1
+	return n
 
 
 ## Герой стоїть біля речі, яку нема куди покласти: нагадати, але не частіше ніж раз на кілька секунд.

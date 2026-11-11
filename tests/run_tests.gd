@@ -123,6 +123,8 @@ func _run() -> void:
 	await _suite_way()
 	await _suite_objective_arrow()
 	await _suite_gear_best()
+	await _suite_quick_raid()
+	await _suite_pickup_filter()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7913,6 +7915,306 @@ func _suite_skills_tab() -> void:
 
 
 # ======================= Повна торба, викинути й знищити, гортання з будь-якої точки =======================
+
+func _suite_pickup_filter() -> void:
+	suite("Фільтр автопідбору")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var QS = load("res://scripts/game/quick_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var keep: Dictionary = SaveSystem.load_settings()  # налаштування пристрою після набору повертаємо як були
+	# Налаштування зберігають фільтр і мають розумне значення за замовчуванням
+	SaveSystem.save_settings({"sound": keep["sound"], "music": keep["music"], "autosell": keep["autosell"], "pickup": [false, true, false, true]})
+	check(SaveSystem.load_settings()["pickup"] == [false, true, false, true], "фільтр зберігається в налаштуваннях")
+	SaveSystem.save_settings({"sound": keep["sound"], "music": keep["music"], "autosell": keep["autosell"]})
+	check(SaveSystem.load_settings()["pickup"] == [true, true, true, true] and Data.RARITY_PLURAL.size() == 4, "без налаштування герой підбирає все")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "bag_full", "way"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 20
+	p.stats["vit"] = 80
+	p.recalc()
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	check(c.pickup_filter == [true, true, true, true], "нова гра бере фільтр із налаштувань")
+	var common: Dictionary = Data.gen_item(10, 0, "boots")
+	var rare: Dictionary = Data.gen_item(10, 2, "belt")
+	# Правило
+	c.pickup_filter = [false, true, true, true]
+	check(c.pick_block(common) == "filter" and not c.can_pick_item(common) and c.pick_block(rare) == "" and c.pick_block(common, true) == "", "вимкнену рідкість герой не бере, решту бере, викинуту власноруч бере")
+	c.pickup_filter = [false, false, false, false]
+	check(c.can_pick_item(Uniques.make("poias_baidy", 20)) and c.can_pick_item(Arts.make("zmiiv_zub")) and c.filter_allows(Arts.make("zmiiv_zub")), "золоті речі й артефакти беруться за будь-якого фільтра")
+	# У бою: звичайна лежить тьмяна, рідкісна підбирається
+	c.pickup_filter = [false, true, true, true]
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	c.autosell = false
+	var ground := func() -> Array:
+		return c.entities.get_children().filter(func(ch): return ch.get_script() == c.PickupScript and ch.kind == "item" and not ch.is_queued_for_deletion())
+	for old in ground.call():
+		old.queue_free()
+	await _frames(2)
+	c.spawn_pickup(p.global_position, "item", 0, common)
+	c.spawn_pickup(p.global_position, "item", 0, rare)
+	var note0: float = c._bag_note_at
+	for i in 50:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	var left: Array = ground.call()
+	check(left.size() == 1 and left[0].item == common and left[0].modulate.a < 0.6 and not p.find_item(rare.get("uid", -1)).is_empty() and p.find_item(common.get("uid", -1)).is_empty(), "звичайна річ лежить тьмяна, рідкісну підібрано")
+	check(is_equal_approx(c._bag_note_at, note0) and c.ignored_count() == 1, "про повну торбу гра не каже: річ лежить через фільтр")
+	# Викинута власноруч річ піднімається, хоч фільтр її рідкість і не бере
+	var own: Dictionary = Data.gen_item(10, 0, "head")
+	p.add_item(own, true)
+	p.remove_from_bag(own["uid"])
+	c.drop_item(own)
+	await _frames(2)
+	var dropped = ground.call().filter(func(ch): return ch.manual)[0]
+	check(c.ignored_count() == 1 and dropped.modulate.a > 0.9, "викинута власноруч річ фільтром не рахується й не тьмяніє")
+	p.global_position = dropped.global_position
+	for i in 110:
+		p.hp = p.max_hp
+		p.invuln = 1.0
+		await process_frame
+	check(not p.find_item(own["uid"]).is_empty(), "став на викинуту річ: підняв попри фільтр")
+	# Кнопка «Підібрати все, що лежить»
+	var got: int = c.collect_ignored()
+	await _frames(2)
+	check(got == 1 and c.ignored_count() == 0 and not p.find_item(common.get("uid", -1)).is_empty(), "«Підібрати все, що лежить» бере відфільтроване")
+	# На виході відфільтроване продається
+	var junk: Dictionary = Data.gen_item(10, 0, "belt")
+	c.spawn_pickup(p.global_position + Vector2(400, 0), "item", 0, junk)
+	var g0: int = p.gold
+	var inv0: int = p.inventory.size()
+	c.collect_all()
+	await _frames(2)
+	check(p.gold == g0 + Data.sell_price(junk) and p.inventory.size() == inv0 and ground.call().is_empty() and "Не підібрано за фільтром: продано 1" in game.hud.banner.text, "на виході відфільтроване продано: «%s»" % game.hud.banner.text.replace("\n", " / "))
+	# ---- Меню ----
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	game._show_map_menu()
+	await _frames(2)
+	var btns := func() -> Array:
+		var out := []
+		for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion():
+				out.append(b)
+		return out
+	var entry: Button = null
+	for b in btns.call():
+		if b.text.begins_with("Автопідбір"):
+			entry = b
+	check(entry != null and entry.text == "Автопідбір: 3 із 4 рідкостей", "у меню привалу є кнопка фільтра: «%s»" % (entry.text if entry != null else "—"))
+	entry.pressed.emit()
+	await _frames(2)
+	var toggles: Array = btns.call().filter(func(b): return b.text.begins_with("☑ ") or b.text.begins_with("☐ "))
+	check(toggles.size() == 4 and toggles[0].text == "☐ Звичайні речі" and toggles[3].text == "☑ Легендарні речі", "чотири перемикачі рідкостей: %s" % ", ".join(toggles.map(func(b): return b.text)))
+	toggles[1].pressed.emit()
+	await _frames(2)
+	check(c.pickup_filter == [false, false, true, true] and SaveSystem.load_settings()["pickup"] == [false, false, true, true], "перемикач міняє фільтр і зберігає його")
+	toggles = btns.call().filter(func(b): return b.text.begins_with("☑ ") or b.text.begins_with("☐ "))
+	toggles[0].pressed.emit()
+	await _frames(2)
+	toggles = btns.call().filter(func(b): return b.text.begins_with("☑ ") or b.text.begins_with("☐ "))
+	toggles[1].pressed.emit()
+	await _frames(2)
+	check(c.pickup_filter == [true, true, true, true], "усе ввімкнено назад")
+	for b in btns.call():
+		if b.text == "Назад":
+			b.pressed.emit()
+	await _frames(2)
+	entry = null
+	for b in btns.call():
+		if b.text.begins_with("Автопідбір"):
+			entry = b
+	check(entry != null and entry.text == "Автопідбір: усе", "«Назад» вертає в меню, кнопка каже «усе»")
+	game.go_back(true)
+	await _frames(2)
+	# Швидкий похід слухає фільтр
+	var w2 = load("res://scripts/game/world_state.gd").new()
+	w2.cleared["wild_field"] = 5
+	var q: Dictionary = QS.run(w2, p, "wild_field", 1.0, {}, [false, false, false, false])
+	check(q["items"].is_empty() and int(q["sold"]) >= 2, "швидкий похід із вимкненим фільтром речей не кладе, а продає (%d)" % int(q["sold"]))
+	var fw := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Фільтр автопідбору":
+				fw = str(e["text"])
+	check("«Автопідбір»" in fw and "тьмяна" in fw and "продається" in fw and "Золоті речі й артефакти беруться завжди" in fw, "довідник пояснює фільтр автопідбору")
+	# повертаємо налаштування пристрою
+	c.pickup_filter = keep["pickup"].duplicate()
+	game._save_settings()
+	SaveSystem.save_settings(keep)
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_quick_raid() -> void:
+	suite("Швидкий похід за рекламу")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var QS = load("res://scripts/game/quick_service.gd")
+	var EvS = load("res://scripts/game/event_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var w = load("res://scripts/game/world_state.gd").new()
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = 20
+	p.recalc()
+	# Де буває й коли доступний
+	check(QS.applies("wild_field") and QS.applies("zmii_cave") and not QS.applies("hlybyny") and not QS.applies("bashta") and not QS.applies("sich") and not QS.applies("varta"), "швидкий похід буває в місцевостях і печерах, не в Глибинах, Башті, містах і місцях занять")
+	check("відкриється" in QS.block_reason(w, p, "wild_field"), "непройдене місце: %s" % QS.block_reason(w, p, "wild_field"))
+	w.cleared["wild_field"] = QS.MIN_CLEARS - 1
+	check(QS.block_reason(w, p, "wild_field") != "", "пройдено замало разів: ще не можна")
+	w.cleared["wild_field"] = QS.MIN_CLEARS
+	check(QS.block_reason(w, p, "wild_field") == "" and QS.left_today(w) == QS.PER_DAY, "пройдено %d рази: швидкий похід відкрито, на день %d" % [QS.MIN_CLEARS, QS.PER_DAY])
+	p.level = 1
+	w.cleared["black_forest"] = 5
+	check("надто сильне" in QS.block_reason(w, p, "black_forest"), "сильніше за героя місце швидко не пройти")
+	p.level = 20
+	# Обсяг: поле за своєю зачисткою, печера за кімнатами
+	var LF: Dictionary = Data.LOCATIONS["wild_field"]
+	var LD: Dictionary = Data.LOCATIONS["zmii_cave"]
+	var rooms_sum := 0
+	for room in range(1, int(LD["rooms"]) + 1):
+		rooms_sum += Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER
+	check(QS.kills(LF) == int(LF.get("goal", Data.FIELD_GOAL_BASE + int(LF["level"]) * Data.FIELD_GOAL_PER_LEVEL)) and QS.kills(LD) == rooms_sum, "нечисті стільки ж, як у справжньому поході: поле %d, печера %d" % [QS.kills(LF), QS.kills(LD)])
+	# Похід у поле: досвід, гривні, речі, ресурси; завдання міст рахуються
+	var kind0: String = LF["enemies"][0]
+	w.quests.append({"id": 900, "city": "sich", "loc": "wild_field", "type": "kill", "target": kind0, "progress": 0, "count": 3, "text": "Знищ 3", "lvl": 1, "gold": 10, "xp": 5, "loyalty": 5})
+	seed(11)
+	var xp0: int = p.xp + p.level * 100000
+	var gold0: int = p.gold
+	var inv0: int = p.inventory.size()
+	var r: Dictionary = QS.run(w, p, "wild_field")
+	var res_n := 0
+	for k in r["res"]:
+		res_n += int(r["res"][k])
+	check(int(r["kills"]) == QS.kills(LF) and int(r["xp"]) > 0 and p.xp + p.level * 100000 > xp0 and int(r["gold"]) >= 25 * int(LF["level"]) and p.gold == gold0 + int(r["gold"]), "поле: нечисті %d, досвід +%d, гривні +%d" % [int(r["kills"]), int(r["xp"]), int(r["gold"])])
+	check(r["items"].size() + int(r["sold"]) >= 2 and p.inventory.size() == inv0 + r["items"].size() and res_n >= 5, "за зачистку щонайменше дві речі й п'ять купок ресурсів (речей %d, ресурсів %d)" % [r["items"].size(), res_n])
+	check(int(w.cleared["wild_field"]) == QS.MIN_CLEARS + 1 and w.is_done(w.quests[0]) and r["quests"].size() == 1 and "Здай" in str(r["quests"][0]), "проходження й завдання міста зараховано: %s" % str(r["quests"]))
+	check(QS.used_today(w) == 1 and QS.left_today(w) == QS.PER_DAY - 1, "денний лічильник: лишилось %d" % QS.left_today(w))
+	var kinds_sum := 0
+	for k in r["kinds"]:
+		kinds_sum += int(r["kinds"][k])
+		if not k in LF["enemies"]:
+			kinds_sum = -9999
+	check(kinds_sum == int(r["kills"]), "убита нечисть саме з цього місця")
+	# Рідкісного з босів нема: лише звичайні речі
+	var only_random := true
+	w.cleared["zmii_cave"] = 3
+	w.quests.append({"id": 901, "city": "kyiv", "loc": "zmii_cave", "type": "dungeon", "target": "zmii_cave", "progress": 0, "count": 1, "text": "Очисти: Змієва печера", "lvl": 3, "gold": 100, "xp": 50, "loyalty": 20})
+	var stones0: Dictionary = p.stones.duplicate()
+	var souls0: Dictionary = p.souls.duplicate()
+	var tro0: int = int(p.resources.get("trophy", 0))
+	var d: Dictionary = {}
+	var rare_n := 0
+	for i in 6:
+		d = QS.run(w, p, "zmii_cave")
+		for it in d["items"]:
+			only_random = only_random and int(it["rarity"]) <= Data.RARITY_MAX_RANDOM and not it.has("unique") and not Arts.is_artifact(it)
+			if int(it["rarity"]) >= 2:
+				rare_n += 1
+		for it in p.inventory.duplicate():
+			p.remove_from_bag(it["uid"])  # звільняємо торбу для наступного проходу
+	check(only_random and p.stones == stones0 and p.souls == souls0, "золотих речей, артефактів, каменів і душ швидкий похід не дає")
+	check(rare_n >= 6 and int(p.resources.get("trophy", 0)) >= tro0 + 6 * 3 and w.is_done(w.quests[1]) and int(w.cleared["zmii_cave"]) == 9, "печера: рідкісні речі з господаря, трофеї, завдання «Очисти» зараховано")
+	# Повна торба: зайве продається
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 1))
+	var size_full: int = p.inventory.size()
+	var gf: int = p.gold
+	var rf: Dictionary = QS.run(w, p, "wild_field")
+	check(rf["items"].is_empty() and int(rf["sold"]) >= 2 and p.inventory.size() == size_full and p.gold > gf, "повна торба: речі продано (%d), а не загублено" % int(rf["sold"]))
+	# Денна межа й новий день
+	w.ads["quick_used"] = QS.PER_DAY
+	check(QS.left_today(w) == 0 and "скінчились" in QS.block_reason(w, p, "wild_field"), "денну межу вичерпано")
+	w.ads["quick_day"] = "2000-01-01"
+	check(QS.left_today(w) == QS.PER_DAY and QS.block_reason(w, p, "wild_field") == "", "новий день повертає всі швидкі походи")
+	check("Швидкий похід: Дике Поле" in QS.summary(r) and "Досвід +" in QS.summary(r) and "Завдання виконано" in QS.summary(r), "підсумок словами: %s" % QS.summary(r).replace("\n", " / "))
+	p.free()
+	# ---- У грі ----
+	var ads = root.get_node("Ads")
+	var instant0: bool = ads.instant
+	ads.instant = true
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var h = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "way"]:
+		game.world.hints[k] = true
+	h.change_class("cossack")
+	h.level = 20
+	h.recalc()
+	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	game.enter_map()
+	await _frames(2)
+	var panel := func(place: String) -> Array:
+		game._on_map_select(place)
+		await _frames(2)
+		var out := []
+		for n in game.hud.map_panel.find_children("*", "Label", true, false):
+			out.append(n.text)
+		for b in game.hud.map_panel.find_children("*", "Button", true, false):
+			out.append("[" + b.text + "]")
+		return out
+	var t0: Array = await panel.call("wild_field")
+	check(not "[Швидкий похід за рекламу]" in t0 and t0.any(func(t): return str(t).begins_with("Швидкий похід: відкриється")), "на панелі непройденого місця кнопки нема, є пояснення")
+	game.world.cleared["wild_field"] = QS.MIN_CLEARS
+	var t1: Array = await panel.call("wild_field")
+	check("[Швидкий похід за рекламу]" in t1 and t1.any(func(t): return str(t).begins_with("Миттєва зачистка без бою. Сьогодні лишилось: %d" % QS.PER_DAY)), "пройдене місце: кнопка швидкого походу й лічильник")
+	var t2: Array = await panel.call("sich")
+	check(not t2.any(func(t): return "Швидкий похід" in str(t)), "у місті про швидкий похід ані слова")
+	var trips0: int = int(EvS.state(game.world)["trips"])
+	var xp_h: int = h.xp + h.level * 100000
+	var views0: int = ads.views
+	game.quick_raid("wild_field")
+	await _frames(3)
+	check(ads.views == views0 + 1 and game.state == game.State.MAP and h.xp + h.level * 100000 > xp_h and int(game.world.cleared["wild_field"]) == QS.MIN_CLEARS + 1 and "Швидкий похід: Дике Поле" in game.hud.banner.text, "після реклами похід зараховано: герой на мапі з досвідом і здобиччю")
+	check(int(EvS.state(game.world)["trips"]) == trips0 + 1 and QS.used_today(game.world) == 1 and int(game.world.stats.get("field", 0)) >= 1 and int(game.world.stats.get("kill", 0)) >= QS.kills(LF), "світ порахував це як похід, виклики отримали вбивства")
+	# без реклами нічого не дається
+	ads.instant = false
+	var used1: int = QS.used_today(game.world)
+	game.quick_raid("wild_field")
+	await _frames(2)
+	check(QS.used_today(game.world) == used1 and ads.is_busy(), "поки рекламу не переглянуто, походу нема")
+	ads._finish(false)
+	await _frames(2)
+	check(QS.used_today(game.world) == used1 and int(game.world.cleared["wild_field"]) == QS.MIN_CLEARS + 1, "закрив рекламу: здобичі нема")
+	ads.instant = instant0
+	var qw := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Швидкий похід":
+				qw = str(e["text"])
+	check(("пройшов %d рази" % QS.MIN_CLEARS) in qw and ("дається %d швидких" % QS.PER_DAY) in qw and "реклам" in qw and "золоті речі" in qw, "довідник пояснює швидкий похід із числами")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
 
 func _suite_gear_best() -> void:
 	suite("Кращі речі в торбі й «Вдягнути найкраще»")
