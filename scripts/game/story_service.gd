@@ -70,6 +70,8 @@ static func lines(world, src: Array) -> Array:
 				text = text.replace("козаче", "волхве").replace("Козаче", "Волхве")
 				if npc == "hero":
 					npc = "hero_volkhv"
+			elif hero_class == "strilets":
+				text = text.replace("козаче", "стрільче").replace("Козаче", "Стрільче")
 			out.append([npc, text])
 	return out
 
@@ -246,7 +248,7 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 	if r.has("class"):
 		player.change_class(r["class"])
 		hero_class = r["class"]
-		msgs.append({"text": {"cossack": "Ти — козак Запорозького війська!", "volkhv": "Ти — волхв Карпатського кола!"}.get(r["class"], ""), "big": true})
+		msgs.append({"text": {"cossack": "Ти — козак Запорозького війська!", "volkhv": "Ти — волхв Карпатського кола!", "strilets": "Ти — стрілець сердюцької сотні!"}.get(r["class"], ""), "big": true})
 	if r.has("rank"):
 		player.rank = r["rank"]
 		msgs.append({"text": "Тебе обрано гетьманом України!", "big": true})

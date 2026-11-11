@@ -761,7 +761,7 @@ static func _skills(game) -> Control:
 	if p.can_change_class():
 		var names := []
 		for c in p.class_info()["next"]:
-			names.append("%s (%s)" % [Classes.CLASSES[c]["name"], {"sich": "Січ", "kapyshche": "Карпати"}.get(Classes.CLASSES[c].get("where", ""), "")])
+			names.append("%s (%s)" % [Classes.CLASSES[c]["name"], Data.place_name(str(Classes.CLASSES[c].get("where", "sich")))])
 		note = "Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника."
 	var nl := UI.label(note, 13, UI.GOOD if p.can_change_class() else UI.MUTED, false)
 	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART

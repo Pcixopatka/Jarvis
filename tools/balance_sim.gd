@@ -85,6 +85,11 @@ const SKILL_ORDER := {
 	"volkhv": ["fireball", "iskra", "shield", "fireball", "iskra", "deep_well", "iskra", "twin_spark", "herb", "fireball", "pyre",
 		"regen", "mana_flow", "spirit", "fireball", "pyre", "tough", "iskra", "iskra", "spirit", "focus", "shield", "herb", "tough",
 		"deep_well", "mana_flow", "spirit", "focus", "pyre", "regen", "tough", "ward", "focus", "ward", "shield", "herb", "deep_well", "mana_flow", "regen"],
+	"strilets": ["strila", "luk_master", "zirke_oko", "strila", "luk_master", "podviinyi_postril", "zirke_oko", "strila", "luk_master",
+		"serdiutska_vypravka", "podviinyi_postril", "dalekyi_bii", "strila", "luk_master", "zirke_oko", "podviinyi_postril", "serdiutska_vypravka",
+		"strila", "luk_master", "zirke_oko", "dalekyi_bii", "podviinyi_postril", "lehkyi_krok", "serdiutska_vypravka", "zirke_oko", "vidskok",
+		"podviinyi_postril", "dalekyi_bii", "serdiutska_vypravka", "lehkyi_krok", "povnyi_sahaidak", "serdiutska_vypravka", "navodka",
+		"shvydki_ruky", "lehkyi_krok", "povnyi_sahaidak", "shvydki_ruky", "navodka", "shvydki_ruky"],
 }
 ## Спеціалізації: порядок вмінь і зброя
 const SPEC_ORDER := {
@@ -94,6 +99,13 @@ const SPEC_ORDER := {
 		"oko", "kydok", "tin", "trapper", "pastka", "stryvok"],
 	"samopalnyk": ["kartech", "porokh", "prytsil", "kartech", "porokh", "bochka", "shvydke", "prytsil", "vluchnist", "kartech",
 		"porokh", "shvydke", "prytsil", "vluchnist", "deadly", "bochka", "kartech", "porokh", "prytsil", "shvydke"],
+	"sahaidachnyk": ["vohniana_strila", "tuha_tiatyva", "otruina_strila", "vohniana_strila", "shvydka_tiatyva", "zlyva_stril", "tuha_tiatyva",
+		"vohniana_strila", "oko_yastruba", "zlyva_stril", "shvydka_tiatyva", "viialo_stril", "tuha_tiatyva", "vohniana_strila", "zlyva_stril",
+		"oko_yastruba", "otruina_strila", "shvydka_tiatyva", "vohniana_strila", "zlyva_stril"],
+	"opryshok": ["dva_stvoly", "bartka", "shvydkyi_zariad", "dva_stvoly", "kulia_v_lob", "viialo_kul", "bartka", "dva_stvoly", "shvydkyi_zariad",
+		"arkan", "kulia_v_lob", "viialo_kul", "hirskyi_hart", "dva_stvoly", "bartka", "shvydkyi_zariad", "arkan", "kulia_v_lob", "hirskyi_hart", "dva_stvoly"],
+	"sokolnyk": ["sokil", "strila_lovchoho", "kihti", "sokil", "lovcha_nauka", "pike", "kihti", "sokil", "strila_lovchoho", "sokolyna_mitka",
+		"pike", "lovcha_nauka", "kihti", "sokil", "ptashyna_mova", "strila_lovchoho", "pike", "kihti", "ptashyna_mova", "sokil"],
 	"znakhar": ["otruta", "zhyvytsia", "travnyk", "otruta", "ochyshchennia", "zhyvytsia", "oberih_zahonu", "otruta", "travnyk",
 		"zhyve_slovo", "otruta", "zhyvytsia", "oberih_zahonu", "travnyk", "zhyve_slovo", "pidniaty", "oberih_zahonu", "travnyk", "zhyve_slovo", "zhyvytsia"],
 	"perun_zhrets": ["lightning", "molot", "grim", "lightning", "chain", "molot", "grim", "lightning", "wrath", "molot", "burya",
@@ -104,8 +116,10 @@ const SPEC_ORDER := {
 		"vidvid", "spirit", "kulia", "vovk", "zamova", "wolf_blood", "spirit", "vidvid", "kulia"],
 }
 const SPEC_WEAPON := {"zaporozhets": "mace", "plastun": "pike", "samopalnyk": "pishchal", "kharakternyk": "sabre",
-	"znakhar": "staff", "perun_zhrets": "staff", "molfar": "staff"}
-const SPEC_BASE := {"znakhar": "volkhv", "perun_zhrets": "volkhv", "molfar": "volkhv"}
+	"znakhar": "staff", "perun_zhrets": "staff", "molfar": "staff",
+	"strilets": "bow", "sahaidachnyk": "bow", "opryshok": "pistols", "sokolnyk": "bow"}
+const SPEC_BASE := {"znakhar": "volkhv", "perun_zhrets": "volkhv", "molfar": "volkhv",
+	"samopalnyk": "strilets", "sahaidachnyk": "strilets", "opryshok": "strilets", "sokolnyk": "strilets"}
 const PERK_ORDER := ["h_body", "h_hand", "luck", "h_body", "h_skin", "h_fast", "h_body", "h_hand", "luck", "h_crit",
 	"kobzar", "h_blood", "h_body", "h_body", "h_potion", "h_hand", "h_fast", "steel_will", "h_hand", "h_hand",
 	"h_crit", "luck", "h_skin", "h_skin", "h_blood", "h_blood", "h_roll", "h_parry", "h_spirit", "h_spirit",
@@ -140,6 +154,8 @@ func _build_hero(lvl: int) -> void:
 	var cycle = ["str", "vit", "str", "agi", "vit", "str", "vit", "agi", "str", "str"]
 	if cls == "volkhv":
 		cycle = ["spi", "vit", "spi", "agi", "vit", "spi", "vit", "spi", "spi", "agi"]
+	elif cls == "strilets":
+		cycle = ["agi", "vit", "agi", "agi", "vit", "agi", "vit", "agi", "agi", "str"]
 	var i = 0
 	while p.stat_points > 0:
 		p.add_stat(cycle[i % cycle.size()])
@@ -163,7 +179,7 @@ func _build_hero(lvl: int) -> void:
 		p.learn_perk(id)
 	# Спорядження свого рівня: добротне, з типовою для цього етапу заточкою
 	for slot in Data.SLOTS:
-		var wt: String = SPEC_WEAPON.get(spec, "staff" if cls == "volkhv" else "sabre")
+		var wt: String = SPEC_WEAPON.get(spec, "staff" if cls == "volkhv" else ("bow" if cls == "strilets" else "sabre"))
 		var it = Data.gen_item(lvl, 1, slot, wt if slot == "weapon" else "")
 		it["up"] = mini(lvl / 3, 4)
 		p.add_item(it)
@@ -190,6 +206,7 @@ func _regear(p, lvl: int, rarity: int, up: int, best: bool) -> void:
 		if p.equipment.has(slot):
 			p.equipment.erase(slot)
 	var wt: String = "staff" if p.is_volkhv() else str(SPEC_WEAPON.get(p.job, "sabre"))
+	var main: String = "agi" if wt in Data.AGI_WEAPONS else "str"  # стрільцям потрібна Спритність, а не Сила
 	var souls := {"weapon": "b_putinoid", "amulet": "b_lykho", "head": "zarazhenyi", "body": "vedmid", "belt": "vovkulaka", "boots": "pesyholovets"}
 	for slot in Data.SLOTS:
 		var pick: Dictionary = {}
@@ -202,7 +219,7 @@ func _regear(p, lvl: int, rarity: int, up: int, best: bool) -> void:
 				it["soul"] = souls[slot]
 			var sc := 0.0
 			for a in it["affixes"]:
-				sc += 1.0 if a in ["dmg_pct", "crit", "aspd", "hp", "armor", "str", "vit"] else 0.0
+				sc += 1.0 if a in ["dmg_pct", "crit", "aspd", "hp", "armor", main, "vit"] else 0.0
 			if sc > pick_score:
 				pick_score = sc
 				pick = it

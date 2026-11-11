@@ -61,8 +61,8 @@ static func rich(world, kind: String) -> bool:
 # ======================= Полювання =======================
 
 static func arrows_for(player) -> int:
-	# Пластун і самопальник — природжені мисливці
-	return Acts.HUNT_ARROWS + (1 if player.job in ["plastun", "samopalnyk"] else 0)
+	# Пластун і всі стрільці — природжені мисливці
+	return Acts.HUNT_ARROWS + (1 if player.job == "plastun" or player.Classes.is_strilets_line(player.job) else 0)
 
 
 static func new_hunt(player, seed_value: int = -1, rich_day: bool = false) -> Dictionary:

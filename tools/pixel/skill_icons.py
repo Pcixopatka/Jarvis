@@ -182,6 +182,18 @@ def hourglass(g):
 
 def banner(g, c=RED):
     g.line((6, 22), (6, 2), BROWN, 2); g.poly([(7, 3), (20, 5), (17, 9), (20, 13), (7, 13)], c); g.rect(9, 7, 13, 9, GOLD)
+def bow(g, c=BROWN):
+    g.d.arc([2, 2, 18, 22], 270, 90, fill=c, width=2); g.line((10, 3), (10, 21), W, 1)
+def arrow(g, c=STEEL, y=12):
+    g.line((3, y), (19, y), BROWN, 1); g.poly([(19, y - 3), (23, y), (19, y + 3)], c); g.line((3, y - 2), (5, y), W, 1); g.line((3, y + 2), (5, y), W, 1)
+def pistol(g, c=GREY, x=0, y=0):
+    g.rect(4 + x, 8 + y, 18 + x, 11 + y, c); g.rect(4 + x, 11 + y, 8 + x, 17 + y, BROWN); g.px(19 + x, 7 + y, GOLD); g.line((9 + x, 12 + y), (11 + x, 14 + y), DARK, 1)
+def falcon(g, c=BROWN):
+    g.poly([(12, 7), (3, 4), (8, 12)], c); g.poly([(12, 7), (21, 4), (16, 12)], c); g.circ(12, 11, 4, mul(c, 1.3)); g.circ(12, 6, 3, hx("e0d2b0")); g.line((12, 7), (12, 10), GOLD, 2)
+def axe(g, c=STEEL):
+    g.line((6, 21), (15, 5), BROWN, 2); g.poly([(13, 3), (21, 5), (20, 12), (14, 9)], c); g.line((19, 6), (19, 11), W, 1)
+def feather(g, c=W):
+    g.poly([(6, 20), (10, 8), (17, 3), (15, 12)], c); g.line((6, 20), (16, 5), GREY, 1)
 def both(*fns):
     def run(g):
         for fn in fns: fn(g)
@@ -231,6 +243,35 @@ ICONS = {
     "dalekyi_postril": ("passive", both(crosshair, lambda g: star(g, GOLD))), "tverda_ruka": ("passive", hand_up), "na_zvira": ("passive", lambda g: skull(g, ORANGE)),
     "nabii": ("passive", lambda g: bullets(g, 3)), "stiika_vluchnyka": ("buff", lambda g: (g.ring(12, 12, 8, GOLD, 2), g.circ(12, 12, 2, RED))),
     "stiika_rukhlyva": ("buff", both(boots, lambda g: wind(g, ICE))),
+    # Стрілець
+    "strila": ("attack", arrow), "luk_master": ("passive", bow), "podviinyi_postril": ("attack", lambda g: (arrow(g, STEEL, 8), arrow(g, STEEL, 16))),
+    "dalekyi_bii": ("passive", both(bow, lambda g: star(g, GOLD))), "pistol_master": ("passive", pistol), "postril_vprytul": ("attack", both(pistol, lambda g: fire(g, ORANGE))),
+    "shvydki_ruky": ("passive", lambda g: (pistol(g, GREY, 0, -4), pistol(g, STEEL, 0, 5))), "vidskok": ("buff", dash_arrow), "zirke_oko": ("passive", lambda g: eye(g, GOLD)),
+    "lehkyi_krok": ("passive", boots), "serdiutska_vypravka": ("passive", lambda g: heart(g, hx("3a6ab8"))), "povnyi_sahaidak": ("passive", lambda g: [arrow(g, STEEL, y) for y in (6, 12, 18)]),
+    "navodka": ("attack", lambda g: (g.ring(12, 12, 8, PURPLE, 2), g.line((12, 2), (12, 22), PURPLE, 1), g.line((2, 12), (22, 12), PURPLE, 1))),
+    "stiika_zasidky": ("buff", lambda g: (leaf(g, GREEN), eye(g, W))), "stiika_nalotu": ("buff", both(dash_arrow, lambda g: fire(g, RED))),
+    # Сагайдачник
+    "vohniana_strila": ("attack", both(arrow, lambda g: fire(g, ORANGE))), "otruina_strila": ("attack", lambda g: (arrow(g, GREEN), drop(g, GREEN))),
+    "viialo_stril": ("attack", lambda g: [g.line((3, 20), (8 + i * 4, 4), STEEL, 1) for i in range(4)]), "zlyva_stril": ("attack", lambda g: [g.line((4 + i * 5, 3), (2 + i * 5, 20), STEEL, 1) for i in range(4)]),
+    "khmara_stril": ("attack", lambda g: (cloud(g, DARK), [g.line((6 + i * 4, 12), (5 + i * 4, 22), GOLD, 1) for i in range(4)])),
+    "tuha_tiatyva": ("passive", lambda g: bow(g, hx("b07a3a"))), "shvydka_tiatyva": ("passive", both(bow, lambda g: wind(g, ICE))), "probyvna_strila": ("passive", lambda g: (armor(g, GREY), arrow(g, GOLD))),
+    "zazubreni_vistria": ("passive", both(arrow, drop)), "zapasna_tiatyva": ("passive", hourglass), "viter_u_spynu": ("passive", lambda g: wind(g, ICE)),
+    "oko_yastruba": ("passive", lambda g: (eye(g, GOLD), feather(g, GREY))), "pidranok": ("passive", lambda g: skull(g, RED)),
+    "stiika_vezhi": ("buff", wall), "stiika_vitru": ("buff", lambda g: tornado(g, ICE)),
+    # Опришок
+    "dva_stvoly": ("attack", lambda g: (pistol(g, GREY, 0, -4), pistol(g, STEEL, 0, 5))), "viialo_kul": ("attack", spread), "kulia_v_lob": ("passive", crosshair),
+    "shvydkyi_zariad": ("passive", lambda g: bullets(g, 3)), "sribna_kulia": ("attack", lambda g: (g.circ(12, 12, 6, STEEL), g.circ(10, 10, 2, W), sparkle(g, W))),
+    "bartka": ("attack", axe), "kydok_bartky": ("attack", both(axe, lambda g: wind(g, GREY))), "arkan": ("attack", lambda g: (g.ring(12, 12, 9, RED, 2), axe(g))),
+    "hirskyi_hart": ("passive", lambda g: heart(g, hx("3a8a3a"))), "vidchaidukh": ("passive", lambda g: drop(g, RED)), "zasidka_v_skeliakh": ("passive", both(shadow, pistol)),
+    "vtecha_horamy": ("buff", lambda g: (g.poly([(2, 21), (9, 6), (14, 14), (18, 8), (22, 21)], GREY), dash_arrow(g))), "zdobychnyk": ("passive", lambda g: star(g, GOLD)),
+    "vpertist": ("passive", lambda g: shield(g, hx("3a8a3a"))), "stiika_rozbiinyka": ("buff", lambda g: skull(g, RED)), "stiika_vatazhka": ("buff", banner),
+    # Сокольник
+    "sokil": ("buff", falcon), "kihti": ("passive", lambda g: [g.line((6 + i * 5, 4), (4 + i * 5, 19), STEEL, 2) for i in range(3)]), "sokolyna_mitka": ("passive", lambda g: (falcon(g), g.ring(12, 12, 10, PURPLE, 1))),
+    "pike": ("attack", lambda g: (falcon(g), g.line((12, 14), (12, 22), RED, 2))), "zhraia": ("attack", lambda g: [g.poly([(x, y), (x - 5, y - 3), (x - 2, y + 2)], BROWN) or g.poly([(x, y), (x + 5, y - 3), (x + 2, y + 2)], BROWN) for x, y in ((7, 7), (16, 6), (11, 14), (18, 16), (5, 18))]),
+    "strila_lovchoho": ("attack", lambda g: (arrow(g), feather(g, GREY))), "lovcha_nauka": ("passive", both(bow, arrow)), "syltsia": ("attack", lambda g: (g.ring(12, 14, 7, BROWN, 2), g.line((12, 7), (12, 2), BROWN, 1))),
+    "znannia_zvira": ("passive", lambda g: wolf(g)), "zviryne_chuttia": ("passive", lambda g: eye(g, GREEN)), "pokhidnyi_dukh": ("passive", lambda g: heart(g, hx("b07a3a"))),
+    "ptashyna_mova": ("passive", lambda g: (feather(g), sparkle(g, GOLD))), "lehka_ruka": ("passive", hand_up), "sokolyne_oko": ("passive", lambda g: (eye(g, GOLD), star(g, GOLD))),
+    "stiika_lovtsia": ("buff", both(bow, crosshair)), "stiika_ptakha": ("buff", lambda g: (falcon(g), sparkle(g, GOLD))),
     # нові вміння: Характерник
     "vovche_vyttia": ("attack", both(wolf, lambda g: wind(g, GREY))), "zviryna_syla": ("passive", lambda g: heart(g, hx("8a1020"))), "nichnyi_zir": ("passive", lambda g: eye(g, GOLD)),
     "stiika_vovka": ("buff", lambda g: (wolf(g), g.px(20, 3, RED), g.px(21, 3, RED))), "zamova_krovi": ("buff", lambda g: drop(g, RED)),

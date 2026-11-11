@@ -8,12 +8,15 @@ extends RefCounted
 ## Пасивні вузли з id колишніх перків (sharp, tough, ward…) діють так само, як ті перки.
 
 const CLASSES := {
-	"peasant": {"name": "Селянин", "tier": 0, "job_max": 10, "next": ["cossack", "volkhv"],
+	"peasant": {"name": "Селянин", "tier": 0, "job_max": 10, "next": ["cossack", "volkhv", "strilets"],
 		"weapons": ["pike", "sabre", "mace"], "mana_mult": 0.8, "regen_mult": 0.8, "address": "хлопче", "hp_mult": 1.0, "dmg_mult": 1.0,
 		"desc": "Простий хлопець із хутора. Набирається сили, щоб обрати свою дорогу."},
-	"cossack": {"name": "Козак", "tier": 1, "job_max": 40, "next": ["zaporozhets", "plastun", "samopalnyk", "kharakternyk"],
+	"cossack": {"name": "Козак", "tier": 1, "job_max": 40, "next": ["zaporozhets", "plastun", "kharakternyk"],
 		"weapons": ["sabre", "mace", "pike"], "mana_mult": 1.0, "regen_mult": 1.5, "address": "козаче", "hp_mult": 1.3, "dmg_mult": 1.15,
 		"where": "sich", "desc": "Воїн Січі: шабля, булава чи спис, самопал і бойовий клич. Влучні удари поповнюють наснагу."},
+	"strilets": {"name": "Стрілець", "tier": 1, "job_max": 40, "next": ["sahaidachnyk", "opryshok", "sokolnyk", "samopalnyk"],
+		"weapons": ["bow", "pistols"], "mana_mult": 1.2, "regen_mult": 1.7, "address": "стрільче", "hp_mult": 1.15, "dmg_mult": 1.1,
+		"where": "baturyn", "desc": "Сердюцький стрілець із Батурина: лук або пара пістолів. Б'є здалеку, сила — від Спритності."},
 	"volkhv": {"name": "Волхв", "tier": 1, "job_max": 40, "next": ["znakhar", "perun_zhrets", "molfar"],
 		"weapons": ["staff"], "mana_mult": 2.0, "regen_mult": 2.2, "address": "волхве", "hp_mult": 1.0, "dmg_mult": 1.0, "skill_mult": 0.7,
 		"where": "kapyshche", "desc": "Знавець вогню, трав і оберегів із Карпат. Б'є іскрами здалеку; сила — від Характерництва."},
@@ -24,12 +27,22 @@ const CLASSES := {
 	"plastun": {"name": "Пластун", "tier": 2, "job_max": 50, "next": [], "parent": "cossack",
 		"weapons": ["sabre", "pike"], "mana_mult": 1.1, "regen_mult": 1.6, "address": "козаче", "hp_mult": 1.35, "dmg_mult": 1.3,
 		"where": "sich", "mentor": "sava", "desc": "Розвідник: пастки, Тінь, кидок списа, смертельні криті."},
-	"samopalnyk": {"name": "Самопальник", "tier": 2, "job_max": 50, "next": [], "parent": "cossack",
+	"samopalnyk": {"name": "Самопальник", "tier": 2, "job_max": 50, "next": [], "parent": "strilets",
 		"weapons": ["pishchal", "sabre"], "mana_mult": 1.1, "regen_mult": 1.6, "address": "козаче", "hp_mult": 1.3, "dmg_mult": 1.1,
 		"where": "sich", "mentor": "okhrim", "desc": "Стрілець із пищаллю: картеч, прицільний постріл, бочка пороху. Сила — від Спритності."},
 	"kharakternyk": {"name": "Характерник", "tier": 2, "job_max": 50, "next": [], "parent": "cossack",
 		"weapons": ["sabre", "pike"], "mana_mult": 1.5, "regen_mult": 1.9, "address": "козаче", "hp_mult": 1.4, "dmg_mult": 1.2,
 		"where": "sich", "mentor": "yarema", "desc": "Воїн-чаклун: Вовча подоба, «Куля не бере», замовлена шабля, відвід очей."},
+	# ---- Спеціалізації Стрільця (Самопальник теж його: вище, серед давніх класів) ----
+	"sahaidachnyk": {"name": "Сагайдачник", "tier": 2, "job_max": 50, "next": [], "parent": "strilets",
+		"weapons": ["bow"], "mana_mult": 1.3, "regen_mult": 1.8, "address": "стрільче", "hp_mult": 1.2, "dmg_mult": 1.1,
+		"where": "baturyn", "mentor": "oryna", "desc": "Майстер лука: вогняні й отруйні стріли, злива стріл по площі."},
+	"opryshok": {"name": "Опришок", "tier": 2, "job_max": 50, "next": [], "parent": "strilets",
+		"weapons": ["pistols"], "mana_mult": 1.1, "regen_mult": 1.7, "address": "легеню", "hp_mult": 1.4, "dmg_mult": 1.25,
+		"where": "verkhovyna", "mentor": "opryshok", "desc": "Карпатський месник: два пістолі й бартка, стрільба впритул, ухили й крити."},
+	"sokolnyk": {"name": "Сокольник", "tier": 2, "job_max": 50, "next": [], "parent": "strilets",
+		"weapons": ["bow"], "mana_mult": 1.5, "regen_mult": 1.9, "address": "стрільче", "hp_mult": 1.25, "dmg_mult": 0.95,
+		"where": "baturyn", "mentor": "tymish", "desc": "Ловчий із соколом: птах сам б'є нечисть і мітить ціль для господаря."},
 	# ---- Спеціалізації Волхва (Карпати, кожна — у свого наставника) ----
 	"znakhar": {"name": "Знахар", "tier": 2, "job_max": 50, "next": [], "parent": "volkhv",
 		"weapons": ["staff"], "mana_mult": 2.4, "regen_mult": 2.7, "address": "волхве", "hp_mult": 1.35, "dmg_mult": 1.05, "skill_mult": 0.7,
@@ -45,6 +58,10 @@ const CLASSES := {
 ## Чи належить клас до волхвівської гілки (для звертань «волхве», вигляду тощо).
 static func is_volkhv_line(cls: String) -> bool:
 	return cls == "volkhv" or CLASSES.get(cls, {}).get("parent", "") == "volkhv"
+
+## Чи належить клас до гілки стрільців.
+static func is_strilets_line(cls: String) -> bool:
+	return cls == "strilets" or CLASSES.get(cls, {}).get("parent", "") == "strilets"
 
 ## З якого рівня майстерності можна змінити клас (за ступенем).
 const JOB_CHANGE_AT := {0: 10, 1: 30}
@@ -347,6 +364,102 @@ const TREES := {
 			{"id": "trembita", "name": "Трембіта", "max": 3, "req": {}, "active": true, "cost": 15, "act": {"type": "buff", "cd": 28, "label": "Трембіта", "color": "f2c23a", "dur": 12, "fx": {"skill": [10, 3], "speed": [8, 2]}, "text": "Трембіта кличе"}, "desc": "12 с: +10% сили вмінь і\n+8% бігу"},
 			{"id": "hirska_voda", "name": "Гірська вода", "max": 3, "req": {}, "fx": {"mana_regen": 8, "regen_pct": 0.1}, "desc": "+8% відновлення наснаги й загоєння\n0,1% за секунду за ранг"},
 			{"id": "sertse_hir", "name": "Серце гір", "max": 1, "req": {"grad": 5, "dukh": 3}, "active": true, "cost": 40, "act": {"type": "buff", "cd": 60, "label": "Серце", "color": "5fc04a", "dur": 10, "fx": {"skill": 30, "cd": 20}, "text": "Гори зі мною", "sound": "spell"}, "desc": "Вершинне вміння: 10 с вміння сильніші\nна 30% і відновлюються на 20% швидше"},
+		]},
+	],
+	"strilets": [
+		{"name": "Лук", "nodes": [
+			{"id": "strila", "name": "Влучна стріла", "max": 5, "req": {}, "active": true, "cost": 10, "act": {"type": "shots", "cd": 4, "label": "Стріла", "color": "d8c8a0", "count": 1, "pct": [2.4, 0.4], "pierce": 3, "sound": "swing"}, "desc": "Важка стріла пробиває трьох.\n+17% шкоди за ранг"},
+			{"id": "luk_master", "name": "Лучна наука", "max": 5, "req": {}, "fx": {"dmg": 3, "crit": 1}, "when": {"weapon": ["bow"]}, "desc": "Із луком: +3% шкоди\nй +1% криту за ранг"},
+			{"id": "podviinyi_postril", "name": "Подвійний постріл", "max": 5, "req": {"strila": 2}, "active": true, "cost": 12, "act": {"type": "shots", "cd": 6, "label": "Дві стріли", "color": "d8c8a0", "count": 2, "spread": 0.12, "pct": [1.5, 0.25], "pierce": 1, "sound": "swing"}, "desc": "Дві стріли одразу.\n+17% шкоди за ранг"},
+			{"id": "dalekyi_bii", "name": "Далекий бій", "max": 3, "req": {}, "fx": {"opener": 6}, "desc": "+6% шкоди нечисті з повним\nздоров'ям за ранг"},
+		]},
+		{"name": "Пістолі", "nodes": [
+			{"id": "pistol_master", "name": "Пістольна наука", "max": 5, "req": {}, "fx": {"aspd": 3, "crit_dmg": 4}, "when": {"weapon": ["pistols"]}, "desc": "Із пістолями: +3% швидкості пострілу\nй +4% шкоди криту за ранг"},
+			{"id": "postril_vprytul", "name": "Постріл упритул", "max": 5, "req": {}, "active": true, "cost": 12, "act": {"type": "cone", "cd": 6, "label": "Упритул", "color": "f2c23a", "reach": 190, "arc": 70, "pct": [2.2, 0.35], "kb": 380, "stun": 0.4, "sound": "musket"}, "desc": "Залп перед собою: відкидає\nй приголомшує. +16% шкоди за ранг"},
+			{"id": "shvydki_ruky", "name": "Швидкі руки", "max": 3, "req": {}, "fx": {"aspd": 2, "cd": 2}, "desc": "+2% швидкості пострілу, вміння\nвідновлюються на 2% швидше за ранг"},
+		]},
+		{"name": "Сердюк", "nodes": [
+			{"id": "vidskok", "name": "Відскік", "max": 3, "req": {}, "active": true, "cost": 8, "act": {"type": "buff", "cd": 14, "label": "Відскік", "color": "a8dcff", "dur": 3, "fx": {"speed": [40, 10], "ward": [20, 5]}, "text": "Відскік!", "sound": "dodge"}, "desc": "3 с: біжиш на 40% швидше,\nа б'ють по тобі на 20% слабше"},
+			{"id": "zirke_oko", "name": "Зірке око", "max": 5, "req": {}, "fx": {"crit": 2}, "desc": "+2% шансу криту за ранг"},
+			{"id": "lehkyi_krok", "name": "Легкий крок", "max": 3, "req": {}, "fx": {"speed": 3, "dodge_cd": 5}, "desc": "+3% бігу, перекид готовий\nна 5% швидше за ранг"},
+			{"id": "serdiutska_vypravka", "name": "Сердюцька виправка", "max": 5, "req": {}, "fx": {"hp": 3}, "desc": "+3% здоров'я за ранг"},
+			{"id": "povnyi_sahaidak", "name": "Повний сагайдак", "max": 3, "req": {}, "fx": {"mana": 6, "mana_regen": 6}, "desc": "+6% наснаги й +6%\nїї відновлення за ранг"},
+		]},
+		{"name": "Вишкіл", "nodes": [
+			{"id": "navodka", "name": "Наводка", "max": 3, "req": {}, "active": true, "cost": 12, "act": {"type": "nova", "at": "enemy", "cd": 18, "label": "Наводка", "color": "9a5ad8", "radius": [110, 15], "pct": [0.5, 0.1], "status": ["curse", 5.0], "sound": "spell", "shake": 3}, "desc": "Мітить ворогів у колі: прокляті\nотримують більше шкоди 5 с"},
+			{"id": "stiika_zasidky", "name": "Стійка: засідка", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Засідка", "color": "5fc04a", "group": "stance", "dur": 20, "fx": {"crit": [8, 2], "speed": -10}, "text": "У засідці"}, "desc": "20 с: +8% шансу криту (+2% за ранг),\nале біг −10%. Діє одна стійка"},
+			{"id": "stiika_nalotu", "name": "Стійка: наліт", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Наліт", "color": "d8402e", "group": "stance", "dur": 20, "fx": {"speed": [10, 3], "aspd": [5, 2], "ward": -6}, "text": "Наліт!"}, "desc": "20 с: +10% бігу й +5% швидкості пострілу,\nале по тобі б'ють на 6% сильніше"},
+		]},
+	],
+	"sahaidachnyk": [
+		{"name": "Стріли", "nodes": [
+			{"id": "vohniana_strila", "name": "Вогняна стріла", "max": 5, "req": {}, "active": true, "cost": 14, "act": {"type": "shots", "cd": 6, "label": "Вогонь", "color": "f08a2a", "count": 1, "pct": [2.2, 0.35], "explode": [90, 8], "pierce": 1, "status": ["burn", 4.0], "sound": "swing"}, "desc": "Стріла вибухає вогнем і підпалює.\n+16% шкоди за ранг"},
+			{"id": "otruina_strila", "name": "Отруйна стріла", "max": 5, "req": {}, "active": true, "cost": 12, "act": {"type": "shots", "cd": 7, "label": "Отрута", "color": "5fc04a", "count": 1, "pct": [1.6, 0.25], "pierce": 3, "status": ["plague", 5.0], "sound": "swing"}, "desc": "Пробиває трьох і заражає.\n+16% шкоди за ранг"},
+			{"id": "viialo_stril", "name": "Віяло стріл", "max": 5, "req": {}, "active": true, "cost": 14, "act": {"type": "shots", "cd": 7, "label": "Віяло", "color": "d8c8a0", "count": 5, "spread": 0.7, "pct": [1.0, 0.15], "pierce": 1, "sound": "swing"}, "desc": "П'ять стріл віялом.\n+15% шкоди за ранг"},
+			{"id": "zlyva_stril", "name": "Злива стріл", "max": 5, "req": {"vohniana_strila": 2}, "active": true, "cost": 22, "act": {"type": "zone", "cd": 12, "label": "Злива", "color": "d8c8a0", "radius": [150, 10], "dur": 3, "tick": 0.3, "pct": [0.45, 0.08]}, "desc": "Стріли сиплються на ворога 3 с.\n+18% шкоди за ранг"},
+			{"id": "khmara_stril", "name": "Хмара стріл", "max": 1, "req": {"zlyva_stril": 5, "vohniana_strila": 5}, "active": true, "cost": 40, "act": {"type": "zone", "cd": 45, "label": "Хмара", "color": "f2c23a", "radius": 260, "dur": 5, "tick": 0.25, "pct": 0.6, "status": ["bleed", 3.0]}, "desc": "Вершинне вміння: 5 с стріли\nзатуляють небо над великим колом"},
+		]},
+		{"name": "Тятива", "nodes": [
+			{"id": "tuha_tiatyva", "name": "Туга тятива", "max": 5, "req": {}, "fx": {"dmg": 2.5}, "desc": "+2,5% шкоди за ранг"},
+			{"id": "shvydka_tiatyva", "name": "Швидка тятива", "max": 5, "req": {}, "fx": {"aspd": 3}, "desc": "+3% швидкості пострілу за ранг"},
+			{"id": "probyvna_strila", "name": "Пробивна стріла", "max": 3, "req": {"tuha_tiatyva": 2}, "fx": {"big_dmg": 4}, "desc": "+4% шкоди елітам\nі босам за ранг"},
+			{"id": "zazubreni_vistria", "name": "Зазубрені вістря", "max": 5, "req": {}, "fx": {"bleed_hit": 6}, "desc": "Постріл із шансом 6% за ранг\nпускає кров"},
+			{"id": "zapasna_tiatyva", "name": "Запасна тятива", "max": 3, "req": {}, "fx": {"cd": 3}, "desc": "Вміння відновлюються\nна 3% швидше за ранг"},
+		]},
+		{"name": "Степ", "nodes": [
+			{"id": "viter_u_spynu", "name": "Вітер у спину", "max": 3, "req": {}, "fx": {"speed": 4}, "desc": "+4% швидкості бігу за ранг"},
+			{"id": "oko_yastruba", "name": "Око яструба", "max": 5, "req": {}, "fx": {"crit": 2, "crit_dmg": 4}, "desc": "+2% шансу криту й +4%\nшкоди криту за ранг"},
+			{"id": "pidranok", "name": "Добити підранка", "max": 5, "req": {}, "fx": {"execute": 5}, "desc": "+5% шкоди нечисті нижче\n30% здоров'я за ранг"},
+			{"id": "stiika_vezhi", "name": "Стійка: вежа", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Вежа", "color": "b8bcc8", "group": "stance", "dur": 20, "fx": {"dmg": [12, 4], "speed": -15}, "text": "Стою на місці"}, "desc": "20 с: +12% шкоди (+4% за ранг),\nале біг −15%. Діє одна стійка"},
+			{"id": "stiika_vitru", "name": "Стійка: вітер", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Вітер", "color": "a8dcff", "group": "stance", "dur": 20, "fx": {"speed": [12, 3], "dodge_cd": [15, 5], "dmg": -5}, "text": "Як вітер"}, "desc": "20 с: +12% бігу й швидший перекид,\nале шкода −5%. Діє одна стійка"},
+		]},
+	],
+	"opryshok": [
+		{"name": "Пістолі", "nodes": [
+			{"id": "dva_stvoly", "name": "Два стволи", "max": 5, "req": {}, "active": true, "cost": 10, "act": {"type": "shots", "cd": 4, "label": "Залп", "color": "f2c23a", "count": 2, "spread": 0.1, "pct": [1.9, 0.3], "pierce": 2}, "desc": "Залп з обох пістолів, кулі\nпробивають двох. +16% шкоди за ранг"},
+			{"id": "viialo_kul", "name": "Віяло куль", "max": 5, "req": {"dva_stvoly": 2}, "active": true, "cost": 14, "act": {"type": "shots", "cd": 7, "label": "Віяло", "color": "f2c23a", "count": 5, "spread": 0.9, "pct": [0.9, 0.15], "pierce": 1}, "desc": "П'ять куль віялом.\n+17% шкоди за ранг"},
+			{"id": "kulia_v_lob", "name": "Куля в лоб", "max": 5, "req": {}, "fx": {"crit_dmg": 6}, "desc": "+6% шкоди криту за ранг"},
+			{"id": "shvydkyi_zariad", "name": "Швидкий заряд", "max": 5, "req": {}, "fx": {"aspd": 3}, "desc": "+3% швидкості пострілу за ранг"},
+			{"id": "sribna_kulia", "name": "Срібна куля", "max": 1, "req": {"dva_stvoly": 5, "bartka": 5}, "active": true, "cost": 35, "act": {"type": "shots", "cd": 40, "label": "Срібна", "color": "dfe4ee", "count": 1, "pct": 7.0, "status": ["weak", 6.0]}, "desc": "Вершинне вміння: одна куля\nнавиліт страшної сили, знесилює"},
+		]},
+		{"name": "Бартка", "nodes": [
+			{"id": "bartka", "name": "Удар бартки", "max": 5, "req": {}, "active": true, "cost": 12, "act": {"type": "cone", "cd": 6, "label": "Бартка", "color": "b8bcc8", "reach": 150, "arc": 110, "pct": [2.4, 0.36], "stun": [0.5, 0.1], "status": ["bleed", 4.0]}, "desc": "Рубає перед собою: кров\nі заціпеніння. +15% шкоди за ранг"},
+			{"id": "kydok_bartky", "name": "Кидок бартки", "max": 3, "req": {"bartka": 2}, "active": true, "cost": 14, "act": {"type": "shots", "cd": 9, "label": "Кидок", "color": "b8bcc8", "count": 1, "pct": [2.4, 0.4], "pierce": 2, "status": ["bleed", 4.0], "sound": "swing"}, "desc": "Бартка летить крізь двох\nі пускає кров. +17% шкоди за ранг"},
+			{"id": "arkan", "name": "Аркан", "max": 5, "req": {}, "active": true, "cost": 16, "act": {"type": "nova", "cd": 9, "label": "Аркан", "color": "d8402e", "radius": [170, 10], "pct": [1.3, 0.2], "kb": 300}, "desc": "Танець із барткою: б'є всіх\nдовкола. +15% шкоди за ранг"},
+			{"id": "hirskyi_hart", "name": "Гірський гарт", "max": 5, "req": {}, "fx": {"hp": 3}, "desc": "+3% здоров'я за ранг"},
+			{"id": "vidchaidukh", "name": "Відчайдух", "max": 3, "req": {}, "fx": {"lifesteal": 0.5, "kill_mana": 1}, "desc": "+0,5% вампіризму, вбивство\nвертає 1 наснаги за ранг"},
+		]},
+		{"name": "Опришки", "nodes": [
+			{"id": "zasidka_v_skeliakh", "name": "Засідка в скелях", "max": 5, "req": {}, "fx": {"opener": 8}, "desc": "+8% шкоди нечисті з повним\nздоров'ям за ранг"},
+			{"id": "vtecha_horamy", "name": "Втеча горами", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 16, "label": "Втеча", "color": "5fc04a", "dur": 3, "fx": {"speed": [45, 10]}, "invuln": 0.6, "cleanse": true, "text": "Шукай вітра!", "sound": "dodge"}, "desc": "3 с біжиш на 45% швидше,\nзнімає стани, мить невразливості"},
+			{"id": "zdobychnyk", "name": "Здобичник", "max": 3, "req": {}, "fx": {"pickup": 15, "kill_heal": 0.2}, "desc": "+15% радіусу збору, вбивство\nлікує 0,2% здоров'я за ранг"},
+			{"id": "vpertist", "name": "Гуцульська впертість", "max": 3, "req": {}, "fx": {"ward": 2}, "desc": "Шкода по тобі менша\nна 2% за ранг"},
+			{"id": "stiika_rozbiinyka", "name": "Стійка: месник", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Месник", "color": "d8402e", "group": "stance", "dur": 20, "fx": {"crit": [8, 2], "ward": -8}, "text": "За кривду!"}, "desc": "20 с: +8% шансу криту (+2% за ранг),\nале по тобі б'ють на 8% сильніше"},
+			{"id": "stiika_vatazhka", "name": "Стійка: ватажок", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Ватажок", "color": "4a90e8", "group": "stance", "dur": 20, "fx": {"ward": [8, 2], "dmg": -5}, "text": "Тримаймось"}, "desc": "20 с: шкода по тобі менша на 8% (+2% за ранг),\nале твоя шкода −5%. Діє одна стійка"},
+		]},
+	],
+	"sokolnyk": [
+		{"name": "Сокіл", "nodes": [
+			{"id": "sokil", "name": "Сокіл", "max": 5, "req": {}, "active": true, "cost": 18, "act": {"type": "summon", "cd": 26, "label": "Сокіл", "color": "d8c8a0", "dur": [20, 3], "pct": [0.45, 0.075], "tick": 1.2, "boost": "kihti", "mark": "sokolyna_mitka", "text": "Гей, соколе!", "sound": "swing"}, "desc": "Кличе сокола на 20 с: птах сам\nб'є найближчу нечисть. +17% шкоди за ранг"},
+			{"id": "kihti", "name": "Гострі кігті", "max": 5, "req": {"sokil": 1}, "desc": "Сокіл б'є на 12%\nсильніше за ранг"},
+			{"id": "sokolyna_mitka", "name": "Соколина мітка", "max": 3, "req": {"sokil": 2}, "desc": "Удар сокола проклинає ціль:\nвона отримує більше шкоди"},
+			{"id": "pike", "name": "Піке", "max": 5, "req": {"sokil": 2}, "active": true, "cost": 14, "act": {"type": "nova", "at": "enemy", "cd": 9, "label": "Піке", "color": "d8c8a0", "radius": 120, "pct": [2.2, 0.35], "stun": [0.8, 0.1], "sound": "swing"}, "desc": "Сокіл каменем падає на ворога:\nшкода в колі й заціпеніння"},
+			{"id": "zhraia", "name": "Зграя", "max": 1, "req": {"sokil": 5, "pike": 5}, "active": true, "cost": 40, "act": {"type": "zone", "cd": 45, "label": "Зграя", "color": "d8c8a0", "radius": 240, "dur": 6, "tick": 0.35, "pct": 0.7, "status": ["bleed", 3.0]}, "desc": "Вершинне вміння: зграя соколів 6 с\nшматує всіх у великому колі"},
+		]},
+		{"name": "Лук ловчого", "nodes": [
+			{"id": "strila_lovchoho", "name": "Стріла ловчого", "max": 5, "req": {}, "active": true, "cost": 10, "act": {"type": "shots", "cd": 5, "label": "Ловча", "color": "d8c8a0", "count": 1, "pct": [2.2, 0.35], "pierce": 2, "status": ["weak", 4.0], "sound": "swing"}, "desc": "Пробиває двох і знесилює.\n+16% шкоди за ранг"},
+			{"id": "lovcha_nauka", "name": "Ловча наука", "max": 5, "req": {}, "fx": {"dmg": 2, "aspd": 2}, "desc": "+2% шкоди й +2%\nшвидкості пострілу за ранг"},
+			{"id": "syltsia", "name": "Сильця", "max": 3, "req": {}, "active": true, "cost": 12, "act": {"type": "zone", "cd": 14, "label": "Сильця", "color": "8a5a2a", "radius": 130, "dur": [4, 1], "tick": 0.5, "pct": 0.15, "status": ["chill", 1.5]}, "desc": "Сильця під ворогом: нечисть у колі\nгрузне й мерзне 4 с"},
+			{"id": "znannia_zvira", "name": "Знання звіра", "max": 5, "req": {}, "fx": {"big_dmg": 3, "crit": 1}, "desc": "+3% шкоди елітам і босам\nй +1% криту за ранг"},
+		]},
+		{"name": "Ловець", "nodes": [
+			{"id": "zviryne_chuttia", "name": "Звірине чуття", "max": 3, "req": {}, "fx": {"ward": 2, "dodge_cd": 5}, "desc": "Шкода по тобі менша на 2%,\nперекид готовий на 5% швидше за ранг"},
+			{"id": "pokhidnyi_dukh", "name": "Похідний дух", "max": 5, "req": {}, "fx": {"hp": 2, "regen_pct": 0.08}, "desc": "+2% здоров'я й загоєння\n0,08% за секунду за ранг"},
+			{"id": "ptashyna_mova", "name": "Пташина мова", "max": 5, "req": {}, "fx": {"skill": 3}, "desc": "+3% сили вмінь за ранг:\nсокіл і стріли б'ють сильніше"},
+			{"id": "lehka_ruka", "name": "Легка рука", "max": 3, "req": {}, "fx": {"cd": 3}, "desc": "Вміння відновлюються\nна 3% швидше за ранг"},
+			{"id": "sokolyne_oko", "name": "Соколине око", "max": 5, "req": {}, "fx": {"opener": 6, "crit_dmg": 3}, "desc": "+6% шкоди нечисті з повним здоров'ям\nй +3% шкоди криту за ранг"},
+			{"id": "stiika_lovtsia", "name": "Стійка: ловець", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "Ловець", "color": "5fc04a", "group": "stance", "dur": 20, "fx": {"crit": [8, 2], "speed": -8}, "text": "На лови"}, "desc": "20 с: +8% шансу криту (+2% за ранг),\nале біг −8%. Діє одна стійка"},
+			{"id": "stiika_ptakha", "name": "Стійка: з птахом", "max": 3, "req": {}, "active": true, "cost": 10, "act": {"type": "buff", "cd": 24, "label": "З птахом", "color": "d8c8a0", "group": "stance", "dur": 20, "fx": {"skill": [15, 5], "dmg": -8}, "text": "Разом із птахом"}, "desc": "20 с: +15% сили вмінь (+5% за ранг),\nале шкода зброї −8%. Діє одна стійка"},
 		]},
 	],
 	"volkhv": [

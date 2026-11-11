@@ -12,7 +12,8 @@ ORDER = ["potion", "wood", "iron", "herbs", "trophy", "varenyk", "mana", "meat",
          # клейноди роду й камені долі (скарбниця на хуторі)
          "kl_lytavry", "kl_korohva", "kl_pernach", "kl_bunchuk", "kl_bulava", "kl_pechatka", "kl_surmy", "stone_zabuttia", "stone_alatyr",
          # спорядження для сітки торби й вдягненого: зброя за видом, одяг за слотом, артефакт, душа
-         "it_sabre", "it_mace", "it_pike", "it_staff", "it_pishchal", "it_head", "it_body", "it_belt", "it_boots", "it_amulet", "it_artifact", "it_soul"]
+         "it_sabre", "it_mace", "it_pike", "it_staff", "it_pishchal", "it_head", "it_body", "it_belt", "it_boots", "it_amulet", "it_artifact", "it_soul",
+         "it_bow", "it_pistols"]
 OUT = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "gfx", "sprites", "icons.png")
 O = (27, 20, 32, 255)
 
@@ -266,6 +267,13 @@ def draw(kind):
         d.line([(4, 9), (15, 4)], fill=(90, 95, 105, 255), width=2); d.line([(6, 8), (14, 4)], fill=(150, 155, 165, 255))
         d.polygon([(0, 10), (5, 8), (6, 11), (2, 14), (0, 14)], fill=(130, 85, 45, 255)); d.point((6, 7), fill=(225, 180, 60, 255))
         d.line([(5, 11), (7, 12)], fill=(90, 95, 105, 255))
+    elif kind == "it_bow":  # лук із тятивою й стрілою
+        d.arc([1, 0, 12, 15], 270, 90, fill=(140, 92, 48, 255), width=2); d.line([(6, 1), (6, 14)], fill=(235, 228, 210, 255))
+        d.line([(2, 8), (14, 8)], fill=(200, 180, 140, 255)); d.polygon([(13, 6), (15, 8), (13, 10)], fill=(215, 222, 232, 255))
+    elif kind == "it_pistols":  # пара пістолів навхрест
+        d.line([(1, 4), (11, 9)], fill=(150, 155, 165, 255), width=2); d.polygon([(0, 2), (3, 2), (4, 6), (1, 7)], fill=(130, 85, 45, 255))
+        d.line([(14, 4), (4, 9)], fill=(110, 115, 125, 255), width=2); d.polygon([(15, 2), (12, 2), (11, 6), (14, 7)], fill=(150, 100, 55, 255))
+        d.point((6, 6), fill=(225, 180, 60, 255)); d.point((9, 6), fill=(225, 180, 60, 255))
     elif kind == "it_head":  # шапка зі шликом
         d.ellipse([3, 2, 12, 11], fill=(180, 40, 45, 255)); d.polygon([(10, 3), (15, 6), (13, 10), (11, 6)], fill=(205, 60, 60, 255))
         d.rectangle([1, 9, 14, 13], fill=(70, 50, 38, 255)); d.line([(2, 10), (13, 10)], fill=(105, 78, 58, 255)); d.point((14, 10), fill=(225, 180, 60, 255))

@@ -134,6 +134,8 @@ func _run() -> void:
 	await _suite_shop_game()
 	_suite_skill_trees()
 	await _suite_skill_engine_game()
+	_suite_strilets()
+	await _suite_strilets_game()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -490,7 +492,9 @@ func _suite_story() -> void:
 				check(PS.choose(w, p, "cossack").is_empty(), "%s: вибір без розмов не проходить" % st["id"])
 				PS.mark_talked(w, "cossack")
 				PS.mark_talked(w, "volkhv")
-				check(PS.can_choose(w), "%s: після обох розмов можна обирати" % st["id"])
+				check(not PS.can_choose(w), "%s: двох розмов із трьох замало" % st["id"])
+				PS.mark_talked(w, "strilets")
+				check(PS.can_choose(w), "%s: після всіх розмов можна обирати" % st["id"])
 				PS.choose(w, p, "cossack")
 			elif obj["type"] in ["clear", "dungeon", "visit"]:
 				StoryService.on_event(w, p, "kill", "nobody")
@@ -1254,6 +1258,7 @@ func _suite_classes() -> void:
 					var PSv = load("res://scripts/game/path_service.gd")
 					PSv.mark_talked(w, "cossack")
 					PSv.mark_talked(w, "volkhv")
+					PSv.mark_talked(w, "strilets")
 					PSv.choose(w, v, "volkhv")
 				elif obj["type"] == "kill":
 					for i in obj["count"]:
@@ -1405,8 +1410,8 @@ func _suite_specs() -> void:
 	var Classes = load("res://scripts/data/classes.gd")
 	var p = _new_player()
 	var w = WorldState.new()
-	check(Classes.CLASSES["cossack"]["next"].size() == 4, "у Козака 4 дороги")
-	for spec in Classes.CLASSES["cossack"]["next"]:
+	check(Classes.CLASSES["cossack"]["next"].size() == 3 and Classes.CLASSES["strilets"]["next"].size() == 4, "у Козака 3 дороги, у Стрільця 4")
+	for spec in Classes.CLASSES["cossack"]["next"] + Classes.CLASSES["strilets"]["next"]:
 		var info: Dictionary = Classes.CLASSES[spec]
 		check(info["tier"] == 2 and info["job_max"] == 50 and SS.TRIALS.has(spec), "%s: ступінь 2, є випробування" % spec)
 		check(load("res://scripts/data/story.gd").NPCS.has(info["mentor"]), "%s: наставник %s" % [spec, info["mentor"]])
@@ -1417,7 +1422,7 @@ func _suite_specs() -> void:
 	p.job_level = 29
 	check(SS.available(p).is_empty() and not SS.start(w, p, "plastun"), "до 30-ї майстерності випробувань немає")
 	p.job_level = 30
-	check(SS.available(p).size() == 4 and SS.start(w, p, "plastun"), "з 30-ї — можна до наставника")
+	check(SS.available(p).size() == 3 and SS.start(w, p, "plastun"), "з 30-ї — можна до наставника")
 	check(SS.objective_line(w).begins_with("◆") and SS.target(w) == "", "мета пластуна — будь-де")
 	for i in 7:
 		SS.on_event(w, "elite", "")
@@ -1771,7 +1776,7 @@ func _suite_stones() -> void:
 	# Алатир: Козак → Волхв
 	p.learn_skill("whirl")
 	p.learn_skill("battle_cry")
-	check(ST.siblings(p) == ["volkhv"], "сусідня дорога Козака — Волхв")
+	check(ST.siblings(p) == ["volkhv", "strilets"], "сусідні дороги Козака — Волхв і Стрілець")
 	check(not ST.change_path(p, "volkhv"), "без Алатиря дорогу не зміниш")
 	ST.grant(p, "alatyr")
 	p.job_level = 25
@@ -1781,7 +1786,7 @@ func _suite_stones() -> void:
 	check(p.learn_skill("fireball"), "одразу вчить волхвівське")
 	var sp = _new_player()
 	sp.change_class("plastun")
-	check(ST.siblings(sp).size() == 3 and not "plastun" in ST.siblings(sp), "пластун може стати іншим козацьким майстром")
+	check(ST.siblings(sp).size() == 2 and not "plastun" in ST.siblings(sp), "пластун може стати іншим козацьким майстром")
 	# Камінь забуття вертає очки з усієї дороги: і з пройдених дерев теж
 	var rp = _new_player()
 	rp.skills = {}
@@ -10348,7 +10353,13 @@ func _suite_gameplay() -> void:
 	await _frames(2)
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.PathService.can_choose(game.world), "після обох розмов вибір відкрито")
+	check(not game.PathService.can_choose(game.world), "двох розмов замало: є ще сотник сердюків")
+	game.city_do("path_talk", "strilets")
+	await _frames(2)
+	check(game.hud.dialogue_root != null, "розмова із сотником Лесем")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.PathService.can_choose(game.world), "після всіх розмов вибір відкрито")
 	game.city_do("path_choose", "cossack")
 	check(game.PathService.choosing(game.world), "перше натискання — лише підтвердження")
 	game.city_do("path_choose", "cossack")
@@ -11353,8 +11364,8 @@ func _suite_skill_trees() -> void:
 				if node.has("act"):
 					acts += 1
 					var A: Dictionary = node["act"]
-					good = good and str(A["type"]) in ["nova", "leap", "cone", "shots", "zone", "buff"] and float(A["cd"]) > 0.0 and str(A["label"]) != "" and str(A["label"]).length() <= 10 and node.get("active", false)
-					good = good and Classes.cooldown(id) == float(A["cd"]) and Classes.label(id) == str(A["label"]) and SI.kind(id) == ("buff" if A["type"] == "buff" else "attack")
+					good = good and str(A["type"]) in ["nova", "leap", "cone", "shots", "zone", "buff", "summon"] and float(A["cd"]) > 0.0 and str(A["label"]) != "" and str(A["label"]).length() <= 10 and node.get("active", false)
+					good = good and Classes.cooldown(id) == float(A["cd"]) and Classes.label(id) == str(A["label"]) and SI.kind(id) == ("buff" if A["type"] in ["buff", "summon"] else "attack")
 					for k in A.get("fx", {}):
 						good = good and Classes.FX_TEXT.has(k)
 					if A.has("status"):
@@ -11582,6 +11593,305 @@ func _suite_skill_engine_game() -> void:
 	check(p.hp > p.max_hp * 0.55 and p.buff_on("tsiliushche_kolo"), "«Цілюще коло» лікує одразу й гоїть далі")
 	p.revive()
 	check(p.buffs.is_empty(), "після відпочинку підсилення не лишаються")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+
+
+# ======================= Гілка Стрілець: лук, пістолі, сокіл =======================
+
+func _suite_strilets() -> void:
+	suite("Стрілець: третя дорога, зброя, спеціалізації")
+	var Classes = load("res://scripts/data/classes.gd")
+	var Paths = load("res://scripts/data/paths.gd")
+	var Story = load("res://scripts/data/story.gd")
+	var PS = load("res://scripts/game/path_service.gd")
+	var Spec = load("res://scripts/game/spec_service.gd")
+	var Stones = load("res://scripts/game/stone_service.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Loot = load("res://scripts/game/loot_service.gd")
+	var SetS = load("res://scripts/game/set_service.gd")
+	var Shop = load("res://scripts/game/shop_service.gd")
+	var GfxS = load("res://scripts/world/gfx.gd")
+	var WorldState = load("res://scripts/game/world_state.gd")
+	# ---- Класи ----
+	var C: Dictionary = Classes.CLASSES
+	check(C["peasant"]["next"] == ["cossack", "volkhv", "strilets"] and C["strilets"]["next"] == ["sahaidachnyk", "opryshok", "sokolnyk", "samopalnyk"] and not "samopalnyk" in C["cossack"]["next"], "три дороги; Самопальник тепер у Стрільця, а не в Козака")
+	check(Classes.lineage("samopalnyk") == ["peasant", "strilets", "samopalnyk"] and Classes.lineage("opryshok") == ["peasant", "strilets", "opryshok"] and Classes.is_strilets_line("sokolnyk") and Classes.is_strilets_line("samopalnyk") and not Classes.is_strilets_line("plastun"), "дорога стрільця від Селянина до спеціалізацій")
+	var data_ok := true
+	for cls in ["strilets", "sahaidachnyk", "opryshok", "sokolnyk"]:
+		data_ok = data_ok and Classes.TREES.has(cls) and Paths.CARDS.has(cls) and str(C[cls]["address"]) != "" and Data.CITIES.has(str(C[cls]["where"]))
+		for wt in C[cls]["weapons"]:
+			data_ok = data_ok and wt in Data.AGI_WEAPONS and GfxS.has("%s_%s" % [cls, wt])
+		data_ok = data_ok and GfxS.has("hunter_" + cls) and GfxS.has("plain_" + cls)
+	check(data_ok, "у кожного класу стрільців є дерево, картка, місто наставника й спрайти з кожною його зброєю")
+	# ---- Зброя ----
+	check(Data.WEAPON_TYPES.has("bow") and Data.WEAPON_TYPES.has("pistols") and "bow" in Data.RANGED_WEAPONS and GfxS.ICON_ORDER.has("it_bow") and GfxS.ICON_ORDER.has("it_pistols"), "лук і пістолі: зброя дальнього бою зі своїми значками")
+	var bow: Dictionary = Data.gen_item(20, 1, "weapon", "bow")
+	var pist: Dictionary = Data.gen_item(20, 1, "weapon", "pistols")
+	check(str(bow["name"]).begins_with("Лук") and str(pist["name"]).begins_with("Пістолі"), "назви: «%s», «%s»" % [bow["name"], pist["name"]])
+	var p = _new_player()
+	p.change_class("strilets")
+	p.assign_uid(bow)
+	p.equipment["weapon"] = bow
+	p.recalc()
+	var d0: float = p.damage
+	p.stats["str"] += 40
+	p.recalc()
+	var d_str: float = p.damage
+	p.stats["str"] -= 40
+	p.stats["agi"] += 40
+	p.recalc()
+	check(is_equal_approx(d_str, d0) and p.damage > d0 * 1.5 and is_equal_approx(p.attack_range, 460.0), "шкода лука росте від Спритності, а не від Сили; дальність стала")
+	p.assign_uid(pist)
+	p.equipment["weapon"] = pist
+	p.recalc()
+	check(is_equal_approx(p.attack_range, 330.0) and p.attack_cooldown < 0.42 * 0.7, "пістолі б'ють ближче, зате частіше")
+	check(p.sprite_id() == "strilets_pistols", "спрайт героя за класом і зброєю: %s" % p.sprite_id())
+	# ---- Майстерність під зброю ----
+	p.skills["luk_master"] = 5
+	p.skills["pistol_master"] = 5
+	p.recalc()
+	check(is_equal_approx(p.fx("aspd"), 15.0) and is_equal_approx(p.fx("dmg"), 0.0), "із пістолями діє лише пістольна наука")
+	p.equipment["weapon"] = bow
+	p.recalc()
+	check(is_equal_approx(p.fx("dmg"), 15.0) and is_equal_approx(p.fx("aspd"), 0.0), "із луком діє лише лучна наука")
+	# ---- Вибір дороги й сюжет ----
+	check(Paths.ORDER == ["cossack", "volkhv", "strilets"] and Paths.REPS.has("strilets") and Paths.TALKS["strilets"].size() >= 4 and Story.NPCS.has(Paths.REPS["strilets"]), "третій представник на Січі: сотник сердюків")
+	var w = WorldState.new()
+	var v = _new_player()
+	v.job = "peasant"
+	v.skills = {}
+	StoryService.hero_class = "peasant"
+	var path := []
+	var guard := 0
+	while StoryService.state(w)["chapter"] == 0 and guard < 100:
+		guard += 1
+		var st = StoryService.current(w)
+		path.append(st["id"])
+		match StoryService.state(w)["stage"]:
+			"offer":
+				StoryService.on_dialogue_done(w, v, "start")
+			"active":
+				var obj = st["objective"]
+				if obj["type"] == "job":
+					StoryService.on_event(w, v, "job", "10")
+				elif obj["type"] == "choose":
+					for cls in Paths.ORDER:
+						PS.mark_talked(w, cls)
+					PS.choose(w, v, "strilets")
+				elif obj["type"] == "kill":
+					for i in obj["count"]:
+						StoryService.on_event(w, v, "kill", obj["enemy"])
+				else:
+					StoryService.on_event(w, v, obj["type"], obj["loc"])
+			"turnin":
+				StoryService.on_dialogue_done(w, v, "end", 0)
+	check(not "oath" in path and not "to_carpathians" in path and "to_baturyn" in path and "strilets_trial" in path and "back_to_sich_s" in path, "дорога стрільця: Батурин, випробування, повернення")
+	check(v.job == "strilets" and v.equipment["weapon"]["type"] == "bow" and v.sk("strila") == 1 and StoryService.chose(w, "trial=2") and w.story["chapter"] == 1, "посвячено в стрільці: лук у руці, «Влучна стріла» в подарунок, далі Розділ I")
+	var ln: Array = StoryService.lines(w, [["otaman", "Ну що, козаче?"], ["hero", "Я готовий."]])
+	check(ln[0][1] == "Ну що, стрільче?" and ln[1][0] == "hero", "до стрільця звертаються «стрільче»")
+	StoryService.hero_class = "cossack"
+	# ---- Спеціалізації ----
+	var trials_ok := true
+	for spec in C["strilets"]["next"]:
+		trials_ok = trials_ok and Spec.TRIALS.has(spec) and Story.NPCS.has(str(C[spec]["mentor"])) and Data.WEAPON_TYPES.has(str(Spec.TRIALS[spec]["item"]["type"])) and str(Spec.TRIALS[spec]["item"]["type"]) in C[spec]["weapons"]
+		var obj: Dictionary = Spec.TRIALS[spec]["objective"]
+		if obj.has("loc"):
+			trials_ok = trials_ok and Data.LOCATIONS.has(str(obj["loc"]))
+	check(trials_ok, "у кожної спеціалізації стрільця є наставник, випробування й зброя в нагороду")
+	v.job_level = Classes.JOB_CHANGE_AT[1]
+	check(Spec.available(v) == C["strilets"]["next"] and Spec.start(w, v, "sokolnyk"), "стрілець із майстерністю %d обирає спеціалізацію" % Classes.JOB_CHANGE_AT[1])
+	for i in 6:
+		Spec.on_event(w, "elite", "")
+	check(str(Spec.state(w)["stage"]) == "turnin" and "Батурин" in Spec.objective_line(w) and not Spec.city_dialogue(w, "baturyn").is_empty() and Spec.city_dialogue(w, "sich").is_empty(), "шість еліт: посвята в наставника в Батурині, а не на Січі")
+	var done: String = Spec.complete(w, v)
+	check(v.job == "sokolnyk" and v.equipment["weapon"]["type"] == "bow" and "сокольник" in done, "посвячено в сокольники: %s" % done.replace("\n", " "))
+	# ---- Постріл: межа швидкості, м'яка межа Спритності, наснага ----
+	var sh = _new_player()
+	sh.change_class("strilets")
+	var sbow: Dictionary = Data.gen_item(30, 1, "weapon", "bow")
+	sbow["mods"] = {}
+	sh.add_item(sbow, true)
+	sh.equip(sbow["uid"])
+	sh.stats["agi"] = Data.STAT_BASE + 20
+	sh.recalc()
+	var cd20: float = sh.attack_cooldown
+	check(sh.shot_mult == 1.0 and cd20 > sh.RANGED_MIN_CD, "повільний стрілець: постріл звичайної сили (%.3f с)" % cd20)
+	sh.stats["agi"] = Data.STAT_BASE + int(Data.AGI_ASPD_SOFT)
+	sh.recalc()
+	var cd60: float = sh.attack_cooldown * (1.0 / sh.shot_mult)
+	sh.stats["agi"] = Data.STAT_BASE + int(Data.AGI_ASPD_SOFT) + 100
+	sh.recalc()
+	var cd160: float = sh.attack_cooldown * (1.0 / sh.shot_mult)
+	var full: float = (1.0 + 0.04 * Data.AGI_ASPD_SOFT) / (1.0 + 0.04 * (Data.AGI_ASPD_SOFT + 100.0))
+	check(cd160 < cd60 and cd160 > cd60 * full * 1.5, "понад %d очок Спритність прискорює постріл значно слабше (%.3f → %.3f с)" % [int(Data.AGI_ASPD_SOFT), cd60, cd160])
+	sh.stats["agi"] = Data.STAT_BASE + 400
+	sh.buffs["t"] = {"t": 9.0, "fx": {"aspd": 300.0}}
+	sh.recalc()
+	check(is_equal_approx(sh.attack_cooldown, sh.RANGED_MIN_CD) and sh.shot_mult > 1.5, "частіше за десять пострілів на секунду не буває: надлишок іде в силу пострілу (×%.2f)" % sh.shot_mult)
+	var est: float = load("res://scripts/game/power.gd").dps(sh)
+	sh.shot_mult = 1.0
+	check(est > load("res://scripts/game/power.gd").dps(sh) * 1.4, "оцінка сили героя бачить силу пострілу")
+	sh.buffs.clear()
+	var melee = _new_player()
+	melee.change_class("cossack")
+	melee.stats["agi"] = Data.STAT_BASE + 400
+	melee.recalc()
+	check(melee.shot_mult == 1.0 and melee.attack_cooldown < sh.RANGED_MIN_CD, "ближнього бою межа пострілу не стосується")
+	check(Data.soft_agi_aspd(40.0) == 40.0 and is_equal_approx(Data.soft_agi_aspd(Data.AGI_ASPD_SOFT + 50.0), Data.AGI_ASPD_SOFT + 50.0 * Data.AGI_ASPD_LATE), "м'яка межа Спритності для швидкості пострілу")
+	check(load("res://scripts/game/outdoor_service.gd").arrows_for(v) == load("res://scripts/data/activities.gd").HUNT_ARROWS + 1, "стрільці беруть на полювання зайву стрілу")
+	var shooter_art := ""
+	for a in load("res://scripts/data/wiki_data.gd").BASICS:
+		if str(a["title"]).begins_with("Стрільці"):
+			shooter_art = str(a["text"])
+	check("перші %d очок" % int(Data.AGI_ASPD_SOFT) in shooter_art and "Батурині" in str(load("res://scripts/data/wiki_data.gd").BASICS), "довідник розповідає про стрільців і третю дорогу")
+	# ---- Камінь долі: сусідні дороги ----
+	check("samopalnyk" in Stones.siblings(v) and "opryshok" in Stones.siblings(v) and not "plastun" in Stones.siblings(v), "Алатир-камінь міняє спеціалізацію в межах гілки стрільців")
+	# ---- Переїзд Самопальника ----
+	var old = _new_player()
+	old.job = "samopalnyk"
+	old.job_level = 20
+	old.level = 40
+	old.skills = {"vyly": 2, "whirl": 3, "sharp": 2, "musket": 1, "kartech": 4, "deadly": 1}
+	old.skill_gifts = {"whirl": 1}
+	old.skill_points = 0
+	var moved = _new_player()
+	moved.from_dict(old.to_dict())
+	check(not moved.skills.has("whirl") and not moved.skills.has("sharp") and not moved.skills.has("musket") and moved.sk("kartech") == 4 and moved.sk("deadly") == 1 and moved.sk("vyly") == 2, "козацькі вміння давнього Самопальника знято, свої й селянські лишились")
+	check(moved.skill_points == 5 and moved.sk("strila") == 1 and int(moved.skill_gifts.get("strila", 0)) == 1, "очки за них повернуто (%d), перше вміння стрільця подаровано" % moved.skill_points)
+	var again = _new_player()
+	again.from_dict(moved.to_dict())
+	check(again.skill_points == 5 and again.skills == moved.skills, "повторне завантаження нічого не міняє")
+	# ---- Золото, набори, крамниця ----
+	var types := {}
+	for id in Uniques.ORDER:
+		if Uniques.DEFS[id]["slot"] == "weapon":
+			types[str(Uniques.DEFS[id]["type"])] = int(types.get(str(Uniques.DEFS[id]["type"]), 0)) + 1
+	check(int(types.get("bow", 0)) >= 3 and int(types.get("pistols", 0)) >= 3, "золоті луки й пістолі є на різних ступенях: %s" % str(types))
+	var sah = _new_player()
+	sah.change_class("strilets")
+	sah.change_class("sahaidachnyk")
+	var only_bow := true
+	for i in 200:
+		var D: Dictionary = Uniques.DEFS[Loot.pick(sah, 6, "dev")]
+		only_bow = only_bow and (D["slot"] != "weapon" or D["type"] == "bow")
+	var opr = _new_player()
+	opr.change_class("strilets")
+	opr.change_class("opryshok")
+	check(only_bow and SetS.main_stat(sah) == "agi" and Shop.set_weapon(opr) == "pistols" and Shop.fits(opr, "unique", "para_zalizniaka") and not Shop.fits(opr, "unique", "luk_baidy"), "сагайдачникові падає лише лук; набір під Спритність; опришкові пістолі")
+	for x in [p, v, old, moved, again, sah, opr]:
+		x.free()
+
+
+func _suite_strilets_game() -> void:
+	suite("Стрілець: у бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup"]:
+		game.world.hints[k] = true
+	p.change_class("strilets")
+	p.change_class("sokolnyk")
+	game._sync_class()
+	p.level = 40
+	var bow: Dictionary = Data.gen_item(40, 2, "weapon", "bow")
+	p.add_item(bow, true)
+	p.equip(bow["uid"])
+	p.stats["agi"] = 80
+	p.stats["vit"] = 150
+	for id in ["sokil", "kihti", "sokolyna_mitka", "pike", "strila", "syltsia"]:
+		p.skills[id] = 2
+	p.recalc()
+	game.world.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(2)
+	var dummy := func(offset: Vector2):
+		c.spawn_enemy("upyr", 40, false, p.global_position + offset)
+		var e = c._last_enemy()
+		e.max_hp *= 1000.0
+		e.hp = e.max_hp
+		e.speed = 0.0
+		e.damage = 0.0
+		return e
+	var ready := func() -> void:
+		p.mana = p.max_mana
+		for id in p.skill_timers.keys():
+			p.skill_timers[id] = 0.0
+	# ---- Звичайний постріл із лука ----
+	var foe = dummy.call(Vector2(320, 0))
+	await _frames(1)
+	p.attack_timer = 0.0
+	p.combo_step = 0
+	p.attack()
+	var arrow = c.last_projectile()
+	check(arrow != null and is_instance_valid(arrow) and arrow.friendly and arrow.pierce == 1 and p.sprite_id() == "sokolnyk_bow", "лук пускає стрілу в найближчого ворога")
+	await _frames(30)
+	check(foe.hp < foe.max_hp, "стріла долетіла")
+	# ---- Сокіл ----
+	foe.hp = foe.max_hp
+	ready.call()
+	p.use_skill("sokil")
+	var bird = null
+	for z in c.effects.get_children():
+		if z.get_script() == c.ZoneScript and z.kind == "falcon":
+			bird = z
+	check(bird != null and bird.status == "curse" and bird.duration >= 20.0 and p.skill_timers["sokil"] > 0.0 and p.SkillInfo.kind("sokil") == "buff", "«Сокіл»: птах у небі, з «Соколиною міткою» проклинає ціль")
+	var base_dmg: float = bird.damage
+	await _frames(100)
+	check(foe.hp < foe.max_hp and foe.statuses.has("curse"), "сокіл сам б'є ворога й мітить його")
+	p.skills["kihti"] = 5
+	ready.call()
+	p.use_skill("sokil")
+	var strong = null
+	for z in c.effects.get_children():
+		if z.get_script() == c.ZoneScript and z.kind == "falcon" and z != bird:
+			strong = z
+	check(strong != null and strong.damage > base_dmg * 1.25, "«Гострі кігті» підсилюють сокола")
+	# ---- Пістолі й постріл упритул ----
+	game.enter_map()
+	await _frames(2)
+	p.job = "opryshok"
+	game._sync_class()
+	var pist: Dictionary = Data.gen_item(40, 2, "weapon", "pistols")
+	p.add_item(pist, true)
+	p.equip(pist["uid"])
+	for id in ["postril_vprytul", "dva_stvoly", "bartka", "vtecha_horamy"]:
+		p.skills[id] = 2
+	p.recalc()
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(2)
+	var near = dummy.call(Vector2(140, 0))
+	await _frames(1)
+	p.attack_timer = 0.0
+	p.combo_step = 0
+	p.attack()
+	var b1 = c.last_projectile()
+	check(b1 != null and is_instance_valid(b1) and b1.life < 0.6 and p.sprite_id() == "opryshok_pistols", "пістоль б'є короткою кулею")
+	ready.call()
+	p.use_skill("postril_vprytul")
+	check(near.hp < near.max_hp and near.stun > 0.0, "«Постріл упритул» б'є й приголомшує")
+	ready.call()
+	p.use_skill("bartka")
+	check(near.statuses.has("bleed"), "«Удар бартки» пускає кров")
+	p.statuses["chill"] = {"t": 5.0, "dps": 0.0, "tick": 0.5}
+	var sp0: float = p.speed
+	ready.call()
+	p.use_skill("vtecha_horamy")
+	check(p.statuses.is_empty() and p.speed > sp0 * 1.4 and p.invuln > 0.0, "«Втеча горами»: стани знято, біг швидший, мить невразливості")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

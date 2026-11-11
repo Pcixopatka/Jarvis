@@ -15,6 +15,8 @@ var tick := 0.5
 var status := ""
 var status_dur := 1.5
 var color := Color(1.0, 0.8, 0.3)
+var _dive := 0.0  # сокіл: скільки ще триває піке
+var _dive_to := Vector2.ZERO
 var _t := 0.0
 var _tick := 0.0
 
@@ -35,6 +37,25 @@ func _process(delta: float) -> void:
 				var e = combat.nearest_enemy(global_position, 520.0)
 				if e:
 					combat.spawn_spark(global_position, (e.global_position - global_position).normalized(), damage, false)
+		"falcon":
+			# Сокіл кружляє над героєм, а на удар пірнає до ворога
+			var hero = combat.player
+			var home: Vector2 = hero.global_position + Vector2(cos(_t * 2.4) * 70.0, -80.0 + sin(_t * 4.8) * 14.0)
+			if _dive > 0.0:
+				_dive -= delta
+				global_position = global_position.lerp(_dive_to, minf(1.0, delta * 14.0))
+			else:
+				global_position = global_position.lerp(home, minf(1.0, delta * 5.0))
+			if _tick <= 0.0:
+				_tick = tick
+				var prey = combat.nearest_enemy(hero.global_position, 560.0)
+				if prey:
+					_dive = 0.25
+					_dive_to = prey.global_position + Vector2(0, -10)
+					hero.hit(prey, damage, Vector2.ZERO, false)
+					if status != "" and not prey.dead:
+						hero.Status.apply(prey, status, status_dur)
+					combat.fx.burst(prey.global_position, color, 6, 160, 4, 0.25)
 		_:
 			if _tick <= 0.0:
 				_tick = 0.3 if kind == "grad" else (tick if kind == "skill" else 0.5)
@@ -78,6 +99,15 @@ func _draw() -> void:
 				var a := _t * 0.4 + i * TAU / 7.0
 				draw_circle(Vector2.from_angle(a) * radius * 0.5, radius * 0.55, Color(0.75, 0.78, 0.82, 0.08 * fade))
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(0.8, 0.82, 0.85, 0.35 * fade), 2.0)
+		"falcon":
+			# тулуб і крила, що б'ють; у піке крила складені
+			var flap: float = 0.0 if _dive > 0.0 else sin(_t * 18.0) * 7.0
+			var body := Color(0.55, 0.42, 0.28, fade)
+			draw_polygon(PackedVector2Array([Vector2(-3, 0), Vector2(-16, -4 - flap), Vector2(-9, 3)]), PackedColorArray([body, body, body]))
+			draw_polygon(PackedVector2Array([Vector2(3, 0), Vector2(16, -4 - flap), Vector2(9, 3)]), PackedColorArray([body, body, body]))
+			draw_circle(Vector2.ZERO, 5.0, Color(0.7, 0.58, 0.4, fade))
+			draw_circle(Vector2(0, -5), 3.0, Color(0.85, 0.78, 0.62, fade))
+			draw_line(Vector2(0, -5), Vector2(0, -9), Color(0.95, 0.75, 0.2, fade), 2.0)
 		"skill":
 			draw_circle(Vector2.ZERO, radius, Color(color, 0.14 * fade))
 			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(color, 0.55 * fade), 2.0)

@@ -40,6 +40,7 @@ func _draw() -> void:
 		"velemyr": Color(0.95, 0.94, 0.88), "hero_volkhv": Color(0.95, 0.94, 0.9), "zoreslava": Color(0.93, 0.92, 0.86),
 		"paraska": Color(0.95, 0.92, 0.85), "hromobii": Color(0.85, 0.88, 0.95), "yakym": Color(0.35, 0.22, 0.12),
 		"myron": Color(0.55, 0.08, 0.1), "sava": Color(0.35, 0.4, 0.22), "okhrim": Color(0.2, 0.25, 0.45), "yarema": Color(0.15, 0.12, 0.14),
+		"les": Color(0.18, 0.35, 0.55), "oryna": Color(0.48, 0.35, 0.16), "tymish": Color(0.29, 0.42, 0.23),
 		"chumak": Color(0.92, 0.9, 0.82), "gonets": Color(0.2, 0.35, 0.6), "koval": Color(0.4, 0.26, 0.15), "bizhenka": Color(0.55, 0.4, 0.3)}.get(npc, Color.GRAY)
 	# Плечі
 	draw_colored_polygon(_pts(c, s, [Vector2(-46, 46), Vector2(46, 46), Vector2(54, 64), Vector2(-54, 64)]), cloth)
@@ -218,6 +219,29 @@ func _draw() -> void:
 			_mustache(c, s, Color(0.75, 0.4, 0.15), 26.0)
 			draw_circle(c + Vector2(-14, 8) * s, 5.0 * s, Color(0.3, 0.3, 0.3, 0.4))
 			draw_rect(Rect2(c + Vector2(-30, -38) * s, Vector2(60, 16) * s), Color(0.3, 0.22, 0.15))
+		"les":
+			# Сотник сердюків: хутряна шапка з червоним шликом, підкручений вус, примружене око стрільця
+			draw_rect(Rect2(c + Vector2(-30, -40) * s, Vector2(60, 16) * s), Color(0.16, 0.13, 0.12))
+			draw_colored_polygon(_pts(c, s, [Vector2(10, -40), Vector2(34, -34), Vector2(30, -18), Vector2(18, -26)]), Color(0.78, 0.16, 0.12))
+			_brows(c, s, Color(0.25, 0.18, 0.1), 3.5)
+			_eyes(c, s, eye_y, false)
+			_mustache(c, s, Color(0.3, 0.2, 0.12), 30.0)
+			draw_line(c + Vector2(-46, 56) * s, c + Vector2(46, 56) * s, Color(0.78, 0.16, 0.12), 5.0 * s)
+		"oryna":
+			# Лучниця: темна коса через плече, ремінь сагайдака навскоси
+			draw_colored_polygon(_pts(c, s, [Vector2(-30, 10), Vector2(-28, -22), Vector2(0, -34), Vector2(28, -22), Vector2(30, 6), Vector2(18, -14), Vector2(-18, -14)]), Color(0.24, 0.15, 0.09))
+			draw_line(c + Vector2(26, 6) * s, c + Vector2(34, 48) * s, Color(0.24, 0.15, 0.09), 8.0 * s)
+			_brows(c, s, Color(0.2, 0.13, 0.08), 2.5)
+			_eyes(c, s, eye_y, false)
+			draw_arc(c + Vector2(0, 12) * s, 7.0 * s, 0.2, PI - 0.2, 8, Color(0.6, 0.25, 0.2), 2.0 * s)
+			draw_line(c + Vector2(-44, 46) * s, c + Vector2(30, 64) * s, Color(0.35, 0.22, 0.1), 5.0 * s)
+		"tymish":
+			# Сокольник: зелений каптур, сива борідка, перо за вухом
+			draw_colored_polygon(_pts(c, s, [Vector2(-36, 20), Vector2(-32, -26), Vector2(0, -42), Vector2(32, -26), Vector2(36, 20), Vector2(24, -12), Vector2(0, -22), Vector2(-24, -12)]), Color(0.24, 0.36, 0.18))
+			_brows(c, s, Color(0.7, 0.7, 0.68), 3.0)
+			_eyes(c, s, eye_y, false)
+			draw_colored_polygon(_pts(c, s, [Vector2(-12, 16), Vector2(12, 16), Vector2(0, 32)]), Color(0.75, 0.75, 0.72))
+			draw_line(c + Vector2(30, -22) * s, c + Vector2(44, -46) * s, Color(0.9, 0.86, 0.75), 4.0 * s)
 		"yarema":
 			# Характерник: сивий оселедець, сиві вуса, вовчі очі
 			_chub(c, s, Color(0.85, 0.85, 0.85))

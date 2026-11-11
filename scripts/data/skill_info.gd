@@ -77,7 +77,7 @@ static func kind(id: String) -> String:
 	if KIND.has(id):
 		return KIND[id]
 	# вміння за даними: підсилення йдуть на нижню панель, решта — до атак
-	return "buff" if str(Classes.act(id).get("type", "")) == "buff" else "attack"
+	return "buff" if str(Classes.act(id).get("type", "")) in ["buff", "summon"] else "attack"
 
 
 ## Таблиця цифр для рангу r (r може бути 0 — «ще не вивчено», тоді показуємо ранг 1).

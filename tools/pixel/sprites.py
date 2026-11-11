@@ -380,6 +380,16 @@ def weapon(p, d, frame, c, by, atk, side):
     elif kind == "musket":
         p.line(hx - 4, hy + 2, hx + (-24 if side else 20), hy - 4 - atk * 2, handle, 4)
         p.line(hx - 2, hy + 1, hx + (-24 if side else 20), hy - 5 - atk * 2, hexc("8a8f99"), 2)
+    elif kind == "pistols":
+        # Два пістолі: один у бойовій руці, другий трохи нижче; на пострілі руки підняті
+        steel = hexc("8a8f99")
+        lift = 5 if atk else 0
+        fx_ = hx + (-9 if side else 7)
+        p.line(hx, hy - lift, fx_, hy - 1 - lift, steel, 2); p.rect(hx - 1, hy - lift, 3, 4, handle)
+        ox = hx + (5 if side else -7)
+        p.line(ox, hy + 3 - lift // 2, ox + (-8 if side else 8), hy + 2 - lift // 2, mul(steel, 0.8), 2); p.rect(ox - 1, hy + 3 - lift // 2, 3, 3, handle)
+        if atk == 1:
+            p.px(fx_ + (-2 if side else 2), hy - 2 - lift, hexc("ffd23a")); p.px(fx_ + (-3 if side else 3), hy - 1 - lift, hexc("ff8a2a"))
     elif kind == "claws":
         if atk:
             for i in range(3):
@@ -514,6 +524,13 @@ CHARS["volkhv_staff"] = dict(CHARS["volkhv"], hat="oak", hat_col=hexc("4a9a3a"),
 CHARS["znakhar_staff"] = dict(CHARS["volkhv"], hat="oak", hat_col=hexc("6ab84a"), hair=hexc("b08a4a"), beard=None, sash=hexc("3a9a4a"), vyshyvka=hexc("3a9a4a"), orb=hexc("7fe07a"))
 CHARS["perun_zhrets_staff"] = dict(CHARS["volkhv"], hat="oak", hat_col=hexc("d8dce8"), hair=hexc("b08a4a"), beard=hexc("b08a4a"), sash=hexc("3a4ab8"), body=hexc("dfe4f2"), sleeve=hexc("dfe4f2"), orb=hexc("8ad0ff"))
 CHARS["molfar_staff"] = dict(CHARS["volkhv"], hat="hutsul", hat_col=hexc("141010"), hair=hexc("3a2a1a"), beard=hexc("3a2a1a"), sash=hexc("c0302a"), body=hexc("e8dcc4"), sleeve=hexc("4a2a1a"), orb=hexc("c080ff"))
+# Гілка стрільців: сердюцький каптан, сагайдачник у степовому, опришок у гуцульському, сокольник у ловецькому
+CHARS["strilets_bow"] = coss(hexc("2f5a8a"), weapon="bow", hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("c6281e"), sash=hexc("c6281e"), vyshyvka=None, mustache=True)
+CHARS["strilets_pistols"] = dict(CHARS["strilets_bow"], weapon="pistols")
+CHARS["sahaidachnyk_bow"] = coss(hexc("7a5a2a"), weapon="bow", hat="oseledets", sash=hexc("3a6a9a"), vyshyvka=hexc("f2c23a"), pants=hexc("3a6a9a"))
+CHARS["opryshok_pistols"] = dict(CHARS["molfar_staff"], weapon="pistols", orb=None, body=hexc("f2ecdc"), sleeve=hexc("f2ecdc"), vyshyvka=hexc("c6281e"), sash=hexc("7a2a1a"), pants=hexc("a8322a"), beard=None, mustache=True)
+CHARS["sokolnyk_bow"] = coss(hexc("4a6a3a"), weapon="bow", hat="hood", hat_col=hexc("3a5a2a"), sash=hexc("8a5a2a"), vyshyvka=None, mustache=False, brows=True, pants=hexc("5a4030"))
+CHARS["samopalnyk_pistols"] = dict(CHARS["samopalnyk_sabre"], weapon="pistols")
 # Побратими й найманці
 CHARS["comp_dzhura"] = coss(hexc("c43a2a"), hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("d4a63a"), mustache=False, brows=True)
 CHARS["comp_petro"] = coss(hexc("8c3f33"), hat="shapka", hat_col=hexc("2a2220"), shlyk=hexc("4a90d8"), mustache=True, brows=True)
@@ -584,7 +601,8 @@ CHARS["khiisi"] = dict(pants=hexc("2a3a4a"), boots=hexc("16222e"), body=hexc("3a
 CHARS["chornoboh"] = dict(pants=hexc("0e0c12"), boots=hexc("08060a"), body=hexc("16121c"), sleeve=hexc("16121c"), robe=True, cape=hexc("0a080e"), sash=hexc("8a1a2a"), skin=hexc("8a8690"), hair=hexc("e8e8f0"), beard=hexc("e8e8f0"), hat="crown", hat_col=hexc("3a3440"), eye=hexc("ff2030"), brows=True, gloves=hexc("2a2430"), weapon="staff", orb=hexc("ff2030"), aura=hexc("7a30c0"))
 # Мисливці з луком і беззбройні постаті для мирних занять (полювання, рибалка): по одній на клас
 _LOOKS = {"peasant": "peasant", "cossack": "cossack_sabre", "volkhv": "volkhv_staff", "zaporozhets": "zaporozhets_sabre", "plastun": "plastun_sabre",
-          "samopalnyk": "samopalnyk_sabre", "kharakternyk": "kharakternyk_sabre", "znakhar": "znakhar_staff", "perun_zhrets": "perun_zhrets_staff", "molfar": "molfar_staff"}
+          "samopalnyk": "samopalnyk_sabre", "kharakternyk": "kharakternyk_sabre", "znakhar": "znakhar_staff", "perun_zhrets": "perun_zhrets_staff", "molfar": "molfar_staff",
+          "strilets": "strilets_bow", "sahaidachnyk": "sahaidachnyk_bow", "opryshok": "opryshok_pistols", "sokolnyk": "sokolnyk_bow"}
 for _job, _src in _LOOKS.items():
     CHARS["hunter_" + _job] = dict(CHARS[_src], weapon="bow")
     CHARS["plain_" + _job] = dict(CHARS[_src], weapon=None)

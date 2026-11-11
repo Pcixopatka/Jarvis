@@ -356,7 +356,7 @@ func _after_class_change() -> void:
 ## Клас героя впливає на здобич (зброя свого класу) і звертання в розмовах.
 func _sync_class() -> void:
 	Data.weapon_pool = player.Classes.CLASSES[player.job]["weapons"]
-	StoryService.hero_class = "volkhv" if player.Classes.is_volkhv_line(player.job) else player.job
+	StoryService.hero_class = "volkhv" if player.Classes.is_volkhv_line(player.job) else ("strilets" if player.Classes.is_strilets_line(player.job) else player.job)
 
 
 func new_game() -> void:

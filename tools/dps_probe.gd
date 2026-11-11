@@ -4,6 +4,7 @@ extends "res://tools/balance_sim.gd"
 ## бо формула Power.dps не бачить, наскільки вміння сильніші за удари.
 ## Запуск:  SIM_CLASS=perun_zhrets SIM_LEVELS=45,75 SIM_GEAR=good godot --headless --path . -s res://tools/dps_probe.gd --fixed-fps 60
 ## Наснага витрачається як у бою (зілля бот не п'є); DPS_MANA=full тримає її повною.
+## DPS_SKILLS=0 міряє самі звичайні удари: видно, яку частку шкоди дають уміння.
 const Power := preload("res://scripts/game/power.gd")
 const SECONDS := 20.0
 const DUMMY_HP := 1.0e13
@@ -58,6 +59,9 @@ func _measure(lvl: int, n: int) -> float:
 		p.hp = p.max_hp
 		if OS.get_environment("DPS_MANA") == "full":
 			p.mana = p.max_mana  # DPS_MANA=full — без огляду на запас наснаги
+		if OS.get_environment("DPS_SKILLS") == "0":
+			for id in p.active_skills():
+				p.skill_timers[id] = 9.0  # DPS_SKILLS=0 — самі звичайні удари, без умінь
 		_bot(p, c)
 		await process_frame
 		t += 1.0 / 60.0

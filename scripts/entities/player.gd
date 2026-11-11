@@ -79,6 +79,7 @@ var damage := 20.0
 var crit_chance := 0.05
 var crit_mult := 2.0
 var attack_cooldown := 0.42
+var shot_mult := 1.0  # сила звичайного пострілу понад межу швидкості (див. RANGED_MIN_CD)
 var attack_range := 95.0
 var attack_arc := deg_to_rad(130.0)
 var dodge_cooldown := 1.2
@@ -141,6 +142,9 @@ var swing_full := false
 # --- Комбо, блок, парирування, заряд ---
 const COMBO_WINDOW := 1.0  # скільки чекає серія між ударами
 const COMBO_MULT := [1.0, 1.15, 1.8]  # третій удар серії — сильний і широкий
+## Стрілець не стріляє частіше за 10 разів на секунду: надлишок швидкості йде в силу пострілу (shot_mult).
+## Так шкода за секунду та сама, а екран не тоне в кулях і гра встигає порахувати кожен постріл.
+const RANGED_MIN_CD := 0.099
 const PARRY_WINDOW := 0.25  # натиснув «Блок» за мить до удару — парирування
 const BLOCK_MULT := 0.35  # частка шкоди, що проходить крізь блок
 const CHARGE_MIN := 0.6  # з якого часу утримання блоку удар уже заряджений
@@ -436,9 +440,36 @@ func from_dict(d: Dictionary) -> void:
 		xp = int(float(xp) / maxf(1.0, float(xp_next)) * want)
 		xp_next = want
 	_normalize_buffs()
+	_refund_foreign_skills()
 	recalc()
 	hp = max_hp
 	mana = max_mana
+
+
+## Клас могли перенести в іншу гілку (Самопальник перейшов від Козака до Стрільця).
+## Вміння, що лишилися поза дорогою героя, вертаються очками: їх можна вкласти в нові дерева.
+## Подаровані сюжетом ранги (skill_gifts) очок не вертають, а вміння Загартування це не зачіпає.
+func _refund_foreign_skills() -> int:
+	if not Classes.CLASSES.has(job):
+		return 0
+	var own := {}
+	for c in Classes.lineage(job):
+		for b in Classes.TREES.get(c, []):
+			for n in b["nodes"]:
+				own[n["id"]] = true
+	var back := 0
+	for id in skills.keys():
+		if own.has(id) or Classes.find_node(str(id)).is_empty():
+			continue
+		back += maxi(0, int(skills[id]) - int(skill_gifts.get(id, 0)))
+		skills.erase(id)
+		skill_gifts.erase(id)
+	skill_points += back
+	if back > 0 and Classes.is_strilets_line(job) and sk("strila") <= 0:
+		# замість подарованого козацького вміння стрілець має своє перше: «Влучну стрілу»
+		skills["strila"] = 1
+		skill_gifts["strila"] = 1
+	return back
 
 
 # ---------- Підсилення на час бою: страви з казана, зілля сили, натхнення ----------
@@ -609,7 +640,7 @@ func recalc() -> void:
 	var s_spi := _bonus("spi")
 
 	# Волхв із посохом черпає силу з Характерництва, усі інші — із Сили
-	var s_main := s_spi if weapon_type == "staff" else (s_agi if weapon_type == "pishchal" else s_str)
+	var s_main := s_spi if weapon_type == "staff" else (s_agi if weapon_type in Data.AGI_WEAPONS else s_str)
 	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + 0.08 * pk("porokh") + 0.03 * pk("h_hand") + eq("dmg_pct") / 100.0)
 	if weapon_type == "mace":
 		damage *= 1.0 + 0.1 * pk("mace_master")
@@ -626,12 +657,21 @@ func recalc() -> void:
 		attack_range = 430.0  # іскри летять далеко
 	elif weapon_type == "pishchal":
 		attack_range = 480.0
+	elif weapon_type == "bow":
+		attack_range = 460.0
+	elif weapon_type == "pistols":
+		attack_range = 330.0  # пістолі б'ють ближче за лук і пищаль
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
-	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * s_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
+	var aspd_agi: float = Data.soft_agi_aspd(s_agi) if weapon_type in Data.AGI_WEAPONS else float(s_agi)
+	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * aspd_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
 	if weapon_type == "pishchal":
 		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
 	attack_cooldown /= (1.0 + float(soul_fx.get("aspd", 0.0))) * (1.0 + float(set_fx.get("aspd", 0.0)) / 100.0) * (1.0 + fx("aspd") / 100.0)
-	if not weapon_type in ["staff", "pishchal"]:
+	shot_mult = 1.0
+	if weapon_type in Data.AGI_WEAPONS and attack_cooldown < RANGED_MIN_CD:
+		shot_mult = RANGED_MIN_CD / attack_cooldown
+		attack_cooldown = RANGED_MIN_CD
+	if not weapon_type in Data.RANGED_WEAPONS:
 		attack_range *= 1.0 + fx("range") / 100.0
 	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0 + fx("crit") / 100.0)
 	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0)) + float(set_fx.get("crit_dmg", 0.0)) / 100.0 + fx("crit_dmg") / 100.0
@@ -968,8 +1008,26 @@ func charged_strike(power: float) -> void:
 	if weapon_type == "staff":
 		_charged_spell(power)
 		return
-	if weapon_type == "pishchal":
+	if weapon_type in ["pishchal", "bow"]:
+		# заряджений постріл: важка куля чи стріла навиліт
 		_prytsil_shot((2.0 + 2.5 * power) * skill_power, power >= 0.99)
+		Events.charged_hit.emit()
+		combo_step = 0
+		attack_timer = attack_cooldown
+		return
+	if weapon_type == "pistols":
+		# заряджений залп із двох пістолів: п'ять куль віялом
+		var tgt: Node2D = combat.nearest_enemy(global_position, 500.0)
+		var cdir := facing
+		if tgt:
+			cdir = (tgt.global_position - global_position).normalized()
+			facing = cdir
+		for i in 5:
+			var cr := _roll((0.7 + 0.8 * power) * skill_power)
+			combat.spawn_bullet(global_position + Vector2(0, -10) + cdir * 30.0, cdir.rotated(-0.3 + i * 0.15), cr[0], cr[1])
+			combat.last_projectile().pierce = 2
+		Audio.play("musket", 0.05, -2.0)
+		combat.shake(4.0)
 		Events.charged_hit.emit()
 		combo_step = 0
 		attack_timer = attack_cooldown
@@ -1328,6 +1386,12 @@ func attack() -> void:
 	if weapon_type == "pishchal":
 		_fire_pishchal(step, finisher)
 		return
+	if weapon_type == "bow":
+		_fire_bow(step, finisher)
+		return
+	if weapon_type == "pistols":
+		_fire_pistols(step, finisher)
+		return
 	# Автонаведення — на телефоні цілитися пальцем незручно.
 	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.8)
 	if target:
@@ -1565,7 +1629,8 @@ func use_skill(id: String) -> void:
 ## Виконує активне вміння, описане у вузлі дерева полем "act". Шаблони:
 ##   nova  — удар довкола героя;            leap — стрибок до ворога й удар довкола місця приземлення;
 ##   cone  — удар перед собою;              shots — снаряди в найближчого ворога;
-##   zone  — зона, що б'є й накладає стан;  buff — підсилення на час (fx), лікування, очищення.
+##   zone  — зона, що б'є й накладає стан;  buff — підсилення на час (fx), лікування, очищення;
+##   summon — сокіл-помічник на час (boost і mark — вміння, що його підсилюють).
 ## Спільні поля: pct (множник шкоди зброї), radius, stun, status [стан, секунд], kb, color, sound, text.
 ## Число можна задати як [основа, приріст за ранг].
 func _act(id: String) -> bool:
@@ -1652,6 +1717,19 @@ func _act(id: String) -> bool:
 				z.status_dur = float(A["status"][1])
 			Audio.play(snd if snd != "" else "spell", 0.15, -2.0)
 			combat.fx.ring(pos, col, 20, Classes.val(A.get("radius", 150.0), r) * 2.0, 5, 0.4)
+			done = true
+		"summon":
+			# Сокіл сокольника: літає біля героя й сам б'є найближчу нечисть
+			var boost: float = 1.0 + 0.12 * sk(str(A.get("boost", "")))
+			var z2 = combat.spawn_zone("falcon", global_position + Vector2(0, -70), 0.0, Classes.val(A.get("dur", 20.0), r), damage * m * boost)
+			z2.tick = float(A.get("tick", 1.2))
+			z2.color = col
+			var mark_rank: int = sk(str(A.get("mark", "")))
+			if mark_rank > 0:
+				z2.status = "curse"
+				z2.status_dur = 1.5 + 0.5 * mark_rank
+			Audio.play(snd if snd != "" else "swing", 0.1, -4.0)
+			combat.float_text(global_position + Vector2(0, -70), str(A.get("text", n["name"])), col)
 			done = true
 		"buff":
 			var group: String = str(A.get("group", ""))
@@ -1921,12 +1999,64 @@ func _fire_pishchal(step: int, finisher: bool) -> void:
 	facing = dir
 	var angles := [-0.12, 0.0, 0.12] if finisher else [0.0]
 	for a in angles:
-		var r := _roll(COMBO_MULT[step] * (0.7 if angles.size() > 1 else 1.0))
+		var r := _roll(COMBO_MULT[step] * shot_mult * (0.7 if angles.size() > 1 else 1.0))
 		combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 34.0, dir.rotated(a), r[0], r[1])
 		combat.last_projectile().pierce = 2  # звичайна куля пищалі пробиває двох
 	Audio.play("musket", 0.15, -8.0)
 	combat.fx.burst(global_position + Vector2(0, -10) + dir * 44.0, Color(0.85, 0.85, 0.8, 0.6), 8, 120, 7, 0.6, -40, dir.angle(), 0.8)
 	combat.shake(1.5)
+	_shot_mana()
+	combo_step = (step + 1) % COMBO_MULT.size()
+	combo_timer = COMBO_WINDOW
+
+
+## Звичайна атака луком: стріла в найближчого ворога, завершальний постріл — три стріли віялом.
+func _fire_bow(step: int, finisher: bool) -> void:
+	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.3)
+	if target == null:
+		combo_step = 0
+		return
+	var dir: Vector2 = (target.global_position - global_position).normalized()
+	facing = dir
+	var angles := [-0.14, 0.0, 0.14] if finisher else [0.0]
+	for a in angles:
+		# завершальний постріл: середня стріла повної сили, бічні слабші (вони для гурту)
+		var r := _roll(COMBO_MULT[step] * shot_mult * (0.35 if a != 0.0 else 1.0))
+		combat.spawn_bullet(global_position + Vector2(0, -12) + dir * 30.0, dir.rotated(a), r[0], r[1])
+		var pr = combat.last_projectile()
+		pr.pierce = 1
+		pr.color = Color(0.85, 0.75, 0.55)
+		pr.spear = true  # стріла малюється довгою, як спис
+	Audio.play("swing", 0.15, -6.0)
+	_shot_mana()
+	combo_step = (step + 1) % COMBO_MULT.size()
+	combo_timer = COMBO_WINDOW
+
+
+## Постріл у ціль трохи поповнює наснагу: стрілець не б'є зблизька, тож отримує половину козацького.
+func _shot_mana() -> void:
+	mana = minf(max_mana, mana + Data.MANA_ON_HIT * Data.MANA_ON_SHOT * minf(1.0, attack_cooldown / Data.MANA_ON_HIT_CD))
+
+
+## Звичайна атака пістолями: постріл по черзі з кожної руки, завершальний — з обох одразу.
+func _fire_pistols(step: int, finisher: bool) -> void:
+	var target: Node2D = combat.nearest_enemy(global_position, attack_range * 1.3)
+	if target == null:
+		combo_step = 0
+		return
+	var dir: Vector2 = (target.global_position - global_position).normalized()
+	facing = dir
+	var side: Vector2 = dir.orthogonal() * 8.0
+	var hands := [side, -side] if finisher else [side if step % 2 == 0 else -side]
+	for h in hands:
+		var r := _roll(COMBO_MULT[step] * shot_mult * (0.75 if hands.size() > 1 else 1.0))
+		combat.spawn_bullet(global_position + Vector2(0, -10) + dir * 30.0 + h, dir, r[0], r[1])
+		var pr = combat.last_projectile()
+		pr.pierce = 1
+		pr.life = 0.45  # куля пістоля далеко не летить
+	Audio.play("musket", 0.2, -10.0)
+	combat.fx.burst(global_position + Vector2(0, -10) + dir * 40.0, Color(1.0, 0.8, 0.3), 4, 200, 4, 0.12, 0, dir.angle(), 0.6)
+	_shot_mana()
 	combo_step = (step + 1) % COMBO_MULT.size()
 	combo_timer = COMBO_WINDOW
 
@@ -2669,6 +2799,9 @@ func sprite_id() -> String:
 		return id
 	if Classes.is_volkhv_line(job):
 		return "volkhv_staff" if Gfx.has("volkhv_staff") else "volkhv"
+	if Classes.is_strilets_line(job):
+		var sid := "strilets_%s" % wt
+		return sid if Gfx.has(sid) else "strilets_bow"
 	return "cossack_%s" % wt if Gfx.has("cossack_%s" % wt) else "cossack"
 
 

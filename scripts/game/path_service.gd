@@ -1,14 +1,14 @@
 extends RefCounted
-## Вибір дороги (Козак чи Волхв) після майстерності 10. Стан — world.path_talks:
+## Вибір дороги (Козак, Волхв чи Стрілець) після майстерності 10. Стан — world.path_talks:
 ##   {"cossack": true, "volkhv": true} — з ким уже поговорив.
-## Обрати можна лише після обох розмов; вибір записується як story.choices["trial"] = 0/1
+## Обрати можна лише після всіх розмов; вибір записується як story.choices["trial"] = 0/1/2
 ## і завершує сюжетний крок "choose", далі сюжет сам іде гілкою oath / to_carpathians.
 
 const Paths := preload("res://scripts/data/paths.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
-const CHOICE_INDEX := {"cossack": 0, "volkhv": 1}
+const CHOICE_INDEX := {"cossack": 0, "volkhv": 1, "strilets": 2}
 
 
 ## Чи зараз герой стоїть перед вибором дороги (крок «choose» активний).
@@ -27,8 +27,16 @@ static func mark_talked(world, cls: String) -> void:
 	world.path_talks[cls] = true
 
 
+## Чи вислухано всіх представників доріг.
+static func talked_all(world) -> bool:
+	for cls in Paths.ORDER:
+		if not talked(world, cls):
+			return false
+	return true
+
+
 static func can_choose(world) -> bool:
-	return choosing(world) and talked(world, "cossack") and talked(world, "volkhv")
+	return choosing(world) and talked_all(world)
 
 
 ## Розмова з представником дороги.

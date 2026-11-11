@@ -20,12 +20,15 @@ static func owned(player) -> Dictionary:
 	return out
 
 
-## Головна риса класу героя: посох — Характерництво, пищаль — Спритність, решта — Сила.
+## Головна риса класу героя: посох — Характерництво, лук, пістолі й пищаль — Спритність, решта — Сила.
 static func main_stat(player) -> String:
 	var weapons: Array = Classes.CLASSES[player.job].get("weapons", [])
 	if weapons.has("staff"):
 		return "spi"
-	if weapons.has("pishchal") or str(player.job) == "plastun":
+	for wt in Data.AGI_WEAPONS:
+		if weapons.has(wt):
+			return "agi"
+	if str(player.job) == "plastun":
 		return "agi"
 	return "str"
 

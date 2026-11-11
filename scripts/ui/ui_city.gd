@@ -261,15 +261,15 @@ static func _path_tab(game) -> Control:
 	var w = game.world
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	var both: bool = PS.talked(w, "cossack") and PS.talked(w, "volkhv")
-	var intro := "Поговори з обома — осавулом Мироном і посланницею Зореславою — і обери свою дорогу. Не поспішай: вибір назавжди (змінити зможе лише Алатир-камінь)." if not both else "Ти вислухав обох. Обирай, коли будеш готовий — або повертайся пізніше."
+	var both: bool = PS.talked_all(w)
+	var intro := "Поговори з усіма трьома — осавулом Мироном, посланницею Зореславою й сотником Лесем — і обери свою дорогу. Не поспішай: вибір назавжди (змінити зможе лише Алатир-камінь)." if not both else "Ти вислухав обох. Обирай, коли будеш готовий — або повертайся пізніше."
 	var il := UI.label(intro, 18, UI.GOLD if not both else UI.GOOD, false)
 	il.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(il)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	v.add_child(row)
-	for cls in ["cossack", "volkhv"]:
+	for cls in game.Paths.ORDER:
 		var card := class_card(game, cls, true)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var talked: bool = PS.talked(w, cls)
@@ -323,7 +323,7 @@ static func class_card(game, cls: String, big: bool = false) -> VBoxContainer:
 static func _city_specs(game, city: String) -> Array:
 	var Classes = game.player.Classes
 	var out := []
-	for base in ["cossack", "volkhv"]:
+	for base in Classes.CLASSES["peasant"]["next"]:
 		if not base in Classes.lineage(game.player.job):
 			continue
 		for spec in Classes.CLASSES[base]["next"]:
@@ -340,15 +340,18 @@ static func _mentors(game, city: String) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	var need: int = Classes.JOB_CHANGE_AT[1]
-	var base: String = "cossack" if "cossack" in Classes.lineage(p.job) else "volkhv"
+	var base: String = "cossack"
+	for b0 in Classes.CLASSES["peasant"]["next"]:
+		if b0 in Classes.lineage(p.job):
+			base = b0
 	if p.job == base:
 		var t := "Спеціалізацію можна обрати з %d-го рівня майстерності (зараз %d)." % [need, p.job_level]
 		v.add_child(UI.label(t, 19, UI.GOOD if p.job_level >= need else UI.MUTED, false))
-		if base == "volkhv":
+		if base != "cossack":
 			var places := []
-			for sp in Classes.CLASSES["volkhv"]["next"]:
+			for sp in Classes.CLASSES[base]["next"]:
 				places.append("%s — %s" % [Classes.CLASSES[sp]["name"], Data.place_name(Classes.CLASSES[sp]["where"])])
-			v.add_child(UI.label("Наставники волхвів: " + ", ".join(places), 16, UI.MUTED, false))
+			v.add_child(UI.label("Наставники: " + ", ".join(places), 16, UI.MUTED, false))
 	else:
 		v.add_child(UI.label("Ти вже %s. Іншу дорогу відкриє лише Алатир-камінь." % p.class_name_ua().to_lower(), 19, UI.MUTED, false))
 	var trial: Dictionary = w.spec_trial

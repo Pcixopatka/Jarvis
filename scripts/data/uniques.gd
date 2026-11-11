@@ -116,6 +116,24 @@ const DEFS := {
 	"posokh_dazhboha": {"name": "Посох Дажбога", "slot": "weapon", "type": "staff", "tier": 5, "bosses": ["chaklun", "karachun"],
 		"affixes": {"spi": 1.0, "skill_power": 1.0, "crit": 1.0, "dmg_pct": 1.0, "skill_cd": 0.9}, "power": "yadro", "params": {"period": 4, "sec": 1.0, "r": 170},
 		"lore": "Дажбог щоранку котить сонце небом. Його посох скидає жмені того сонця на нечисть, що ховається в пітьмі."},
+	"luk_popovycha": {"name": "Лук Олешка Поповича", "slot": "weapon", "type": "bow", "tier": 1, "bosses": ["zmii", "vovkulaka"],
+		"affixes": {"agi": 1.0, "crit": 1.0, "aspd": 0.9}, "power": "vypad", "params": {"window": 1.5, "bonus": 0.15},
+		"lore": "Олешко Попович не мірявся зі Змієм силою. Він відскочив і пустив стрілу, поки той розвертався."},
+	"pistoli_karmeliuka": {"name": "Пістолі Кармелюка", "slot": "weapon", "type": "pistols", "tier": 2, "bosses": ["solovei", "chaklun"],
+		"affixes": {"agi": 1.1, "aspd": 1.0, "crit": 1.0}, "power": "zvytiaha", "params": {"dmg": 0.025, "max": 8, "dur": 6},
+		"lore": "Устим Кармелюк тікав із каторги чотири рази, і щоразу пани знову чули два постріли під вікном."},
+	"luk_sahaidachnoho": {"name": "Сагайдак гетьмана", "slot": "weapon", "type": "bow", "tier": 3, "bosses": ["koshchii", "bila_pani"],
+		"affixes": {"agi": 1.0, "dmg_pct": 1.0, "crit": 1.0, "speed": 0.8}, "power": "perun", "params": {"chance": 0.28, "jumps": 3, "pct": 0.55, "icd": 0.5},
+		"lore": "Петра Конашевича прозвали Сагайдачним за лук, з яким він не розлучався. Його стріли знали дорогу й через море."},
+	"pistoli_paliia": {"name": "Пістолі Палія", "slot": "weapon", "type": "pistols", "tier": 4, "bosses": ["lykho", "shubin"],
+		"affixes": {"agi": 1.1, "crit": 1.0, "dmg_pct": 1.0, "hp": 0.9}, "power": "hrim", "params": {"radius": 260, "pct": 1.2, "stun": 0.5},
+		"lore": "Семен Палій тримав Фастів проти трьох держав. Два його пістолі гриміли так, що здавалося, ніби б'є гармата."},
+	"luk_baidy": {"name": "Лук Байди", "slot": "weapon", "type": "bow", "tier": 5, "bosses": ["karachun", "putinoid"],
+		"affixes": {"agi": 1.0, "crit": 1.0, "dmg_pct": 1.0, "aspd": 1.0, "hp": 0.9}, "power": "yadro", "params": {"period": 4, "sec": 1.0, "r": 170},
+		"lore": "Байда висів на гаку й попросив лук. Три стріли, і цар, цариця та їхня донька вже не сміялися."},
+	"para_zalizniaka": {"name": "Пара Залізняка", "slot": "weapon", "type": "pistols", "tier": 6, "bosses": ["velnias", "zolota_baba"],
+		"affixes": {"agi": 1.1, "crit": 1.1, "dmg_pct": 1.1, "aspd": 1.0, "hp": 1.0}, "power": "zvytiaha", "params": {"dmg": 0.035, "max": 10, "dur": 7},
+		"lore": "Максим Залізняк освятив ножі під Холодним Яром, а пістолі лишив несвяченими: казав, що вони й так знають, у кого цілити."},
 	"mech_kladenets": {"name": "Меч-кладенець", "slot": "weapon", "type": "sabre", "tier": 6, "bosses": ["dev", "chornoboh"],
 		"affixes": {"str": 1.1, "agi": 1.0, "crit": 1.1, "dmg_pct": 1.1, "aspd": 1.0}, "power": "perun", "params": {"chance": 0.4, "jumps": 6, "pct": 0.8, "icd": 0.4},
 		"lore": "Лежав під каменем, доки не прийшов той, кому він до руки. Сам рубає, щойно витягнеш із піхов."},
@@ -143,6 +161,7 @@ const DEFS := {
 }
 
 const ORDER := ["kotyhoroshko", "osykovyi_spys", "kozhukh_kozhumiaky", "vovcha_kuchma", "lishchynova_palytsia", "poias_baidy", "choboty_skorokhody", "samopal_morozenka", "namysto_lysoi_hory", "posokh_chornoknyzhnyka", "pernach_sahaidachnoho", "koshchieva_holka", "kolchuha_bohuna", "shapka_nalyvaika", "posokh_velesa", "shablia_sirka", "osten_morskoho_tsaria", "cheres_shubina", "pyshchal_kryvonosa", "shapka_nevydymka", "posokh_molfara", "bulava_mazepy", "shablia_bohdana", "zhupan_polubotka", "ladanka_mamaia", "posokh_dazhboha",
+	"luk_popovycha", "pistoli_karmeliuka", "luk_sahaidachnoho", "pistoli_paliia", "luk_baidy", "para_zalizniaka",
 	"mech_kladenets", "palytsia_vernyhory", "spys_zmiiebortsia", "kris_dovbusha", "posokh_svaroha", "bronia_sviatoslava", "oberih_berehyni", "sholom_oleha"]
 
 

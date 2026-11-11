@@ -56,6 +56,42 @@ const TRIALS := {
 		],
 		"item": {"type": "sabre", "name": "Замовлена шабля"},
 	},
+	"sahaidachnyk": {
+		"start": [
+			["oryna", "Лук любить терплячих. Натягнеш зарано — схибиш, запізно — тебе вже гризуть."],
+			["oryna", "Пройди Путивльську пущу від краю до краю. Там темно й тісно: саме те, щоб навчитися бити напевно."],
+		],
+		"objective": {"type": "clear", "loc": "putyvl_pushcha", "text": "Випробування сагайдачника: пройди Путивльську пущу"},
+		"end": [
+			["oryna", "Вийшов із пущі, і сагайдак не порожній. Отже, не марнував стріл."],
+			["oryna", "Бери мій лук. Тятива туга, зате співає. Відтепер ти сагайдачник."],
+		],
+		"item": {"type": "bow", "name": "Лук Орини"},
+	},
+	"opryshok": {
+		"start": [
+			["opryshok", "Опришком не стають у корчмі. Опришком стають у горах, коли нема куди відступати."],
+			["opryshok", "Іди в Печеру Довбуша. Хто вийде звідти живим, тому Олексина бартка до руки."],
+		],
+		"objective": {"type": "dungeon", "loc": "dovbush_cave", "text": "Випробування опришка: пройди Печеру Довбуша"},
+		"end": [
+			["opryshok", "Живий. І вовчий ватажок лежить. Гори тебе прийняли, легеню."],
+			["opryshok", "Ось тобі пара пістолів. Кріси лишай панам, а опришок б'є з двох рук."],
+		],
+		"item": {"type": "pistols", "name": "Пістолі Чорногорця"},
+	},
+	"sokolnyk": {
+		"start": [
+			["tymish", "Сокіл не слуга. Він летить із тим, кого поважає, а поважає він добрих ловців."],
+			["tymish", "Вполюй шість найлютіших із нечисті. Птах дивитиметься згори й сам вирішить."],
+		],
+		"objective": {"type": "elite", "count": 6, "text": "Випробування сокольника: вполюй 6 еліт"},
+		"end": [
+			["tymish", "Шість. Він увесь час кружляв над тобою, ти помітив?"],
+			["tymish", "Підстав руку. Бачиш, сів. Відтепер ви вдвох, сокольнику. І лук візьми, ловецький."],
+		],
+		"item": {"type": "bow", "name": "Ловецький лук"},
+	},
 	"znakhar": {
 		"start": [
 			["paraska", "Знахар не той, хто вбиває заразу, а той, хто повертає людей до життя."],
@@ -142,7 +178,7 @@ static func on_event(world, type: String, arg: String) -> Array:
 		return []
 	s["stage"] = "turnin"
 	var mentor: String = Classes.CLASSES[s["spec"]]["mentor"]
-	return [{"text": "Випробування пройдено!\nПовертайся на Січ до наставника", "big": true, "mentor": mentor}]
+	return [{"text": "Випробування пройдено!\nНаставник чекає: %s" % Data.place_name(str(Classes.CLASSES[s["spec"]]["where"])), "big": true, "mentor": mentor}]
 
 
 ## Розмова-посвята на Січі, коли випробування пройдене: {"spec", "lines"} або {}.
@@ -175,7 +211,7 @@ static func objective_line(world) -> String:
 	if s.is_empty():
 		return ""
 	if s["stage"] == "turnin":
-		return "◆ Повертайся на Січ: посвята в %s" % Classes.CLASSES[s["spec"]]["name"].to_lower()
+		return "◆ Повертайся до наставника (%s): посвята в %s" % [Data.place_name(str(Classes.CLASSES[s["spec"]]["where"])), Classes.CLASSES[s["spec"]]["name"].to_lower()]
 	var obj := objective(world)
 	var line: String = "◆ " + obj["text"]
 	if obj.has("count"):
