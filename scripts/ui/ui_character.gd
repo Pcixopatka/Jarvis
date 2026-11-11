@@ -15,6 +15,7 @@ static func build(game) -> Control:
 	var p = game.player
 	var pages := [
 		["Герой" + _pts(p.stat_points), _hero(game)],
+		["Журнал" + _pts(load("res://scripts/game/journal_service.gd").ready_count(game.world, p)), _journal(game)],
 		["Вміння" + _pts(p.skill_points), _skills(game)],
 		["Загартування" + _pts(p.perk_points), _perks(game)],
 		["Літопис", _chronicle(game)],
@@ -185,6 +186,51 @@ static func _hero(game) -> Control:
 		det.add_child(UI.button("Вдягнути", _do(game, "equip", sel), Vector2(300, 60), 24, usable))
 		det.add_child(UI.button("Викинути", _do(game, "drop", sel), Vector2(300, 52), 20))
 	return h
+
+
+# ---------------- Журнал завдань ----------------
+
+static func _journal(game) -> Control:
+	var Journal = load("res://scripts/game/journal_service.gd")
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	var secs: Array = Journal.sections(game.world, p)
+	var ready: int = Journal.ready_count(game.world, p)
+	var head := "Усе, що зараз треба зробити. Завдань: %d" % Journal.total(game.world, p)
+	if ready > 0:
+		head += "   •   можна здати: %d" % ready
+	v.add_child(UI.label(head, 17, UI.GOOD if ready > 0 else UI.MUTED, false))
+	for sec in secs:
+		v.add_child(UI.label(sec["title"], 22, UI.GOLD, false))
+		if sec["rows"].is_empty():
+			v.add_child(UI.label(sec["empty"], 16, UI.MUTED, false))
+		for r in sec["rows"]:
+			var card := PanelContainer.new()
+			card.add_theme_stylebox_override("panel", UI.style(Color(0.14, 0.11, 0.1), Color(0.5, 0.9, 0.4) if r["ready"] else Color(0.42, 0.33, 0.2), 10, 10))
+			var box := VBoxContainer.new()
+			box.add_theme_constant_override("separation", 2)
+			card.add_child(box)
+			var t := UI.label(r["text"], 19, UI.TEXT, false)
+			t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			box.add_child(t)
+			var parts := []
+			if r["where"] != "":
+				parts.append("Де: %s" % r["where"])
+			if r["from"] != "":
+				parts.append("Від міста: %s" % r["from"])
+			if r["reward"] != "":
+				parts.append("Нагорода: %s" % r["reward"])
+			if not parts.is_empty():
+				var sub := UI.label("   •   ".join(parts), 15, UI.MUTED, false)
+				sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				box.add_child(sub)
+			if r["ready"]:
+				box.add_child(UI.label(r["ready_text"], 16, UI.GOOD, false))
+			v.add_child(card)
+	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». На мапі зірка веде за історією, а «!» позначає місце завдання.", 15, UI.MUTED, false))
+	v.get_child(v.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return v
 
 
 # ---------------- Виклики й досягнення ----------------

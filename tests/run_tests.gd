@@ -115,6 +115,7 @@ func _run() -> void:
 	await _suite_souls()
 	await _suite_difficulty()
 	await _suite_hero_screen()
+	await _suite_journal()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -7533,6 +7534,76 @@ func _suite_hero_screen() -> void:
 	var smith: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.city_tab)
 	var scells := smith.find_children("*", "Button", true, false).filter(func(b): return b.text == "" and b.custom_minimum_size.x == b.custom_minimum_size.y and b.custom_minimum_size.x >= 60.0)
 	check(scells.size() == p.equipment.size() + p.inventory.size(), "у коваля ті самі клітинки: %d" % scells.size())
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Журнал завдань =======================
+
+func _suite_journal() -> void:
+	suite("Журнал завдань")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Journal = load("res://scripts/game/journal_service.gd")
+	var Bounty = load("res://scripts/game/bounty_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var w = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char"]:
+		w.hints[k] = true
+	var find := func(title_start: String) -> Dictionary:
+		for sec in Journal.sections(w, p):
+			if str(sec["title"]).begins_with(title_start):
+				return sec
+		return {}
+	# Історія завжди перша, з місцем
+	var secs: Array = Journal.sections(w, p)
+	var story: Dictionary = secs[0]
+	check(str(story["title"]).begins_with("Історія") and story["rows"].size() == 1 and str(story["rows"][0]["text"]) != "" and not str(story["rows"][0]["text"]).begins_with("★") and str(story["rows"][0]["where"]) != "", "історія в журналі: що зробити й де (%s, %s)" % [story["rows"][0]["text"], story["rows"][0]["where"]])
+	var cityq: Dictionary = find.call("Завдання міст")
+	check(cityq["rows"].is_empty() and "дошці оголошень" in str(cityq["empty"]) and Journal.ready_count(w, p) == 0, "без завдань журнал підказує, де їх узяти")
+	# Завдання міста: поступ, місце, місто, нагорода, готовність
+	w.quests.append({"id": 950, "city": "sich", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 2, "count": 5, "text": "Знищ 5 мавок (Дике Поле)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
+	cityq = find.call("Завдання міст")
+	var r: Dictionary = cityq["rows"][0]
+	check(str(cityq["title"]) == "Завдання міст (1/%d)" % Data.MAX_ACTIVE_QUESTS and r["text"] == "Знищ 5 мавок (Дике Поле)  2/5" and r["where"] == "Дике Поле" and r["from"] == "Запорозька Січ" and r["reward"] == "100 грн, досвіду 50, лояльності 20" and not r["ready"], "завдання міста: поступ, де, від кого, нагорода")
+	w.quests[0]["progress"] = 5
+	r = find.call("Завдання міст")["rows"][0]
+	check(r["ready"] and r["ready_text"] == "Готово: здай у місті Запорозька Січ" and Journal.ready_count(w, p) == 1, "виконане завдання позначено: де здати")
+	# Розшук
+	Bounty.state(w)["active"].append({"id": 7, "city": "kyiv", "kind": "upyr", "name": "Упир Кривий", "loc": "crypt", "affixes": ["fiery", "swift"], "gold": 300, "glory": 6, "killed": false})
+	var hunt: Dictionary = find.call("Розшук")
+	check(hunt["rows"].size() == 1 and hunt["rows"][0]["text"] == "Розшук: Упир Кривий" and hunt["rows"][0]["where"] == "Упирячий склеп" and hunt["rows"][0]["reward"] == "300 грн, слави 6" and not hunt["rows"][0]["ready"], "ціль розшуку в журналі")
+	Bounty.state(w)["active"][0]["killed"] = true
+	check(find.call("Розшук")["rows"][0]["ready"] and "Київ" in str(find.call("Розшук")["rows"][0]["ready_text"]) and Journal.ready_count(w, p) == 2 and Journal.total(w, p) >= 3, "убита ціль: неси голову в місто; лічильник готових росте")
+	# Екран
+	game.enter_city("sich")
+	await _frames(2)
+	game.open_character()
+	await _frames(2)
+	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(tc.get_tab_title(1) == "Журнал  (+2)", "вкладка «Журнал» друга й показує, скільки можна здати: «%s»" % tc.get_tab_title(1))
+	var text := ""
+	for n in tc.get_tab_control(1).find_children("*", "Label", true, false):
+		text += n.text + "\n"
+	check("можна здати: 2" in text and "Знищ 5 мавок (Дике Поле)  5/5" in text and "Від міста: Запорозька Січ" in text and "Нагорода: 100 грн" in text and "Готово: здай у місті Запорозька Січ" in text and "Розшук: Упир Кривий" in text and "Голова твоя" in text, "у журналі на екрані все: завдання, нагороди, що здати")
+	game.close_character()
+	# Довідник
+	var titles := {}
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			titles[str(e["title"])] = str(e["text"])
+	check(titles.has("Екран героя й журнал") and "Журнал" in str(titles.get("Екран героя й журнал", "")), "довідник пояснює екран героя й журнал")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
