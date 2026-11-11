@@ -694,8 +694,9 @@ func enter_location(id: String) -> void:
 # ======================= Крамниця Хованця =======================
 
 var trader_open := false
-var trader_sel := -1
+var trader_city := ""  # у якому місті торгує Хованець: останнє, де герой бував
 var _trader_back := Callable()
+var _trader_prev_city := ""
 
 
 ## Номер вкладки крамниці за назвою (вкладки можуть додаватися, тож шукаємо за іменем).
@@ -707,13 +708,19 @@ func _shop_tab_index(title: String) -> int:
 	return maxi(0, names.find(title))
 
 
-## Хованець торгує будь-де: продати зайве й купити зілля без дороги до міста.
+## Хованець торгує будь-де. Це та сама крамниця, що й у місті: товари, зілля, продаж поодинці,
+## гуртом і кількох вибраних речей. Товар, ціни й знижка беруться з останнього міста, де герой бував.
 func open_trader(back: Callable) -> void:
 	if not DivineService.remote_shop(player):
 		return
 	_trader_back = back
 	trader_open = true
-	trader_sel = -1
+	trader_city = world.last_city if Data.CITIES.has(world.last_city) else "sich"
+	_trader_prev_city = city_id
+	city_id = trader_city  # дії крамниці (city_do) рахують ціни цього міста
+	city_sel_uid = -1
+	sell_multi = false
+	sell_marked.clear()
 	hud.close_overlay()
 	Audio.play("coins", 0.05)
 	hud.set_screen(_trader_screen())
@@ -732,40 +739,16 @@ func close_trader() -> void:
 	if not trader_open:
 		return
 	trader_open = false
+	city_id = _trader_prev_city
+	city_sel_uid = -1
+	sell_multi = false
+	sell_marked.clear()
 	hud.clear_screen()
 	save_game()
 	var back := _trader_back
 	_trader_back = Callable()
 	if back.is_valid():
 		back.call()
-
-
-func trader_do(action: String, arg) -> void:
-	if not trader_open:
-		return
-	match action:
-		"select":
-			trader_sel = int(arg)
-		"sell":
-			if CityService.sell(player, int(arg)) > 0:
-				Audio.play("coins", 0.05)
-				trader_sel = -1
-		"sell_upto":
-			var got: int = CityService.sell_up_to(player, int(arg))
-			if got > 0:
-				Audio.play("coins", 0.05)
-				hud.show_banner("Продано гуртом: +%s грн" % UI.num(got), UI.GOLD)
-		"buy_potion":
-			var pp: int = Data.potion_price(int(player.level))
-			if player.gold >= pp and player.potions < player.potion_max() and player.add_potion():
-				player.gold -= pp
-				Audio.play("coins", 0.05)
-		"buy_mana":
-			var mp: int = Data.mana_potion_price(int(player.level))
-			if player.gold >= mp and player.mana_potions < player.mana_potion_max() and player.add_mana_potion():
-				player.gold -= mp
-				Audio.play("coins", 0.05)
-	hud.set_screen(_trader_screen(), true)
 
 
 # ======================= Автобій =======================
@@ -2163,7 +2146,10 @@ func city_do(action: String, arg) -> void:
 				hud.show_banner("\n".join(bm), UI.GOLD)
 				_record("bounty")
 	save_game()
-	_build_city()
+	if trader_open:
+		hud.set_screen(_trader_screen(), true)  # крамниця Хованця: ті самі дії, інший екран
+	else:
+		_build_city()
 	dice_anim = {}  # анімація кидка стосується лише цього показу
 
 

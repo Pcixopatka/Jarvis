@@ -160,51 +160,13 @@ static func shop_page(game) -> Control:
 	return v
 
 
-## Крамниця Хованця: продати зайве й купити зілля будь-де, без дороги до міста.
+## Крамниця Хованця: та сама крамниця, що й у місті (товари, зілля, продаж поодинці, гуртом і
+## кількох вибраних речей), лише відкривається будь-де. Товар і ціни беруться з міста game.trader_city.
 static func trader(game) -> Control:
 	var p = game.player
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 18)
-	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(360, 0)
-	left.add_theme_constant_override("separation", 8)
-	h.add_child(left)
-	left.add_child(_wrap("Хованець збігає до крамаря замість тебе. Ціни звичайні, без міських знижок.", 16, UI.MUTED))
-	var pprice: int = Data.potion_price(int(p.level))
-	left.add_child(UI.label("Зілля здоров'я: %d/%d" % [p.potions, p.potion_max()], 20, UI.TEXT, false))
-	left.add_child(UI.button("Купити зілля • %d грн" % pprice, game.trader_do.bind("buy_potion", 0), Vector2(340, 56), 18, p.gold >= pprice and p.potions < p.potion_max()))
-	var mprice: int = Data.mana_potion_price(int(p.level))
-	left.add_child(UI.label("Зілля наснаги: %d/%d" % [p.mana_potions, p.mana_potion_max()], 20, UI.TEXT, false))
-	left.add_child(UI.button("Купити зілля наснаги • %d грн" % mprice, game.trader_do.bind("buy_mana", 0), Vector2(340, 56), 17, p.gold >= mprice and p.mana_potions < p.mana_potion_max()))
-	left.add_child(UI.label("Продати гуртом", 20, UI.GOLD, false))
-	for r in [0, 1, 2]:
-		var cand: Array = CityService.bulk_candidates(p, r)
-		var sum := 0
-		for it in cand:
-			sum += Data.sell_price(it)
-		left.add_child(UI.button("Усе до «%s»: %d шт. за %s грн" % [str(Data.RARITY_NAMES[r]).to_lower(), cand.size(), UI.num(sum)], game.trader_do.bind("sell_upto", r), Vector2(340, 52), 15, not cand.is_empty()))
-	left.add_child(_wrap("Гуртом не продаються золоті й наборні речі, речі з душами й ті, що кращі за вдягнені.", 14, UI.MUTED))
-
-	var bag := VBoxContainer.new()
-	bag.add_theme_constant_override("separation", 6)
-	h.add_child(bag)
-	bag.add_child(UI.label("Твоя торба %d/%d" % [p.inventory.size(), p.bag_size()], 22, UI.GOLD, false))
-	var sel: int = game.trader_sel
-	var bg := UI.grid(6)
-	for it in p.inventory:
-		if it.has("artifact"):
-			continue  # артефакти не продають
-		bg.add_child(UI.item_cell(it, game.trader_do.bind("select", it["uid"]), it["uid"] == sel, 72))
-	bag.add_child(bg)
-
-	var det := VBoxContainer.new()
-	det.custom_minimum_size = Vector2(320, 0)
-	det.add_theme_constant_override("separation", 8)
-	h.add_child(det)
-	var item: Dictionary = p.find_item(sel) if sel > 0 else {}
-	if item.is_empty() or p.is_equipped(sel):
-		det.add_child(UI.label("Торкнись речі в торбі,\nщоб продати її.", 19, UI.MUTED, false))
-	else:
-		det.add_child(UI.button("Продати за %s грн" % UI.num(Data.sell_price(item)), game.trader_do.bind("sell", sel), Vector2(300, 56), 19))
-		det.add_child(UI.item_card(item))
-	return UI.screen("Хованець: крамниця будь-де   •   %s грн" % UI.num(p.gold), "Назад", game.close_trader, [["Торгівля", h]], 0, func(_i: int): pass)
+	var city: String = game.trader_city
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(_wrap("Хованець збігав до крамаря замість тебе: %s. Товар, ціни й знижка тамтешні." % Data.place_name(city), 15, UI.MUTED))
+	v.add_child(load("res://scripts/ui/ui_city.gd")._shop(game, city))
+	return UI.screen("Хованець: крамниця будь-де   •   %s грн" % UI.num(p.gold), "Назад", game.close_trader, [["Крамниця", v]], 0, func(_i: int): pass)

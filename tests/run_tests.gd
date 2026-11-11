@@ -13173,17 +13173,48 @@ func _suite_divine() -> void:
 	gp.potions = 0
 	trader_btn.pressed.emit()
 	await _frames(2)
-	check(game.trader_open, "крамниця Хованця відкрилась")
+	check(game.trader_open and game.trader_city == gw.last_city and game.city_id == game.trader_city, "крамниця Хованця відкрилась: торгує в останньому місті (%s)" % game.trader_city)
+	var tbtn := []
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion():
+			tbtn.append(b.text)
+	var bulk_btn := false
+	for t in tbtn:
+		bulk_btn = bulk_btn or str(t).begins_with("Продати звичайні")
+	check("✓ Вибрати кілька" in tbtn and bulk_btn and tbtn.any(func(t): return str(t).begins_with("Купити зілля")) and not game.shop_stock(game.trader_city).is_empty(), "вона така сама, як у місті: товари, зілля, «Вибрати кілька» й продаж гуртом")
 	var gold0: int = gp.gold
-	game.trader_do("buy_potion", 0)
-	check(gp.potions == 1 and gp.gold == gold0 - Data.potion_price(40), "зілля куплено за звичайну ціну")
+	game.city_do("buy_potion", null)
+	check(gp.potions == 1 and gp.gold == gold0 - game.CityService.potion_price(gw, gp, game.trader_city), "зілля куплено за ціною цього міста")
 	gold0 = gp.gold
-	game.trader_do("select", keep["uid"])
-	game.trader_do("sell", keep["uid"])
-	check(gp.find_item(keep["uid"]).is_empty() and gp.gold == gold0 + Data.sell_price(keep), "вибрану річ продано")
+	game.city_do("select", keep["uid"])
+	game.city_do("sell", keep["uid"])
+	check(gp.find_item(keep["uid"]).is_empty() and gp.gold == gold0 + Data.sell_price(keep) and game.trader_open, "вибрану річ продано, крамниця лишилась відкрита")
+	# вибір кількох речей, як у місті
+	var m1: Dictionary = Data.gen_item(40, 2, "belt")
+	var m2: Dictionary = Data.gen_item(40, 2, "boots")
+	gp.add_item(m1, true)
+	gp.add_item(m2, true)
+	game.city_do("sell_multi", null)
+	await _frames(2)
+	var done_btn := false
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		done_btn = done_btn or (not b.is_queued_for_deletion() and b.text == "Готово")
+	check(game.sell_multi and done_btn, "кнопка «Вибрати кілька» вмикає вибір")
+	game.city_do("mark", m1["uid"])
+	game.city_do("mark", m2["uid"])
 	gold0 = gp.gold
-	game.trader_do("sell_upto", 0)
+	game.city_do("sell_marked", null)
+	check(gp.find_item(m1["uid"]).is_empty() and gp.find_item(m2["uid"]).is_empty() and gp.gold == gold0 + Data.sell_price(m1) + Data.sell_price(m2), "дві вибрані речі продано разом")
+	game.city_do("sell_multi", null)
+	gold0 = gp.gold
+	game.city_do("sell_upto", 0)
 	check(gp.find_item(junk["uid"]).is_empty() and gp.gold > gold0, "звичайні речі продано гуртом")
+	var stock: Array = game.shop_stock(game.trader_city)
+	var buy_it: Dictionary = stock[0]
+	gp.gold = 10000000
+	var bag_n: int = gp.inventory.size()
+	game.city_do("buy", buy_it["uid"])
+	check(gp.inventory.size() == bag_n + 1, "товар міста можна купити через Хованця")
 	game.close_trader()
 	await _frames(2)
 	check(not game.trader_open and game.state == game.State.MAP, "«Назад» вертає на мапу")
