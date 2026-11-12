@@ -35,7 +35,7 @@ const MOB_SCHEMA := {
 		}},
 	}},
 	"hit_status": {"type": "string"},  # стан, який може накласти удар (див. Status.INFO)
-	"minion_ability": {"type": "bool"},  # має свій прийом (Enemy._minion_ability)
+	"mechanic": {"type": "string"},  # механіка звичайної форми: "mob/<файл>" у scripts/mechanics/ (див. Mechanic)
 	"sounds": {"type": "record", "fields": {
 		"death": {"type": "string"},  # голос смерті (без нього — загальний «enemy_die»)
 	}},
@@ -47,7 +47,8 @@ const MOB_SCHEMA := {
 		"num": {"type": "int", "required": true},  # сталий номер боса (2001...), окремий від номера нечисті
 		"name": {"type": "string", "required": true},
 		"tier": {"type": "int"},  # ступінь золотих речей (без нього — за рівнем лігва, див. LootService)
-		"phase2": {"type": "bool"},  # лютішає на половині здоров'я (Enemy._enter_phase2)
+		"phase2": {"type": "bool"},  # лютішає на половині здоров'я (тоді рушій кличе phase2 механіки)
+		"mechanic": {"type": "string"},  # механіка боса: "boss/<файл>" у scripts/mechanics/
 		"wiki": {"type": "record", "fields": {
 			"text": {"type": "string", "required": true},
 			"tip": {"type": "string", "required": true},
@@ -285,8 +286,17 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 				for k in ["name", "plural", "quest_item"]:
 					if R.has(k) and str(R[k]).strip_edges() == "":
 						out.append("mobs/%s: «%s» порожнє" % [id, k])
+				# Механіка: звичайна форма — лише з теки mob/, бос — лише з boss/
+				if R.has("mechanic") and not _is_mechanic_ref(R["mechanic"], "mob"):
+					out.append("mobs/%s: «mechanic» має бути \"mob/<файл>\", а не «%s»" % [id, R["mechanic"]])
+				if R.has("boss") and R["boss"].has("mechanic") and not _is_mechanic_ref(R["boss"]["mechanic"], "boss"):
+					out.append("mobs/%s: «boss.mechanic» має бути \"boss/<файл>\", а не «%s»" % [id, R["boss"]["mechanic"]])
 			out.append_array(_unique_nums(rows))
 	return out
+
+
+static func _is_mechanic_ref(ref: String, folder: String) -> bool:
+	return ref.begins_with(folder + "/") and _is_id(ref.substr(folder.length() + 1))
 
 
 ## Номери записів не повторюються: серед нечисті й окремо серед босів.
@@ -389,6 +399,7 @@ static func _mob_links(rows: Dictionary) -> Array:
 		need.call(k, "довідник (боси)", "boss")
 		if rows.has(k) and rows[k].has("boss") and not rows[k]["boss"].has("wiki"):
 			out.append("довідник (боси): у «%s» нема «boss.wiki»" % k)
+	out.append_array(_mechanic_links(rows))
 	# Зворотні перевірки: те, що є в записі, мусить мати сенс для гри
 	var Status = load("res://scripts/game/status.gd")
 	var Index = load("res://scripts/data/sound_index.gd")
@@ -403,6 +414,52 @@ static func _mob_links(rows: Dictionary) -> Array:
 			out.append("mobs/%s: опис у довіднику є, а в Wiki.ENEMY_ORDER виду нема, тож його не видно" % id)
 		if R.has("boss") and R["boss"].has("wiki") and not id in Wiki.BOSS_ORDER:
 			out.append("mobs/%s: опис боса є, а в Wiki.BOSS_ORDER його нема, тож його не видно" % id)
+	return out
+
+
+## Механіки (scripts/mechanics/): кожне посилання веде на файл, що походить від Mechanic, і кожен файл
+## у mob/ і boss/ має запис, який на нього посилається (без сиріт). Лише для перевірки: під час гри
+## теки не переглядаються.
+static func _mechanic_links(rows: Dictionary) -> Array:
+	var out := []
+	var M = load("res://scripts/mechanics/mechanic.gd")
+	var used := {}
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var refs := []
+		if R.has("mechanic"):
+			refs.append(["mechanic", str(R["mechanic"])])
+		if R.has("boss") and R["boss"].has("mechanic"):
+			refs.append(["boss.mechanic", str(R["boss"]["mechanic"])])
+		for pair in refs:
+			var ref: String = pair[1]
+			used[ref] = true
+			var path: String = M.path_of(ref)
+			if not ResourceLoader.exists(path):
+				out.append("mobs/%s: «%s» посилається на %s, а такого файлу нема" % [id, pair[0], path])
+				continue
+			var s = load(path)
+			if not s is Script or not M.extends_base(s):
+				out.append("mobs/%s: %s — не механіка (має походити від %s)" % [id, path, M.BASE_PATH])
+	for folder in ["mob", "boss"]:
+		for ref in mechanic_files(folder):
+			if not used.has(ref):
+				out.append("механіка %s нікому не потрібна: жоден запис mobs.json на неї не посилається" % M.path_of(ref))
+	return out
+
+
+## Файли механік у теці (mob чи boss) як посилання ("mob/chort"). Лише для перевірки й інструментів:
+## у збірці теки містять .gdc і .remap, тож гра механік так не шукає.
+static func mechanic_files(folder: String) -> Array:
+	var out := []
+	var dir := "res://scripts/mechanics/" + folder
+	for f in DirAccess.get_files_at(dir):
+		f = f.trim_suffix(".remap")
+		if f.ends_with(".gd") or f.ends_with(".gdc"):
+			var ref := folder + "/" + f.get_basename()
+			if not ref in out:
+				out.append(ref)
+	out.sort()
 	return out
 
 
@@ -489,8 +546,10 @@ static func hit_status(id: String) -> String:
 	return str(mob(id).get("hit_status", ""))
 
 
-static func has_minion_ability(id: String) -> bool:
-	return bool(mob(id).get("minion_ability", false))
+## Посилання на механіку виду ("" — нема): boss — бойової форми боса, інакше звичайної.
+static func mechanic(id: String, boss: bool = false) -> String:
+	var R: Dictionary = mob(id).get("boss", _EMPTY) if boss else mob(id)
+	return str(R.get("mechanic", ""))
 
 
 ## Голос смерті ("" — свого нема).

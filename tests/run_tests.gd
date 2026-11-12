@@ -164,6 +164,7 @@ func _run() -> void:
 	await _suite_reforge_rare()
 	await _suite_artifact_bag_icon()
 	await _suite_stun_arena()
+	await _suite_mechanics()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -286,7 +287,7 @@ func _suite_game_db() -> void:
 	# Невідомий вид: порожній запис, назви з запасним словом, типові числа в бою
 	var none: Dictionary = GameDB.mob("nova_nevidoma")
 	check(none.is_empty() and none.is_read_only() and not GameDB.has_mob("nova_nevidoma") and not GameDB.has_boss("nova_nevidoma"), "невідомий вид: порожній запис лише для читання")
-	check(GameDB.mob_name("nova_nevidoma") == "" and GameDB.mob_name("nova_nevidoma", "Бос") == "Бос" and GameDB.boss_name("nova_nevidoma", "x") == "x" and GameDB.boss_tier("nova_nevidoma") == 0 and GameDB.hit_status("nova_nevidoma") == "" and not GameDB.has_minion_ability("nova_nevidoma") and not GameDB.is_phase2_boss("nova_nevidoma") and GameDB.mob_wiki("nova_nevidoma").is_empty() and load("res://scripts/data/sounds.gd").death("nova_nevidoma") == "enemy_die", "невідомий вид: порожні назви, жодних станів, загальний голос")
+	check(GameDB.mob_name("nova_nevidoma") == "" and GameDB.mob_name("nova_nevidoma", "Бос") == "Бос" and GameDB.boss_name("nova_nevidoma", "x") == "x" and GameDB.boss_tier("nova_nevidoma") == 0 and GameDB.hit_status("nova_nevidoma") == "" and GameDB.mechanic("nova_nevidoma") == "" and GameDB.mechanic("nova_nevidoma", true) == "" and not GameDB.is_phase2_boss("nova_nevidoma") and GameDB.mob_wiki("nova_nevidoma").is_empty() and load("res://scripts/data/sounds.gd").death("nova_nevidoma") == "enemy_die", "невідомий вид: порожні назви, жодних станів, загальний голос")
 	var EnemyS = load("res://scripts/entities/enemy.gd")
 	var odd = EnemyS.new()
 	odd.setup("nova_nevidoma", 1, false)
@@ -345,6 +346,64 @@ func _suite_game_db() -> void:
 	var T: Dictionary = norm[0]["t"]
 	check(norm[1].is_empty() and typeof(T["num"]) == TYPE_INT and typeof(T["stats"]["xp"]) == TYPE_INT and typeof(T["stats"]["hp"]) == TYPE_FLOAT and typeof(T["attack"]["windup"]) == TYPE_FLOAT and T["color"] == Color(1, 0.5, 0), "нормалізація зводить числа до типів схеми")
 	check(not GameDB.validate("mobs", {}).is_empty(), "порожня база не проходить: на нечисть посилається вся гра")
+	# Механіки: запис посилається на файл механіки, файл — на основу Mechanic, сиріт нема
+	var M = load("res://scripts/mechanics/mechanic.gd")
+	var refs := {}
+	var n_refs := [0, 0]
+	var resolve_ok := true
+	for id in ids:
+		for b in [false, true]:
+			var ref: String = GameDB.mechanic(id, b)
+			if ref != "":
+				refs[ref] = id
+				n_refs[1 if b else 0] += 1
+				resolve_ok = resolve_ok and M.script_of(ref) != null and ref.begins_with("boss/" if b else "mob/")
+	check(resolve_ok and n_refs == [30, 25], "механіки: 30 звичайних і 25 босових посилань, усі ведуть на файл механіки своєї теки (%s)" % str(n_refs))
+	var every_boss := true
+	for b in GameDB.boss_ids():
+		every_boss = every_boss and GameDB.mechanic(b, true) == "boss/" + b
+	check(every_boss, "кожен бос має свою механіку boss/<вид>")
+	var files: Array = GameDB.mechanic_files("mob") + GameDB.mechanic_files("boss")
+	var listed: Array = refs.keys()
+	files.sort()
+	listed.sort()
+	check(files == listed, "кожен файл механіки потрібен якомусь запису, і кожне посилання має файл")
+	check(GameDB.mechanic("koshchii", true) == "boss/koshchii" and GameDB.mechanic("koshchii") == "" and GameDB.mechanic("chort") == "mob/chort" and GameDB.mechanic("chort", true) == "" and GameDB.mechanic("mavka") == "" and GameDB.mechanic("vovkulaka") == "mob/vovkulaka" and GameDB.mechanic("vovkulaka", true) == "boss/vovkulaka", "механіка звичайної форми й боса — окремі поля")
+	check(M.extends_base(M.script_of("boss/vii")) and M.extends_base(M.script_of("mob/stallo")) and not M.extends_base(load("res://scripts/core/game_db.gd")) and M.script_of("mob/nema_takoho") == null, "механіка походить від Mechanic; чужий скрипт чи відсутній файл — не механіка")
+	check(M.has_hook("mob/chort", "chase") and not M.has_hook("mob/chort", "ability") and M.has_hook("mob/stallo", "ability") and M.has_hook("mob/khiisi", "ability") and M.has_hook("boss/vii", "tick") and M.has_hook("boss/shubin", "tick") and M.has_hook("boss/vovkulaka", "chase") and M.has_hook("boss/vovkulaka", "ability") and not M.has_hook("boss/zmii", "phase2") and M.has_hook("boss/koshchii", "on_lethal") and not M.has_hook("mob/pishchalnyk", "tick"), "рушій бачить лише ті хуки, які механіка (чи її предок) написала")
+	check(is_same(M.script_of("boss/vii"), M.script_of("boss/vii")) and is_same(M.script_of("boss/vii"), load(M.path_of("boss/vii"))), "скрипт механіки вантажиться раз і береться з кешу")
+	var plain = EnemyS.new()
+	plain.setup("mavka", 5, false)
+	var up_minion = EnemyS.new()
+	up_minion.setup("upyr", 5, false)
+	var up_boss = EnemyS.new()
+	up_boss.setup("upyr", 5, true)
+	var ch1 = EnemyS.new()
+	ch1.setup("chort", 5, false)
+	var ch2 = EnemyS.new()
+	ch2.setup("chort", 5, false)
+	var lead = EnemyS.new()
+	lead.setup("pesyholovets", 5, true)
+	check(plain.mechanic == null and plain._mh == 0 and up_minion.mechanic == null and up_boss.mechanic != null and up_boss._mech_boss, "нечисть без механіки її не має; упир-бос має механіку боса")
+	check(ch1.mechanic != ch2.mechanic and ch1.mechanic.get_script() == ch2.mechanic.get_script() and ch1.mechanic.e == ch1 and ch1._trick == false, "кожен чорт має свій об'єкт механіки з одного скрипту")
+	check(lead.is_boss and lead.mechanic != null and not lead._mech_boss and lead.mechanic.get_script() == M.script_of("mob/pesyholovets"), "ватажок без запису боса тримає механіку звичайної форми")
+	for x in [plain, up_minion, up_boss, ch1, ch2, lead]:
+		x.free()
+	# Перевірка ловить хибні посилання на механіки
+	var bm: Dictionary = raw.duplicate(true)
+	bm["chort"]["mechanic"] = "mob/nema_takoho"
+	bm["koshchii"]["boss"]["mechanic"] = "mob/koshchii"
+	bm["mavka"]["mechanic"] = "boss/zmii"
+	var mfound := GameDB.validate("mobs", bm)
+	var mexpect := ["mobs/chort: «mechanic» посилається на res://scripts/mechanics/mob/nema_takoho.gd, а такого файлу нема", "mobs/koshchii: «boss.mechanic» має бути", "mobs/mavka: «mechanic» має бути", "механіка res://scripts/mechanics/mob/chort.gd нікому не потрібна", "механіка res://scripts/mechanics/boss/koshchii.gd нікому не потрібна"]
+	var mmissed := []
+	for x in mexpect:
+		var hit := false
+		for p in mfound:
+			hit = hit or x in str(p)
+		if not hit:
+			mmissed.append(x)
+	check(mmissed.is_empty(), "перевірка ловить хибні посилання на механіки й сиріт%s" % ("" if mmissed.is_empty() else ": не впіймала " + str(mmissed) + " / " + str(mfound)))
 
 func _suite_data() -> void:
 	suite("Дані")
@@ -4296,7 +4355,7 @@ func _suite_new_bosses() -> void:
 	await _frames(1)
 	c.spawn_enemy("vii", 15, true, p.global_position + Vector2(0, -260))
 	var v = c._last_enemy()
-	v._rock_timer = 999.0
+	v.mechanic.rock_timer = 999.0
 	check(v.is_boss and v.kind == "vii" and not v.ranged, "Вій — повільний бос ближнього бою")
 	v.ability_timer = 999.0  # прийоми в цій перевірці запускаємо самі
 	# Скам'яніння героя
@@ -4317,16 +4376,16 @@ func _suite_new_bosses() -> void:
 	game.hud.joystick.vector = Vector2.ZERO
 	# Погляд: герой перед очима й нічого не робить — скам'яніє
 	p.global_position = v.global_position + Vector2(0, 200)
-	v._start_gaze(p, Vector2.DOWN)
+	v.mechanic.start_gaze(p, Vector2.DOWN)
 	await _frames(2)
-	check(v._gaze != null and v._lid_bearers.size() == 2 and v._lid_bearers[0].title == "Повікар" and v.cast_time > 2.0, "«Підніміть мені повіки!»: два повікарі й три секунди")
-	for b in v._lid_bearers:
+	check(v.mechanic.gaze != null and v.mechanic.lid_bearers.size() == 2 and v.mechanic.lid_bearers[0].title == "Повікар" and v.cast_time > 2.0, "«Підніміть мені повіки!»: два повікарі й три секунди")
+	for b in v.mechanic.lid_bearers:
 		b.global_position = v.global_position + Vector2(0, -400)  # подалі від героя, щоб не заважали
 		b.speed = 0.0
 	var hp0: float = p.hp
 	await _frames(190)
 	check(p.petrified > 0.0 and p.hp < hp0, "погляд ударив: герой скам'янів і поранений")
-	check(v._gaze == null, "погляд відпрацював")
+	check(v.mechanic.gaze == null, "погляд відпрацював")
 	# Погляд: герой устиг забігти за спину — цілий
 	p.petrified = 0.0
 	p.petrify_guard = 0.0
@@ -4335,10 +4394,10 @@ func _suite_new_bosses() -> void:
 	await _frames(1)
 	c.spawn_enemy("vii", 15, true, p.global_position + Vector2(0, -260))
 	v = c._last_enemy()
-	v._rock_timer = 999.0
+	v.mechanic.rock_timer = 999.0
 	v.ability_timer = 999.0
-	v._start_gaze(p, Vector2.DOWN)
-	for b in v._lid_bearers:
+	v.mechanic.start_gaze(p, Vector2.DOWN)
+	for b in v.mechanic.lid_bearers:
 		b.speed = 0.0
 		b.global_position = v.global_position + Vector2(300, -300)
 	p.global_position = v.global_position + Vector2(0, -180)
@@ -4346,13 +4405,13 @@ func _suite_new_bosses() -> void:
 	check(p.petrified <= 0.0 and p.hp == p.max_hp, "за спиною Вія погляд не дістає")
 	# Погляд: повікарів убито — Вій осліп
 	p.global_position = v.global_position + Vector2(0, 200)
-	v._start_gaze(p, Vector2.DOWN)
+	v.mechanic.start_gaze(p, Vector2.DOWN)
 	await _frames(2)
 	var blind0: int = int(game.world.stats.get("vii_blind", 0))
-	for b in v._lid_bearers:
+	for b in v.mechanic.lid_bearers:
 		b.take_damage(1.0e9, Vector2.ZERO)
 	await _frames(4)
-	check(v._gaze == null and v.stun > 2.0 and v.exposed > 2.0 and int(game.world.stats.get("vii_blind", 0)) == blind0 + 1, "обох повікарів здолано: повіки впали, Вій осліп")
+	check(v.mechanic.gaze == null and v.stun > 2.0 and v.exposed > 2.0 and int(game.world.stats.get("vii_blind", 0)) == blind0 + 1, "обох повікарів здолано: повіки впали, Вій осліп")
 	var before: float = v.hp
 	v.take_damage(100.0, Vector2.ZERO)
 	check(absf((before - v.hp) - 150.0) < 1.0, "осліплий Вій отримує в півтора раза більше")
@@ -4372,7 +4431,7 @@ func _suite_new_bosses() -> void:
 			rings += 1 if t.shape == "circle" else 0
 	check(lines == 6 and rings >= 1, "тупіт: коло довкола й шість тріщин")
 	v.cast_time = 0.0
-	v._rock_timer = 0.0
+	v.mechanic.rock_timer = 0.0
 	var rocks0 := rings
 	await _frames(3)
 	rings = 0
@@ -6792,7 +6851,7 @@ func _suite_muscovy() -> void:
 	for kind in MUSCOVY_MINIONS:
 		var ok: bool = (GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != ""
 		ok = ok and Acts.BOUNTY_NAMES.has(kind) and Acts.BOUNTY_NAMES[kind].size() >= 3 and not GameDB.mob_wiki(kind).is_empty() and str(GameDB.mob_wiki(kind)["tip"]) != ""
-		ok = ok and GameDB.has_minion_ability(kind) and GameDB.hit_status(kind) != ""
+		ok = ok and load("res://scripts/mechanics/mechanic.gd").has_hook(GameDB.mechanic(kind), "ability") and GameDB.hit_status(kind) != ""
 		check(ok, "%s: ім'я, спрайт, голос, розшук, довідник і свій прийом" % kind)
 	for loc_id in MUSCOVY_BOSSES:
 		var b: String = MUSCOVY_BOSSES[loc_id]
@@ -6909,7 +6968,7 @@ func _suite_muscovy_game() -> void:
 		p.global_position = boss.global_position + Vector2(0, 260)
 		match bk:
 			"pushkar":
-				boss._cannon_shots = 2
+				boss.mechanic.cannon_shots = 2
 				boss.ability_step = 0
 				boss._boss_ability(p)
 				for i in 90:
@@ -6921,9 +6980,9 @@ func _suite_muscovy_game() -> void:
 				boss.exposed = 0.0
 			"lisovyi_did":
 				var big_r: float = boss.radius
-				boss._set_size(true)
+				boss.mechanic.set_size(true)
 				check(boss.radius < big_r and boss.dmg_taken_mult > 1.0 and boss.speed > boss._base_speed, "Лісовий Дід малий: швидкий і крихкий")
-				boss._set_size(false)
+				boss.mechanic.set_size(false)
 				check(is_equal_approx(boss.radius, big_r) and boss.dmg_taken_mult < 1.0 and boss.speed < boss._base_speed, "Лісовий Дід великий: повільний і товстошкірий")
 			"idolyshche":
 				boss.ability_step = 3
@@ -6933,22 +6992,22 @@ func _suite_muscovy_game() -> void:
 					p.hp = p.max_hp
 					p.invuln = 1.0
 					await process_frame
-				check(boss._feast > 0.0 and boss.hp > boss.max_hp * 0.82, "Ідолище бенкетує й гоїть рани")
+				check(boss.mechanic.feast > 0.0 and boss.hp > boss.max_hp * 0.82, "Ідолище бенкетує й гоїть рани")
 				boss.take_damage(boss.max_hp * 0.06, Vector2.ZERO)
-				check(boss._feast <= 0.0 and boss.stun > 0.0 and boss.exposed > 0.0, "багато шкоди за бенкетом — Ідолище вдавилося")
+				check(boss.mechanic.feast <= 0.0 and boss.stun > 0.0 and boss.exposed > 0.0, "багато шкоди за бенкетом — Ідолище вдавилося")
 				boss.stun = 0.0
 				boss.exposed = 0.0
 				boss.hp = boss.max_hp
 			"karachun":
 				boss.ability_step = 0
 				boss._boss_ability(p)
-				var wd: Vector2 = boss._wind_dir
+				var wd: Vector2 = boss.mechanic.wind_dir
 				var a0: float = p.global_position.dot(wd)
 				for i in 40:
 					p.hp = p.max_hp
 					p.invuln = 1.0
 					await process_frame
-				check(boss._wind_t > 0.0 and p.global_position.dot(wd) - a0 > 60.0, "хуртовина зносить героя за вітром")
+				check(boss.mechanic.wind_t > 0.0 and p.global_position.dot(wd) - a0 > 60.0, "хуртовина зносить героя за вітром")
 				Status.apply(p, "chill", 5.0)
 				var old_input: Callable = c.move_input
 				c.move_input = func() -> Vector2: return -wd
@@ -6959,7 +7018,7 @@ func _suite_muscovy_game() -> void:
 					await process_frame
 				c.move_input = old_input
 				check(p.global_position.dot(wd) < a1 - 10.0, "і застуджений герой може йти проти вітру")
-				boss._wind_t = 0.0
+				boss.mechanic.wind_t = 0.0
 				p.statuses.clear()
 		var tele0: int = c.effects.get_child_count()
 		for step in 4:
@@ -6972,7 +7031,8 @@ func _suite_muscovy_game() -> void:
 			p.hp = p.max_hp
 			p.invuln = 1.0
 			await process_frame
-		boss._feast = 0.0
+		if "feast" in boss.mechanic:
+			boss.mechanic.feast = 0.0
 		boss.hp = boss.max_hp
 		boss.take_damage(boss.max_hp * 0.55 / boss.dmg_taken_mult, Vector2.ZERO)
 		check(boss.phase2, "%s: друга фаза на половині здоров'я" % bk)
@@ -10629,7 +10689,7 @@ func _suite_moves() -> void:
 	# Чорт телепортується до цілі
 	var ch = _moves_dummy(game, "chort")
 	ch.global_position = p.global_position + Vector2(600, 0)
-	ch.blink_timer = 0.0
+	ch.mechanic.blink_timer = 0.0
 	ch._process(0.016)
 	check(ch.global_position.distance_to(p.global_position) < 150.0, "чорт вигулькує поруч")
 	# Стани
@@ -17594,3 +17654,88 @@ func _suite_stun_arena() -> void:
 	get_root().get_tree().paused = false
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_mechanics() -> void:
+	suite("Механіки нечисті: кожна стає до бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full",
+			"enrage", "pushkar_misfire", "idol_feast", "karachun_wind", "vii_gaze", "velnias_trick", "baba_gold"]:
+		game.world.hints[k] = true
+	game.enter_location("wild_field")
+	await _frames(4)
+	_clear_enemies(game)
+	await _frames(1)
+	var c = game.combat
+	var M = load("res://scripts/mechanics/mechanic.gd")
+	var spot: Vector2 = gp.global_position + Vector2(0, -300)
+	var bad := []
+	for id in GameDB.mob_ids():
+		for b in [false, true]:
+			var ref: String = GameDB.mechanic(id, b)
+			if ref == "":
+				continue
+			gp.hp = gp.max_hp
+			gp.invuln = 5.0
+			c.spawn_enemy(id, 20, b, spot)
+			var e = c._last_enemy()
+			var ok: bool = e.kind == id and e.mechanic != null and e.mechanic.get_script() == M.script_of(ref) and e._mech_boss == b
+			for round in (2 if b and GameDB.is_phase2_boss(id) else 1):
+				for i in (5 if b else 1):
+					if not is_instance_valid(e) or e.dead:
+						break
+					e.ability_timer = 0.0
+					e.cast_time = 0.0
+					if b:
+						e._boss_ability(gp)
+					elif e._trick:
+						e._minion_ability(gp, 300.0)
+					else:
+						e.ability_timer = 1.0  # прийому нема: перевіряємо лише, що бій іде
+					ok = ok and e.ability_timer > 0.0
+				if e._mh & M.VOLLEY:
+					var n0: int = c.effects.get_child_count()
+					e.mechanic.volley(Vector2.DOWN)
+					ok = ok and (c.effects.get_child_count() > n0 or ("feast" in e.mechanic and e.mechanic.feast > 0.0))
+				await _frames(3)
+				if round == 0 and b and GameDB.is_phase2_boss(id) and is_instance_valid(e):
+					e.exposed = 0.0
+					e.take_damage(e.max_hp * 0.55 / maxf(0.1, e.dmg_taken_mult), Vector2.ZERO)
+					ok = ok and e.phase2
+			if not ok:
+				bad.append(ref)
+			_clear_enemies(game)
+			for n in c.effects.get_children():
+				n.queue_free()
+			await _frames(1)
+	check(bad.is_empty(), "кожна механіка (звичайна й босова, до й після люті) стає до справжнього бою й робить свій прийом%s" % ("" if bad.is_empty() else ": " + str(bad)))
+	# Заражений гине й лишає хмару; заражена еліта з «чумою» — лише одну
+	for affs in [[], ["plague"]]:
+		c.spawn_enemy("zarazhenyi", 5, false, spot)
+		var z = c._last_enemy()
+		if not affs.is_empty():
+			z.make_elite(affs)
+		var clouds0 := 0
+		for n in c.effects.get_children():
+			if n.get_script() != null and str(n.get_script().resource_path).ends_with("plague_cloud.gd") and not n.is_queued_for_deletion():
+				clouds0 += 1
+		z.take_damage(1.0e9, Vector2.ZERO)
+		var clouds := 0
+		for n in c.effects.get_children():
+			if n.get_script() != null and str(n.get_script().resource_path).ends_with("plague_cloud.gd") and not n.is_queued_for_deletion():
+				clouds += 1
+		check(clouds == clouds0 + 1, "заражений%s гине й лишає одну хмару зарази" % (" з «чумою»" if not affs.is_empty() else ""))
+		await _frames(1)
+	_clear_enemies(game)
+	game.queue_free()
+	await _frames(2)

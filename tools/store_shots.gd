@@ -149,10 +149,10 @@ func _run() -> void:
 	c.spawn_enemy("vii", 15, true, p.global_position + Vector2(-290, -70))
 	var boss = c._last_enemy()
 	boss.ability_timer = 999.0
-	boss._rock_timer = 999.0
+	boss.mechanic.rock_timer = 999.0
 	boss.speed = 0.0
-	boss._start_gaze(p, (p.global_position - boss.global_position).normalized())
-	for b in boss._lid_bearers:
+	boss.mechanic.start_gaze(p, (p.global_position - boss.global_position).normalized())
+	for b in boss.mechanic.lid_bearers:
 		b.speed = 0.0
 		b.max_hp *= 50.0  # повікарі мають дожити до знімка, інакше погляд обірветься
 		b.hp = b.max_hp
