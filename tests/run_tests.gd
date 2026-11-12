@@ -46,6 +46,7 @@ func _run() -> void:
 	_suite_party_db()
 	_suite_item_db()
 	_suite_world_db()
+	_suite_class_db()
 	_suite_player()
 	_suite_save()
 	_suite_city()
@@ -168,6 +169,7 @@ func _run() -> void:
 	await _suite_artifact_bag_icon()
 	await _suite_stun_arena()
 	await _suite_world_fights()
+	await _suite_class_skills_fight()
 	await _suite_mechanics()
 	await _suite_party_mechanics()
 	await _suite_valor_cap()
@@ -201,7 +203,7 @@ func suite(name: String) -> void:
 ## Скільки всього рангів у дереві класу.
 func _tree_ranks(Classes, cls: String) -> int:
 	var total := 0
-	for br in Classes.TREES[cls]:
+	for br in Classes.tree(cls):
 		for n in br["nodes"]:
 			total += int(n["max"])
 	return total
@@ -420,25 +422,25 @@ func _suite_data() -> void:
 		if L["type"] == "dungeon":
 			check(GameDB.has_boss(L["boss"]) and int(L["rooms"]) >= 2, "%s: бос або кімнати" % id)
 	var Classes = load("res://scripts/data/classes.gd")
-	for cls in Classes.TREES:
+	for cls in Classes.tree_ids():
 		var skill_ids = {}
-		for b in Classes.TREES[cls]:
+		for b in Classes.tree(cls):
 			for n in b["nodes"]:
 				check(not skill_ids.has(n["id"]), "%s: дубль вміння %s" % [cls, n["id"]])
 				skill_ids[n["id"]] = true
 				if n.get("active", false):
-					check(Classes.actives().has(n["id"]) and Classes.cooldown(n["id"]) > 0.0 and Classes.label(n["id"]) != "" and int(n.get("cost", 0)) > 0 and (Data.ACTIVE_SKILLS.has(n["id"]) or n.has("act")), "%s: активне %s має кнопку, перезарядку й ціну" % [cls, n["id"]])
-		for b in Classes.TREES[cls]:
+					check(Classes.actives().has(n["id"]) and Classes.cooldown(n["id"]) > 0.0 and Classes.label(n["id"]) != "" and int(n.get("cost", 0)) > 0 and (n.has("what") or n.has("act")), "%s: активне %s має кнопку, перезарядку й ціну" % [cls, n["id"]])
+		for b in Classes.tree(cls):
 			for n in b["nodes"]:
 				for r in n["req"]:
 					check(skill_ids.has(r), "%s: вміння %s вимагає невідоме %s" % [cls, n["id"], r])
-		var info: Dictionary = Classes.CLASSES[cls]
+		var info: Dictionary = Classes.info(cls)
 		for wt in info["weapons"]:
 			check(Data.has_weapon(wt), "%s: зброя %s існує" % [cls, wt])
 		for nx in info["next"]:
-			check(Classes.CLASSES.has(nx), "%s → %s" % [cls, nx])
+			check(Classes.has_class(nx), "%s → %s" % [cls, nx])
 	var perk_ids = {}
-	for b in Data.PERK_BRANCHES:
+	for b in Data.perk_branches():
 		for t in b["tiers"]:
 			for pk in t:
 				check(not perk_ids.has(pk["id"]), "дубль перка " + pk["id"])
@@ -508,18 +510,18 @@ func _suite_player() -> void:
 	p.perk_points = 99
 	var Classes = load("res://scripts/data/classes.gd")
 	for i in 8:
-		for b in Classes.TREES["cossack"]:
+		for b in Classes.tree("cossack"):
 			for n in b["nodes"]:
 				p.learn_skill(n["id"])
-		for b in Data.PERK_BRANCHES:
+		for b in Data.perk_branches():
 			for t in b["tiers"]:
 				for pk in t:
 					p.learn_perk(pk["id"])
-	for b in Classes.TREES["cossack"]:
+	for b in Classes.tree("cossack"):
 		for n in b["nodes"]:
 			check(p.sk(n["id"]) == n["max"], "вміння %s на максимумі" % n["id"])
 	check(not p.learn_skill("fireball"), "козак не вчить вміння волхва")
-	for b in Data.PERK_BRANCHES:
+	for b in Data.perk_branches():
 		for t in b["tiers"]:
 			for pk in t:
 				check(p.pk(pk["id"]) == pk["max"], "перк %s на максимумі" % pk["id"])
@@ -527,12 +529,12 @@ func _suite_player() -> void:
 	check(p.armor <= 0.75 and p.crit_chance <= 0.8 and p.skill_cd_mult >= 0.3, "межі показників")
 	# Дерево Загартування розраховане на 99 рівень: очок (49) менше, ніж вузлів, — є з чого вибирати
 	var perk_total := 0
-	for b in Data.PERK_BRANCHES:
+	for b in Data.perk_branches():
 		for t in b["tiers"]:
 			for pk in t:
 				perk_total += int(pk["max"])
 	check(perk_total > Classes.BASE_LEVEL_MAX / Classes.HARDEN_EVERY, "Загартування: вузлів (%d) більше за очки на 99 рівні" % perk_total)
-	check(Data.PERK_BRANCHES.size() == 3, "Загартування: три гілки")
+	check(Data.perk_branches().size() == 3, "Загартування: три гілки")
 	# Нові перки діють
 	var q0 = _new_player()
 	q0.perk_points = 99
@@ -1421,16 +1423,17 @@ func _suite_classes() -> void:
 	check(p.set_panel("attack", 2, "") and p.panel["attack"][2] == "", "комірку можна звільнити")
 	p.sync_panel()
 	check(first in p.panel["attack"], "після синхронізації вивчене вміння повертається у вільну комірку")
-	for id in SI.KIND:
+	# Вміння, дію яких пише код (без «act»): картка знає вид, що робить і від чого росте
+	var coded := 0
+	for id in Classes.actives():
 		var node: Dictionary = Classes.find_node(id)
-		check(not node.is_empty() and node.get("active", false), "довідник: %s — активне вміння" % id)
-		check(not SI.stats(id, 1, p).is_empty() or SI.KIND[id] == "buff", "довідник: %s має цифри" % id)
-		check(SI.WHAT.has(id), "довідник: %s має опис" % id)
-	for cls in Classes.TREES:
-		for b in Classes.TREES[cls]:
-			for node in b["nodes"]:
-				if node.get("active", false):
-					check(SI.KIND.has(node["id"]) or node.has("act"), "активне %s є в довіднику панелі" % node["id"])
+		check(not node.is_empty() and node.get("active", false) and node.has("kind"), "довідник: %s — активне вміння з панеллю" % id)
+		if node.has("act"):
+			continue
+		coded += 1
+		check(not SI.stats(id, 1, p).is_empty() or SI.kind(id) == "buff", "довідник: %s має цифри" % id)
+		check(SI.what(id) != "" and SI.scales(id) != "", "довідник: %s має опис" % id)
+	check(coded == 33, "вмінь, дію яких пише код, 33: %d" % coded)
 	var sabre = Data.gen_item(3, 1, "weapon", "sabre")
 	var staff = Data.gen_item(3, 1, "weapon", "staff")
 	p.add_item(sabre)
@@ -1643,9 +1646,9 @@ func _suite_specs() -> void:
 	var Classes = load("res://scripts/data/classes.gd")
 	var p = _new_player()
 	var w = WorldState.new()
-	check(Classes.CLASSES["cossack"]["next"].size() == 3 and Classes.CLASSES["strilets"]["next"].size() == 4, "у Козака 3 дороги, у Стрільця 4")
-	for spec in Classes.CLASSES["cossack"]["next"] + Classes.CLASSES["strilets"]["next"]:
-		var info: Dictionary = Classes.CLASSES[spec]
+	check(Classes.info("cossack")["next"].size() == 3 and Classes.info("strilets")["next"].size() == 4, "у Козака 3 дороги, у Стрільця 4")
+	for spec in Classes.info("cossack")["next"] + Classes.info("strilets")["next"]:
+		var info: Dictionary = Classes.info(spec)
 		check(info["tier"] == 2 and info["job_max"] == 50 and SS.TRIALS.has(spec), "%s: ступінь 2, є випробування" % spec)
 		check(load("res://scripts/data/story.gd").NPCS.has(info["mentor"]), "%s: наставник %s" % [spec, info["mentor"]])
 		var t: Dictionary = SS.TRIALS[spec]
@@ -1672,17 +1675,17 @@ func _suite_specs() -> void:
 	p.skill_points = 4
 	var whirl0: int = p.sk("whirl")
 	check(p.learn_skill("kydok") and p.learn_skill("whirl") and p.sk("whirl") == whirl0 + 1, "пластун вчить свої вміння, а вільні очки вкладає й у козацькі")
-	check(not p.learn_skill("fireball") and not p.learn_skill(Classes.TREES["zaporozhets"][0]["nodes"][0]["id"]), "чужої дороги й сусідньої спеціалізації пластун не вчить")
+	check(not p.learn_skill("fireball") and not p.learn_skill(Classes.tree("zaporozhets")[0]["nodes"][0]["id"]), "чужої дороги й сусідньої спеціалізації пластун не вчить")
 	# Очки ніколи не зависають: рангів на дорозі більше, ніж очок, тож усе вивчити не вийде
 	# і вільне очко завжди є куди вкласти (див. також «Вміння: дерева більші за запас очок»).
 	var stuck := []
-	for cls3 in Classes.CLASSES:
-		if int(Classes.CLASSES[cls3]["tier"]) != 2:
+	for cls3 in Classes.ids():
+		if int(Classes.info(cls3)["tier"]) != 2:
 			continue
 		var ranks := 0
 		var earned := 0
 		for c3 in Classes.lineage(cls3):
-			earned += int(Classes.CLASSES[c3]["job_max"]) - 1
+			earned += int(Classes.info(c3)["job_max"]) - 1
 			ranks += int(_tree_ranks(Classes, c3))
 		var own: int = _tree_ranks(Classes, cls3)
 		if earned > ranks:
@@ -1852,10 +1855,10 @@ func _suite_volkhv_specs() -> void:
 	var SS = load("res://scripts/game/spec_service.gd")
 	var Classes = load("res://scripts/data/classes.gd")
 	var UiCity = load("res://scripts/ui/ui_city.gd")
-	check(Classes.CLASSES["volkhv"]["next"].size() == 3, "у Волхва 3 дороги")
+	check(Classes.info("volkhv")["next"].size() == 3, "у Волхва 3 дороги")
 	var places := {}
-	for spec in Classes.CLASSES["volkhv"]["next"]:
-		var info: Dictionary = Classes.CLASSES[spec]
+	for spec in Classes.info("volkhv")["next"]:
+		var info: Dictionary = Classes.info(spec)
 		check(Data.is_city(info["where"]) and not places.has(info["where"]), "%s: окремий наставник у %s" % [spec, info["where"]])
 		places[info["where"]] = true
 		check(SS.TRIALS.has(spec) and Classes.is_volkhv_line(spec) and info["weapons"] == ["staff"], "%s: випробування, посох" % spec)
@@ -8019,13 +8022,13 @@ func _suite_difficulty() -> void:
 	var sp_plain: float = sp.skill_power
 	sp.job = "perun_zhrets"
 	sp.recalc()
-	var k_perun: float = float(Data.Classes.CLASSES["perun_zhrets"]["skill_mult"])
+	var k_perun: float = float(Data.Classes.info("perun_zhrets")["skill_mult"])
 	var staff_ok := true
-	for cid in Data.Classes.CLASSES:
-		var CI: Dictionary = Data.Classes.CLASSES[cid]
+	for cid in Data.Classes.ids():
+		var CI: Dictionary = Data.Classes.info(cid)
 		var staff: bool = CI["weapons"] == ["staff"]
 		staff_ok = staff_ok and (staff == CI.has("skill_mult")) and (not staff or (float(CI["skill_mult"]) > 0.3 and float(CI["skill_mult"]) < 1.0))
-	check(is_equal_approx(sp.skill_power, sp_plain * k_perun) and staff_ok and k_perun < float(Data.Classes.CLASSES["molfar"]["skill_mult"]) and float(Data.Classes.CLASSES["molfar"]["skill_mult"]) < float(Data.Classes.CLASSES["znakhar"]["skill_mult"]), "класи з посохом мають власний множник сили вмінь, найменший у Перунового жерця")
+	check(is_equal_approx(sp.skill_power, sp_plain * k_perun) and staff_ok and k_perun < float(Data.Classes.info("molfar")["skill_mult"]) and float(Data.Classes.info("molfar")["skill_mult"]) < float(Data.Classes.info("znakhar")["skill_mult"]), "класи з посохом мають власний множник сили вмінь, найменший у Перунового жерця")
 	sp.job = "peasant"
 	sp.recalc()
 	var dps_hand: float = Power.dps(sp)
@@ -8081,7 +8084,7 @@ func _suite_difficulty() -> void:
 		for e in sx["entries"]:
 			if str(e["title"]) == "Перунів жрець":
 				perun_art = str(e["text"])
-	check(("сила вмінь ×%s" % WSv._num(Data.Classes.CLASSES["perun_zhrets"]["skill_mult"])) in perun_art, "довідник показує множник сили вмінь класу")
+	check(("сила вмінь ×%s" % WSv._num(Data.Classes.info("perun_zhrets")["skill_mult"])) in perun_art, "довідник показує множник сили вмінь класу")
 	var drop_rule: String = str(arts.get("Шанси здобичі", ""))
 	check(("шансом %s%%" % WSv._num(Data.ITEM_DROP_CHANCE * 100.0)) in drop_rule and ("%s%%" % WSv._num(snappedf(Data.rarity_share(99, 3) * 100.0, 0.1))) in drop_rule and "Бос завжди дає дві речі" in drop_rule, "довідник називає шанси здобичі з балансу")
 	var art_rule: String = str(arts.get("Де взяти артефакт", ""))
@@ -8520,7 +8523,7 @@ func _suite_skills_tab() -> void:
 	# Дерево нинішнього класу: значок на кожне вміння, ранг під значком, лінії за вимогами
 	var nodes := 0
 	var reqs := 0
-	for br in Classes.TREES["cossack"]:
+	for br in Classes.tree("cossack"):
 		nodes += br["nodes"].size()
 		for n in br["nodes"]:
 			reqs += n.get("req", {}).size()
@@ -8574,7 +8577,7 @@ func _suite_skills_tab() -> void:
 	game.char_do("skill_tree", "peasant")
 	await _frames(2)
 	var pnodes := 0
-	for br in Classes.TREES["peasant"]:
+	for br in Classes.tree("peasant"):
 		pnodes += br["nodes"].size()
 	view = page.call().find_children("*", "Control", true, false).filter(func(c): return c.get_script() != null and "links" in c)[0]
 	check(view.find_children("*", "Button", true, false).size() == pnodes and "Пройдене дерево. Вільні очки можна вкладати й сюди." in labels.call() and game.skill_tree == "peasant", "перемикач показує дерево селянина: %d значків" % pnodes)
@@ -8596,7 +8599,7 @@ func _suite_skills_tab() -> void:
 	var prog: Array = p.tree_progress("peasant")
 	check(("%d/%d" % prog) in labels.call() and prog[1] == 16, "на кнопці дерева видно, скільки рангів вивчено: %d/%d" % prog)
 	# Дерево нинішнього класу вивчено до кінця: гра сама каже, куди подіти очки
-	for br in Classes.TREES[p.job]:
+	for br in Classes.tree(p.job):
 		for n in br["nodes"]:
 			p.skills[n["id"]] = int(n["max"])
 	game.char_do("skill_tree", p.job)
@@ -9503,7 +9506,7 @@ func _suite_guide() -> void:
 	p.skill_points = 4
 	check(int(GS.items(w, p, "sich").filter(func(it): return it["kind"] == "points")[0]["tab"]) == GS.TAB_SKILLS, "очки вмінь ведуть на вкладку «Вміння»")
 	for c in p.Classes.lineage(p.job):
-		for br in p.Classes.TREES[c]:
+		for br in p.Classes.tree(c):
 			for n in br["nodes"]:
 				p.skills[n["id"]] = int(n["max"])
 	check(not "points" in kinds.call(), "коли вчити більше нічого, порадник про очки вмінь мовчить")
@@ -10088,8 +10091,8 @@ func _suite_events_wiki() -> void:
 		map_ok = map_ok and titles.has(Acts.SPOTS[id]["name"])
 	check(map_ok, "у розділі «Мапа» кожне місто, місцевість і місце занять")
 	var cls_ok := true
-	for c in Classes.CLASSES:
-		cls_ok = cls_ok and titles.has(Classes.CLASSES[c]["name"])
+	for c in Classes.ids():
+		cls_ok = cls_ok and titles.has(Classes.info(c)["name"])
 	check(cls_ok, "усі десять класів")
 	var hol_ok := true
 	for h in Acts.HOLIDAY_ORDER:
@@ -10123,12 +10126,12 @@ func _suite_events_wiki() -> void:
 				return true
 		return false
 	var lost := []
-	for cls in Classes.TREES:
-		for br in Classes.TREES[cls]:
+	for cls in Classes.tree_ids():
+		for br in Classes.tree(cls):
 			for node in br["nodes"]:
 				if not has_title.call(str(node["name"])):
 					lost.append(node["name"])
-	for br in Data.PERK_BRANCHES:
+	for br in Data.perk_branches():
 		for tier in br["tiers"]:
 			for perk in tier:
 				if not has_title.call(str(perk["name"])):
@@ -11383,10 +11386,10 @@ func _suite_valor() -> void:
 	var Power = load("res://scripts/game/power.gd")
 	var cap: int = Classes.BASE_LEVEL_MAX
 	var data_ok := true
-	for id in Valor.ORDER:
-		var L: Dictionary = Valor.LINES[id]
+	for id in Valor.order():
+		var L: Dictionary = Valor.line(id)
 		data_ok = data_ok and str(L["name"]) != "" and float(L["per"]) > 0.0 and not "%s" in Valor.text(id, 3.0)
-	check(Valor.ORDER.size() == 5 and Valor.ORDER.size() == Valor.LINES.size() and data_ok and Valor.LINE_MAX >= 20, "п'ять ліній звитяги з назвами й текстами")
+	check(Valor.order().size() == 5 and Valor.keys() == Valor.order() + ["gold"] and not Valor.is_line("gold") and data_ok and Valor.LINE_MAX >= 20, "п'ять ліній звитяги з назвами й текстами, «гривні» — лише в іменних")
 	var bar0: int = Valor.bar(0)
 	check(bar0 == int(Data.xp_for_level(cap - 1) * Valor.BAR_PART) and Valor.bar(10) > bar0 and Valor.bar(50) > Valor.bar(10) and Valor.BAR_PART <= 0.25, "перша смуга — частка останнього рівня, кожна наступна дорожча")
 	check(Valor.fx({"dmg": 2}, {"dmg": 3, "gold": 10}) == {"dmg": 5.0, "gold": 10.0} and Valor.fx_text({"hp": 3}) == "+3% здоров'я" and Valor.text("ward", 2.5) == "шкода по тобі менша на 2,5%" and Valor.fx_text({"gold": 10}) == "+10% гривень", "бонуси звитяг складаються й мають тексти")
@@ -11848,19 +11851,19 @@ func _suite_skill_trees() -> void:
 	var Status = load("res://scripts/game/status.gd")
 	var ranks_of := func(cls: String) -> int:
 		var n := 0
-		for br in Classes.TREES.get(cls, []):
+		for br in Classes.tree(cls):
 			for node in br["nodes"]:
 				n += int(node["max"])
 		return n
 	# Очок на вершині: майстерність Селянина 10, першого класу 40, спеціалізації 50 (по очку за рівень понад перший)
 	var tight := []
-	for cls in Classes.CLASSES:
-		if int(Classes.CLASSES[cls]["tier"]) != 2:
+	for cls in Classes.ids():
+		if int(Classes.info(cls)["tier"]) != 2:
 			continue
 		var points := 0
 		var ranks := 0
 		for c in Classes.lineage(cls):
-			points += int(Classes.CLASSES[c]["job_max"]) - 1
+			points += int(Classes.info(c)["job_max"]) - 1
 			ranks += int(ranks_of.call(c))
 		if float(ranks) < float(points) * 1.3:
 			tight.append("%s %d/%d" % [cls, ranks, points])
@@ -11868,24 +11871,25 @@ func _suite_skill_trees() -> void:
 	var bad := []
 	var acts := 0
 	var passives := 0
-	for cls in Classes.TREES:
-		for br in Classes.TREES[cls]:
+	for cls in Classes.tree_ids():
+		for br in Classes.tree(cls):
 			for node in br["nodes"]:
 				var id: String = node["id"]
 				var good: bool = Icons.INDEX.has(id) and str(node["desc"]) != ""
 				if node.has("fx") and not node.has("act"):
 					passives += 1
 					for k in node["fx"]:
-						good = good and Classes.FX_TEXT.has(k)
+						good = good and Classes.has_fx(k)
 					for wt in node.get("when", {}).get("weapon", []):
 						good = good and Data.has_weapon(wt)
 				if node.has("act"):
 					acts += 1
 					var A: Dictionary = node["act"]
-					good = good and str(A["type"]) in ["nova", "leap", "cone", "shots", "zone", "buff", "summon"] and float(A["cd"]) > 0.0 and str(A["label"]) != "" and str(A["label"]).length() <= 10 and node.get("active", false)
-					good = good and Classes.cooldown(id) == float(A["cd"]) and Classes.label(id) == str(A["label"]) and SI.kind(id) == ("buff" if A["type"] in ["buff", "summon"] else "attack")
+					# підпис і перезарядка — у самому вузлі (як і в умінь із кодом), дія — у «act»
+					good = good and str(A["type"]) in ["nova", "leap", "cone", "shots", "zone", "buff", "summon"] and float(node["cd"]) > 0.0 and str(node["label"]) != "" and str(node["label"]).length() <= 10 and node.get("active", false) and not A.has("cd") and not A.has("label")
+					good = good and Classes.cooldown(id) == float(node["cd"]) and Classes.label(id) == str(node["label"]) and SI.kind(id) == ("buff" if A["type"] in ["buff", "summon"] else "attack") and SI.kind(id) == str(node["kind"])
 					for k in A.get("fx", {}):
-						good = good and Classes.FX_TEXT.has(k)
+						good = good and Classes.has_fx(k)
 					if A.has("status"):
 						good = good and Status.INFO.has(str(A["status"][0]))
 					good = good and load("res://scripts/data/sound_index.gd").SFX.has(str(A.get("sound", "boom")))
@@ -12133,12 +12137,14 @@ func _suite_strilets() -> void:
 	var GfxS = load("res://scripts/world/gfx.gd")
 	var WorldState = load("res://scripts/game/world_state.gd")
 	# ---- Класи ----
-	var C: Dictionary = Classes.CLASSES
+	var C := {}
+	for c in Classes.ids():
+		C[c] = Classes.info(c)
 	check(C["peasant"]["next"] == ["cossack", "volkhv", "strilets"] and C["strilets"]["next"] == ["sahaidachnyk", "opryshok", "sokolnyk", "samopalnyk"] and not "samopalnyk" in C["cossack"]["next"], "три дороги; Самопальник тепер у Стрільця, а не в Козака")
 	check(Classes.lineage("samopalnyk") == ["peasant", "strilets", "samopalnyk"] and Classes.lineage("opryshok") == ["peasant", "strilets", "opryshok"] and Classes.is_strilets_line("sokolnyk") and Classes.is_strilets_line("samopalnyk") and not Classes.is_strilets_line("plastun"), "дорога стрільця від Селянина до спеціалізацій")
 	var data_ok := true
 	for cls in ["strilets", "sahaidachnyk", "opryshok", "sokolnyk"]:
-		data_ok = data_ok and Classes.TREES.has(cls) and Paths.CARDS.has(cls) and str(C[cls]["address"]) != "" and Data.is_city(str(C[cls]["where"]))
+		data_ok = data_ok and Classes.has_tree(cls) and Paths.has_card(cls) and str(C[cls]["address"]) != "" and Data.is_city(str(C[cls]["where"]))
 		for wt in C[cls]["weapons"]:
 			data_ok = data_ok and wt in Data.agi_weapons() and GfxS.has("%s_%s" % [cls, wt])
 		data_ok = data_ok and GfxS.has("hunter_" + cls) and GfxS.has("plain_" + cls)
@@ -12175,7 +12181,7 @@ func _suite_strilets() -> void:
 	p.recalc()
 	check(is_equal_approx(p.fx("dmg"), 15.0) and is_equal_approx(p.fx("aspd"), 0.0), "із луком діє лише лучна наука")
 	# ---- Вибір дороги й сюжет ----
-	check(Paths.ORDER == ["cossack", "volkhv", "strilets"] and Paths.REPS.has("strilets") and Paths.TALKS["strilets"].size() >= 4 and Story.NPCS.has(Paths.REPS["strilets"]), "третій представник на Січі: сотник сердюків")
+	check(Paths.order() == ["cossack", "volkhv", "strilets"] and Paths.rep("strilets") != "" and Paths.talk("strilets").size() >= 4 and Story.NPCS.has(Paths.rep("strilets")), "третій представник на Січі: сотник сердюків")
 	var w = WorldState.new()
 	var v = _new_player()
 	v.job = "peasant"
@@ -12195,7 +12201,7 @@ func _suite_strilets() -> void:
 				if obj["type"] == "job":
 					StoryService.on_event(w, v, "job", "10")
 				elif obj["type"] == "choose":
-					for cls in Paths.ORDER:
+					for cls in Paths.order():
 						PS.mark_talked(w, cls)
 					PS.choose(w, v, "strilets")
 				elif obj["type"] == "kill":
@@ -12218,8 +12224,8 @@ func _suite_strilets() -> void:
 		if obj.has("loc"):
 			trials_ok = trials_ok and Data.is_place(str(obj["loc"]))
 	check(trials_ok, "у кожної спеціалізації стрільця є наставник, випробування й зброя в нагороду")
-	v.job_level = Classes.JOB_CHANGE_AT[1]
-	check(Spec.available(v) == C["strilets"]["next"] and Spec.start(w, v, "sokolnyk"), "стрілець із майстерністю %d обирає спеціалізацію" % Classes.JOB_CHANGE_AT[1])
+	v.job_level = int(C["strilets"]["change_at"])
+	check(v.job_level == 30 and Spec.available(v) == C["strilets"]["next"] and Spec.start(w, v, "sokolnyk"), "стрілець із майстерністю %d обирає спеціалізацію" % v.job_level)
 	for i in 6:
 		Spec.on_event(w, "elite", "")
 	check(str(Spec.state(w)["stage"]) == "turnin" and "Батурин" in Spec.objective_line(w) and not Spec.city_dialogue(w, "baturyn").is_empty() and Spec.city_dialogue(w, "sich").is_empty(), "шість еліт: посвята в наставника в Батурині, а не на Січі")
@@ -12963,7 +12969,7 @@ func _suite_enchant_fair() -> void:
 		var D: Dictionary = Ench.def(id)
 		data_ok = data_ok and str(D["name"]) != "" and not D["fx"].is_empty()
 		for k in D["fx"]:
-			data_ok = data_ok and Classes.FX_TEXT.has(k) and float(D["fx"][k]) > 0.0
+			data_ok = data_ok and Classes.has_fx(k) and float(D["fx"][k]) > 0.0
 		for sl in D["slots"]:
 			data_ok = data_ok and sl in Data.slots()
 			by_slot[sl] = int(by_slot.get(sl, 0)) + 1
@@ -13019,7 +13025,7 @@ func _suite_enchant_fair() -> void:
 	var top: int = Fair.top_tier(60)
 	for e in golds:
 		var D: Dictionary = Uniq.def(e["id"])
-		fits = fits and int(D["tier"]) <= top and int(D["tier"]) >= top - 1 and (D["slot"] != "weapon" or D["type"] in Classes.CLASSES["cossack"]["weapons"]) and int(e["trophy"]) == int(Uniq.tier_fair(int(D["tier"]))["trophy"])
+		fits = fits and int(D["tier"]) <= top and int(D["tier"]) >= top - 1 and (D["slot"] != "weapon" or D["type"] in Classes.info("cossack")["weapons"]) and int(e["trophy"]) == int(Uniq.tier_fair(int(D["tier"]))["trophy"])
 	check(golds.size() == Fair.GOLD_ITEMS and fits and arts.size() == 1 and goods.size() == Fair.GOODS_ORDER.size(), "товар тижня: три золоті речі під клас і рівень, артефакт і дрібний товар")
 	check(Fair.stock(p) == stock, "протягом тижня товар той самий")
 	var seen := {}
@@ -13510,7 +13516,7 @@ func _suite_divine() -> void:
 		slots[D["slot"]] = id
 		data_ok = data_ok and D["slot"] in Div.slots() and str(D["name"]) != "" and int(D["price"]) > 0 and GfxS.icon_tex(str(D["icon"])) != null and not D["lines"].is_empty() and id in Div.in_slot(D["slot"])
 		for k in D.get("fx", {}):
-			data_ok = data_ok and Classes.FX_TEXT.has(k)
+			data_ok = data_ok and Classes.has_fx(k)
 	var two := 0
 	for sl in Div.slots():
 		data_ok = data_ok and not Div.in_slot(sl).is_empty() and GameDB.table("gift_slots").has(sl)
@@ -15392,8 +15398,8 @@ func _suite_hero_names() -> void:
 	check(game.naming == "" and NS.check(game.player.nick) == "", "new_game() без імені: герой має допустиме прізвисько (%s)" % game.player.nick)
 	# Підпис слота: найдовший має влазити в кнопку
 	var longest := ""
-	for c in Classes.CLASSES:
-		if str(Classes.CLASSES[c]["name"]).length() > longest.length():
+	for c in Classes.ids():
+		if str(Classes.info(c)["name"]).length() > longest.length():
 			longest = c
 	var s_long := {"job": longest, "level": 99, "rank": "", "chapter": 5, "done": true, "playtime": 999.0 * 3600.0 + 59 * 60, "nick": "Перебийніс-Сірко"}
 	var title: String = game._slot_title(s_long)
@@ -15972,7 +15978,7 @@ func _suite_scroll_keep() -> void:
 	check(open_tab.call("Вміння"), "на екрані героя є вкладка вмінь")
 	gp.skill_points = 30
 	var learn := func() -> String:
-		for br in gp.Classes.TREES[gp.job]:
+		for br in gp.Classes.tree(gp.job):
 			for n in br["nodes"]:
 				if gp.can_learn_skill(n):
 					return str(n["id"])
@@ -15985,7 +15991,7 @@ func _suite_scroll_keep() -> void:
 	check(open_tab.call("Загартування"), "є вкладка загартування")
 	gp.perk_points = 10
 	var perk := ""
-	for br in Data.PERK_BRANCHES:
+	for br in Data.perk_branches():
 		for tier in br["tiers"]:
 			for pk in tier:
 				if perk == "" and gp.can_learn_perk(pk["id"]):
@@ -17930,8 +17936,8 @@ func _suite_item_db() -> void:
 	for id in Uniques.ids():
 		var it: Dictionary = Uniques.make(id, 60)
 		var job := "cossack"
-		for cls in ClassesD.CLASSES:
-			if Uniques.type_of(id) in ClassesD.CLASSES[cls].get("weapons", []):
+		for cls in ClassesD.ids():
+			if Uniques.type_of(id) in ClassesD.info(cls).get("weapons", []):
 				job = cls
 				break
 		p.job = job
@@ -18319,6 +18325,264 @@ func _suite_world_db() -> void:
 	check(_has_problem(pr, ["mobs/mavka", "«feminine»"]) and _has_problem(pr, ["mobs/upyr", "«bounty_names» порожні"]) and _has_problem(pr, ["mobs/zmii.blood"]) and _has_problem(pr, ["місце", "«kikimora»", "немає в mobs.json"]), "зламана нечисть у світі: %s" % str(pr))
 
 
+## Класи, вузли дерев, ступені майстерності, ключі бонусів, Загартування, характеристики, звитяги й
+## картки доріг — таблиці бази (docs/data.md, «Класи й уміння»).
+func _suite_class_db() -> void:
+	suite("База класів і вмінь")
+	var Classes = load("res://scripts/data/classes.gd")
+	var SI = load("res://scripts/data/skill_info.gd")
+	var Valor = load("res://scripts/data/valor.gd")
+	var Paths = load("res://scripts/data/paths.gd")
+	var probs := GameDB.problems()
+	check(probs.is_empty(), "у базі нема проблем%s" % ("" if probs.is_empty() else ": " + "; ".join(probs.slice(0, 5))))
+	var expect := {"classes": 14, "skills": 229, "job_tiers": 3, "effects": 35, "perk_branches": 3, "perks": 27, "base_stats": 4, "valor_lines": 6, "paths": 13}
+	var count_bad := []
+	for t in expect:
+		if GameDB.ids(t).size() != int(expect[t]):
+			count_bad.append("%s %d" % [t, GameDB.ids(t).size()])
+	check(count_bad.is_empty(), "у таблицях класів і вмінь стільки записів, скільки було в коді: %s" % str(count_bad))
+	# ---- Порядок файлу — колишній порядок сталих ----
+	check(Classes.ids() == ["peasant", "cossack", "strilets", "volkhv", "zaporozhets", "plastun", "samopalnyk", "kharakternyk", "sahaidachnyk", "opryshok", "sokolnyk", "znakhar", "perun_zhrets", "molfar"], "класи в тому самому порядку")
+	check(Classes.tree_ids() == ["peasant", "cossack", "zaporozhets", "plastun", "samopalnyk", "kharakternyk", "znakhar", "perun_zhrets", "molfar", "strilets", "sahaidachnyk", "opryshok", "sokolnyk", "volkhv"], "дерева в тому самому порядку")
+	check(Classes.actives().size() == 105 and Classes.actives()[0] == "vyly" and Classes.actives()[-1] == "dukh_predkiv", "105 активних умінь у порядку дерев")
+	# ---- Номери сталі ----
+	check(Classes.info("peasant")["num"] == 7001 and Classes.info("molfar")["num"] == 7014 and GameDB.row("skills", "vyly")["num"] == 7101 and GameDB.row("skills", "dukh_predkiv")["num"] == 7329
+		and GameDB.row("effects", "dmg")["num"] == 8001 and GameDB.row("effects", "dodge_dmg")["num"] == 8035 and GameDB.row("perk_branches", "body")["num"] == 8091
+		and GameDB.row("perks", "h_body")["num"] == 8101 and GameDB.row("perks", "h_berehynia")["num"] == 8127 and GameDB.row("base_stats", "str")["num"] == 8201
+		and Valor.line("dmg")["num"] == 8251 and Valor.line("gold")["num"] == 8256 and Paths.card("cossack")["num"] == 8301 and Paths.card("molfar")["num"] == 8313
+		and GameDB.row("job_tiers", "tier0")["num"] == 8401 and GameDB.row("job_tiers", "tier2")["num"] == 8403, "номери класів і вмінь ті самі, що їм дали")
+	check(GameDB.by_num("skills", 7101) == "vyly" and GameDB.by_num("classes", 7002) == "cossack" and GameDB.by_num("skills", 7001) == "", "пошук уміння й класу за номером")
+	# ---- Типи ----
+	var bad := []
+	for id in GameDB.ids("skills"):
+		var R: Dictionary = GameDB.row("skills", id)
+		var ok: bool = typeof(R["max"]) == TYPE_INT and typeof(R["num"]) == TYPE_INT and typeof(R["branch"]) == TYPE_INT and R["id"] is String
+		for r in R["req"]:
+			ok = ok and typeof(R["req"][r]) == TYPE_INT
+		if R.get("active", false):
+			ok = ok and typeof(R["cost"]) == TYPE_INT and typeof(R["cd"]) == TYPE_FLOAT and R["label"] is String and (not R.has("color") or typeof(R["color"]) == TYPE_COLOR)
+		var A: Dictionary = R.get("act", {})
+		for k in A:
+			if k in ["range", "reach", "arc", "radius", "pct", "count", "spread", "explode", "stun", "dur", "heal", "invuln"]:
+				ok = ok and (typeof(A[k]) == TYPE_FLOAT or (A[k] is Array and A[k].size() == 2 and typeof(A[k][0]) == TYPE_FLOAT and typeof(A[k][1]) == TYPE_FLOAT))
+		ok = ok and (not A.has("pierce") or typeof(A["pierce"]) == TYPE_INT) and (not A.has("status") or (A["status"][0] is String and typeof(A["status"][1]) == TYPE_FLOAT))
+		for k in R.get("fx", {}):
+			ok = ok and typeof(R["fx"][k]) == TYPE_FLOAT
+		if not ok:
+			bad.append(id)
+	for c in Classes.ids():
+		var C: Dictionary = Classes.info(c)
+		if typeof(C["job_max"]) != TYPE_INT or typeof(C["tier"]) != TYPE_INT or typeof(C["hp_mult"]) != TYPE_FLOAT or (C.has("change_at") and typeof(C["change_at"]) != TYPE_INT):
+			bad.append(c)
+	for t in GameDB.ids("job_tiers"):
+		for k in ["base", "per", "square"]:
+			if typeof(GameDB.row("job_tiers", t)["xp"][k]) != TYPE_INT:
+				bad.append(t)
+	for v in Valor.order():
+		if typeof(Valor.line(v)["per"]) != TYPE_FLOAT:
+			bad.append(v)
+	check(bad.is_empty(), "рівні, ранги, ціни й номери цілі, числа дії дробові чи [основа, приріст], кольори — Color: %s" % str(bad))
+	check(Classes.color("whirl") == Color(0.55, 0.3, 0.8) and Classes.color("taran") == Color("d08a3a").darkened(0.25) and Classes.act("taran")["pct"] == [2.0, 0.3] and Classes.act("taran")["stun"] == [0.6, 0.1], "кольори кнопок і числа дії ті самі")
+	# ---- Правила майстерності класу — у записі ----
+	var rules_ok := true
+	for c in Classes.ids():
+		var C: Dictionary = Classes.info(c)
+		var want: int = {0: 10, 1: 30}.get(int(C["tier"]), -1)
+		rules_ok = rules_ok and int(C.get("change_at", -1)) == (want if not C["next"].is_empty() else -1) and int(C["job_max"]) == [10, 40, 50][int(C["tier"])]
+	check(rules_ok, "з якого рівня майстерності йти далі й найвищий рівень — у записі кожного класу, як було за ступенем")
+	check(Classes.job_xp_for(0, 3) == 130 and Classes.job_xp_for(1, 10) == 1300 and Classes.job_xp_for(2, 49) == 51358 and Classes.job_xp_for(5, 1) == Classes.job_xp_for(2, 1), "крива досвіду майстерності — у ступенях (job_tiers.json); вищий ступінь бере останній")
+	var raw_c: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("classes")))
+	raw_c["peasant"]["change_at"] = 8
+	raw_c["peasant"]["job_max"] = 15
+	check(GameDB.validate("classes", raw_c).is_empty(), "правило одного класу змінюється правкою одного запису (Селянин іде далі з 8-го, росте до 15-го)")
+	# ---- Лише для читання й без копій ----
+	var nd: Dictionary = Classes.find_node("taran")
+	check(nd.is_read_only() and nd["act"].is_read_only() and nd["act"]["pct"].is_read_only() and Classes.info("cossack").is_read_only() and Classes.info("cossack")["next"].is_read_only()
+		and Classes.tree("cossack").is_read_only() and Classes.tree("cossack")[0]["nodes"].is_read_only() and Classes.lineage("molfar").is_read_only() and Classes.actives().is_read_only()
+		and Data.perk_branches().is_read_only() and Data.perk_branches()[0]["tiers"][0][0].is_read_only() and Data.base_stats().is_read_only() and Valor.order().is_read_only() and Paths.talk("cossack").is_read_only(), "записи класів і вмінь заморожені")
+	check(is_same(nd, GameDB.row("skills", "taran")) and is_same(Classes.tree("zaporozhets")[0]["nodes"][2], nd) and is_same(Classes.tree("cossack"), Classes.tree("cossack")) and is_same(Classes.lineage("molfar"), Classes.lineage("molfar")), "вузол читається без копії, дерева й дороги складаються раз")
+	# ---- Той самий id у кількох класах ----
+	check(Classes.find_node("deadly")["class"] == "cossack" and Classes.find_node("deadly", "plastun")["class"] == "plastun" and Classes.find_node("deadly", "plastun")["id"] == "deadly" and Classes.find_node("deadly", "plastun")["req"] == {"oko": 3}
+		and Classes.find_node("spirit", "molfar")["name"] == "Сила гір" and Classes.find_node("spirit")["name"] == "Характерна сила" and Classes.find_node("whirl", "molfar")["class"] == "cossack", "той самий id у кількох класах: свій вузол для класу, перший — без класу")
+	check(Classes.find_node("nope").is_empty() and Classes.info("nope").is_empty() and Classes.tree("nope").is_empty() and Classes.lineage("nope") == ["nope"] and Classes.label("nope") == "nope" and Classes.cooldown("nope") == 6.0 and not Classes.has_tree("nope"), "невідомі вміння й клас — порожні записи")
+	# ---- Те, що лежало в паралельних таблицях, тепер у вузлі ----
+	check(SI.kind("vyly") == "attack" and SI.kind("first_aid") == "buff" and SI.kind("sokil") == "buff" and SI.heals("herb") and SI.heals("zamova_krovi") and SI.heals("khoruhva") and not SI.heals("whirl") and not SI.heals("hardy")
+		and SI.what("musket").begins_with("Постріл із самопала") and SI.scales("zhyvytsia") == "Здоров'я (і Травник)" and SI.what("taran", "-") == "-" and Classes.label("musket") == "Самопал" and Classes.cooldown("pidniaty") == 60.0, "панель, лікування, опис, підпис і перезарядка — у вузлі")
+	check(Classes.fx_template("block") == "крізь Блок проходить на %s%% менше шкоди" and Classes.has_fx("dodge_dmg") and not Classes.has_fx("nope") and Classes.fx_text({"nope": 2}) == "2", "ключі бонусів — у effects.json")
+	check(Data.base_stats().map(func(x): return x["id"]) == ["str", "agi", "vit", "spi"] and ("%d очок" % int(Data.AGI_ASPD_SOFT)) in str(Data.base_stats()[1]["desc"]) and ("Перші %d" % int(Data.SPI_SOFT)) in str(Data.base_stats()[3]["desc"]), "характеристики — у base_stats.json; числа в описі збігаються з правилами")
+	check(Data.find_perk("h_execute")[0] == 1 and Data.find_perk("h_execute")[1] == 4 and Data.find_perk("h_execute")[2]["max"] == 1 and Data.find_perk("nope")[0] == -1 and Data.perk_branches()[2]["name"] == "Похід" and Data.perk_branches()[0]["tiers"].size() == 5, "Загартування — гілки й яруси з perks.json")
+	check(Valor.max_valor() == Valor.order().size() * Valor.LINE_MAX and Valor.text("gold", 3.0) == "+3% гривень" and Valor.is_line("luck") and Valor.fx({"gold": 5, "hp": 2}, {}) == {"hp": 2.0}, "звитяги: лінії й бонус іменних звитяг — у valor_lines.json, стеля — від числа ліній")
+	check(Paths.order() == ["cossack", "volkhv", "strilets"] and Paths.ids().size() == 13 and Paths.rep("cossack") == "myron" and Paths.rep("zaporozhets") == "" and Paths.card("zaporozhets")["skills"].size() == 3 and not Paths.has_card("peasant"), "картки доріг і розповіді представників — у paths.json")
+	# ---- Файли в єдиному вигляді й проходять перевірку ----
+	var fmt_ok := true
+	var raws := {}
+	for t in expect:
+		var text := FileAccess.get_file_as_string(GameDB.path_of(t))
+		raws[t] = JSON.parse_string(text)
+		fmt_ok = fmt_ok and load("res://tools/data_format.gd").format_table(t, raws[t]) == text and not "\\u0" in text and GameDB.validate(t, raws[t]).is_empty()
+	check(fmt_ok, "файли класів і вмінь в єдиному вигляді й проходять перевірку")
+	# ---- Перевірка ловить зламаний запис у кожній таблиці ----
+	var b: Dictionary = raws["classes"].duplicate(true)
+	b["cossack"]["change_at"] = 99
+	b["zaporozhets"]["change_at"] = 10
+	b["plastun"]["parent"] = "volkhv"
+	b["molfar"]["weapons"] = ["lyre"]
+	b["sokolnyk"]["where"] = "nowhere"
+	b["strilets"].erase("change_at")
+	b["volkhv"]["tier"] = 7
+	var pr := GameDB.validate("classes", b)
+	check(_has_problem(pr, ["classes/cossack", "«change_at» 99"]) and _has_problem(pr, ["classes/zaporozhets", "без «next»"]) and _has_problem(pr, ["classes/plastun", "«parent» — «volkhv»"])
+		and _has_problem(pr, ["classes/cossack", "у «plastun» інший «parent»"]) and _has_problem(pr, ["molfar", "«lyre»"]) and _has_problem(pr, ["classes/sokolnyk", "«nowhere»"])
+		and _has_problem(pr, ["classes/strilets", "«change_at»"]) and _has_problem(pr, ["classes/volkhv", "«tier» 7"]), "зламаний клас: %s" % str(pr))
+	b = raws["skills"].duplicate(true)
+	b["whirl"]["class"] = "nobody"
+	b["vyly"]["req"] = {"fireball": 1}
+	b["roll"]["req"] = {"hardy": 9}
+	b["taran"]["act"]["type"] = "teleport"
+	b["navala"]["act"]["status"] = ["dizzy", 2.0]
+	b["sharp"]["fx"] = {"nope": 2}
+	b["first_aid"].erase("cd")
+	b["hardy"]["cost"] = 5
+	b["mitka"]["num"] = 7101
+	b["zamova_krovi"].erase("heals")
+	b["deadly_plastun"]["skill"] = "oko"
+	b["kulova"]["act"]["pct"] = [1.0]
+	b["nova"] = {"num": 7998, "class": "cossack", "branch": 9, "name": "Нове", "max": 1, "req": {}, "desc": "x"}
+	pr = GameDB.validate("skills", b)
+	check(_has_problem(pr, ["skills/whirl", "«nobody»"]) and _has_problem(pr, ["skills/vyly", "«fireball» нема на дорозі"]) and _has_problem(pr, ["skills/roll", "«req.hardy» 9"])
+		and _has_problem(pr, ["skills/taran.act.type", "teleport"]) and _has_problem(pr, ["skills/navala", "«dizzy»"]) and _has_problem(pr, ["skills/sharp", "«nope»"])
+		and _has_problem(pr, ["skills/first_aid", "«cd»"]) and _has_problem(pr, ["skills/hardy", "«cost» буває лише в активного"]) and _has_problem(pr, ["skills/mitka", "7101"])
+		and _has_problem(pr, ["skills/zamova_krovi", "«heals»"]) and _has_problem(pr, ["skills/deadly_plastun", "«oko_plastun»"]) and _has_problem(pr, ["skills/kulova.act.pct"])
+		and _has_problem(pr, ["skills/nova", "без значка"]) and _has_problem(pr, ["skills/nova", "«branch» 9"]), "зламане вміння: %s" % str(pr))
+	b = raws["job_tiers"].duplicate(true)
+	b["tier1"]["tier"] = 5
+	b["tier0"]["xp"]["base"] = 0
+	pr = GameDB.validate("job_tiers", b)
+	check(_has_problem(pr, ["job_tiers", "«tier»", "бракує"]) and _has_problem(pr, ["job_tiers/tier0.xp", "«base»"]) and _has_problem(pr, ["classes/cossack", "«tier» 1"]), "зламаний ступінь майстерності: %s" % str(pr))
+	b = raws["effects"].duplicate(true)
+	b["dmg"]["text"] = "+шкоди"
+	b.erase("block")
+	b.erase("dodge_cd")
+	pr = GameDB.validate("effects", b)
+	check(_has_problem(pr, ["effects/dmg", "%s"]) and _has_problem(pr, ["skills/khvatka", "«block»"]) and _has_problem(pr, ["dodge_cd"]), "зламаний ключ бонусу: %s" % str(pr))
+	b = raws["perks"].duplicate(true)
+	b["h_skin"]["tier"] = 4
+	b["luck"]["branch"] = "nope"
+	b["boots"]["max"] = 0
+	pr = GameDB.validate("perks", b)
+	check(_has_problem(pr, ["perks/h_skin", "ярус 4"]) and _has_problem(pr, ["perks/luck", "«nope»"]) and _has_problem(pr, ["perks/boots", "«max»"]), "зламане вміння Загартування: %s" % str(pr))
+	b = raws["perk_branches"].duplicate(true)
+	b.erase("march")
+	b["nova"] = {"num": 8099, "name": "Нова"}
+	pr = GameDB.validate("perk_branches", b)
+	check(_has_problem(pr, ["perk_branches/nova", "нема жодного"]) and _has_problem(pr, ["perks/purse", "«march»"]), "зламана гілка Загартування: %s" % str(pr))
+	b = raws["base_stats"].duplicate(true)
+	b["luk"] = {"num": 8205, "name": "Удача", "desc": "x"}
+	pr = GameDB.validate("base_stats", b)
+	check(_has_problem(pr, ["base_stats", "STAT_IDS"]), "зламана характеристика: %s" % str(pr))
+	b = raws["valor_lines"].duplicate(true)
+	b["gold"]["per"] = 1.0
+	b["hp"].erase("per")
+	b["dmg"]["text"] = "x"
+	b.erase("luck")
+	pr = GameDB.validate("valor_lines", b)
+	check(_has_problem(pr, ["valor_lines/gold", "«per»"]) and _has_problem(pr, ["valor_lines/hp", "«per»"]) and _has_problem(pr, ["valor_lines/dmg", "%s"]) and _has_problem(pr, ["lands/baltyka", "«luck»"]), "зламана звитяга: %s" % str(pr))
+	b = raws["paths"].duplicate(true)
+	b["cossack"].erase("talk")
+	b["volkhv"]["rep"] = "nobody"
+	b["zaporozhets"]["rep"] = "myron"
+	b["zaporozhets"]["talk"] = [["myron", "Ти вже наш."]]
+	b.erase("strilets")
+	b["nova"] = {"num": 8399, "title": "x", "where": "x", "style": "x", "strong": ["x"], "weak": ["x"], "skills": ["x"], "next": [], "for": "x"}
+	pr = GameDB.validate("paths", b)
+	check(_has_problem(pr, ["paths/cossack", "«rep»", "«talk»"]) and _has_problem(pr, ["paths/volkhv", "«nobody»"]) and _has_problem(pr, ["paths/zaporozhets", "Селянина"])
+		and _has_problem(pr, ["paths:", "«strilets»"]) and _has_problem(pr, ["paths/nova", "нема класу"]), "зламана картка дороги: %s" % str(pr))
+	var lands: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("lands")))
+	lands["kavkaz"]["title_fx"] = {"nope": 2}
+	pr = GameDB.validate("lands", lands)
+	check(_has_problem(pr, ["lands/kavkaz", "«nope»", "valor_lines.json"]), "бонус іменної звитяги перевіряється за valor_lines.json: %s" % str(pr))
+	var ench: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("enchants")))
+	ench[ench.keys()[0]]["fx"] = {"nope": 2.0}
+	pr = GameDB.validate("enchants", ench)
+	check(_has_problem(pr, ["enchants/", "«nope»", "effects.json"]), "ключі зачарувань перевіряються за effects.json: %s" % str(pr))
+
+
+## Кожен клас вивчає всю свою дорогу за правилами дерева й уживає кожне своє активне вміння в бою.
+func _suite_class_skills_fight() -> void:
+	suite("Кожен клас уживає свої вміння")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full"]:
+		game.world.hints[k] = true
+	var gp = game.player
+	var Classes = gp.Classes
+	game.enter_location("wild_field")
+	await _frames(4)
+	_clear_enemies(game)
+	var c = game.combat
+	c.spawn_timer = 1.0e9
+	var spot: Vector2 = c.arena.get_center()
+	c._spawn_companions([{"type": "dzhura", "downed": false, "level": 20, "xp": 0, "index": 0}])  # побратим, якого піднімає знахар
+	var learn_bad := []
+	var use_bad := []
+	for cls in Classes.ids():
+		gp.job = cls
+		game._sync_class()
+		gp.level = 60
+		gp.skills = {}
+		gp.skill_points = 400
+		var guard := 0
+		var progress := true
+		while progress and guard < 400:
+			guard += 1
+			progress = false
+			for lc in Classes.lineage(cls):
+				for br in Classes.tree(lc):
+					for n in br["nodes"]:
+						if gp.can_learn_skill(n) and gp.learn_skill(n["id"]):
+							progress = true
+		for lc in Classes.lineage(cls):
+			var pr: Array = gp.tree_progress(lc)
+			if pr[0] != pr[1]:
+				learn_bad.append("%s/%s %s" % [cls, lc, str(pr)])
+		gp.recalc()
+		for lc in Classes.lineage(cls):
+			for br in Classes.tree(lc):
+				for n in br["nodes"]:
+					if not n.get("active", false):
+						continue
+					_clear_enemies(game)
+					for k in 3:
+						c.spawn_enemy("upyr", 20, false, spot + Vector2(140 + 60 * k, -40 + 40 * k))
+						var e = c._last_enemy()
+						e.max_hp = 1.0e6
+						e.hp = e.max_hp
+					gp.global_position = spot
+					gp.alive = true
+					gp.hp = gp.max_hp * 0.5
+					gp.mana = 1000.0  # ціну перевіряє інший тест: тут — чи вміння діє
+					for cn in c.companion_nodes:
+						cn.alive = false
+						cn.hp = 0.0
+					gp.skill_timers[n["id"]] = 0.0
+					gp.use_skill(n["id"])
+					if float(gp.skill_timers.get(n["id"], 0.0)) <= 0.0:
+						use_bad.append("%s/%s" % [cls, n["id"]])
+					await process_frame
+	check(learn_bad.is_empty(), "кожен клас вивчає всю свою дорогу за правилами дерева: %s" % str(learn_bad))
+	check(use_bad.is_empty(), "кожне активне вміння дороги вживається в бою (перезарядка пішла): %s" % str(use_bad))
+	game.queue_free()
+	await _frames(2)
+
+
 ## Бій починається в кожному місці мапи: нечисть з'являється, земля й шум — краєвиду місця.
 func _suite_world_fights() -> void:
 	suite("Бій у кожному місці")
@@ -18368,9 +18632,9 @@ func _suite_valor_cap() -> void:
 	var WorldState = load("res://scripts/game/world_state.gd")
 	var WS = load("res://scripts/game/wiki_service.gd")
 	var top: int = Valor.max_valor()
-	check(top == Valor.LINES.size() * Valor.LINE_MAX and top > 0, "стеля звитяги — усі лінії повні: %d" % top)
+	check(top == Valor.order().size() * Valor.LINE_MAX and top > 0, "стеля звитяги — усі лінії повні: %d" % top)
 	var full := {}
-	for id in Valor.ORDER:
+	for id in Valor.order():
 		full[id] = Valor.LINE_MAX
 	var banners := [0]
 	var count := func(text: String, _col: Color) -> void:

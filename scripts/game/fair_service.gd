@@ -63,7 +63,7 @@ static func _shuffled(ids: Array, salt: String) -> Array:
 ## Товар цього тижня для героя: [{"key", "kind", "id", "name", "trophy", "gold", "limit", "tier"}].
 static func stock(player) -> Array:
 	var out := []
-	var weapons: Array = Classes.CLASSES[player.job].get("weapons", [])
+	var weapons: Array = Classes.info(player.job).get("weapons", [])
 	var top := top_tier(int(player.level))
 	var pool := []
 	for id in Uniques.ids():

@@ -120,7 +120,7 @@ static func check(v) -> String:
 		var lvl := int(p.get("level", 0))
 		if lvl < 1 or lvl > Data.Classes.BASE_LEVEL_MAX or typeof(p.get("job", "")) != TYPE_STRING:
 			return bad
-		if not Data.Classes.CLASSES.has(str(p.get("job", "peasant"))):
+		if not Data.Classes.has_class(str(p.get("job", "peasant"))):
 			return "У коді є герой класу, якого ця версія гри не знає. Спершу онови гру на цьому пристрої."
 		# ім'я, якщо є, має бути рядком; недопустиме не причина відмови: при вході воно стане порожнім
 		if p.has("nick") and typeof(p["nick"]) != TYPE_STRING:
@@ -134,7 +134,7 @@ static func summary(profile: Dictionary) -> Array:
 	for h in profile["heroes"]:
 		var p: Dictionary = h["data"]["player"]
 		var job := str(p.get("job", "cossack"))
-		var title: String = Data.Classes.CLASSES.get(job, {}).get("name", "Герой")
+		var title: String = Data.Classes.info(job).get("name", "Герой")
 		if str(p.get("rank", "")) == "hetman":
 			title = "Гетьман"
 		var nick: String = NameService.from_save(p.get("nick", ""))

@@ -63,7 +63,7 @@ static func owned(player) -> Dictionary:
 
 ## Яка річ випаде: свого ступеня найчастіше, улюблена річ боса втричі частіше, вже наявна вчетверо рідше.
 static func pick(player, tier: int, boss_kind: String) -> String:
-	var weapons: Array = Classes.CLASSES[player.job].get("weapons", [])
+	var weapons: Array = Classes.info(player.job).get("weapons", [])
 	var have := owned(player)
 	var ids := []
 	var weights := []

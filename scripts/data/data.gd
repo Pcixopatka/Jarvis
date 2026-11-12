@@ -201,77 +201,52 @@ const SKILL_POINTS_PER_LEVEL := 1  # очок вмінь за рівень ма�
 const PERK_POINTS_PER_LEVEL := 1  # очок Загартування за кожні Classes.HARDEN_EVERY рівнів героя
 const PERK_TIER_STEP := 2  # скільки очок треба вкласти в гілку, щоб відкрити наступний ярус
 
-const STATS := [
-	{"id": "str", "name": "Сила", "desc": "+6% шкоди"},
-	{"id": "agi", "name": "Спритність", "desc": "+4%% швидкості удару, +1.5%% криту, +1.5%% бігу. Стрільцям ще й +6%% сили пострілу, зате швидкість понад %d очок росте вдесятеро повільніше" % int(AGI_ASPD_SOFT)},
-	{"id": "vit", "name": "Витривалість", "desc": "+12 здоров'я, +1% захисту"},
-	{"id": "spi", "name": "Характерництво", "desc": "Перші %d вкладених очок: +5%% сили вмінь і -4%% перезарядки, далі вдесятеро менше. Більше наснаги" % int(SPI_SOFT)},
-]
-
-# Вміння тепер у деревах класів (див. classes.gd).
+# Характеристики героя (назва й опис) лежать у data/base_stats.json, Загартування — у
+# data/perk_branches.json і perks.json (docs/data.md, «Класи й уміння»); що вони дають — Player.recalc.
 const Classes := preload("res://scripts/data/classes.gd")
-const ACTIVE_SKILLS: Array = ["vyly", "first_aid", "whirl", "battle_cry", "musket", "fireball", "shield", "herb",
-	"zemnyi", "stina", "bulava", "pastka", "tin", "kydok", "kartech", "prytsil", "bochka", "vovk", "kulia", "zamova", "vidvid",
-	"zhyvytsia", "pidniaty", "ochyshchennia", "oberih_zahonu", "otruta", "lightning", "molot", "burya", "grad", "tuman", "proklin", "dukh"]
-const ACTIVE_LABELS: Dictionary = Classes.ACTIVE_LABELS
+
+static var _stats: Array = []  # записи характеристик у порядку екрана героя
+static var _perk_tree: Array = []  # [{"name": гілка, "tiers": [[вміння ярусу 1], ...]}]
+static var _perk_at := {}  # id → [гілка, ярус, запис]
 
 
-static func find_skill(id: String) -> Dictionary:
-	return Classes.find_node(id)
-
-
-static func skill_name(id: String) -> String:
-	return Classes.node_name(id)
+## Характеристики героя: записи base_stats.json (з «id») у порядку файлу.
+static func base_stats() -> Array:
+	if _stats.is_empty():
+		for id in GameDB.ids("base_stats"):
+			_stats.append(GameDB.row("base_stats", id))
+		_stats.make_read_only()
+	return _stats
 
 
 # Загартування — спільне для всіх класів дерево пасивних вмінь (очко за кожні 2 рівні героя).
-# Ярус N відкривається, коли у гілку вкладено N * PERK_TIER_STEP очок.
-const PERK_BRANCHES := [
-	{"name": "Тіло", "tiers": [
-		[{"id": "h_body", "name": "Міцна кістка", "max": 5, "desc": "+4% здоров'я"},
-		 {"id": "boots", "name": "Легкі чоботи", "max": 3, "desc": "+5% швидкості\nбігу"}],
-		[{"id": "h_skin", "name": "Дублена шкіра", "max": 3, "desc": "+2% захисту"},
-		 {"id": "h_blood", "name": "Живуча кров", "max": 3, "desc": "+0.5 здоров'я/с"}],
-		[{"id": "varenyk", "name": "Бабусині вареники", "max": 2, "desc": "Вареники частіше\nі ситніші"},
-		 {"id": "h_potion", "name": "Міцне зілля", "max": 3, "desc": "Зілля лікує\nна 10% більше"}],
-		[{"id": "h_roll", "name": "Спритний перекид", "max": 2, "desc": "Перекид готовий\nна 10% швидше"},
-		 {"id": "h_parry", "name": "Тверда рука", "max": 2, "desc": "Парирування\nлікує 4% здоров'я"}],
-		[{"id": "sich", "name": "Загартований", "max": 3, "desc": "+2 до всіх\nхарактеристик"}],
-	]},
-	{"name": "Удар", "tiers": [
-		[{"id": "luck", "name": "Вдача", "max": 3, "desc": "+5% шансу\nкриту"},
-		 {"id": "h_hand", "name": "Важкий удар", "max": 5, "desc": "+3% шкоди"}],
-		[{"id": "h_fast", "name": "Швидка рука", "max": 3, "desc": "+4% швидкості\nудару"},
-		 {"id": "h_crit", "name": "Жорстокий крит", "max": 2, "desc": "+25% шкоди\nкриту"}],
-		[{"id": "steel_will", "name": "Сталева воля", "max": 3, "desc": "+10% наснаги"},
-		 {"id": "h_breath", "name": "Рівне дихання", "max": 3, "desc": "+10% відновлення\nнаснаги"}],
-		[{"id": "h_spirit", "name": "Сила духу", "max": 3, "desc": "+5% сили вмінь"},
-		 {"id": "h_mind", "name": "Швидкий розум", "max": 2, "desc": "-5% перезарядки\nвмінь"}],
-		[{"id": "h_execute", "name": "Добивання", "max": 1, "desc": "+20% шкоди ворогам\nнижче 30% здоров'я"}],
-	]},
-	{"name": "Похід", "tiers": [
-		[{"id": "purse", "name": "Жадібний гаманець", "max": 2, "desc": "+25% радіус\nзбору здобичі"},
-		 {"id": "kobzar", "name": "Кобзарева наука", "max": 3, "desc": "+10% досвіду"}],
-		[{"id": "h_gold", "name": "Торгова жилка", "max": 3, "desc": "+8% гривень"},
-		 {"id": "h_eye", "name": "Зіркий погляд", "max": 3, "desc": "+15% шансу подвійного\nресурсу"}],
-		[{"id": "h_flask", "name": "Запасна баклага", "max": 2, "desc": "+1 зілля\nз собою"},
-		 {"id": "h_horse", "name": "Швидкий кінь", "max": 2, "desc": "Подорож мапою\nна 15% швидша"}],
-		[{"id": "h_sip", "name": "Швидкий ковток", "max": 2, "desc": "Зілля готове\nна 15% швидше"},
-		 {"id": "h_trophy", "name": "Мисливець", "max": 2, "desc": "+1 трофей\nз боса й еліти"}],
-		[{"id": "h_berehynia", "name": "Берегиня", "max": 1, "desc": "Раз на бій смертельний удар\nлишає 1 здоров'я й лікує 30%"}],
-	]},
-]
+# Ярус N (від 0) відкривається, коли у гілку вкладено N * PERK_TIER_STEP очок.
+
+## Гілки Загартування: [{"name": назва, "tiers": [[записи perks.json ярусу], ...]}] (лише для читання).
+static func perk_branches() -> Array:
+	if _perk_tree.is_empty():
+		var bi := {}
+		for b in GameDB.ids("perk_branches"):
+			bi[b] = _perk_tree.size()
+			_perk_tree.append({"name": GameDB.row("perk_branches", b)["name"], "tiers": []})
+		for id in GameDB.ids("perks"):
+			var P: Dictionary = GameDB.row("perks", id)
+			if not bi.has(P["branch"]):
+				continue
+			var tiers: Array = _perk_tree[bi[P["branch"]]]["tiers"]
+			var ti := int(P["tier"]) - 1
+			while tiers.size() <= ti:
+				tiers.append([])
+			tiers[ti].append(P)
+			_perk_at[id] = [bi[P["branch"]], ti, P]
+		GameDB._freeze(_perk_tree)
+	return _perk_tree
 
 
 ## Повертає [індекс гілки, індекс ярусу, перк] або [-1, -1, {}].
 static func find_perk(id: String) -> Array:
-	for bi in PERK_BRANCHES.size():
-		var tiers: Array = PERK_BRANCHES[bi]["tiers"]
-		for ti in tiers.size():
-			for p in tiers[ti]:
-				if p["id"] == id:
-					return [bi, ti, p]
-	return [-1, -1, {}]
+	perk_branches()
+	return _perk_at.get(id, [-1, -1, _EMPTY])
 
 
 # ======================= Спорядження =======================

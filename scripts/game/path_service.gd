@@ -29,7 +29,7 @@ static func mark_talked(world, cls: String) -> void:
 
 ## Чи вислухано всіх представників доріг.
 static func talked_all(world) -> bool:
-	for cls in Paths.ORDER:
+	for cls in Paths.order():
 		if not talked(world, cls):
 			return false
 	return true
@@ -41,7 +41,7 @@ static func can_choose(world) -> bool:
 
 ## Розмова з представником дороги.
 static func talk_lines(cls: String) -> Array:
-	return Paths.TALKS.get(cls, [])
+	return Paths.talk(cls)
 
 
 ## Обрати дорогу. Записує вибір і закриває крок «choose». Повертає повідомлення сюжету.

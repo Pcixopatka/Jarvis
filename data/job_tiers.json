@@ -1,0 +1,20 @@
+{
+	"tier0": {
+		"num": 8401,
+		"tier": 0,
+		"name": "Селянин",
+		"xp": {"base": 40, "per": 30, "square": 0}
+	},
+	"tier1": {
+		"num": 8402,
+		"tier": 1,
+		"name": "Клас",
+		"xp": {"base": 100, "per": 60, "square": 6}
+	},
+	"tier2": {
+		"num": 8403,
+		"tier": 2,
+		"name": "Спеціалізація",
+		"xp": {"base": 300, "per": 160, "square": 18}
+	}
+}

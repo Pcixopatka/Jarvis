@@ -227,7 +227,7 @@ func _ready() -> void:
 		_story_event("job", str(jl))
 		if player.can_change_class() and player.is_peasant():
 			hud.show_banner("Майстерність %d!\nЧас обирати дорогу: Січ, Батурин чи Карпати" % jl, UI.GOLD)
-		elif player.can_change_class() and jl == player.Classes.JOB_CHANGE_AT[1]:
+		elif player.can_change_class() and jl == int(player.class_info()["change_at"]):
 			hud.show_banner("Майстерність %d!\nНаставники на Січі чекають на тебе" % jl, UI.GOLD)
 		elif state != State.PLAYING:
 			hud.show_banner("Майстерність %d!" % jl, UI.GOLD))
@@ -390,7 +390,7 @@ func _after_class_change() -> void:
 
 ## Клас героя впливає на здобич (зброя свого класу) і звертання в розмовах.
 func _sync_class() -> void:
-	Data.weapon_pool = player.Classes.CLASSES[player.job]["weapons"]
+	Data.weapon_pool = player.Classes.info(player.job)["weapons"]
 	StoryService.hero_class = "volkhv" if player.Classes.is_volkhv_line(player.job) else ("strilets" if player.Classes.is_strilets_line(player.job) else player.job)
 
 
@@ -497,7 +497,7 @@ func load_game() -> bool:
 	var d := SaveSystem.load_data(save_path)
 	if d.is_empty():
 		return false
-	if not ClassesData.CLASSES.has(str(d["player"].get("job", "peasant"))):
+	if not ClassesData.has_class(str(d["player"].get("job", "peasant"))):
 		return false  # клас, якого ця версія гри не знає: герой із новішої збірки
 	world = WorldState.new()
 	world.from_dict(d["world"])
@@ -1033,7 +1033,7 @@ func _path_choose(cls: String) -> void:
 	if msgs.is_empty():
 		return
 	Audio.play("quest", 0.0)
-	hud.show_banner("Дорогу обрано: %s!" % Paths.CARDS[cls]["title"], UI.GOLD)
+	hud.show_banner("Дорогу обрано: %s!" % Paths.card(cls)["title"], UI.GOLD)
 	save_game()
 	if state == State.CITY:
 		city_tab = 0
@@ -2654,7 +2654,7 @@ func char_do(action: String, arg) -> void:
 			skill_sel = arg
 			# вміння вибрано з кнопки бою: показати дерево, де воно росте
 			for c in player.Classes.lineage(player.job):
-				for br in player.Classes.TREES.get(c, []):
+				for br in player.Classes.tree(c):
 					for n in br["nodes"]:
 						if n["id"] == arg:
 							skill_tree = c
@@ -2831,7 +2831,7 @@ func _show_main_menu() -> void:
 ## Ім'я стоїть першим і ніколи не обрізається. max_w (ширина тексту кнопки, шрифт font): якщо
 ## перший рядок не влазить, ім'я йде окремим рядком, а клас переходить у другий замість часу гри.
 func _slot_title(s_: Dictionary, max_w: float = 0.0, font: int = 20) -> String:
-	var cls: String = ClassesData.CLASSES.get(s_["job"], {}).get("name", "Герой")
+	var cls: String = ClassesData.info(s_["job"]).get("name", "Герой")
 	if s_.get("rank", "") == "hetman":
 		cls = "Гетьман"
 	var story := "сюжет пройдено" if s_["done"] else ("Пролог" if s_["chapter"] == 0 else "Розділ %s" % ["", "I", "II", "III", "IV", "V"][mini(5, s_["chapter"])])

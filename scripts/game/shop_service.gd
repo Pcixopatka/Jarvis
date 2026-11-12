@@ -129,14 +129,14 @@ static func bought(world, kind: String, id: String) -> int:
 
 ## Зброя набору для цього героя: та, що в руках, якщо вона до класу, інакше перша з дозволених.
 static func set_weapon(player) -> String:
-	var weapons: Array = Classes.CLASSES[player.job].get("weapons", ["sabre"])
+	var weapons: Array = Classes.info(player.job).get("weapons", ["sabre"])
 	return str(player.weapon_type) if str(player.weapon_type) in weapons else str(weapons[0])
 
 
 ## Чи річ до руки цьому героєві (чужу зброю купити можна, але вдягти її зможе інший герой).
 static func fits(player, kind: String, id: String) -> bool:
 	if kind == "unique" and str(Uniques.def(id)["slot"]) == "weapon":
-		return Uniques.type_of(id) in Classes.CLASSES[player.job].get("weapons", [])
+		return Uniques.type_of(id) in Classes.info(player.job).get("weapons", [])
 	return true
 
 

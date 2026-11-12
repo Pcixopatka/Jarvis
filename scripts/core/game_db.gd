@@ -11,8 +11,10 @@ const DIR := "res://data/"
 ## color (масив [r, g, b] або [r, g, b, a] із часток 0..1, стає Color), record (вкладений запис
 ## зі своїми "fields"), vector (масив [x, y] із двох чисел, стає Vector2: довгота й широта на мапі),
 ## enum (рядок із переліку "values"), list (масив значень, кожне за описом "of";
-## "size" — точна довжина), map (об'єкт {рядковий ключ: значення за описом "of"}; порядок ключів
-## зберігається). Порядок полів у схемі — порядок ключів у файлі (див. tools/data_format.gd).
+## "size" — точна довжина; "items" — опис кожного місця окремо, як у [стан, секунд]), map (об'єкт
+## {рядковий ключ: значення за описом "of"}; порядок ключів зберігається), rank (число вміння на ранзі:
+## одне число або [основа, приріст за ранг]; стає float чи [float, float]).
+## Порядок полів у схемі — порядок ключів у файлі (див. tools/data_format.gd).
 const MOB_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер запису (1001...): ніколи не змінюється й не віддається іншому
 	"name": {"type": "string"},  # ім'я в однині; без нього нечисть не з'являється на мапі й у завданнях
@@ -311,7 +313,7 @@ const ENCHANT_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер (5401...)
 	"name": {"type": "string", "required": true},
 	"slots": {"type": "list", "required": true, "of": {"type": "string"}},  # на які клітинки лягає
-	"fx": {"type": "map", "required": true, "of": {"type": "float"}},  # ключі як у пасивних умінь (Classes.FX_TEXT)
+	"fx": {"type": "map", "required": true, "of": {"type": "float"}},  # ключі бонусів (effects.json), як у пасивних умінь
 }
 
 ## Гніздо божих дарів.
@@ -333,7 +335,7 @@ const GIFT_SCHEMA := {
 	"bag": {"type": "int"},  # місць у торбі
 	"trade": {"type": "int"},  # одиниць краму на возі
 	"stats": {"type": "float"},  # частка до всіх характеристик
-	"fx": {"type": "map", "of": {"type": "float"}},  # бойові показники (Classes.FX_TEXT)
+	"fx": {"type": "map", "of": {"type": "float"}},  # бойові показники: ключі бонусів (effects.json)
 	"revive": {"type": "float"},  # з якою часткою здоров'я раз на бій піднімає
 	"xp": {"type": "float"},
 	"gold": {"type": "float"},
@@ -429,7 +431,7 @@ const LAND_SCHEMA := {
 	"name": {"type": "string", "required": true},
 	"desc": {"type": "string", "required": true},
 	"title": {"type": "string", "required": true},  # звання героя за першу перемогу над босом печери цієї землі
-	"title_fx": {"type": "map", "required": true, "of": {"type": "int"}},  # вічний бонус звитяги (ключі Valor.LINES чи EXTRA_TEXT), відсотки
+	"title_fx": {"type": "map", "required": true, "of": {"type": "int"}},  # вічний бонус звитяги (ключі valor_lines.json), відсотки
 }
 
 ## Краєвид місця: фоновий шум, ресурс для хутора, значок на мапі. Земля й частинки малюються кодом.
@@ -452,6 +454,161 @@ const ELITE_AFFIX_SCHEMA := {
 	"color": {"type": "color", "required": true},
 	"status": {"type": "string"},  # стан, який накладає кожен удар (Status.INFO)
 	"desc": {"type": "string", "required": true},  # «підпалює»: у розшуку й довіднику
+}
+
+# ---------- Класи й уміння ----------
+
+## Ступінь майстерності (0 — Селянин, 1 — клас, 2 — спеціалізація): крива досвіду рівня майстерності.
+## Досвід до наступного рівня jl: base + per × jl + square × jl² (див. Classes.job_xp_for).
+const JOB_TIER_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8401...)
+	"tier": {"type": "int", "required": true},
+	"name": {"type": "string", "required": true},  # для людей; гра не показує
+	"xp": {"type": "record", "required": true, "fields": {
+		"base": {"type": "int", "required": true},
+		"per": {"type": "int", "required": true},
+		"square": {"type": "int", "required": true},
+	}},
+}
+
+## Клас героя: усе про клас, разом із його власними правилами майстерності й назвами гілок дерева вмінь.
+const CLASS_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (7001...)
+	"name": {"type": "string", "required": true},
+	"tier": {"type": "int", "required": true},  # ступінь (job_tiers.json): крива досвіду майстерності
+	"job_max": {"type": "int", "required": true},  # найвищий рівень майстерності
+	"change_at": {"type": "int"},  # з якого рівня майстерності можна обрати наступний клас (є лише з «next»)
+	"next": {"type": "list", "required": true, "of": {"type": "string"}},  # куди можна піти далі (порядок — порядок показу)
+	"parent": {"type": "string"},  # з якого класу спеціалізація (у класів першого ступеня поля нема)
+	"weapons": {"type": "list", "required": true, "of": {"type": "string"}},  # дозволена зброя (weapons.json); перша — стартова
+	"hp_mult": {"type": "float", "required": true},  # вроджені множники
+	"dmg_mult": {"type": "float", "required": true},
+	"mana_mult": {"type": "float", "required": true},
+	"regen_mult": {"type": "float", "required": true},
+	"skill_mult": {"type": "float"},  # множник сили вмінь (класи з посохом, див. docs/balance.md)
+	"address": {"type": "string", "required": true},  # як до героя звертаються: «козаче»
+	"where": {"type": "string"},  # місто посвяти й наставника (cities.json)
+	"mentor": {"type": "string"},  # наставник спеціалізації (Story.NPCS)
+	"branches": {"type": "list", "required": true, "of": {"type": "string"}},  # назви гілок дерева вмінь; «branch» уміння — номер у цьому списку від 1
+	"desc": {"type": "string", "required": true},
+}
+
+## Число вміння на ранзі: одне число або [основа, приріст за кожен ранг понад перший] (Classes.val).
+const RANK := {"type": "rank"}
+## Бонуси «fx»: ключ (effects.json) → відсотки (за ранг; у підсиленнях — число чи [основа, приріст]).
+const FX_MAP := {"type": "map", "of": RANK}
+
+## Дія активного вміння за даними: шаблон (type) і його числа. Як шаблони діють — Player._act.
+const ACT_SCHEMA := {"type": "record", "fields": {
+	"type": {"type": "enum", "required": true, "values": ["nova", "leap", "cone", "shots", "zone", "buff", "summon"]},
+	"at": {"type": "enum", "values": ["self", "enemy"]},  # де центр: на герої чи на найближчому ворогові
+	"color": {"type": "string", "required": true},  # колір дії (hex, «c8a050»); кнопка — він же, темніший на чверть
+	"range": RANK,  # як далеко шукати ціль
+	"reach": RANK,  # cone: довжина удару
+	"arc": RANK,  # cone: ширина в градусах
+	"radius": RANK,
+	"pct": RANK,  # множник шкоди зброї
+	"count": RANK,  # shots: снарядів
+	"spread": RANK,  # shots: віяло, радіани
+	"explode": RANK,  # shots: радіус вибуху снаряда
+	"pierce": {"type": "int"},  # shots: крізь скількох летить
+	"stun": RANK,  # приголомшення, с
+	"status": {"type": "list", "items": [{"type": "string"}, {"type": "float"}]},  # [стан (Status.INFO), секунд]
+	"kb": {"type": "float"},  # відкидання
+	"pull": {"type": "bool"},  # стягує до центру замість відкидати
+	"dur": RANK,  # тривалість, с
+	"tick": {"type": "float"},  # zone, summon: с між ударами
+	"heal": RANK,  # buff: лікує відсотків здоров'я
+	"invuln": RANK,  # buff: невразливість, с
+	"cleanse": {"type": "bool"},  # buff: знімає стани
+	"group": {"type": "string"},  # buff: діє лише одне підсилення групи (стійки)
+	"fx": FX_MAP,  # buff: бонуси на час дії
+	"boost": {"type": "string"},  # summon: уміння, що підсилює помічника (+12% за ранг)
+	"mark": {"type": "string"},  # summon: уміння, з яким помічник проклинає ціль
+	"text": {"type": "string"},  # напис над героєм
+	"sound": {"type": "string"},
+	"shake": {"type": "float"},  # трусіння екрана
+}}
+
+## Вузол дерева вмінь класу. Порядок записів у файлі — порядок показу: клас за класом, гілка за гілкою.
+## Ключ запису — id уміння, ранги якого зберігає герой; той самий id в іншому класі має ключ
+## «<id>_<клас>» і поле «skill» (вузли ділять ранги, як «Смертельний удар» козака й пластуна).
+const SKILL_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (7101...)
+	"class": {"type": "string", "required": true},  # чиє дерево (classes.json)
+	"branch": {"type": "int", "required": true},  # гілка: номер у «branches» класу, від 1
+	"skill": {"type": "string"},  # id уміння, якщо ключ запису інший (див. вище)
+	"name": {"type": "string", "required": true},
+	"max": {"type": "int", "required": true},  # найвищий ранг
+	"req": {"type": "map", "required": true, "of": {"type": "int"}},  # що треба вивчити раніше: id → ранг
+	"active": {"type": "bool"},  # кнопка в бою
+	"cost": {"type": "int"},  # активне: наснага
+	"cd": {"type": "float"},  # активне: перезарядка, с (до поправок героя)
+	"label": {"type": "string"},  # активне: підпис на кнопці бою
+	"color": {"type": "color"},  # колір кнопки бою (без поля — колір дії «act», темніший)
+	"kind": {"type": "enum", "values": ["attack", "buff"]},  # панель: атаки біля «Удару» чи підсилення знизу
+	"heals": {"type": "bool"},  # вертає героєві здоров'я (авто-бафи Німба лікують лише пораненого)
+	"scales": {"type": "string"},  # картка вміння: від чого росте сила («—» — ні від чого)
+	"what": {"type": "string"},  # картка вміння: що робить, без цифр
+	"act": ACT_SCHEMA,  # активне за даними; без нього дію пише код (Player.use_skill)
+	"fx": FX_MAP,  # пасивне: бонуси за кожен ранг
+	"when": {"type": "record", "fields": {  # пасивне діє лише за умови
+		"weapon": {"type": "list", "required": true, "of": {"type": "string"}},  # з такою зброєю в руках
+	}},
+	"desc": {"type": "string", "required": true},  # опис у дереві ("\n" — розрив рядка)
+}
+
+## Ключ бонусу «fx» (пасивні вміння, підсилення, зачарування, божі дари) і його текст: %s — число.
+const EFFECT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8001...)
+	"text": {"type": "string", "required": true},
+}
+
+## Гілка Загартування (спільного для всіх класів дерева).
+const PERK_BRANCH_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8091...)
+	"name": {"type": "string", "required": true},
+}
+
+## Вміння Загартування. Порядок файлу — порядок показу: гілка за гілкою, ярус за ярусом.
+const PERK_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8101...)
+	"branch": {"type": "string", "required": true},  # гілка (perk_branches.json)
+	"tier": {"type": "int", "required": true},  # ярус від 1; ярус N відкривають (N − 1) × Data.PERK_TIER_STEP очок у гілці
+	"name": {"type": "string", "required": true},
+	"max": {"type": "int", "required": true},
+	"desc": {"type": "string", "required": true},
+}
+
+## Характеристика героя (Сила, Спритність...): назва й опис на екрані героя. Що вона дає — Player.recalc.
+const BASE_STAT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8201...)
+	"name": {"type": "string", "required": true},
+	"desc": {"type": "string", "required": true},
+}
+
+## Лінія звитяги (у неї вкладають очки) або бонус, що буває лише в іменних звитяг («named»).
+const VALOR_LINE_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8251...)
+	"name": {"type": "string"},  # лінія: назва
+	"named": {"type": "bool"},  # лише в іменних звитяг (title_fx землі), очок у неї не вкладають
+	"text": {"type": "string", "required": true},  # %s — відсотки
+	"per": {"type": "float"},  # лінія: відсотків за очко
+}
+
+## Картка дороги (вибір класу на Січі) чи спеціалізації (вкладка наставника). Ключ — id класу.
+const PATH_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8301...)
+	"title": {"type": "string", "required": true},
+	"where": {"type": "string", "required": true},
+	"style": {"type": "string", "required": true},
+	"strong": {"type": "list", "required": true, "of": {"type": "string"}},
+	"weak": {"type": "list", "required": true, "of": {"type": "string"}},
+	"skills": {"type": "list", "required": true, "of": {"type": "string"}},
+	"next": {"type": "list", "required": true, "of": {"type": "string"}},
+	"for": {"type": "string", "required": true},
+	"rep": {"type": "string"},  # картка вибору дороги: представник на Січі (Story.NPCS); порядок файлу — порядок карток
+	"talk": {"type": "list", "of": LINE},  # його розповідь про дорогу
 }
 
 ## Таблиці бази: назва → файл і схема. Нова таблиця (уміння, речі...) додається сюди одним рядком,
@@ -488,6 +645,15 @@ const TABLES := {
 	"lands": {"file": "lands.json", "schema": LAND_SCHEMA},
 	"biomes": {"file": "biomes.json", "schema": BIOME_SCHEMA},
 	"elite_affixes": {"file": "elite_affixes.json", "schema": ELITE_AFFIX_SCHEMA},
+	"job_tiers": {"file": "job_tiers.json", "schema": JOB_TIER_SCHEMA},
+	"classes": {"file": "classes.json", "schema": CLASS_SCHEMA},
+	"skills": {"file": "skills.json", "schema": SKILL_SCHEMA},
+	"effects": {"file": "effects.json", "schema": EFFECT_SCHEMA},
+	"perk_branches": {"file": "perk_branches.json", "schema": PERK_BRANCH_SCHEMA},
+	"perks": {"file": "perks.json", "schema": PERK_SCHEMA},
+	"base_stats": {"file": "base_stats.json", "schema": BASE_STAT_SCHEMA},
+	"valor_lines": {"file": "valor_lines.json", "schema": VALOR_LINE_SCHEMA},
+	"paths": {"file": "paths.json", "schema": PATH_SCHEMA},
 }
 
 ## Проміжки сталих номерів за таблицями: [перший, останній]. Номер запису мусить лежати у своєму
@@ -501,6 +667,9 @@ const NUM_RANGES := {
 	"souls": [5301, 5399], "enchants": [5401, 5499], "gifts": [5501, 5599], "costumes": [5601, 5699],
 	"coin_packs": [5701, 5799], "regions": [6001, 6099], "cities": [6101, 6199], "places": [6201, 6399],
 	"lands": [6401, 6499], "biomes": [6501, 6599], "elite_affixes": [6601, 6699],
+	"classes": [7001, 7099], "skills": [7101, 7999], "effects": [8001, 8089], "perk_branches": [8091, 8099],
+	"perks": [8101, 8199], "base_stats": [8201, 8249], "valor_lines": [8251, 8299], "paths": [8301, 8399],
+	"job_tiers": [8401, 8449],
 }
 const BOSS_NUM_RANGE := [2001, 2999]  # boss.num у mobs.json
 
@@ -584,10 +753,20 @@ static func _read(name: String, probs: Array) -> Dictionary:
 	return json.data
 
 
+## Таблиці, записи яких після завантаження мають поле «id» (у файлі його не пишуть): назва → поле, з
+## якого його взяти ("" — ключ запису). Вміння: ранги зберігаються під «skill», якщо воно є, інакше під ключем.
+const ID_FIELD := {"skills": "skill", "perks": "", "base_stats": ""}
+
+
 ## Що таблиця доводить до ладу після схеми, поки записи ще не заморожено.
 ## Золота річ: параметри сили стають цілими чи дробовими так, як їх оголошує сила (powers.json):
 ## JSON дає всі числа дробовими, а радіус чи кількість стрибків — цілі.
 static func _post(name: String, rows: Dictionary) -> void:
+	if ID_FIELD.has(name):
+		# Запис, який гра передає як вузол (вміння, Загартування, характеристика), знає свій id
+		for id in rows:
+			rows[id]["id"] = str(rows[id].get(ID_FIELD[name], id)) if ID_FIELD[name] != "" else str(id)
+		return
 	if name != "golden":
 		return
 	for id in rows:
@@ -724,14 +903,25 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 					return v
 				probs.append("%s: «%s» — не з переліку %s" % [where, v, str(f["values"])])
 				return null
+		"rank":
+			# Число вміння на ранзі: одне число або [основа, приріст за ранг] (Classes.val)
+			if v is float or v is int:
+				return float(v)
+			if v is Array and v.size() == 2 and (v[0] is float or v[0] is int) and (v[1] is float or v[1] is int):
+				return [float(v[0]), float(v[1])]
+			probs.append("%s: має бути числом або [основа, приріст за ранг]" % where)
+			return null
 		"list":
 			if v is Array:
-				if f.has("size") and v.size() != int(f["size"]):
-					probs.append("%s: має бути %d значень, а не %d" % [where, int(f["size"]), v.size()])
+				# "items" — опис кожного місця окремо (запис різного роду: [стан, секунд])
+				var items: Array = f.get("items", [])
+				var size: int = items.size() if not items.is_empty() else int(f.get("size", -1))
+				if size >= 0 and v.size() != size:
+					probs.append("%s: має бути %d значень, а не %d" % [where, size, v.size()])
 					return null
 				var out := []
 				for i in v.size():
-					var x = _value(v[i], f["of"], "%s[%d]" % [where, i], probs)
+					var x = _value(v[i], items[i] if not items.is_empty() else f["of"], "%s[%d]" % [where, i], probs)
 					if x == null:
 						return null
 					out.append(x)
@@ -750,7 +940,7 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 
 static func _type_name(t: String) -> String:
 	return {"string": "рядком", "bool": "true або false", "int": "цілим числом", "float": "числом", "record": "об'єктом {...}",
-		"enum": "рядком", "list": "масивом [...]", "map": "об'єктом {...}", "vector": "масивом [x, y]"}.get(t, t)
+		"enum": "рядком", "list": "масивом [...]", "map": "об'єктом {...}", "vector": "масивом [x, y]", "rank": "числом"}.get(t, t)
 
 
 static func _type_name_of(v) -> String:
@@ -836,6 +1026,9 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 				out.append_array(_unique_nums(name, rows))
 			elif WORLD_TABLES.has(name):
 				out.append_array(_world_rules(name, rows))
+				out.append_array(_unique_nums(name, rows))
+			elif CLASS_TABLES.has(name):
+				out.append_array(_class_rules(name, rows))
 				out.append_array(_unique_nums(name, rows))
 	return out
 
@@ -1162,6 +1355,8 @@ static func _links(name: String, rows: Dictionary) -> Array:
 				out.append_array(_item_links(name, rows))
 			elif WORLD_TABLES.has(name):
 				out.append_array(_world_links(name, rows))
+			elif CLASS_TABLES.has(name):
+				out.append_array(_class_links(name, rows))
 	return out
 
 
@@ -1183,7 +1378,6 @@ static func _worn_slots() -> Array:
 static func _item_links(name: String, rows: Dictionary) -> Array:
 	var out := []
 	var worn := _worn_slots()
-	var Classes = load("res://scripts/data/classes.gd")
 	match name:
 		"gear_slots":
 			var any_worn := false
@@ -1215,8 +1409,8 @@ static func _item_links(name: String, rows: Dictionary) -> Array:
 			if by_rank.has(Data.RARITY_MAX_RANDOM) and by_rank[Data.RARITY_MAX_RANDOM].get("epithets", []).is_empty():
 				out.append("rarities: найвища випадкова рідкість (ранг %d) потребує «epithets»" % Data.RARITY_MAX_RANDOM)
 		"weapons":
-			for cls in Classes.CLASSES:
-				for w in Classes.CLASSES[cls].get("weapons", []):
+			for cls in ids("classes"):
+				for w in row("classes", cls).get("weapons", []):
 					if not rows.has(w):
 						out.append("клас %s носить зброю «%s», якої нема у weapons.json" % [cls, w])
 			for w in load("res://scripts/data/costumes.gd").WEAPONS:
@@ -1334,15 +1528,15 @@ static func _item_links(name: String, rows: Dictionary) -> Array:
 					if not s in worn:
 						out.append("enchants/%s: «slots» — «%s» не клітинка спорядження" % [id, s])
 				for k in rows[id].get("fx", _EMPTY):
-					if not Classes.FX_TEXT.has(k):
-						out.append("enchants/%s: «fx» — ключа «%s» нема в Classes.FX_TEXT" % [id, k])
+					if not _has_row("effects", k):
+						out.append("enchants/%s: «fx» — ключа «%s» нема в effects.json" % [id, k])
 		"gifts":
 			for id in rows:
 				if rows[id].has("slot") and not _has_row("gift_slots", rows[id]["slot"]):
 					out.append("gifts/%s: «slot» — нема гнізда «%s» у gift_slots.json" % [id, rows[id]["slot"]])
 				for k in rows[id].get("fx", _EMPTY):
-					if not Classes.FX_TEXT.has(k):
-						out.append("gifts/%s: «fx» — ключа «%s» нема в Classes.FX_TEXT" % [id, k])
+					if not _has_row("effects", k):
+						out.append("gifts/%s: «fx» — ключа «%s» нема в effects.json" % [id, k])
 	return out
 
 
@@ -1704,7 +1898,6 @@ static func _world_links(name: String, rows: Dictionary) -> Array:
 				if R.has("pos") and not _in_map(R["pos"]):
 					out.append("%s: «pos» %s поза мапою (WorldMap.LON0..LON1, LAT0..LAT1)" % [where, str(R["pos"])])
 		"lands":
-			var Valor = load("res://scripts/data/valor.gd")
 			for id in rows:
 				var n := 0
 				for p in ids("places"):
@@ -1713,8 +1906,8 @@ static func _world_links(name: String, rows: Dictionary) -> Array:
 				if n != 1:
 					out.append("lands/%s: у землі має бути рівно одна надважка печера («land» у places.json), а їх %d" % [id, n])
 				for k in rows[id].get("title_fx", _EMPTY):
-					if not Valor.LINES.has(k) and not Valor.EXTRA_TEXT.has(k):
-						out.append("lands/%s: «title_fx» — ключа «%s» нема ні у Valor.LINES, ні у Valor.EXTRA_TEXT" % [id, k])
+					if not _has_row("valor_lines", k):
+						out.append("lands/%s: «title_fx» — ключа «%s» нема у valor_lines.json" % [id, k])
 		"biomes":
 			var Index = load("res://scripts/data/sound_index.gd")
 			var Camp = load("res://scripts/data/camp_data.gd")
@@ -1735,6 +1928,365 @@ static func _world_links(name: String, rows: Dictionary) -> Array:
 			for id in rows:
 				if rows[id].has("status") and not Status.INFO.has(rows[id]["status"]):
 					out.append("elite_affixes/%s: невідомий стан «%s» (див. Status.INFO)" % [id, rows[id]["status"]])
+	return out
+
+
+# ---------- Класи й уміння: правила й посилання ----------
+
+## Таблиці класів і вмінь: їхні правила — _class_rules, посилання — _class_links.
+const CLASS_TABLES := ["job_tiers", "classes", "skills", "effects", "perk_branches", "perks", "base_stats", "valor_lines", "paths"]
+## Рядкові поля цих записів, які не можуть бути порожні.
+const _CLASS_TEXTS := ["name", "desc", "text", "address", "where", "mentor", "label", "scales", "what", "title", "style", "for", "rep", "parent", "class", "skill", "branch"]
+## Характеристики героя, які знає код (Player.stats і Player.recalc), у порядку екрана героя.
+const STAT_IDS := ["str", "agi", "vit", "spi"]
+## Поля активного вміння, яких пасивне не має.
+const _ACTIVE_ONLY := ["cost", "cd", "label", "color", "kind", "heals", "scales", "what", "act"]
+
+
+## Правила таблиць класів і вмінь, що не залежать від інших таблиць.
+static func _class_rules(name: String, rows: Dictionary) -> Array:
+	var out := []
+	var prev_cls := ""
+	var prev_branch := 0
+	var done_cls := {}
+	var own := {}  # клас → id умінь (ранги, які зберігає герой)
+	var order := rows.keys()
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var where := "%s/%s" % [name, id]
+		_not_blank(R, _CLASS_TEXTS, where, out)
+		for k in R:
+			if R[k] is bool and not R[k]:
+				out.append("%s: «%s» пишеться лише як true" % [where, k])
+		match name:
+			"job_tiers":
+				var X: Dictionary = R.get("xp", _EMPTY)
+				_positive(X, ["base"], where + ".xp", out)
+				_positive(X, ["per", "square"], where + ".xp", out, true)
+			"classes":
+				_positive(R, ["job_max", "hp_mult", "dmg_mult", "mana_mult", "regen_mult", "skill_mult"], where, out)
+				var nx: Array = R.get("next", [])
+				if nx.is_empty() and R.has("change_at"):
+					out.append("%s: «change_at» без «next»: далі нема куди йти" % where)
+				if not nx.is_empty() and not R.has("change_at"):
+					out.append("%s: є «next», а з якого рівня майстерності йти далі («change_at»), не сказано" % where)
+				if R.has("change_at") and (int(R["change_at"]) < 1 or int(R["change_at"]) > int(R.get("job_max", 0))):
+					out.append("%s: «change_at» %d має бути від 1 до «job_max» (%d)" % [where, int(R["change_at"]), int(R.get("job_max", 0))])
+				if id in nx:
+					out.append("%s: клас веде сам у себе («next»)" % where)
+				for k in ["next", "weapons", "branches"]:
+					var seen := {}
+					for x in R.get(k, []):
+						if str(x).strip_edges() == "":
+							out.append("%s: порожнє значення в «%s»" % [where, k])
+						if seen.has(x):
+							out.append("%s: «%s» двічі в «%s»" % [where, x, k])
+						seen[x] = true
+				if R.get("weapons", []).is_empty():
+					out.append("%s: «weapons» порожні" % where)
+			"skills":
+				var cls := str(R.get("class", ""))
+				var sid := str(R.get("skill", id))
+				if R.has("skill") and id != "%s_%s" % [R["skill"], cls]:
+					out.append("%s: вузол зі «skill» має ключ «%s_%s»" % [where, R["skill"], cls])
+				if R.has("skill") and (not rows.has(R["skill"]) or order.find(R["skill"]) > order.find(id)):
+					out.append("%s: «skill» — нема раніше у файлі вузла з ключем «%s»" % [where, R["skill"]])
+				if cls != prev_cls:
+					if done_cls.has(cls):
+						out.append("%s: вузли класу «%s» мають іти у файлі підряд" % [where, cls])
+					done_cls[cls] = true
+					prev_cls = cls
+					prev_branch = 0
+				if int(R.get("branch", 0)) < prev_branch:
+					out.append("%s: гілка %d після гілки %d: вузли йдуть гілка за гілкою" % [where, int(R.get("branch", 0)), prev_branch])
+				prev_branch = int(R.get("branch", 0))
+				if not own.has(cls):
+					own[cls] = {}
+				if own[cls].has(sid):
+					out.append("%s: уміння «%s» двічі в дереві класу «%s»" % [where, sid, cls])
+				own[cls][sid] = true
+				_positive(R, ["max", "branch"], where, out)
+				for r in R.get("req", _EMPTY):
+					if int(R["req"][r]) < 1:
+						out.append("%s: «req.%s» має бути від 1" % [where, r])
+					if r == sid:
+						out.append("%s: уміння вимагає саме себе" % where)
+				var A: Dictionary = R.get("act", _EMPTY)
+				if R.get("active", false):
+					for k in ["cost", "cd", "label", "kind"]:
+						if not R.has(k):
+							out.append("%s: активному вмінню потрібне «%s»" % [where, k])
+					_positive(R, ["cost", "cd"], where, out)
+					if not R.has("color") and not A.has("color"):
+						out.append("%s: кнопці бою потрібен колір («color» чи «act.color»)" % where)
+					if R.has("act"):
+						var heals: bool = A.has("heal") or A.get("fx", _EMPTY).has("regen_pct")
+						if R.get("heals", false) != heals:
+							out.append("%s: «heals» має бути %s: уміння за даними лікує, коли в «act» є «heal» чи «fx.regen_pct»" % [where, "true" if heals else "відсутнім"])
+						if A.has("color") and not Color.html_is_valid(str(A["color"])):
+							out.append("%s: «act.color» — не колір («%s»)" % [where, A["color"]])
+						if A.has("status") and float(A["status"][1]) <= 0.0:
+							out.append("%s: «act.status» — секунд має бути більше нуля" % where)
+						if str(A.get("type", "")) == "buff" and A.has("at"):
+							out.append("%s: «act.at» не має сенсу для підсилення" % where)
+					else:
+						for k in ["what", "scales"]:
+							if not R.has(k):
+								out.append("%s: уміння з коду потребує «%s» для картки" % [where, k])
+				else:
+					for k in _ACTIVE_ONLY:
+						if R.has(k):
+							out.append("%s: «%s» буває лише в активного вміння («active»)" % [where, k])
+				if R.has("act") and R.has("fx"):
+					out.append("%s: «fx» пасивного вміння й «act» разом: пасивний бонус не діяв би" % where)
+				if R.has("when") and not R.has("fx"):
+					out.append("%s: «when» без «fx»" % where)
+				if R.has("when") and R["when"]["weapon"].is_empty():
+					out.append("%s: «when.weapon» порожній" % where)
+			"effects":
+				if R.has("text") and not "%s" in str(R["text"]):
+					out.append("%s: «text» має містити %%s (число)" % where)
+			"perks":
+				_positive(R, ["max", "tier"], where, out)
+			"valor_lines":
+				if R.get("named", false):
+					for k in ["name", "per"]:
+						if R.has(k):
+							out.append("%s: бонус іменних звитяг («named») не має «%s»: очок у нього не вкладають" % [where, k])
+				else:
+					for k in ["name", "per"]:
+						if not R.has(k):
+							out.append("%s: лінії звитяги потрібне «%s»" % [where, k])
+					_positive(R, ["per"], where, out)
+				if R.has("text") and not "%s" in str(R["text"]):
+					out.append("%s: «text» має містити %%s (відсотки)" % where)
+			"paths":
+				if R.has("rep") != R.has("talk"):
+					out.append("%s: картка вибору дороги має і «rep» (хто розповідає), і «talk» (що)" % where)
+				if R.has("talk") and R["talk"].is_empty():
+					out.append("%s: «talk» порожній" % where)
+				for i in R.get("talk", []).size():
+					if str(R["talk"][i][0]).strip_edges() == "" or str(R["talk"][i][1]).strip_edges() == "":
+						out.append("%s: «talk[%d]»: порожній мовець чи текст" % [where, i])
+				for k in ["strong", "weak", "skills"]:
+					if R.get(k, []).is_empty():
+						out.append("%s: «%s» порожні" % [where, k])
+				for k in ["strong", "weak", "skills", "next"]:
+					for x in R.get(k, []):
+						if str(x).strip_edges() == "":
+							out.append("%s: порожній рядок у «%s»" % [where, k])
+	match name:
+		"job_tiers":
+			out.append_array(_contiguous(name, rows, "tier", 0))
+		"valor_lines":
+			var lines := 0
+			for id in rows:
+				lines += 0 if rows[id].get("named", false) else 1
+			if not rows.is_empty() and lines == 0:
+				out.append("valor_lines: жодної лінії, у яку можна вкласти очко")
+	return out
+
+
+## Ланцюжок класів від першого до cls за записами класів (як Classes.lineage).
+static func _lineage_in(classes: Dictionary, cls: String) -> Array:
+	var out := [cls]
+	var guard := 0
+	var c := cls
+	while guard < 20:
+		guard += 1
+		var up := ""
+		for p in classes:
+			if c in classes[p].get("next", []):
+				up = p
+				break
+		if up == "" or up in out:
+			break
+		out.push_front(up)
+		c = up
+	return out
+
+
+## Посилання таблиць класів і вмінь на інші таблиці й на код гри.
+static func _class_links(name: String, rows: Dictionary) -> Array:
+	var out := []
+	match name:
+		"classes":
+			var Story = load("res://scripts/data/story.gd")
+			var from := {}  # клас → хто веде до нього («next»)
+			for id in rows:
+				for x in rows[id].get("next", []):
+					if from.has(x):
+						out.append("classes/%s: до «%s» уже веде «%s»: у класу один попередник" % [id, x, from[x]])
+					else:
+						from[x] = id
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "classes/" + id
+				if R.has("tier") and not _tier_exists("job_tiers", int(R["tier"])):
+					out.append("%s: «tier» %d — нема такого ступеня в job_tiers.json" % [where, int(R["tier"])])
+				for x in R.get("next", []):
+					if not rows.has(x):
+						out.append("%s: «next» — нема класу «%s»" % [where, x])
+					elif int(rows[x].get("tier", 0)) <= int(R.get("tier", 0)):
+						out.append("%s: «next» — «%s» не вищого ступеня" % [where, x])
+					elif rows[x].has("parent") and str(rows[x]["parent"]) != id:
+						out.append("%s: «next» — у «%s» інший «parent» (%s)" % [where, x, rows[x]["parent"]])
+					elif not rows[x].has("parent") and R.has("parent"):
+						out.append("%s: «next» — «%s» без «parent»: спеціалізація має знати, чия вона" % [where, x])
+				if R.has("parent"):
+					if not rows.has(R["parent"]):
+						out.append("%s: «parent» — нема класу «%s»" % [where, R["parent"]])
+					elif not id in rows[R["parent"]].get("next", []):
+						out.append("%s: «parent» — «%s», а в його «next» цього класу нема" % [where, R["parent"]])
+					for k in ["where", "mentor"]:
+						if not R.has(k):
+							out.append("%s: спеціалізації потрібне «%s» (наставник і місто посвяти)" % [where, k])
+				if not from.has(id) and id != "peasant":
+					out.append("%s: до класу не веде жоден «next» (нова гра починається Селянином, «peasant»)" % where)
+				for w in R.get("weapons", []):
+					if not _has_row("weapons", w):
+						out.append("клас %s носить зброю «%s», якої нема у weapons.json" % [id, w])
+				if R.has("where") and not _has_row("cities", R["where"]):
+					out.append("%s: «where» — нема міста «%s» у cities.json" % [where, R["where"]])
+				if R.has("mentor") and not Story.NPCS.has(R["mentor"]):
+					out.append("%s: «mentor» — нема «%s» у Story.NPCS" % [where, R["mentor"]])
+				var used := {}
+				for s in ids("skills"):
+					if str(row("skills", s).get("class", "")) == id:
+						used[int(row("skills", s).get("branch", 0))] = true
+				for i in R.get("branches", []).size():
+					if not used.has(i + 1):
+						out.append("%s: у гілці «%s» (%d) нема жодного вузла в skills.json" % [where, R["branches"][i], i + 1])
+			for s in ids("skills"):
+				if not rows.has(str(row("skills", s).get("class", ""))):
+					out.append("skills/%s: «class» — нема класу «%s» у classes.json" % [s, row("skills", s).get("class", "")])
+			if not rows.is_empty() and not rows.has("peasant"):
+				out.append("classes: нема класу «peasant», а нова гра починається з нього")
+			elif rows.has("peasant") and (from.has("peasant") or rows["peasant"].has("parent")):
+				out.append("classes/peasant: перший клас не має попередника")
+		"skills":
+			var Status = load("res://scripts/game/status.gd")
+			var Icons = load("res://scripts/data/skill_icon_index.gd")
+			var Index = load("res://scripts/data/sound_index.gd")
+			var classes: Dictionary = table("classes")
+			var nodes := {}  # клас → {id уміння: найвищий ранг}
+			for id in rows:
+				var c := str(rows[id].get("class", ""))
+				if not nodes.has(c):
+					nodes[c] = {}
+				nodes[c][str(rows[id].get("skill", id))] = int(rows[id].get("max", 0))
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "skills/" + id
+				var cls := str(R.get("class", ""))
+				var sid := str(R.get("skill", id))
+				if not classes.has(cls):
+					out.append("%s: «class» — нема класу «%s» у classes.json" % [where, cls])
+					continue
+				var nb: int = classes[cls].get("branches", []).size()
+				if int(R.get("branch", 0)) > nb:
+					out.append("%s: «branch» %d, а в класу «%s» гілок %d («branches»)" % [where, int(R.get("branch", 0)), cls, nb])
+				var lin := _lineage_in(classes, cls)
+				for r in R.get("req", _EMPTY):
+					var top := 0
+					for c in lin:
+						top = maxi(top, int(nodes.get(c, _EMPTY).get(r, 0)))
+					if top == 0:
+						out.append("%s: «req» — уміння «%s» нема на дорозі класу %s" % [where, r, str(lin)])
+					elif int(R["req"][r]) > top:
+						out.append("%s: «req.%s» %d, а найвищий ранг «%s» — %d" % [where, r, int(R["req"][r]), r, top])
+				var A: Dictionary = R.get("act", _EMPTY)
+				for k in R.get("fx", _EMPTY).keys() + A.get("fx", _EMPTY).keys():
+					if not _has_row("effects", k):
+						out.append("%s: «fx» — ключа «%s» нема в effects.json" % [where, k])
+				for w in R.get("when", _EMPTY).get("weapon", []):
+					if not _has_row("weapons", w):
+						out.append("%s: «when.weapon» — нема зброї «%s» у weapons.json" % [where, w])
+				if A.has("status") and not Status.INFO.has(str(A["status"][0])):
+					out.append("%s: «act.status» — невідомий стан «%s» (див. Status.INFO)" % [where, A["status"][0]])
+				if A.has("sound") and not Index.SFX.has(str(A["sound"])):
+					out.append("%s: «act.sound» — нема звуку «%s» у SoundIndex.SFX" % [where, A["sound"]])
+				for k in ["boost", "mark"]:
+					if A.has(k) and not nodes.get(cls, _EMPTY).has(str(A[k])):
+						out.append("%s: «act.%s» — нема вміння «%s» у дереві класу" % [where, k, A[k]])
+				if not Icons.INDEX.has(sid):
+					out.append("%s: уміння «%s» без значка (tools/pixel/skill_icons.py → SkillIconIndex.INDEX)" % [where, sid])
+		"perks":
+			var branches: Array = ids("perk_branches")
+			var last := {}  # гілка → останній ярус у файлі
+			var at := -1
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var b := str(R.get("branch", ""))
+				var bi := branches.find(b)
+				if bi < 0:
+					out.append("perks/%s: «branch» — нема гілки «%s» у perk_branches.json" % [id, b])
+					continue
+				if bi < at:
+					out.append("perks/%s: Загартування йде у файлі гілка за гілкою, як у perk_branches.json" % id)
+				at = bi
+				var t := int(R.get("tier", 0))
+				if t < int(last.get(b, 1)) or t > int(last.get(b, 0)) + 1:
+					out.append("perks/%s: ярус %d після ярусу %d гілки «%s»: яруси йдуть підряд від 1" % [id, t, int(last.get(b, 0)), b])
+				last[b] = maxi(t, int(last.get(b, 0)))
+			for b in branches:
+				if not last.has(b):
+					out.append("perk_branches/%s: у гілці нема жодного вміння (perks.json)" % b)
+		"perk_branches":
+			for b in rows:
+				var n := 0
+				for p in ids("perks"):
+					n += 1 if str(row("perks", p).get("branch", "")) == b else 0
+				if n == 0:
+					out.append("perk_branches/%s: у гілці нема жодного вміння (perks.json)" % b)
+			for p in ids("perks"):
+				if not rows.has(str(row("perks", p).get("branch", ""))):
+					out.append("perks/%s: «branch» — нема гілки «%s» у perk_branches.json" % [p, row("perks", p).get("branch", "")])
+		"job_tiers":
+			for c in ids("classes"):
+				var t := int(row("classes", c).get("tier", 0))
+				var found := false
+				for id in rows:
+					found = found or int(rows[id].get("tier", -1)) == t
+				if not found:
+					out.append("classes/%s: «tier» %d — нема такого ступеня в job_tiers.json" % [c, t])
+		"effects":
+			# Ключі «fx» умінь, зачарувань і божих дарів (ті самі тексти, що й у їхніх таблицях)
+			for id in ids("skills"):
+				var R: Dictionary = row("skills", id)
+				for k in R.get("fx", _EMPTY).keys() + R.get("act", _EMPTY).get("fx", _EMPTY).keys():
+					if not rows.has(k):
+						out.append("skills/%s: «fx» — ключа «%s» нема в effects.json" % [id, k])
+			for t in ["enchants", "gifts"]:
+				for id in ids(t):
+					for k in row(t, id).get("fx", _EMPTY):
+						if not rows.has(k):
+							out.append("%s/%s: «fx» — ключа «%s» нема в effects.json" % [t, id, k])
+		"valor_lines":
+			for l in ids("lands"):
+				for k in row("lands", l).get("title_fx", _EMPTY):
+					if not rows.has(k):
+						out.append("lands/%s: «title_fx» — ключа «%s» нема у valor_lines.json" % [l, k])
+		"base_stats":
+			if rows.keys() != STAT_IDS:
+				out.append("base_stats: характеристики %s, а код знає %s (GameDB.STAT_IDS): нова характеристика потребує коду в Player (stats, recalc)" % [str(rows.keys()), str(STAT_IDS)])
+		"paths":
+			var Story = load("res://scripts/data/story.gd")
+			var first: Array = row("classes", "peasant").get("next", [])
+			for id in rows:
+				var R: Dictionary = rows[id]
+				if not _has_row("classes", id):
+					out.append("paths/%s: нема класу «%s» у classes.json" % [id, id])
+				if R.has("rep") and not Story.NPCS.has(R["rep"]):
+					out.append("paths/%s: «rep» — нема «%s» у Story.NPCS" % [id, R["rep"]])
+				for i in R.get("talk", []).size():
+					if not Story.NPCS.has(R["talk"][i][0]):
+						out.append("paths/%s: «talk[%d]» — мовця «%s» нема в Story.NPCS" % [id, i, R["talk"][i][0]])
+				if R.has("rep") != (id in first):
+					out.append("paths/%s: картку вибору дороги («rep», «talk») мають саме класи з «next» Селянина %s" % [id, str(first)])
+			for c in first:
+				if not rows.has(c):
+					out.append("paths: клас «%s» обирають на Січі, а картки дороги в paths.json нема" % c)
 	return out
 
 

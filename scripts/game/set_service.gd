@@ -22,7 +22,7 @@ static func owned(player) -> Dictionary:
 
 ## Головна риса класу героя: посох — Характерництво, лук, пістолі й пищаль — Спритність, решта — Сила.
 static func main_stat(player) -> String:
-	var weapons: Array = Classes.CLASSES[player.job].get("weapons", [])
+	var weapons: Array = Classes.info(player.job).get("weapons", [])
 	if weapons.has("staff"):
 		return "spi"
 	for wt in Data.agi_weapons():
@@ -63,7 +63,7 @@ static func roll(player, ilvl: int) -> Dictionary:
 	var p := pick(player)
 	var type := ""
 	if str(p[1]) == "weapon":
-		var weapons: Array = Classes.CLASSES[player.job].get("weapons", ["sabre"])
+		var weapons: Array = Classes.info(player.job).get("weapons", ["sabre"])
 		type = str(weapons[randi() % weapons.size()])
 	return Sets.make(str(p[0]), str(p[1]), ilvl, type)
 

@@ -55,7 +55,7 @@ static func reset_points(player) -> bool:
 		player.perk_points += int(player.perks[id])
 	player.perks = {}
 	for c in Classes.lineage(player.job):  # очки можна вкладати в усі дерева дороги, тож і вертаються вони з усіх
-		if Classes.TREES.has(c):
+		if Classes.has_tree(c):
 			_forget_tree(player, c)
 	player.recalc()
 	return true
@@ -63,7 +63,7 @@ static func reset_points(player) -> bool:
 
 ## Забути вміння дерева класу (подаровані сюжетом лишаються лише для свого класу).
 static func _forget_tree(player, cls: String, keep_gifts: bool = true) -> void:
-	for b in Classes.TREES[cls]:
+	for b in Classes.tree(cls):
 		for n in b["nodes"]:
 			var id: String = n["id"]
 			var r: int = player.sk(id)
@@ -81,13 +81,13 @@ static func _forget_tree(player, cls: String, keep_gifts: bool = true) -> void:
 
 ## Сусідні дороги, на які можна перейти Алатир-каменем.
 static func siblings(player) -> Array:
-	var info: Dictionary = Classes.CLASSES[player.job]
+	var info: Dictionary = Classes.info(player.job)
 	var parent: String = info.get("parent", "")
 	if int(info["tier"]) == 1:
 		parent = "peasant"
 	if parent == "":
 		return []
-	return Classes.CLASSES[parent]["next"].filter(func(c): return c != player.job)
+	return Classes.info(parent)["next"].filter(func(c): return c != player.job)
 
 
 ## Змінити дорогу (Алатир-камінь).

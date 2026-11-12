@@ -1,0 +1,218 @@
+{
+	"h_body": {
+		"num": 8101,
+		"branch": "body",
+		"tier": 1,
+		"name": "Міцна кістка",
+		"max": 5,
+		"desc": "+4% здоров'я"
+	},
+	"boots": {
+		"num": 8102,
+		"branch": "body",
+		"tier": 1,
+		"name": "Легкі чоботи",
+		"max": 3,
+		"desc": "+5% швидкості\nбігу"
+	},
+	"h_skin": {
+		"num": 8103,
+		"branch": "body",
+		"tier": 2,
+		"name": "Дублена шкіра",
+		"max": 3,
+		"desc": "+2% захисту"
+	},
+	"h_blood": {
+		"num": 8104,
+		"branch": "body",
+		"tier": 2,
+		"name": "Живуча кров",
+		"max": 3,
+		"desc": "+0.5 здоров'я/с"
+	},
+	"varenyk": {
+		"num": 8105,
+		"branch": "body",
+		"tier": 3,
+		"name": "Бабусині вареники",
+		"max": 2,
+		"desc": "Вареники частіше\nі ситніші"
+	},
+	"h_potion": {
+		"num": 8106,
+		"branch": "body",
+		"tier": 3,
+		"name": "Міцне зілля",
+		"max": 3,
+		"desc": "Зілля лікує\nна 10% більше"
+	},
+	"h_roll": {
+		"num": 8107,
+		"branch": "body",
+		"tier": 4,
+		"name": "Спритний перекид",
+		"max": 2,
+		"desc": "Перекид готовий\nна 10% швидше"
+	},
+	"h_parry": {
+		"num": 8108,
+		"branch": "body",
+		"tier": 4,
+		"name": "Тверда рука",
+		"max": 2,
+		"desc": "Парирування\nлікує 4% здоров'я"
+	},
+	"sich": {
+		"num": 8109,
+		"branch": "body",
+		"tier": 5,
+		"name": "Загартований",
+		"max": 3,
+		"desc": "+2 до всіх\nхарактеристик"
+	},
+	"luck": {
+		"num": 8110,
+		"branch": "strike",
+		"tier": 1,
+		"name": "Вдача",
+		"max": 3,
+		"desc": "+5% шансу\nкриту"
+	},
+	"h_hand": {
+		"num": 8111,
+		"branch": "strike",
+		"tier": 1,
+		"name": "Важкий удар",
+		"max": 5,
+		"desc": "+3% шкоди"
+	},
+	"h_fast": {
+		"num": 8112,
+		"branch": "strike",
+		"tier": 2,
+		"name": "Швидка рука",
+		"max": 3,
+		"desc": "+4% швидкості\nудару"
+	},
+	"h_crit": {
+		"num": 8113,
+		"branch": "strike",
+		"tier": 2,
+		"name": "Жорстокий крит",
+		"max": 2,
+		"desc": "+25% шкоди\nкриту"
+	},
+	"steel_will": {
+		"num": 8114,
+		"branch": "strike",
+		"tier": 3,
+		"name": "Сталева воля",
+		"max": 3,
+		"desc": "+10% наснаги"
+	},
+	"h_breath": {
+		"num": 8115,
+		"branch": "strike",
+		"tier": 3,
+		"name": "Рівне дихання",
+		"max": 3,
+		"desc": "+10% відновлення\nнаснаги"
+	},
+	"h_spirit": {
+		"num": 8116,
+		"branch": "strike",
+		"tier": 4,
+		"name": "Сила духу",
+		"max": 3,
+		"desc": "+5% сили вмінь"
+	},
+	"h_mind": {
+		"num": 8117,
+		"branch": "strike",
+		"tier": 4,
+		"name": "Швидкий розум",
+		"max": 2,
+		"desc": "-5% перезарядки\nвмінь"
+	},
+	"h_execute": {
+		"num": 8118,
+		"branch": "strike",
+		"tier": 5,
+		"name": "Добивання",
+		"max": 1,
+		"desc": "+20% шкоди ворогам\nнижче 30% здоров'я"
+	},
+	"purse": {
+		"num": 8119,
+		"branch": "march",
+		"tier": 1,
+		"name": "Жадібний гаманець",
+		"max": 2,
+		"desc": "+25% радіус\nзбору здобичі"
+	},
+	"kobzar": {
+		"num": 8120,
+		"branch": "march",
+		"tier": 1,
+		"name": "Кобзарева наука",
+		"max": 3,
+		"desc": "+10% досвіду"
+	},
+	"h_gold": {
+		"num": 8121,
+		"branch": "march",
+		"tier": 2,
+		"name": "Торгова жилка",
+		"max": 3,
+		"desc": "+8% гривень"
+	},
+	"h_eye": {
+		"num": 8122,
+		"branch": "march",
+		"tier": 2,
+		"name": "Зіркий погляд",
+		"max": 3,
+		"desc": "+15% шансу подвійного\nресурсу"
+	},
+	"h_flask": {
+		"num": 8123,
+		"branch": "march",
+		"tier": 3,
+		"name": "Запасна баклага",
+		"max": 2,
+		"desc": "+1 зілля\nз собою"
+	},
+	"h_horse": {
+		"num": 8124,
+		"branch": "march",
+		"tier": 3,
+		"name": "Швидкий кінь",
+		"max": 2,
+		"desc": "Подорож мапою\nна 15% швидша"
+	},
+	"h_sip": {
+		"num": 8125,
+		"branch": "march",
+		"tier": 4,
+		"name": "Швидкий ковток",
+		"max": 2,
+		"desc": "Зілля готове\nна 15% швидше"
+	},
+	"h_trophy": {
+		"num": 8126,
+		"branch": "march",
+		"tier": 4,
+		"name": "Мисливець",
+		"max": 2,
+		"desc": "+1 трофей\nз боса й еліти"
+	},
+	"h_berehynia": {
+		"num": 8127,
+		"branch": "march",
+		"tier": 5,
+		"name": "Берегиня",
+		"max": 1,
+		"desc": "Раз на бій смертельний удар\nлишає 1 здоров'я й лікує 30%"
+	}
+}

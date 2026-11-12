@@ -352,15 +352,15 @@ static func _path_tab(game) -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16)
 	v.add_child(row)
-	for cls in game.Paths.ORDER:
+	for cls in game.Paths.order():
 		var card := class_card(game, cls, true)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var talked: bool = PS.talked(w, cls)
-		var rep: String = game.Paths.REPS[cls]
+		var rep: String = game.Paths.rep(cls)
 		var rep_name: String = game.StoryService.Story.NPCS[rep]["name"]
 		card.add_child(UI.button(("Поговорити з: " if not talked else "Ще раз: ") + rep_name, _do(game, "path_talk", cls), Vector2(0, 54), 16))
 		var key: String = "path_choose:" + cls
-		var t: String = ("Обрати: %s" % game.Paths.CARDS[cls]["title"]) if game.confirm_action != key else "Точно? Натисни ще раз"
+		var t: String = ("Обрати: %s" % game.Paths.card(cls)["title"]) if game.confirm_action != key else "Точно? Натисни ще раз"
 		var b := UI.button(t, _do(game, "path_choose", cls), Vector2(0, 60), 20, both)
 		if both:
 			b.add_theme_stylebox_override("normal", UI.style(Color(0.2, 0.32, 0.15), Color(0.5, 0.9, 0.4), 12, 8))
@@ -373,7 +373,7 @@ static func _path_tab(game) -> Control:
 
 ## Картка дороги чи спеціалізації: стиль, сильні/слабкі сторони, зброя, вміння, що далі.
 static func class_card(game, cls: String, big: bool = false) -> VBoxContainer:
-	var c: Dictionary = game.Paths.CARDS[cls]
+	var c: Dictionary = game.Paths.card(cls)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 4)
 	var panel := PanelContainer.new()
@@ -406,11 +406,11 @@ static func class_card(game, cls: String, big: bool = false) -> VBoxContainer:
 static func _city_specs(game, city: String) -> Array:
 	var Classes = game.player.Classes
 	var out := []
-	for base in Classes.CLASSES["peasant"]["next"]:
+	for base in Classes.info("peasant")["next"]:
 		if not base in Classes.lineage(game.player.job):
 			continue
-		for spec in Classes.CLASSES[base]["next"]:
-			if Classes.CLASSES[spec]["where"] == city:
+		for spec in Classes.info(base)["next"]:
+			if Classes.info(spec)["where"] == city:
 				out.append(spec)
 	return out
 
@@ -422,31 +422,31 @@ static func _mentors(game, city: String) -> Control:
 	var w = game.world
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	var need: int = Classes.JOB_CHANGE_AT[1]
 	var base: String = "cossack"
-	for b0 in Classes.CLASSES["peasant"]["next"]:
+	for b0 in Classes.info("peasant")["next"]:
 		if b0 in Classes.lineage(p.job):
 			base = b0
+	var need: int = int(Classes.info(base)["change_at"])
 	if p.job == base:
 		var t := "Спеціалізацію можна обрати з %d-го рівня майстерності (зараз %d)." % [need, p.job_level]
 		v.add_child(UI.label(t, 19, UI.GOOD if p.job_level >= need else UI.MUTED, false))
 		if base != "cossack":
 			var places := []
-			for sp in Classes.CLASSES[base]["next"]:
-				places.append("%s — %s" % [Classes.CLASSES[sp]["name"], Data.place_name(Classes.CLASSES[sp]["where"])])
+			for sp in Classes.info(base)["next"]:
+				places.append("%s — %s" % [Classes.info(sp)["name"], Data.place_name(Classes.info(sp)["where"])])
 			v.add_child(UI.label("Наставники: " + ", ".join(places), 16, UI.MUTED, false))
 	else:
 		v.add_child(UI.label("Ти вже %s. Іншу дорогу відкриє лише Алатир-камінь." % p.class_name_ua().to_lower(), 19, UI.MUTED, false))
 	var trial: Dictionary = w.spec_trial
 	for spec in _city_specs(game, city):
-		var info: Dictionary = Classes.CLASSES[spec]
+		var info: Dictionary = Classes.info(spec)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
 		var col := VBoxContainer.new()
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var mentor: Dictionary = game.StoryService.Story.NPCS[info["mentor"]]
 		col.add_child(UI.label("%s  •  наставник: %s" % [info["name"], mentor["name"]], 22, UI.GOLD if p.job == spec else UI.TEXT, false))
-		if game.Paths.CARDS.has(spec):
+		if game.Paths.has_card(spec):
 			col.add_child(class_card(game, spec))
 		else:
 			var d := UI.label(info["desc"], 16, UI.MUTED, false)

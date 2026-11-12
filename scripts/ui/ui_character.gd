@@ -111,7 +111,7 @@ static func _hero(game) -> Control:
 	free.add_child(UI.label("Очки", 15, UI.MUTED))
 	free.add_child(UI.label(str(p.stat_points), 30, UI.GOLD if p.stat_points > 0 else UI.MUTED))
 	pts.add_child(free)
-	for st in Data.STATS:
+	for st in Data.base_stats():
 		var box := VBoxContainer.new()
 		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		box.add_theme_constant_override("separation", 0)
@@ -737,11 +737,11 @@ static func _skills(game) -> Control:
 	h.add_child(left)
 	left.add_child(UI.label("Очки вмінь", 15, UI.MUTED))
 	left.add_child(UI.label(str(p.skill_points), 38, UI.GOLD if p.skill_points > 0 else UI.MUTED))
-	var lineage: Array = Classes.lineage(p.job).filter(func(c): return Classes.TREES.has(c))
+	var lineage: Array = Classes.lineage(p.job).filter(func(c): return Classes.has_tree(c))
 	var shown: String = game.skill_tree if game.skill_tree in lineage else p.job
 	left.add_child(UI.label("Дерева", 15, UI.MUTED))
 	for c in lineage:
-		var tb := UI.button(str(Classes.CLASSES[c]["name"]), _do(game, "skill_tree", c), Vector2(170, 56), 17)
+		var tb := UI.button(str(Classes.info(c)["name"]), _do(game, "skill_tree", c), Vector2(170, 56), 17)
 		if c == shown:
 			tb.add_theme_stylebox_override("normal", UI.style(Color(0.3, 0.25, 0.12), Color(1.0, 0.85, 0.3), 10, 6))
 		# у кутку кнопки: скільки рангів дерева вивчено, щоб було видно, куди ще можна вкласти очки
@@ -773,7 +773,7 @@ static func _skills(game) -> Control:
 	if p.can_change_class():
 		var names := []
 		for c in p.class_info()["next"]:
-			names.append("%s (%s)" % [Classes.CLASSES[c]["name"], Data.place_name(str(Classes.CLASSES[c].get("where", "sich")))])
+			names.append("%s (%s)" % [Classes.info(c)["name"], Data.place_name(str(Classes.info(c).get("where", "sich")))])
 		note = "Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника."
 	var nl := UI.label(note, 13, UI.GOOD if p.can_change_class() else UI.MUTED, false)
 	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -781,7 +781,7 @@ static func _skills(game) -> Control:
 	left.add_child(nl)
 
 	# ----- Посередині: дерево значками -----
-	var branches: Array = Classes.TREES[shown]
+	var branches: Array = Classes.tree(shown)
 	var rows := 1
 	for br in branches:
 		rows = maxi(rows, br["nodes"].size())
@@ -862,7 +862,7 @@ static func _panel_block(game, v: VBoxContainer) -> void:
 			slot.add_child(cl)
 			row.add_child(slot)
 		v.add_child(row)
-	var hint := "Торкнись зеленої кнопки, щоб поставити туди «%s». Те, що там стоїть, перейде на його місце." % Data.skill_name(sel) if can_place else "Щоб переставити вміння, торкнись його кнопки або вивченого активного вміння в дереві (з позначкою ⚔ чи ✦), а тоді зеленої кнопки."
+	var hint := "Торкнись зеленої кнопки, щоб поставити туди «%s». Те, що там стоїть, перейде на його місце." % p.Classes.node_name(sel) if can_place else "Щоб переставити вміння, торкнись його кнопки або вивченого активного вміння в дереві (з позначкою ⚔ чи ✦), а тоді зеленої кнопки."
 	var hl := UI.label(hint, 13, UI.GOOD if can_place else UI.MUTED, false)
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(hl)
@@ -918,14 +918,14 @@ static func _skill_card(game) -> Control:
 				if p.sk(r) < n["req"][r]:
 					reqs.append("%s %d" % [p.Classes.find_node(r).get("name", r), n["req"][r]])
 			card.add_child(UI.label("Потрібно: " + ", ".join(reqs), 15, UI.BAD, false))
-	var what: String = SI.WHAT.get(id, n["desc"].replace("\n", " "))
+	var what: String = SI.what(id, n["desc"].replace("\n", " "))
 	var wl := UI.label(what, 17, UI.TEXT, false)
 	wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	card.add_child(wl)
 	if active:
 		var cost := int(n.get("cost", 0))
 		card.add_child(UI.label("Наснага: %d   •   Перезарядка: %.1f с" % [cost, p.skill_cooldown(id)], 16, UI.TEXT, false))
-		var scales: String = SI.SCALES.get(id, "")
+		var scales: String = SI.scales(id)
 		if scales != "" and scales != "—":
 			card.add_child(UI.label("Підсилює: " + scales, 14, UI.MUTED, false))
 		var now: Array = SI.stats(id, rank, p)
@@ -973,7 +973,7 @@ static func _stones_row(game, v: VBoxContainer) -> void:
 	if a > 0:
 		for cls in SS.siblings(p):
 			var key: String = "stone_path:" + cls
-			var nm: String = p.Classes.CLASSES[cls]["name"]
+			var nm: String = p.Classes.info(cls)["name"]
 			var t: String = ("Алатир ×%d: стати «%s»" % [a, nm]) if game.confirm_action != key else "Точно «%s»? Ще раз" % nm
 			row.add_child(UI.button(t, _do(game, "stone_path", cls), Vector2(250, 44), 13))
 	v.add_child(row)
@@ -993,8 +993,9 @@ static func _perks(game) -> Control:
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 12)
 	v.add_child(h)
-	for bi in Data.PERK_BRANCHES.size():
-		var branch: Dictionary = Data.PERK_BRANCHES[bi]
+	var perk_tree: Array = Data.perk_branches()
+	for bi in perk_tree.size():
+		var branch: Dictionary = perk_tree[bi]
 		var col := VBoxContainer.new()
 		col.add_theme_constant_override("separation", 0)
 		col.add_child(UI.label("%s  (%d)" % [branch["name"], p.branch_perk_points(bi)], 26, UI.GOLD))
@@ -1036,8 +1037,8 @@ static func _valor_block(game, v: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 8)
-	for id in Valor.ORDER:
-		var L: Dictionary = Valor.LINES[id]
+	for id in Valor.order():
+		var L: Dictionary = Valor.line(id)
 		var n: int = int(p.valor_spent.get(id, 0))
 		var text := "%s  %d/%d\n%s" % [L["name"], n, Valor.LINE_MAX, Valor.text(id, float(L["per"]) * maxi(n, 1))]
 		row.add_child(_tree_button(text, n, Valor.LINE_MAX, p.can_add_valor(id), false, 13, Vector2(214, 78), _do(game, "valor", id)))

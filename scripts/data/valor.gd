@@ -6,27 +6,45 @@ extends RefCounted
 
 const Data := preload("res://scripts/data/data.gd")
 const Classes := preload("res://scripts/data/classes.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 const BAR_PART := 0.1  # перша смуга: ця частка досвіду останнього рівня героя
 const BAR_STEP := 0.02  # кожна наступна смуга дорожча на стільки від першої
 const LINE_MAX := 30  # найбільше очок в одну лінію
 
-## Лінії: назва, текст бонусу й скільки відсотків дає одне очко.
-const LINES := {
-	"dmg": {"name": "Лють", "text": "+%s%% шкоди", "per": 1.0},
-	"hp": {"name": "Гарт", "text": "+%s%% здоров'я", "per": 1.0},
-	"ward": {"name": "Оберіг", "text": "шкода по тобі менша на %s%%", "per": 0.5},
-	"skill": {"name": "Слово", "text": "+%s%% сили вмінь", "per": 1.0},
-	"luck": {"name": "Талан", "text": "золото, артефакти, душі й речі наборів падають на %s%% частіше", "per": 1.0},
-}
-const ORDER := ["dmg", "hp", "ward", "skill", "luck"]
-## Бонуси, які бувають лише в іменних звитяг
-const EXTRA_TEXT := {"gold": "+%s%% гривень"}
+## Лінії звитяги (назва, текст бонусу й скільки відсотків дає одне очко) і бонуси, що бувають лише в
+## іменних звитяг («named»), лежать у data/valor_lines.json (docs/data.md, «Класи й уміння»).
+static var _order: Array = []
+
+
+## Лінії, у які вкладають очки, у порядку файлу (так їх показує екран героя й довідник).
+static func order() -> Array:
+	if _order.is_empty():
+		for id in GameDB.ids("valor_lines"):
+			if not GameDB.row("valor_lines", id).get("named", false):
+				_order.append(id)
+		_order.make_read_only()
+	return _order
+
+
+## Запис лінії чи бонусу іменної звитяги; для невідомого — порожній.
+static func line(id: String) -> Dictionary:
+	return GameDB.row("valor_lines", id)
+
+
+## Чи це лінія, у яку можна вкласти очко.
+static func is_line(id: String) -> bool:
+	return GameDB.table("valor_lines").has(id) and not line(id).get("named", false)
+
+
+## Усі ключі звитяг (лінії й бонуси іменних звитяг).
+static func keys() -> Array:
+	return GameDB.ids("valor_lines")
 
 
 ## Найбільша звитяга героя: усі лінії заповнені до краю. Далі смуга лише стоїть повна, очок не дає.
 static func max_valor() -> int:
-	return LINES.size() * LINE_MAX
+	return order().size() * LINE_MAX
 
 
 ## Скільки досвіду вміщає смуга, коли вже заповнено filled смуг.
@@ -45,8 +63,8 @@ static func spent_total(spent: Dictionary) -> int:
 static func fx(spent: Dictionary, named: Dictionary) -> Dictionary:
 	var out := {}
 	for k in spent:
-		if LINES.has(k) and int(spent[k]) > 0:
-			out[k] = float(LINES[k]["per"]) * int(spent[k])
+		if is_line(k) and int(spent[k]) > 0:
+			out[k] = float(line(k)["per"]) * int(spent[k])
 	for k in named:
 		out[k] = float(out.get(k, 0.0)) + float(named[k])
 	return out
@@ -59,8 +77,7 @@ static func num(v: float) -> String:
 
 ## Бонус словами: «+3% шкоди».
 static func text(key: String, value: float) -> String:
-	var t: String = str(LINES[key]["text"]) if LINES.has(key) else str(EXTRA_TEXT.get(key, "%s"))
-	return t % num(value)
+	return str(line(key).get("text", "%s")) % num(value)
 
 
 ## Бонуси іменної звитяги словами.

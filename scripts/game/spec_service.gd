@@ -177,14 +177,14 @@ static func on_event(world, type: String, arg: String) -> Array:
 	if not done:
 		return []
 	s["stage"] = "turnin"
-	var mentor: String = Classes.CLASSES[s["spec"]]["mentor"]
-	return [{"text": "Випробування пройдено!\nНаставник чекає: %s" % Data.place_name(str(Classes.CLASSES[s["spec"]]["where"])), "big": true, "mentor": mentor}]
+	var mentor: String = Classes.info(s["spec"])["mentor"]
+	return [{"text": "Випробування пройдено!\nНаставник чекає: %s" % Data.place_name(str(Classes.info(s["spec"])["where"])), "big": true, "mentor": mentor}]
 
 
 ## Розмова-посвята на Січі, коли випробування пройдене: {"spec", "lines"} або {}.
 static func city_dialogue(world, city: String) -> Dictionary:
 	var s := state(world)
-	if s.is_empty() or s["stage"] != "turnin" or city != Classes.CLASSES[s["spec"]]["where"]:
+	if s.is_empty() or s["stage"] != "turnin" or city != Classes.info(s["spec"])["where"]:
 		return {}
 	return {"spec": s["spec"], "lines": TRIALS[s["spec"]]["end"]}
 
@@ -203,7 +203,7 @@ static func complete(world, player) -> String:
 		player.inventory.append(it)
 	player.equip(it["uid"])
 	world.spec_trial = {}
-	return "Ти — %s!\nОтримано: %s" % [Classes.CLASSES[spec]["name"].to_lower(), it["name"]]
+	return "Ти — %s!\nОтримано: %s" % [Classes.info(spec)["name"].to_lower(), it["name"]]
 
 
 static func objective_line(world) -> String:
@@ -211,7 +211,7 @@ static func objective_line(world) -> String:
 	if s.is_empty():
 		return ""
 	if s["stage"] == "turnin":
-		return "◆ Повертайся до наставника (%s): посвята в %s" % [Data.place_name(str(Classes.CLASSES[s["spec"]]["where"])), Classes.CLASSES[s["spec"]]["name"].to_lower()]
+		return "◆ Повертайся до наставника (%s): посвята в %s" % [Data.place_name(str(Classes.info(s["spec"])["where"])), Classes.info(s["spec"])["name"].to_lower()]
 	var obj := objective(world)
 	var line: String = "◆ " + obj["text"]
 	if obj.has("count"):
@@ -224,5 +224,5 @@ static func target(world) -> String:
 	if s.is_empty():
 		return ""
 	if s["stage"] == "turnin":
-		return Classes.CLASSES[s["spec"]]["where"]
+		return Classes.info(s["spec"])["where"]
 	return objective(world).get("loc", "")

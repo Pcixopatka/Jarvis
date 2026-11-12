@@ -290,8 +290,8 @@ static func _peril() -> Array:
 	out.append(_e("Нагороди надважких печер", "заради чого туди ходити", "Речі з нечисті мають рівень печери, від %d до %d. Вищих у грі нема, і коваль до такого рівня річ не оновить. Досвіду з цієї нечисті в %s раза більше. Бос дає золото шостого ступеня «%s» із шансом %s%%, свій артефакт із шансом %s%% і душу сьомого ступеня з шансом %s%%. Перша перемога над кожним босом дає річ набору напевно й іменну звитягу: звання з вічним бонусом. Далі бос дає річ набору з шансом %d%%, а елітна нечисть печери з шансом %d%%. Найкращий час проходження записується героєві й роду." % [
 		int(Data.place(first)["level"]), int(Data.place(last)["level"]), _num(Peril.XP_MULT), Uniques.tier_name(6), _num(Uniques.tier_chance(6) * 100.0), _num(Artifacts.CHANCE_PERIL * 100.0), _num(Souls.CHANCE_PERIL * 100.0), roundi(Sets.BOSS_CHANCE * 100.0), roundi(Sets.ELITE_CHANCE * 100.0)]))
 	var lines := []
-	for id in Valor.ORDER:
-		lines.append("%s: %s за очко" % [Valor.LINES[id]["name"], Valor.text(id, float(Valor.LINES[id]["per"]))])
+	for id in Valor.order():
+		lines.append("%s: %s за очко" % [Valor.line(id)["name"], Valor.text(id, float(Valor.line(id)["per"]))])
 	var top: int = Data.Classes.BASE_LEVEL_MAX
 	out.append(_e("Звитяги", "поступ після %d-го рівня" % top, "На %d-му рівні досвід не пропадає: він наповнює смугу звитяги. Заповнена смуга дає очко. Перша смуга вміщає %s досвіду, кожна наступна на %s%% більше від першої. Очки вкладають на екрані героя, вкладка «Загартування», у п'ять ліній. %s. В одну лінію можна вкласти до %d очок. Найбільша звитяга %d (усі лінії повні): далі смуга лише стоїть повна й нових очок не дає. Бонуси вічні й малі: звитяги не зроблять надважку печеру легкою, але дають рости й після стелі рівня. Смерть забирає частку смуги, та зароблені очки не зникають." % [
 		top, _big(Valor.bar(0)), _num(Valor.BAR_STEP * 100.0), ". ".join(lines), Valor.LINE_MAX, Valor.max_valor()], {}, "Звитяги"))
@@ -332,8 +332,8 @@ static func _classes() -> Array:
 	var out := []
 	var tier_head := {0: "Початок", 1: "Дороги", 2: "Спеціалізації"}
 	var last_tier := -1
-	for cls in Classes.CLASSES:
-		var C: Dictionary = Classes.CLASSES[cls]
+	for cls in Classes.ids():
+		var C: Dictionary = Classes.info(cls)
 		var tier := int(C["tier"])
 		var parts := ["зброя: " + _weapon_names(C["weapons"])]
 		if C.has("where"):
@@ -341,7 +341,7 @@ static func _classes() -> Array:
 		if C.has("mentor"):
 			parts.append("наставник: " + str(Story.NPCS.get(C["mentor"], {}).get("name", C["mentor"])))
 		var actives := []
-		for b in Classes.TREES.get(cls, []):
+		for b in Classes.tree(cls):
 			for n in b["nodes"]:
 				if n.get("active", false):
 					actives.append(n["name"])
@@ -355,7 +355,7 @@ static func _classes() -> Array:
 		if not C["next"].is_empty():
 			var nx := []
 			for n in C["next"]:
-				nx.append(Classes.CLASSES[n]["name"])
+				nx.append(Classes.info(n)["name"])
 			text += "\nДалі: " + ", ".join(nx) + "."
 		out.append(_e(C["name"], " • ".join(parts), text, {"sprite": _class_sprite(cls)}, tier_head[tier] if tier != last_tier else ""))
 		last_tier = tier
@@ -512,8 +512,8 @@ static func _city_entry(id: String, head: String) -> Dictionary:
 		parts.append("майдан")
 	if id == Acts.MUSTER_CITY:
 		parts.append("огляд")
-	for cls in Classes.CLASSES:
-		if Classes.CLASSES[cls].get("where", "") == id and Classes.CLASSES[cls].has("mentor"):
+	for cls in Classes.ids():
+		if Classes.info(cls).get("where", "") == id and Classes.info(cls).has("mentor"):
 			parts.append("наставник")
 			break
 	return _e(C["name"], " • ".join(parts), C["desc"], {"map": "castle"}, head)
@@ -717,20 +717,20 @@ static func _skills() -> Array:
 	var SkillInfo = load("res://scripts/data/skill_info.gd")
 	var out := []
 	var counts := {}
-	for cls in Classes.TREES:
-		for br in Classes.TREES[cls]:
+	for cls in Classes.tree_ids():
+		for br in Classes.tree(cls):
 			for node in br["nodes"]:
 				counts[node["name"]] = int(counts.get(node["name"], 0)) + 1
-	for br in Data.PERK_BRANCHES:
+	for br in Data.perk_branches():
 		for tier in br["tiers"]:
 			for perk in tier:
 				counts[perk["name"]] = int(counts.get(perk["name"], 0)) + 1
 	out.append(_e("Дерева вмінь", "у кожного класу своє", "У кожного класу своє дерево з кількох гілок. Деякі вміння вимагають уже вивченого попереднього. Активні вміння коштують наснагу й мають перезарядку, пасивні діють завжди. У бою на панелі до трьох атак і до п'яти підсилень: набір обирають у вкладці «Вміння» на екрані героя. Вивчені вміння селянина лишаються й після вибору дороги. Очки вмінь можна вкладати в дерево нинішнього класу й у пройдені дерева своєї дороги: наприклад, Запорожець довчає вміння Козака й Селянина. Перемикач дерев ліворуч показує, скільки рангів у кожному вже вивчено. Вміння чужої дороги й сусідньої спеціалізації вчити не можна. Камінь забуття вертає очки з усіх дерев дороги.", {}, "Як це працює"))
 	out.append(_e("Очок менше, ніж умінь", "доведеться обирати", "На вершині герой має 97 очок умінь, а в деревах його дороги близько півтори сотні рангів. Вивчити все не вийде: кожен збирає свого героя. Є майстерність під окрему зброю, що діє лише з нею в руках. Є стійки: підсилення на 20 с із платою за нього, і діє лише одна стійка. Є прийоми у відповідь, що спрацьовують після парирування чи перекиду. Є вершинні вміння на один ранг: вони вимагають двох інших умінь на п'ятому ранзі й мають довгу перезарядку. Активних умінь більше, ніж кнопок бою, тож набір на панелі теж обирають."))
-	out.append(_e("Загартування", "спільне для всіх класів", "Дерево пасивних вмінь, однакове для всіх: очко за кожні %d рівні героя. Гілок три: %s. У гілці кілька ярусів, і щоб відкрити наступний, треба вкласти в гілку по %d очка за кожен попередній ярус." % [Classes.HARDEN_EVERY, ", ".join(Data.PERK_BRANCHES.map(func(b): return b["name"])), Data.PERK_TIER_STEP]))
-	for cls in Classes.TREES:
-		var cname: String = str(Classes.CLASSES[cls]["name"])
-		for br in Classes.TREES[cls]:
+	out.append(_e("Загартування", "спільне для всіх класів", "Дерево пасивних вмінь, однакове для всіх: очко за кожні %d рівні героя. Гілок три: %s. У гілці кілька ярусів, і щоб відкрити наступний, треба вкласти в гілку по %d очка за кожен попередній ярус." % [Classes.HARDEN_EVERY, ", ".join(Data.perk_branches().map(func(b): return b["name"])), Data.PERK_TIER_STEP]))
+	for cls in Classes.tree_ids():
+		var cname: String = str(Classes.info(cls)["name"])
+		for br in Classes.tree(cls):
 			var first := true
 			for node in br["nodes"]:
 				var id: String = node["id"]
@@ -738,9 +738,9 @@ static func _skills() -> Array:
 				var text := _line(node["desc"]) + "."
 				if node.get("active", false):
 					sub = "%s • наснага %d • перезарядка %s с • рангів %d" % ["підсилення" if SkillInfo.kind(id) == "buff" else "атака", int(node.get("cost", 0)), _num(Classes.cooldown(id)), int(node["max"])]
-					text = str(SkillInfo.WHAT.get(id, "")) + " " + text
-					if str(SkillInfo.SCALES.get(id, "—")) != "—":
-						text += " Росте від: %s." % str(SkillInfo.SCALES[id]).to_lower()
+					text = str(node.get("what", "")) + " " + text
+					if str(node.get("scales", "—")) != "—":
+						text += " Росте від: %s." % str(node["scales"]).to_lower()
 				var need := []
 				for r in node.get("req", {}):
 					for other in br["nodes"]:
@@ -750,7 +750,7 @@ static func _skills() -> Array:
 					text += " Потрібно: %s." % ", ".join(need)
 				out.append(_e(skill_title(cname, node["name"], counts), sub, text.strip_edges(), {}, "%s • %s" % [cname, br["name"]] if first else ""))
 				first = false
-	for br in Data.PERK_BRANCHES:
+	for br in Data.perk_branches():
 		var first2 := true
 		for ti in br["tiers"].size():
 			for perk in br["tiers"][ti]:

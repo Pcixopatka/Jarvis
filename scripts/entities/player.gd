@@ -277,7 +277,7 @@ func can_use(item: Dictionary) -> bool:
 		return false  # артефакт не вдягають: він діє з торби
 	if item.get("slot", "") != "weapon":
 		return true
-	return item.get("type", "") in Classes.CLASSES[job]["weapons"]
+	return item.get("type", "") in Classes.info(job)["weapons"]
 
 
 func equip(uid: int) -> bool:
@@ -487,11 +487,11 @@ func from_dict(d: Dictionary) -> void:
 ## Вміння, що лишилися поза дорогою героя, вертаються очками: їх можна вкласти в нові дерева.
 ## Подаровані сюжетом ранги (skill_gifts) очок не вертають, а вміння Загартування це не зачіпає.
 func _refund_foreign_skills() -> int:
-	if not Classes.CLASSES.has(job):
+	if not Classes.has_class(job):
 		return 0
 	var own := {}
 	for c in Classes.lineage(job):
-		for b in Classes.TREES.get(c, []):
+		for b in Classes.tree(c):
 			for n in b["nodes"]:
 				own[n["id"]] = true
 	var back := 0
@@ -608,7 +608,7 @@ func pk(id: String) -> int:
 
 
 func class_info() -> Dictionary:
-	return Classes.CLASSES[job]
+	return Classes.info(job)
 
 
 func class_name_ua() -> String:
@@ -627,21 +627,21 @@ func is_mage() -> bool:
 	return weapon_type == "staff"
 
 
-## Чи можна вже змінити клас (досить майстерності й є куди рости).
+## Чи можна вже змінити клас (досить майстерності й є куди рости): «change_at» запису класу.
 func can_change_class() -> bool:
-	var tier := int(class_info()["tier"])
-	return not class_info()["next"].is_empty() and job_level >= int(Classes.JOB_CHANGE_AT.get(tier, 999))
+	var ci := class_info()
+	return not ci["next"].is_empty() and job_level >= int(ci.get("change_at", 999))
 
 
 ## Зміна класу: майстерність з 1, вивчене лишається, невитрачені очки — теж.
 func change_class(cls: String) -> bool:
-	if not Classes.CLASSES.has(cls) or cls == job:
+	if not Classes.has_class(cls) or cls == job:
 		return false
 	var was_volkhv := is_volkhv()
 	job = cls
 	job_level = 1
 	job_xp = 0
-	Data.weapon_pool = Classes.CLASSES[job]["weapons"]
+	Data.weapon_pool = Classes.info(job)["weapons"]
 	recalc()
 	mana = max_mana
 	if is_volkhv() and not was_volkhv:
@@ -805,10 +805,8 @@ func is_peasant() -> bool:
 ## (Селянин → Козак → Запорожець). Інакше очки, зароблені понад дерево останнього класу, нікуди подіти.
 func in_class_tree(id: String) -> bool:
 	for c in Classes.lineage(job):
-		for b in Classes.TREES.get(c, []):
-			for n in b["nodes"]:
-				if n["id"] == id:
-					return true
+		if Classes.find_node(id, c).get("class", "") == c:
+			return true
 	return false
 
 
@@ -816,7 +814,7 @@ func in_class_tree(id: String) -> bool:
 func tree_progress(cls: String) -> Array:
 	var have := 0
 	var total := 0
-	for b in Classes.TREES.get(cls, []):
+	for b in Classes.tree(cls):
 		for n in b["nodes"]:
 			have += mini(sk(n["id"]), int(n["max"]))
 			total += int(n["max"])
@@ -840,7 +838,7 @@ func learn_skill(id: String) -> bool:
 
 func branch_perk_points(bi: int) -> int:
 	var total := 0
-	for tier in Data.PERK_BRANCHES[bi]["tiers"]:
+	for tier in Data.perk_branches()[bi]["tiers"]:
 		for p in tier:
 			total += pk(p["id"])
 	return total
@@ -914,7 +912,7 @@ func valor_points() -> int:
 
 
 func can_add_valor(line: String) -> bool:
-	return Valor.LINES.has(line) and valor_points() > 0 and int(valor_spent.get(line, 0)) < Valor.LINE_MAX
+	return Valor.is_line(line) and valor_points() > 0 and int(valor_spent.get(line, 0)) < Valor.LINE_MAX
 
 
 ## Вкласти очко звитяги в лінію.
@@ -1853,9 +1851,8 @@ func _act_area(A: Dictionary, r: int, m: float, col: Color, center: Vector2) -> 
 func learned_actives() -> Array:
 	var out := []
 	var lin: Array = Classes.lineage(job)
-	lin.reverse()
-	for c in lin:
-		for b in Classes.TREES[c]:
+	for i in range(lin.size() - 1, -1, -1):
+		for b in Classes.tree(lin[i]):
 			for n in b["nodes"]:
 				if n.get("active", false) and sk(n["id"]) > 0 and not (n["id"] in out):
 					out.append(n["id"])
