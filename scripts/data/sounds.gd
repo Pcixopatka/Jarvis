@@ -1,6 +1,7 @@
 extends RefCounted
 ## Звукова мапа гри: гучність кожного звуку, голоси нечисті, фон за ландшафтом.
-## Голос смерті кожного виду записаний у data/mobs.json (sounds.death).
+## Голос смерті кожного виду записаний у data/mobs.json (sounds.death), фоновий шум краєвиду — у
+## data/biomes.json (ambient).
 ## Самі файли — assets/audio (збирає tools/audio/build_audio.py), перелік — sound_index.gd.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
@@ -17,11 +18,6 @@ const VOLUME := {
 	"enemy_die": -5.0, "die_beast": -5.0, "die_undead": -6.0, "die_slime": -5.0, "die_human": -6.0, "die_spirit": -6.0,
 }
 
-## Фоновий шум за ландшафтом ("" — тиша).
-const AMBIENT := {
-	"steppe": "wind", "mountain": "wind", "forest": "forest", "village": "forest", "river": "river", "swamp": "night",
-	"cave": "cave", "plague": "cave", "maidan": "crowd", "sand": "wind", "snow": "wind",
-}
 ## Гучність фонових шумів у дБ (щоб вітер не перекрикував бій, а юрба було чути).
 const AMBIENT_VOLUME := {"forest": -2.0, "wind": 0.0, "night": -4.0, "cave": 0.0, "river": -3.0, "fire": -3.0, "crowd": -6.0}
 
@@ -32,7 +28,8 @@ static func death(kind: String) -> String:
 	return s if s != "" else "enemy_die"
 
 
+## Фоновий шум краєвиду ("" — тиша): свій із data/biomes.json, а вночі (крім печери) — нічний.
 static func ambient_for(biome: String, night: bool = false) -> String:
 	if night and biome != "cave":
 		return "night"
-	return AMBIENT.get(biome, "")
+	return str(GameDB.row("biomes", biome).get("ambient", ""))

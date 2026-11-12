@@ -1,0 +1,88 @@
+{
+	"steppe": {
+		"num": 6501,
+		"name": "Степ",
+		"ambient": "wind",
+		"resource": "wood",
+		"icon": "sabres",
+		"dungeon_icon": "cave"
+	},
+	"mountain": {
+		"num": 6502,
+		"name": "Гори",
+		"ambient": "wind",
+		"resource": "iron",
+		"icon": "mountain",
+		"dungeon_icon": "cave"
+	},
+	"forest": {
+		"num": 6503,
+		"name": "Ліс",
+		"ambient": "forest",
+		"resource": "wood",
+		"icon": "tree",
+		"dungeon_icon": "cave"
+	},
+	"village": {
+		"num": 6504,
+		"name": "Село",
+		"ambient": "forest",
+		"icon": "hut",
+		"dungeon_icon": "cave"
+	},
+	"river": {
+		"num": 6505,
+		"name": "Річка",
+		"ambient": "river",
+		"resource": "herbs",
+		"icon": "wave",
+		"dungeon_icon": "cave"
+	},
+	"swamp": {
+		"num": 6506,
+		"name": "Болото",
+		"ambient": "night",
+		"resource": "herbs",
+		"icon": "swamp",
+		"dungeon_icon": "cave"
+	},
+	"cave": {
+		"num": 6507,
+		"name": "Печера",
+		"ambient": "cave",
+		"resource": "iron",
+		"icon": "sabres",
+		"dungeon_icon": "cave"
+	},
+	"plague": {
+		"num": 6508,
+		"name": "Зачумлена печера",
+		"ambient": "cave",
+		"resource": "iron",
+		"icon": "sabres",
+		"dungeon_icon": "skull"
+	},
+	"maidan": {
+		"num": 6509,
+		"name": "Майдан",
+		"ambient": "crowd",
+		"icon": "sabres",
+		"dungeon_icon": "cave"
+	},
+	"sand": {
+		"num": 6510,
+		"name": "Піски",
+		"ambient": "wind",
+		"resource": "iron",
+		"icon": "dune",
+		"dungeon_icon": "cave"
+	},
+	"snow": {
+		"num": 6511,
+		"name": "Сніги",
+		"ambient": "wind",
+		"resource": "wood",
+		"icon": "pine",
+		"dungeon_icon": "cave"
+	}
+}

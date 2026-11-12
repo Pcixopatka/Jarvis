@@ -24,7 +24,7 @@ func _run() -> void:
 	var limit: float = float(OS.get_environment("PERIL_LIMIT")) if OS.get_environment("PERIL_LIMIT") != "" else 900.0
 	print("Клас: %s, спорядження: %s" % [OS.get_environment("SIM_CLASS") if OS.get_environment("SIM_CLASS") != "" else "cossack", gear])
 	for loc_id in locs:
-		var L: Dictionary = Data.LOCATIONS[loc_id]
+		var L: Dictionary = Data.place(loc_id)
 		for s in seeds:
 			seed(977 * s + hash(loc_id))
 			_build_hero(99)

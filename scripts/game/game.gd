@@ -568,7 +568,7 @@ func _restore_place() -> void:
 			var mv = hud.map_view
 			at_point = true
 			ll = Vector2(clampf(float(x), mv.LON0 + mv.EDGE, mv.LON1 - mv.EDGE), clampf(float(y), mv.LAT0 + mv.EDGE, mv.LAT1 - mv.EDGE))
-	var known: bool = Data.CITIES.has(here) or Data.LOCATIONS.has(here) or Acts.SPOTS.has(here) or here == Camp.CAMP_ID
+	var known: bool = Data.is_city(here) or Data.is_place(here) or Acts.SPOTS.has(here) or here == Camp.CAMP_ID
 	# після бою, що міг лишити героя чи загін пораненими, вхід у гру лікує, як раніше лікувало місто
 	player.revive()
 	world.revive_companions()
@@ -578,7 +578,7 @@ func _restore_place() -> void:
 		map_point = ll
 		map_sel = ""
 		enter_map()
-	elif known and Data.CITIES.has(here):
+	elif known and Data.is_city(here):
 		map_here = here
 		enter_city(here)
 	elif here == Camp.CAMP_ID:
@@ -751,7 +751,7 @@ func _quick_done(loc_id: String) -> void:
 		_record("kill:" + str(kind), int(r["kinds"][kind]))
 	if int(r["elites"]) > 0:
 		_record("elite", int(r["elites"]))
-	_record("dungeon" if Data.LOCATIONS[loc_id]["type"] == "dungeon" else "field")
+	_record("dungeon" if Data.place(loc_id)["type"] == "dungeon" else "field")
 	var lines := [QuickService.summary(r)]
 	lines.append_array(_trip_tick())
 	Audio.play("quest", 0.0)
@@ -814,7 +814,7 @@ func _price_city(id: String) -> void:
 func enter_location(id: String) -> void:
 	map_here = id
 	_price_city("")
-	for cid in Data.CITIES:
+	for cid in Data.city_ids():
 		world.shop_dirty[cid] = true
 	hud.clear_screen()
 	hud.close_dialogue()
@@ -825,10 +825,10 @@ func enter_location(id: String) -> void:
 	extra.merge(BountyService.mods_for(world, id, player))
 	if ChallengeService.pending(world, "trail"):
 		extra["trail_sure"] = true  # виклик просить стежку слідів — вона буде в цьому ж поході
-	if Data.LOCATIONS.has(id):
-		if extra.get("night", false) and not FarService.is_far(Data.LOCATIONS[id]):
-			extra.merge(FarService.night_mods(Data.LOCATIONS[id], player))  # нічний похід підтягується до героя
-		extra.merge(FarService.mods(Data.LOCATIONS[id], player))  # далекі краї ростуть із рівнем героя
+	if Data.is_place(id):
+		if extra.get("night", false) and not FarService.is_far(Data.place(id)):
+			extra.merge(FarService.night_mods(Data.place(id), player))  # нічний похід підтягується до героя
+		extra.merge(FarService.mods(Data.place(id), player))  # далекі краї ростуть із рівнем героя
 		extra.merge(PerilService.combat_mods(id))  # надважка печера: міцніший бос і його лють
 		extra.merge(LegendService.mods_for(world, player, id), true)  # місце переказу міряється рівнем із героєм
 		if PerilService.is_peril(id):
@@ -868,7 +868,7 @@ func open_trader(back: Callable) -> void:
 		return
 	_trader_back = back
 	trader_open = true
-	trader_city = world.last_city if Data.CITIES.has(world.last_city) else "sich"
+	trader_city = world.last_city if Data.is_city(world.last_city) else "sich"
 	_trader_prev_city = city_id
 	city_id = trader_city  # дії крамниці (city_do) рахують ціни цього міста
 	_price_city(trader_city)
@@ -1008,7 +1008,7 @@ func _cleanse(loc_id: String) -> void:
 	var was := PlagueService.level(world, loc_id)
 	if was == 0:
 		return
-	var now := PlagueService.cleanse(world, loc_id, was if Data.LOCATIONS[loc_id]["type"] == "dungeon" else 1)
+	var now := PlagueService.cleanse(world, loc_id, was if Data.place(loc_id)["type"] == "dungeon" else 1)
 	var text := "Зараза відступає!" if now > 0 else "Місцевість очищено від зарази!"
 	combat.float_text(player.global_position + Vector2(0, -150), text, Color(0.6, 1.0, 0.4))
 
@@ -1552,7 +1552,7 @@ func _go_to(id: String, escort: bool = false) -> void:
 	travel_paused = false
 	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)
 	travel_event_at = -1.0
-	if not Data.CITIES.has(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not Acts.SPOTS.has(id) and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
+	if not Data.is_city(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not Acts.SPOTS.has(id) and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
 		pending_event = TravelService.roll(world, player)
 		if not pending_event.is_empty():
 			travel_event_at = randf_range(0.4, 0.65)
@@ -1618,7 +1618,7 @@ func _arrive_point() -> void:
 func _nearest_place(ll: Vector2) -> String:
 	var best := "sich"
 	var best_d := INF
-	for id in Data.CITIES.keys() + Data.LOCATIONS.keys() + Acts.SPOTS.keys() + [Camp.CAMP_ID]:
+	for id in Data.city_ids() + Data.place_ids() + Acts.SPOTS.keys() + [Camp.CAMP_ID]:
 		var d: float = hud.map_view._place_ll(id).distance_to(ll)
 		if d < best_d:
 			best_d = d
@@ -1649,7 +1649,7 @@ func _arrive(id: String) -> void:
 		start_tower(tower_sel)
 	elif Acts.SPOTS.has(id):
 		enter_spot(id)
-	elif Data.CITIES.has(id):
+	elif Data.is_city(id):
 		if id != world.last_city and TradeService.should_ambush(world):
 			start_ambush(id)  # на валку з крамом напали дорогою
 		else:

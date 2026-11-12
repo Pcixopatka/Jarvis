@@ -32,23 +32,9 @@ func _icon(name: String, pos: Vector2, size: float, tint: Color = Color.WHITE) -
 	draw_texture_rect_region(ICONS, Rect2(pos - Vector2(size, size) / 2.0, Vector2(size, size)), Rect2(i * 24, 0, 24, 24), tint)
 
 
-## Який значок у місцевості за типом і біомом.
+## Який значок у місцевості (див. Data.place_icon).
 func _loc_icon(L: Dictionary) -> String:
-	if L.has("icon"):
-		return str(L["icon"])  # особливі місця далеких країв: замок, шахта, острів
-	if L.get("tower", false):
-		return "tower"
-	if L["type"] == "dungeon":
-		return "skull" if L["biome"] == "plague" else "cave"
-	match L["biome"]:
-		"forest": return "tree"
-		"mountain": return "mountain"
-		"swamp": return "swamp"
-		"river": return "wave"
-		"village": return "hut"
-		"sand": return "dune"
-		"snow": return "pine"
-	return "sabres"
+	return Data.place_icon(L)
 
 
 ## Пунктирна лінія (кордони, шлях).
@@ -309,10 +295,10 @@ func _place_overlays() -> void:
 
 ## Координати (довгота, широта) точки шляху для прогресу t — пряма між місцями.
 func _place_ll(id: String) -> Vector2:
-	if Data.CITIES.has(id):
-		return Data.CITIES[id]["pos"]
-	if Data.LOCATIONS.has(id):
-		return Data.LOCATIONS[id]["pos"]
+	if Data.is_city(id):
+		return Data.city(id)["pos"]
+	if Data.is_place(id):
+		return Data.place(id)["pos"]
 	if id == Camp.CAMP_ID:
 		return Camp.CAMP["pos"]
 	if Acts.SPOTS.has(id):
@@ -554,9 +540,9 @@ func _draw() -> void:
 	var tpl := Time.get_ticks_msec() / 1000.0
 	for id in plague:
 		var pl := int(plague[id])
-		if pl <= 0 or not Data.LOCATIONS.has(id):
+		if pl <= 0 or not Data.is_place(id):
 			continue
-		var pc := _proj(Data.LOCATIONS[id]["pos"])
+		var pc := _proj(Data.place(id)["pos"])
 		var pr := (26.0 + 16.0 * pl) * k * (1.0 + 0.05 * sin(tpl * 1.5 + pc.x))
 		draw_circle(pc, pr, Color(0.35, 0.7, 0.1, 0.1 + 0.05 * pl))
 		draw_circle(pc, pr * 0.65, Color(0.25, 0.55, 0.05, 0.1 + 0.05 * pl))
@@ -566,8 +552,8 @@ func _draw() -> void:
 	_markers.clear()
 	var labels := []  # [пріоритет, id, позиція, текст, розмір, колір]
 	var label_fs := int(clampf(15.0 * k, 12, 28))
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		var c := _proj(L["pos"])
 		_markers[id] = c
 		var danger: bool = L["level"] > hero_level + 2
@@ -580,8 +566,8 @@ func _draw() -> void:
 		var lvl_text := ("%d+" % int(L["level"])) if L.get("scale", false) else str(L["level"])
 		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%s)" % [L["name"], lvl_text], label_fs, Color(0.6, 0.12, 0.08) if danger else INK])
 	var city_fs := int(clampf(18.0 * k, 13, 32))
-	for id in Data.CITIES:
-		var C: Dictionary = Data.CITIES[id]
+	for id in Data.city_ids():
+		var C: Dictionary = Data.city(id)
 		var c := _proj(C["pos"])
 		_markers[id] = c
 		_icon("castle", c, 40.0 * k)

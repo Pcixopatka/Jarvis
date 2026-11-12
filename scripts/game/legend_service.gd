@@ -227,9 +227,9 @@ static func done_count(world) -> int:
 
 ## Нечисть у місці, куди зараз веде переказ, міряється рівнем із героєм: стара печера не стає прогулянкою.
 static func mods_for(world, player, loc_id: String) -> Dictionary:
-	if not Data.LOCATIONS.has(loc_id):
+	if not Data.is_place(loc_id):
 		return {}
-	var base: int = int(Data.LOCATIONS[loc_id]["level"])
+	var base: int = int(Data.place(loc_id)["level"])
 	if int(player.level) <= base:
 		return {}
 	for line in Legends.ORDER:

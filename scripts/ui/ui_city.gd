@@ -13,7 +13,7 @@ static func _do(game, action: String, arg = null) -> Callable:
 
 static func build(game, city: String) -> Control:
 	var w = game.world
-	var C: Dictionary = Data.CITIES[city]
+	var C: Dictionary = Data.city(city)
 	var lvl: int = w.loyalty_level(city)
 	var pts: int = w.loyalty_points(city)
 	var next := ""

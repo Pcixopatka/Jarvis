@@ -102,7 +102,7 @@ func _level(lvl: int, hours: int, overhead: float) -> void:
 	var pace: Dictionary = _pace(lvl)
 	var p = _hero(lvl)
 	# ---- Поле далекого краю ----
-	var FL: Dictionary = Data.LOCATIONS[FIELD_ID]
+	var FL: Dictionary = Data.place(FIELD_ID)
 	var goal: int = mini(110, Data.FIELD_GOAL_BASE + int(FL["level"]) * Data.FIELD_GOAL_PER_LEVEL)
 	var field_runs: float = 3600.0 / (float(pace["field"]) + overhead)
 	var reg = _foe("zarazhenyi", lvl, false)
@@ -129,7 +129,7 @@ func _level(lvl: int, hours: int, overhead: float) -> void:
 	print("  речей за годину: %s" % _rar(items, hours))
 	print("  душа з рядової нечисті: раз на %s" % _per(souls, hours))
 	# ---- Печера далекого краю ----
-	var DL: Dictionary = Data.LOCATIONS[DUNGEON_ID]
+	var DL: Dictionary = Data.place(DUNGEON_ID)
 	var fake := FakeCombat.new()
 	fake.loc = DL.duplicate()
 	fake.loc["level"] = lvl
@@ -213,7 +213,7 @@ func _per(count: int, hours: int) -> String:
 func _artifact_luck() -> void:
 	var p = _hero(75)
 	var fake := FakeCombat.new()
-	fake.loc = Data.LOCATIONS[DUNGEON_ID].duplicate()
+	fake.loc = Data.place(DUNGEON_ID).duplicate()
 	fake.loc["level"] = 75
 	var boss = _foe(str(fake.loc["boss"]), 75, true)
 	var tries := []

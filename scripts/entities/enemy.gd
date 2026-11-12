@@ -48,7 +48,7 @@ var ability_step := 0
 var stun := 0.0  # приголомшений: не рухається й не б'є
 var statuses := {}  # стани (див. Status)
 var elite := false
-var affixes := []  # властивості еліти (див. Elites.AFFIXES)
+var affixes := []  # властивості еліти (id із data/elite_affixes.json, див. Elites)
 var title := ""  # ім'я еліти над головою
 var dmg_taken_mult := 1.0
 var base_scale := 1.0
@@ -340,8 +340,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	knockback += kb * (0.15 if is_boss else (0.45 if style != "" else 1.0))
 	var col := Color(1.0, 0.85, 0.2) if crit else Color.WHITE
 	combat.float_text(global_position + Vector2(0, -radius - 14), str(int(amount)) + ("!" if crit else ""), col)
-	var blood: Color = {"mavka": Color(0.75, 1.0, 0.75), "upyr": Color(0.55, 0.05, 0.08), "bolotianyk": Color(0.45, 0.55, 0.2),
-		"vovkulaka": Color(0.7, 0.1, 0.1), "zarazhenyi": Color(0.25, 0.4, 0.1), "zmii": Color(0.3, 0.8, 0.3), "rival": Color(0.75, 0.1, 0.1)}.get(kind, Color.WHITE)
+	var blood: Color = GameDB.mob(kind).get("blood", Color.WHITE)  # колір бризок виду (data/mobs.json)
 	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
 		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
@@ -379,7 +378,7 @@ func on_hit(target) -> void:
 	if st != "" and level >= 4 and randf() < (HIT_STATUS_CHANCE * 0.5 if is_boss else HIT_STATUS_CHANCE):
 		target.add_status(st, 3.0, damage * 0.1)
 	for a in affixes:
-		var info: Dictionary = Elites.AFFIXES[a]
+		var info: Dictionary = Elites.affix(a)
 		if info.has("status"):
 			target.add_status(info["status"], 3.5, damage * 0.15)
 		if a == "vampire":
@@ -797,7 +796,7 @@ func _draw_overlays(side: float) -> void:
 	if slow_timer > 0.0:
 		draw_arc(Vector2(0, -r_draw * 0.5), r_draw * 1.4, 0.0, TAU, 32, Color(0.55, 0.8, 1.0, 0.7), 3.0)
 	if elite:
-		var ac: Color = Elites.AFFIXES[affixes[0]]["color"]
+		var ac: Color = Elites.affix(affixes[0])["color"]
 		draw_arc(Vector2(0, r_draw * 0.6), r_draw * 1.25, 0.0, TAU, 32, Color(1.0, 0.8, 0.2, 0.8), 2.5)
 		draw_arc(Vector2(0, r_draw * 0.6), r_draw * 1.05, 0.0, TAU, 32, Color(ac, 0.6), 2.0)
 		var font := ThemeDB.fallback_font

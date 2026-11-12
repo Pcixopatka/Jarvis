@@ -38,9 +38,9 @@ static func left_today(world) -> int:
 
 ## Чи буває в цьому місці швидкий похід узагалі: звичайна місцевість чи печера, не Глибини, не Башта й не надважка печера.
 static func applies(loc_id: String) -> bool:
-	if not Data.LOCATIONS.has(loc_id):
+	if not Data.is_place(loc_id):
 		return false
-	var L: Dictionary = Data.LOCATIONS[loc_id]
+	var L: Dictionary = Data.place(loc_id)
 	return L["type"] in ["field", "dungeon"] and not L.get("endless", false) and not L.has("peril")
 
 
@@ -51,7 +51,7 @@ static func block_reason(world, player, loc_id: String) -> String:
 	var times: int = int(world.cleared.get(loc_id, 0))
 	if times < MIN_CLEARS:
 		return "відкриється, коли пройдеш це місце %d рази (зараз %d)" % [MIN_CLEARS, times]
-	if int(Data.LOCATIONS[loc_id]["level"]) > int(player.level):
+	if int(Data.place(loc_id)["level"]) > int(player.level):
 		return "місце ще надто сильне для тебе"
 	if left_today(world) <= 0:
 		return "на сьогодні скінчились, завтра буде ще %d" % per_day(world)
@@ -99,7 +99,7 @@ static func kills(L: Dictionary) -> int:
 ## drop_boost — реклама «×2 здобичі», festive — святкові надбавки (HolidayService.combat_mods()),
 ## pickup — фільтр автопідбору (Combat.pickup_filter): рідкості, яких він не бере, одразу продаються.
 static func run(world, player, loc_id: String, drop_boost: float = 1.0, festive: Dictionary = {}, pickup: Array = []) -> Dictionary:
-	var L: Dictionary = Data.LOCATIONS[loc_id]
+	var L: Dictionary = Data.place(loc_id)
 	var lvl: int = Data.loc_level(L, int(player.level))
 	var dungeon: bool = L["type"] == "dungeon"
 	var out := {"name": str(L["name"]), "kills": 0, "elites": 0, "xp": 0, "gold": 0, "items": [], "sold": 0,
@@ -201,7 +201,7 @@ static func _res_amount(n: int, player, festive: Dictionary) -> int:
 
 static func _roll_resource(L: Dictionary) -> String:
 	if randf() < 0.7:
-		return str(Camp.BIOME_RESOURCE.get(L.get("biome", "steppe"), "wood"))
+		return Camp.biome_resource(str(L.get("biome", "steppe")))
 	return Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
 
 

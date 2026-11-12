@@ -710,252 +710,73 @@ static func sell_price(item: Dictionary) -> int:
 
 
 # ======================= Світ =======================
-# Позиції — реальні географічні координати (довгота, широта); мапа проєктує їх на екран.
+# Краї, міста й місця лежать у таблицях (docs/data.md, «Світ»): data/regions.json, cities.json, places.json.
+# Позиції — справжні географічні координати (довгота, широта) як Vector2; мапа проєктує їх на екран.
+# Записи лише для читання: бій, що хоче змінити опис місця, бере собі копію (Combat.enter).
 
-const CITIES := {
-	"sich": {"name": "Запорозька Січ", "pos": Vector2(35.1, 47.75), "level": 1,
-		"desc": "Козацька столиця за порогами. Тут усе починається."},
-	"chyhyryn": {"name": "Чигирин", "pos": Vector2(32.66, 49.08), "level": 2,
-		"desc": "Гетьманська столиця над Тясмином."},
-	"poltava": {"name": "Полтава", "pos": Vector2(34.55, 49.6), "level": 3,
-		"desc": "Полкове місто на Ворсклі."},
-	"kyiv": {"name": "Київ", "pos": Vector2(30.52, 50.45), "level": 4,
-		"desc": "Стародавня столиця на Дніпрових кручах."},
-	"chernihiv": {"name": "Чернігів", "pos": Vector2(31.3, 51.5), "level": 6,
-		"desc": "Княже місто серед поліських лісів."},
-	"kamianets": {"name": "Кам'янець", "pos": Vector2(26.58, 48.68), "level": 7,
-		"desc": "Неприступна фортеця над Смотричем."},
-	"kapyshche": {"name": "Капище на Говерлі", "pos": Vector2(24.5, 48.16), "level": 3,
-		"desc": "Осідок волхвів Карпатського кола на схилах Говерли. Тут посвячують у волхви."},
-	"verkhovyna": {"name": "Верховина", "pos": Vector2(25.35, 47.95), "level": 6,
-		"desc": "Гуцульське село серед полонин. Тут живе знахарка Параска — наставниця знахарів."},
-	"pip_ivan": {"name": "Піп Іван", "pos": Vector2(24.75, 47.5), "level": 8,
-		"desc": "Найгрозовіша вершина Чорногори. На ній — капище Перуна й жрець Громобій."},
-	"molfar_hut": {"name": "Хата мольфара", "pos": Vector2(23.75, 47.45), "level": 8,
-		"desc": "Самотня хата на чорногірських схилах. Мольфар Яким кличе дощ і проганяє град."},
-	"lviv": {"name": "Львів", "pos": Vector2(24.03, 49.84), "level": 9,
-		"desc": "Багате торгове місто, ворота на захід."},
-	# ---- Далекі краї (версія 0.29) ----
-	"baturyn": {"name": "Батурин", "pos": Vector2(33.1, 51.38), "level": 7, "region": "siver",
-		"desc": "Гетьманська столиця над Сеймом: палати, гарматний двір і найкращі на Лівобережжі майстри."},
-	"ostroh": {"name": "Острог", "pos": Vector2(26.52, 50.33), "level": 9, "region": "volyn",
-		"desc": "Княже місто з академією й друкарнею. Тут шанують книгу не менше за шаблю."},
-	"izium": {"name": "Ізюм", "pos": Vector2(37.26, 49.21), "level": 12, "region": "slobid",
-		"desc": "Фортеця на Кременці над Дінцем. Стереже Ізюмський шлях, яким ходять зі степу."},
-	"khadzhybei": {"name": "Хаджибей", "pos": Vector2(30.73, 46.48), "level": 16, "region": "pivden",
-		"desc": "Портове містечко над лиманами. Чумаки везуть звідси сіль і рибу, а чайки йдуть у море."},
-	"brashov": {"name": "Брашов", "pos": Vector2(25.59, 45.65), "level": 30, "region": "semyhorod",
-		"desc": "Торгове місто саксонських купців під горою Тимпа. Мури з цеховими вежами, ярмарок на всі Карпати, а браму на ніч замикають на три засуви."},
-	# ---- Московія ----
-	"yelets": {"name": "Єлець", "pos": Vector2(38.5, 52.62), "level": 15, "region": "oka",
-		"desc": "Порубіжна фортеця над річкою Сосною. 1618 року Сагайдачний, ідучи на Москву, узяв Єлець хитрощами: частина козаків виманила залогу в поле, а решта ввірвалася до міста. Тепер тут знову стоїть козацька залога."},
-	"tver": {"name": "Твер", "pos": Vector2(35.9, 56.86), "level": 21, "region": "tvershchyna",
-		"desc": "Місто над Волгою, давня суперниця Москви. 1327 року тверичі повстали проти Орди, і Москва разом з Ордою спалила місто. Тут цього не забули й радо приймають козаків."},
-	"cherkaskyi_stan": {"name": "Черкаський стан", "pos": Vector2(38.5, 56.95), "level": 26, "region": "zalissia",
-		"desc": "Козацький кіш над Плещеєвим озером. Черкасами московити здавна звуть козаків, а за Смути ті доходили аж сюди. На березі лежить Синій камінь: його і закопували, і топили, а він щоразу вилазить нагору, як і козаки."},
-}
-
-## Де в місті чекають ті, хто має справу до героя (вкладка міста, див. Game.hall_rows). Міста мають ратушу,
-## а Січ, козацький стан і святі місця називають цю будівлю по-своєму.
-const HALL_DEFAULT := "Ратуша"
-const HALL_NAMES := {"sich": "Курінь", "cherkaskyi_stan": "Курінь", "kapyshche": "Коло волхвів",
-	"pip_ivan": "Коло волхвів", "molfar_hut": "Світлиця"}
+## Усі місця (поля й печери): id → запис.
+static func places() -> Dictionary:
+	return GameDB.table("places")
 
 
-static func hall_name(city: String) -> String:
-	return str(HALL_NAMES.get(city, HALL_DEFAULT))
+## Місце на мапі (див. GameDB.PLACE_SCHEMA); для невідомого id — порожній запис.
+static func place(id: String) -> Dictionary:
+	return GameDB.table("places").get(id, _EMPTY)
 
 
-## Далекі краї: чотири сторони світу довкола старої мапи, три краї Московії та Семигород за Карпатами. Їхні місцевості ростуть із рівнем героя ("scale"),
-## тож цікаві на будь-якому рівні, вищому за позначений.
-const REGIONS := {
-	"siver": {"name": "Сіверщина", "desc": "Ліси й луки над Десною та Сеймом."},
-	"volyn": {"name": "Волинь і Поділля", "desc": "Замки, озера й дністровські кручі."},
-	"slobid": {"name": "Слобожанщина й Донеччина", "desc": "Крейдяні гори, кургани й соляні копальні."},
-	"pivden": {"name": "Чорномор'я і Крим", "desc": "Піски, солоні болота, гори й відкрите море."},
-	"semyhorod": {"name": "Семигород і Волощина", "desc": "Земля за Карпатами: перевали, темні ліси й замки над прірвами. Тут вішають часник на двері й не відчиняють після заходу сонця."},
-	"oka": {"name": "Засіки й Пооччя", "desc": "Південний рубіж Московії: засічні ліси, Куликове поле й мещерські болота."},
-	"tvershchyna": {"name": "Тверщина й Верхня Волга", "desc": "Оковський ліс, де починаються три ріки, озеро Селігер і старий волок на північ."},
-	"zalissia": {"name": "Залісся", "desc": "Давні міста за лісами, старші за саму Москву: Ростов Великий, Суздаль, Ярославль. Опричні слободи й тайга за Волгою."},
-}
-const REGION_ORDER := ["siver", "volyn", "slobid", "pivden", "oka", "tvershchyna", "zalissia", "semyhorod"]
+static func is_place(id: String) -> bool:
+	return GameDB.table("places").has(id)
 
-const LOCATIONS := {
-	"ridne_selo": {"name": "Рідне село", "type": "field", "biome": "village", "pos": Vector2(36.3, 49.75), "level": 1, "goal": 15,
-		"enemies": ["zarazhenyi", "mavka"], "desc": "Твоє рідне село на Слобожанщині, біля самого московського кордону. Заражені прийшли сюди першими."},
-	"wild_field": {"name": "Дике Поле", "type": "field", "biome": "steppe", "pos": Vector2(37.6, 48.15), "level": 1,
-		"enemies": ["mavka", "upyr", "zarazhenyi"], "desc": "Безкраї степи, куди першими докотилися заражені загони з півночі."},
-	"rapids": {"name": "Дніпрові пороги", "type": "field", "biome": "river", "pos": Vector2(34.5, 48.75), "level": 2,
-		"enemies": ["mavka", "bolotianyk"], "desc": "Бурхливі пороги, де мавки заманюють у воду."},
-	"zmii_cave": {"name": "Змієва печера", "type": "dungeon", "biome": "cave", "pos": Vector2(33.6, 47.2), "level": 3,
-		"rooms": 4, "enemies": ["mavka", "upyr", "bolotianyk"], "boss": "zmii",
-		"desc": "Глибоке лігво під кручами. Там спить Триголовий Змій."},
-	"black_forest": {"name": "Чорний ліс", "type": "field", "biome": "forest", "pos": Vector2(32.2, 48.45), "level": 4,
-		"enemies": ["mavka", "vovkulaka", "zarazhenyi"], "desc": "Темна пуща, де стали табором заражені московити і виють вовкулаки."},
-	"crypt": {"name": "Упирячий склеп", "type": "dungeon", "biome": "cave", "pos": Vector2(33.0, 50.85), "level": 6,
-		"rooms": 5, "enemies": ["upyr", "vovkulaka"], "boss": "upyr",
-		"desc": "Старі підземелля, де править Упир-володар."},
-	"polissia": {"name": "Поліські болота", "type": "field", "biome": "swamp", "pos": Vector2(27.6, 51.35), "level": 6,
-		"enemies": ["bolotianyk", "upyr", "zarazhenyi"], "desc": "Трясовина, туман і болотяники. Тут пройшли заражені загони."},
-	"pidstupy": {"name": "Підступи до Чорногори", "type": "field", "biome": "mountain", "pos": Vector2(25.5, 49.15), "level": 3, "goal": 25,
-		"enemies": ["zarazhenyi", "vovkulaka", "mavka"], "desc": "Гірські стежки до капища волхвів. Заражені шукають тут дорогу на Говерлу."},
-	"chornohora": {"name": "Чорногора", "type": "field", "biome": "mountain", "pos": Vector2(23.4, 47.85), "level": 9,
-		"enemies": ["vovkulaka", "upyr", "bolotianyk"], "desc": "Високі Карпати, сніг і вовчі зграї."},
-	"bilovezha": {"name": "Біловезька пуща", "type": "field", "biome": "forest", "pos": Vector2(23.9, 52.7), "level": 8,
-		"enemies": ["vovkulaka", "mavka", "upyr"], "desc": "Прадавня пуща на межі з Польщею. Тут водяться найлютіші вовкулаки."},
-	"bryansk_forest": {"name": "Брянські ліси", "type": "field", "biome": "forest", "pos": Vector2(34.0, 53.1), "level": 11,
-		"enemies": ["zarazhenyi", "vovkulaka", "upyr"], "desc": "Прикордонні ліси на московських землях — звідси розповзається зараза."},
-	"chaklun_lair": {"name": "Лігво чаклуна", "type": "dungeon", "biome": "plague", "pos": Vector2(35.4, 53.7), "level": 12,
-		"rooms": 6, "enemies": ["zarazhenyi", "vovkulaka", "upyr"], "boss": "chaklun",
-		"desc": "Отруєні печери на московських землях. Звідси чаклун Путіноїда розсилає заразу."},
-	"lysa_hora": {"name": "Лиса гора", "type": "dungeon", "biome": "forest", "pos": Vector2(29.6, 50.0), "level": 9, "night": true,
-		"rooms": 4, "enemies": ["mavka", "chort", "upyr"], "boss": "vidma",
-		"desc": "Гола вершина під Києвом, де глупої ночі нечисть збирається на шабаш. Править ним Відьма."},
-	"vii_church": {"name": "Проклята церква", "type": "dungeon", "biome": "cave", "pos": Vector2(31.9, 50.3), "level": 15,
-		"rooms": 5, "enemies": ["upyr", "chort", "zarazhenyi"], "boss": "vii",
-		"desc": "Занедбана церква на хуторі, куди три ночі поспіль сходилась уся нечисть. У вівтарі чекає Вій."},
-	"dovbush_cave": {"name": "Печера Довбуша", "type": "dungeon", "biome": "cave", "pos": Vector2(23.0, 49.05), "level": 10,
-		"rooms": 6, "enemies": ["vovkulaka", "upyr", "bolotianyk"], "boss": "vovkulaka",
-		"desc": "Скарби опришків стереже Вовкулака-ватажок."},
-	# ---- Розділ III: Карпатська варта ----
-	"kamianets_walls": {"name": "Кам'янецькі мури", "type": "field", "biome": "mountain", "pos": Vector2(27.6, 48.05), "level": 13,
-		"enemies": ["zarazhenyi", "pishchalnyk", "chort"], "desc": "Під мурами фортеці стала облогою Кощієва рать: пищальники й чорти."},
-	"koshchii_tower": {"name": "Кощієва вежа", "type": "dungeon", "biome": "plague", "pos": Vector2(30.4, 54.4), "level": 16,
-		"rooms": 6, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "koshchii",
-		"desc": "Кістяна вежа на білоруських болотах. Тут сидить Кощій — воєвода Путіноїда, якого не бере смерть."},
-	# ---- Розділ IV: Похід на Північ ----
-	"smolensk_road": {"name": "Смоленський шлях", "type": "field", "biome": "forest", "pos": Vector2(33.6, 54.6), "level": 18,
-		"enemies": ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"], "desc": "Старий шлях на Москву. Кожна верста тут полита кров'ю."},
-	"mozhaisk": {"name": "Можайські болота", "type": "field", "biome": "swamp", "pos": Vector2(35.9, 55.5), "level": 20,
-		"enemies": ["pishchalnyk", "bolotianyk", "chort", "zarazhenyi"], "desc": "Останні болота перед Москвою. Зараза тут така густа, що її видно оком."},
-	# ---- Після сюжету ----
-	"hlybyny": {"name": "Глибини зарази", "type": "dungeon", "biome": "plague", "pos": Vector2(38.6, 55.35), "level": 22,
-		"rooms": 4, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "putinoid", "endless": true,
-		"desc": "Корені зарази під Кремлем: печера без дна. Відкривається після перемоги над Путіноїдом."},
-	"bashta": {"name": "Башта Кощія", "type": "dungeon", "biome": "cave", "pos": Vector2(36.9, 56.05), "level": 15,
-		"rooms": 2, "enemies": ["zarazhenyi", "pishchalnyk", "chort"], "boss": "koshchii", "endless": true, "tower": true,
-		"desc": "Кістяна башта посеред Москви: безкінечний підйом. Відкривається з 15-го рівня героя."},
-	# ---- Розділ V: Кремль ----
-	"kremlin": {"name": "Кремль", "type": "dungeon", "biome": "plague", "pos": Vector2(37.62, 55.75), "level": 22,
-		"rooms": 7, "enemies": ["zarazhenyi", "pishchalnyk", "chort", "upyr"], "boss": "putinoid",
-		"desc": "Червоні мури, за якими сто років сидить Путіноїд. Серце зарази."},
-	# ======================= Далекі краї (версія 0.29) =======================
-	# Усі мають "scale": рівень місцевості не нижчий за позначений і росте разом із героєм (див. Data.loc_level).
-	# ---- Сіверщина ----
-	"desna_luky": {"name": "Деснянські луки", "type": "field", "biome": "river", "pos": Vector2(33.4, 52.0), "level": 7, "scale": true, "region": "siver",
-		"enemies": ["mavka", "potopelnyk", "bolotianyk"], "desc": "Заплавні луки над Десною. Гарні на око, та в кожній старці хтось сидить."},
-	"putyvl_pushcha": {"name": "Путивльська пуща", "type": "field", "biome": "forest", "pos": Vector2(34.35, 51.45), "level": 9, "scale": true, "region": "siver",
-		"enemies": ["vovkulaka", "zlyden", "upyr"], "desc": "Старий ліс за Сеймом. Злидні тут обдирають подорожніх швидше за розбійників."},
-	"konotop_hreblia": {"name": "Конотопська гребля", "type": "field", "biome": "swamp", "pos": Vector2(33.8, 50.7), "level": 10, "scale": true, "region": "siver",
-		"enemies": ["bolotianyk", "zarazhenyi", "potopelnyk"], "desc": "Багниста переправа, де колись загрузло ціле військо. Дехто з нього досі не вибрався."},
-	"soloviv_hnizdo": {"name": "Солов'їне гніздо", "type": "dungeon", "biome": "forest", "pos": Vector2(35.3, 52.35), "level": 11, "scale": true, "region": "siver",
-		"rooms": 5, "enemies": ["vovkulaka", "zlyden", "upyr"], "boss": "solovei", "icon": "oak",
-		"desc": "Дев'ять дубів над прямоїжджим шляхом. На них тридцять літ сидить Соловей-розбійник і не пускає ні пішого, ні кінного."},
-	# ---- Волинь і Поділля ----
-	"shatski_ozera": {"name": "Шацькі озера", "type": "field", "biome": "river", "pos": Vector2(23.85, 51.5), "level": 9, "scale": true, "region": "volyn",
-		"enemies": ["potopelnyk", "mavka", "bolotianyk"], "desc": "Глибокі лісові озера. Рибалки кажуть, що сіті тут тягне хтось знизу."},
-	"khatka_yahy": {"name": "Хатка на курячих ніжках", "type": "dungeon", "biome": "forest", "pos": Vector2(28.75, 51.75), "level": 12, "scale": true, "region": "volyn",
-		"rooms": 4, "enemies": ["mavka", "vovkulaka", "zlyden"], "boss": "baba_yaha", "icon": "izba",
-		"desc": "Глуха поліська хаща, де хатка сама повертається до лісу задом. У ній хазяйнує Баба Яга."},
-	"berestechko": {"name": "Берестецьке поле", "type": "field", "biome": "swamp", "pos": Vector2(25.45, 50.85), "level": 11, "scale": true, "region": "volyn",
-		"enemies": ["mara", "upyr", "zarazhenyi"], "desc": "Поле давньої битви серед боліт. Мари блукають тут і вдень."},
-	"dnister_kruchi": {"name": "Дністровські кручі", "type": "field", "biome": "river", "pos": Vector2(28.45, 48.3), "level": 13, "scale": true, "region": "volyn",
-		"enemies": ["potopelnyk", "pesyholovets", "chort"], "desc": "Високі скелясті береги над Дністром. У печерах під ними зимують песиголовці."},
-	"pidhirtsi": {"name": "Підгорецький замок", "type": "dungeon", "biome": "cave", "pos": Vector2(25.0, 49.5), "level": 14, "scale": true, "region": "volyn",
-		"rooms": 5, "enemies": ["mara", "upyr", "chort"], "boss": "bila_pani", "icon": "ruin",
-		"desc": "Покинутий замок на пагорбі. Опівночі його залами ходить Біла Пані, і гостей вона не відпускає."},
-	# ---- Слобожанщина й Донеччина ----
-	"sviati_hory": {"name": "Святі гори", "type": "field", "biome": "mountain", "pos": Vector2(38.1, 49.6), "level": 12, "scale": true, "region": "slobid",
-		"enemies": ["mara", "upyr", "kamiana_baba"], "desc": "Крейдяні скелі над Дінцем із печерними келіями. Ченці пішли, а в келіях оселилось інше."},
-	"kamiani_mohyly": {"name": "Кам'яні Могили", "type": "field", "biome": "steppe", "pos": Vector2(38.15, 47.2), "level": 15, "scale": true, "region": "slobid",
-		"enemies": ["kamiana_baba", "pesyholovets", "zlyden"], "desc": "Гранітні останці серед рівного степу. Кам'яні баби тут сходять зі своїх курганів."},
-	"savur_mohyla": {"name": "Савур-могила", "type": "field", "biome": "steppe", "pos": Vector2(39.1, 48.0), "level": 17, "scale": true, "region": "slobid",
-		"enemies": ["pesyholovets", "kamiana_baba", "pishchalnyk"], "desc": "Найвищий курган Донецького кряжа. Хто стоїть на ньому, бачить степ до самого моря."},
-	"bakhmut_kopalni": {"name": "Бахмутські копальні", "type": "dungeon", "biome": "cave", "pos": Vector2(38.3, 48.75), "level": 18, "scale": true, "region": "slobid",
-		"rooms": 6, "enemies": ["kamiana_baba", "upyr", "zlyden"], "boss": "shubin", "icon": "mine",
-		"desc": "Соляні шахти, що йдуть під землю на версту. У найглибшому штреку чекає Шубін, господар копалень."},
-	# ---- Чорномор'я і Крим ----
-	"oleshky": {"name": "Олешківські піски", "type": "field", "biome": "sand", "pos": Vector2(32.95, 46.6), "level": 16, "scale": true, "region": "pivden",
-		"enemies": ["pesyholovets", "zlyden", "kamiana_baba"], "desc": "Справжня пустеля над Дніпром: бархани, спека й міражі. Колись тут стояла Олешківська Січ."},
-	"perekop": {"name": "Перекоп", "type": "field", "biome": "swamp", "pos": Vector2(33.85, 45.95), "level": 19, "scale": true, "region": "pivden",
-		"enemies": ["potopelnyk", "bolotianyk", "mara"], "desc": "Вузький перешийок між двома морями. Обабіч нього солоні болота Сивашу."},
-	"tarkhankut": {"name": "Тарханкут", "type": "field", "biome": "sand", "pos": Vector2(32.75, 45.35), "level": 21, "scale": true, "region": "pivden",
-		"enemies": ["pesyholovets", "potopelnyk", "chort"], "desc": "Дикий мис із білими кручами. У гротах під ними ховається те, що викинуло море."},
-	"marmurova": {"name": "Мармурова печера", "type": "dungeon", "biome": "cave", "pos": Vector2(34.35, 44.85), "level": 22, "scale": true, "region": "pivden",
-		"rooms": 6, "enemies": ["pesyholovets", "mara", "kamiana_baba"], "boss": "lykho",
-		"desc": "Печера під Чатир-Дагом. У найглибшій залі сидить Лихо Однооке й чекає на гостей."},
-	"zmiinyi": {"name": "Острів Зміїний", "type": "dungeon", "biome": "sand", "pos": Vector2(30.25, 45.2), "level": 24, "scale": true, "region": "pivden",
-		"rooms": 5, "enemies": ["potopelnyk", "mara", "pesyholovets"], "boss": "morskyi_tsar", "icon": "island",
-		"desc": "Скелястий острів посеред моря. Кажуть, під ним палац Морського царя, і непроханих гостей він топить."},
-	# ---- Семигород і Волощина: край Дракули (переказ «Упир із-за гір», див. Legends) ----
-	"tihutsa": {"name": "Перевал Тігуца", "type": "field", "biome": "mountain", "pos": Vector2(25.6, 47.0), "level": 30, "scale": true, "region": "semyhorod",
-		"enemies": ["vovkulaka", "strygoi", "moroi"], "desc": "Гірська дорога з Буковини в Семигород. Візники проїжджають її лише вдень і хрестяться на кожному повороті."},
-	"hoia": {"name": "Ліс Хойя", "type": "field", "biome": "forest", "pos": Vector2(23.5, 46.77), "level": 32, "scale": true, "region": "semyhorod",
-		"enemies": ["strygoi", "moroi", "mavka"], "desc": "Ліс із кривими деревами, куди пастухи не женуть овець. Хто заночує тут, виходить сивим або не виходить зовсім."},
-	"tyrhovyshte": {"name": "Тирговіште", "type": "field", "biome": "village", "pos": Vector2(25.46, 44.93), "level": 34, "scale": true, "region": "semyhorod",
-		"enemies": ["strygoi", "upyr", "vovkulaka"], "desc": "Стара столиця Волощини. Княжий двір стоїть пусткою, а вночі вулицями ходять ті, кого поховали торік."},
-	"zamok_drakuly": {"name": "Замок Дракули", "type": "dungeon", "biome": "cave", "pos": Vector2(24.62, 45.35), "level": 35, "scale": true, "region": "semyhorod",
-		"rooms": 6, "enemies": ["strygoi", "moroi", "upyr"], "boss": "drakula", "icon": "ruin",
-		"desc": "Замок на скелі над Арджешем. У ньому сидить упир, що назвався Дракулою, і вдень у вікнах темно."},
-	# ======================= Московія =======================
-	"kromy": {"name": "Кромський острог", "type": "field", "biome": "steppe", "pos": Vector2(35.77, 52.69), "level": 14, "scale": true, "region": "oka",
-		"enemies": ["mertvyi_strilets", "upyr", "pesyholovets"], "icon": "mound", "desc": "Земляні вали над річкою Кромою. 1605 року жменька донських козаків отамана Корели кілька місяців трималася тут проти всього царського війська. Стрільці-мерці досі йдуть на приступ."},
-	"uhra": {"name": "Над Угрою", "type": "field", "biome": "river", "pos": Vector2(35.55, 54.7), "level": 15, "scale": true, "region": "oka",
-		"enemies": ["potopelnyk", "mertvyi_strilets", "kikimora"], "desc": "Річка, на якій восени 1480 року два війська тижнями стояли одне проти одного й так і не зійшлися. Мерці й тепер стоять тут і стріляють через воду."},
-	"kulykove": {"name": "Куликове поле", "type": "field", "biome": "steppe", "pos": Vector2(38.66, 53.67), "level": 15, "scale": true, "region": "oka",
-		"enemies": ["boyaryn", "mara", "kamiana_baba"], "desc": "Тут, у верхів'ях Дону, 1380 року розбили Мамая. Засадний полк, що вирішив битву, вів волинянин Боброк. Полеглі бояри встають із землі й ділять, кому яка вотчина."},
-	"zaseky": {"name": "Тульські засіки", "type": "field", "biome": "forest", "pos": Vector2(36.85, 53.95), "level": 16, "scale": true, "region": "oka",
-		"enemies": ["vedmid", "lisovyk", "vovkulaka"], "desc": "Смуга поваленого лісу, якою Москва віками відгороджувалась від степу. Тепер завалами никають шатуни, а лісовики водять подорожніх колами."},
-	"tula_zbroiarnia": {"name": "Тульська зброярня", "type": "dungeon", "biome": "cave", "pos": Vector2(37.62, 54.19), "level": 17, "scale": true, "region": "oka",
-		"rooms": 5, "enemies": ["mertvyi_strilets", "kromeshnyk", "chort"], "boss": "pushkar", "icon": "cannon",
-		"desc": "Підземні кузні під Тулою, де кують зброю для царя. Сюди з Москви привезли Цар-гармату, щоб нарешті навчити її стріляти. Пушкар пробує й досі."},
-	"meshchera": {"name": "Мещерські болота", "type": "field", "biome": "swamp", "pos": Vector2(40.15, 55.3), "level": 18, "scale": true, "region": "oka",
-		"enemies": ["kikimora", "bolotianyk", "potopelnyk"], "desc": "Торфові болота за Окою, без краю й без дна. Кікімори прядуть тут туман, і хто в нього вступить, той грузне."},
-	"yamskyi_shliakh": {"name": "Ямський шлях", "type": "field", "biome": "forest", "pos": Vector2(36.45, 56.5), "level": 19, "scale": true, "region": "tvershchyna",
-		"enemies": ["kromeshnyk", "mertvyi_strilets", "upyr"], "desc": "Стара поштова дорога з Москви на Твер. Колись нею мчала опричнина палити місто, і мертві кромішники мчать нею й тепер."},
-	"staritsa": {"name": "Старицькі каменоломні", "type": "field", "biome": "mountain", "pos": Vector2(34.9, 56.45), "level": 20, "scale": true, "region": "tvershchyna",
-		"enemies": ["vedmid", "mara", "chort"], "desc": "Тут над Волгою віками ламали білий камінь, а тепер каменоломні стоять порожні. У покинутих штольнях ховаються від морозу шатуни, а в темряві блукають мари."},
-	"seliger": {"name": "Озеро Селігер", "type": "field", "biome": "river", "pos": Vector2(33.1, 57.15), "level": 21, "scale": true, "region": "tvershchyna",
-		"enemies": ["potopelnyk", "kikimora", "mavka"], "desc": "Велике лісове озеро із сотнею островів. Між островами легко заблукати, а з води за човном стежать потопельники."},
-	"okovskyi_lis": {"name": "Оковський ліс", "type": "dungeon", "biome": "forest", "pos": Vector2(32.55, 56.35), "level": 22, "scale": true, "region": "tvershchyna",
-		"rooms": 5, "enemies": ["lisovyk", "vedmid", "vovkulaka"], "boss": "lisovyi_did", "icon": "leshy",
-		"desc": "Праліс із київського літопису: з нього течуть Дніпро на південь, Двіна на північ, а Волга на схід. Тут починається наш Дніпро. Господар пралісу, Лісовий Дід, водить манівцями кожного, хто зайде."},
-	"volochok": {"name": "Вишній Волочок", "type": "field", "biome": "snow", "pos": Vector2(34.55, 57.6), "level": 23, "scale": true, "region": "tvershchyna",
-		"enemies": ["vedmid", "lisovyk", "mara"], "desc": "Старий волок, де човни тягли суходолом від Волги на північ. Тепер його замело снігом, а заметами бродять шатуни, яким не спиться."},
-	"nero": {"name": "Озеро Неро", "type": "field", "biome": "swamp", "pos": Vector2(39.45, 57.2), "level": 24, "scale": true, "region": "zalissia",
-		"enemies": ["kikimora", "potopelnyk", "boyaryn"], "desc": "Мілке озеро під Ростовом Великим, рідним містом Олешка Поповича. Ростов майже на три століття старший за Москву. Води тут по коліно, а мулу на кілька сажнів: хто загруз, той там і лишився."},
-	"uhlych": {"name": "Углич", "type": "field", "biome": "river", "pos": Vector2(38.33, 57.53), "level": 25, "scale": true, "region": "zalissia",
-		"enemies": ["kromeshnyk", "mara", "potopelnyk"], "icon": "bell", "desc": "Містечко над Волгою, де за царським наказом відшмагали батогами дзвін, вирвали йому язика й заслали до Сибіру, бо вдарив на сполох. Додому він вернувся аж через триста років."},
-	"oleksandrivska_sloboda": {"name": "Олександрівська слобода", "type": "dungeon", "biome": "village", "pos": Vector2(38.71, 56.4), "level": 26, "scale": true, "region": "zalissia", "night": true,
-		"rooms": 6, "enemies": ["kromeshnyk", "mertvyi_strilets", "boyaryn"], "boss": "oprychnyk", "icon": "doghead",
-		"desc": "Опричне гніздо за валами й ровом. Звідси кромішники із собачими головами при сідлах їздили гризти власну землю. Тут досі хазяйнує Малюта й вимітає мітлою всіх, хто йому не до вподоби."},
-	"votchyna": {"name": "Боярська вотчина", "type": "field", "biome": "village", "pos": Vector2(41, 57), "level": 27, "scale": true, "region": "zalissia",
-		"enemies": ["boyaryn", "zlyden", "upyr"], "desc": "Село, де мертвий боярин досі збирає оброк. Злидні ходять від хати до хати й забирають останнє."},
-	"suzdal_medovarni": {"name": "Суздальські медоварні", "type": "dungeon", "biome": "cave", "pos": Vector2(40.45, 56.42), "level": 28, "scale": true, "region": "zalissia",
-		"rooms": 6, "enemies": ["boyaryn", "chort", "zlyden"], "boss": "idolyshche", "icon": "kotel",
-		"desc": "Глибокі погреби, де варили мед на цілий край. Тепер його п'є Ідолище Погане й закусює всім, що трапиться. Суздаль старший за Москву й пам'ятає її ще селом."},
-	"vedmezhyi_kut": {"name": "Ведмежий кут", "type": "field", "biome": "snow", "pos": Vector2(39.9, 57.68), "level": 29, "scale": true, "region": "zalissia",
-		"enemies": ["vedmid", "vovkulaka", "lisovyk"], "desc": "Мис над Волгою, де київський князь Ярослав Мудрий зарубав сокирою ведмедя й заклав місто Ярославль. Ведмідь із сокирою й тепер на гербі міста. А тутешні ведмеді відтоді не сплять."},
-	"kryzhanyi_ostroh": {"name": "Крижаний острог", "type": "dungeon", "biome": "snow", "pos": Vector2(41.4, 58.2), "level": 30, "scale": true, "region": "zalissia", "night": true,
-		"rooms": 7, "enemies": ["vedmid", "lisovyk", "mara"], "boss": "karachun", "icon": "frost",
-		"desc": "Фортеця з криги в тайзі за Костромою, де ніколи не світає. Тут панує Карачун, і зима при ньому не минає."},
-	# ---- Надважкі печери нових земель (див. Peril, PerilService): нечисть від 100-го рівня, сильніша за будь-якого героя ----
-	"devova_ushchelyna": {"name": "Девова ущелина", "type": "dungeon", "biome": "mountain", "pos": Vector2(43.9, 43.45), "level": 100, "peril": 1, "land": "kavkaz",
-		"rooms": 6, "enemies": ["almasty", "kadzhi", "pesyholovets"], "boss": "dev", "icon": "mountain",
-		"desc": "Ущелина під самими льодовиками Кавказу. Алмасти стережуть стежку, каджі кують у печерах закляту зброю, а на дні сидить Дев і жбурляє скелі в кожного, хто зайде."},
-	"khalyna_planyna": {"name": "Халина планина", "type": "dungeon", "biome": "forest", "pos": Vector2(24.9, 42.3), "level": 110, "peril": 2, "land": "balkany",
-		"rooms": 6, "enemies": ["karakondzhul", "samodiva", "upyr"], "boss": "khala", "icon": "pine",
-		"desc": "Гірський праліс на Балканах, над яким ніколи не розходяться хмари. Уночі тут верхи на людях їздять караконджули, самодіви стріляють без промаху, а з хмари дивиться Хала."},
-	"velniasove_horodyshche": {"name": "Велнясове городище", "type": "dungeon", "biome": "swamp", "pos": Vector2(22.6, 56.0), "level": 120, "peril": 3, "land": "baltyka",
-		"rooms": 7, "enemies": ["mertvyi_lytsar", "lauma", "aitvaras"], "boss": "velnias", "icon": "ruin",
-		"desc": "Пагорб серед балтійських боліт, а під ним підземні двори Велняса. Сюди він зводить мертвих лицарів, що колись прийшли хрестити цей край мечем, і тут рахує своє золото."},
-	"hora_zolotoi_baby": {"name": "Гора Золотої Баби", "type": "dungeon", "biome": "cave", "pos": Vector2(57.9, 59.4), "level": 130, "peril": 4, "land": "ural",
-		"rooms": 7, "enemies": ["menkv", "shurale", "chud"], "boss": "zolota_baba", "icon": "mine",
-		"desc": "Печери в серці Кам'яного Поясу. Чудь білоока пішла сюди під землю разом зі своїм золотом, і відтоді його стереже Золота Баба: ідол, якому носили жертви від Ками до Обі."},
-	"chertohy_chornoboha": {"name": "Чертоги Чорнобога", "type": "dungeon", "biome": "snow", "pos": Vector2(35.6, 63.35), "level": 140, "peril": 5, "land": "pivnich", "night": true,
-		"rooms": 8, "enemies": ["stallo", "khiisi", "mara"], "boss": "chornoboh", "icon": "frost",
-		"desc": "Чорна крижана твердиня над Студеним морем, де сонце не сходить пів року. Тут кінець світу й престол Чорнобога. Далі дороги нема."},
-}
+
+## Місця в порядку файлу (лише для читання).
+static func place_ids() -> Array:
+	return GameDB.ids("places")
+
+
+## Місто (див. GameDB.CITY_SCHEMA); для невідомого id — порожній запис.
+static func city(id: String) -> Dictionary:
+	return GameDB.table("cities").get(id, _EMPTY)
+
+
+static func is_city(id: String) -> bool:
+	return GameDB.table("cities").has(id)
+
+
+## Міста в порядку файлу (лише для читання).
+static func city_ids() -> Array:
+	return GameDB.ids("cities")
+
+
+## Далекий край (див. GameDB.REGION_SCHEMA); для невідомого id — порожній запис.
+static func region(id: String) -> Dictionary:
+	return GameDB.table("regions").get(id, _EMPTY)
+
+
+static func is_region(id: String) -> bool:
+	return GameDB.table("regions").has(id)
+
+
+## Далекі краї в порядку показу (порядок файлу): чотири сторони світу довкола старої мапи,
+## три краї Московії та Семигород за Карпатами. Їхні місцевості ростуть із рівнем героя ("scale").
+static func region_ids() -> Array:
+	return GameDB.ids("regions")
+
+
+## Значок місця на мапі й у довіднику: свій («icon»: замок, шахта, острів), Башта, а інакше —
+## за краєвидом (biomes.json: «icon» поля чи «dungeon_icon» печери).
+static func place_icon(L: Dictionary) -> String:
+	if L.has("icon"):
+		return str(L["icon"])
+	if L.get("tower", false):
+		return "tower"
+	var dungeon: bool = L["type"] == "dungeon"
+	return str(GameDB.row("biomes", str(L["biome"])).get("dungeon_icon" if dungeon else "icon", "cave" if dungeon else "sabres"))
+
+
+## Де в місті чекають ті, хто має справу до героя (вкладка міста, див. Game.hall_rows): міста мають
+## ратушу, а Січ, козацький стан і святі місця називають цю будівлю по-своєму («hall» у записі міста).
+static func hall_name(city_id: String) -> String:
+	return str(city(city_id).get("hall", ""))
 
 
 ## Рівень місцевості для героя. Далекі краї ("scale") ростуть разом із ним: рівень не нижчий за позначений.
@@ -982,10 +803,10 @@ static func loyalty_level(points: int) -> int:
 
 
 static func place_name(id: String) -> String:
-	if CITIES.has(id):
-		return CITIES[id]["name"]
-	if LOCATIONS.has(id):
-		return LOCATIONS[id]["name"]
+	if is_city(id):
+		return city(id)["name"]
+	if is_place(id):
+		return place(id)["name"]
 	if id == "hutir":
 		return "Козацький хутір"
 	var spots: Dictionary = load("res://scripts/data/activities.gd").SPOTS

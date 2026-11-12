@@ -91,7 +91,7 @@ static func tick(world, player) -> Array:
 		return msgs
 	# Ярмарок
 	if s["fair"].is_empty() and int(s["trips"]) % FAIR_EVERY == 0:
-		var cities := Data.CITIES.keys().filter(func(c): return int(Data.CITIES[c]["level"]) <= player.level + 2)
+		var cities := Data.city_ids().filter(func(c): return int(Data.city(c)["level"]) <= player.level + 2)
 		if not cities.is_empty():
 			var city: String = cities[randi() % cities.size()]
 			s["fair"] = {"city": city, "left": FAIR_TRIPS}
@@ -132,8 +132,8 @@ static func tick(world, player) -> Array:
 ## Місцевості (не печери, не безкінечні) по силі герою.
 static func reachable_locs(world, player) -> Array:
 	var out := []
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if L["type"] != "field" or L.get("endless", false):
 			continue
 		var lvl := Data.loc_level(L, player.level)  # далекі краї ростуть із героєм, тож події є й для бувалих
@@ -169,7 +169,7 @@ static func start(world, player, kind: String, target: String = "") -> String:
 			if kind == "captives":
 				ev["from"] = target
 		"caravan":
-			var cities := Data.CITIES.keys().filter(func(c): return int(Data.CITIES[c]["level"]) <= player.level + 2)
+			var cities := Data.city_ids().filter(func(c): return int(Data.city(c)["level"]) <= player.level + 2)
 			if cities.size() < 2:
 				return ""
 			var from: String = target if target != "" else cities[randi() % cities.size()]
@@ -202,7 +202,7 @@ static func start(world, player, kind: String, target: String = "") -> String:
 static func battle_loc(world, ev: Dictionary, player) -> Dictionary:
 	var kind: String = ev["kind"]
 	var target: String = ev["target"]
-	var base_lvl: int = int(Data.CITIES[target]["level"]) if Data.CITIES.has(target) else int(Data.LOCATIONS[target]["level"])
+	var base_lvl: int = int(Data.city(target)["level"]) if Data.is_city(target) else int(Data.place(target)["level"])
 	var lvl := maxi(base_lvl, player.level - 1)
 	var enemies := ["zarazhenyi", "zarazhenyi", "upyr", "vovkulaka"]
 	if lvl >= 8:
@@ -210,8 +210,8 @@ static func battle_loc(world, ev: Dictionary, player) -> Dictionary:
 	if lvl >= 13:
 		enemies = ["zarazhenyi", "pishchalnyk", "chort", "vovkulaka"]
 	var biome := "steppe"
-	if Data.LOCATIONS.has(target):
-		biome = Data.LOCATIONS[target]["biome"]
+	if Data.is_place(target):
+		biome = Data.place(target)["biome"]
 		if biome in ["cave", "plague"]:
 			biome = "steppe"
 	var variant: String = {"village_raid": "village", "caravan": "caravan", "sich_siege": "city", "captives": "captives", "wounded": "wounded"}[kind]
@@ -297,7 +297,7 @@ static func lose(world, player, ev: Dictionary, late: bool = false) -> String:
 
 ## Частка пройденого шляху для конвою з бранцями (значок рухається до Кремля).
 static func captives_ll(ev: Dictionary) -> Vector2:
-	var from_ll: Vector2 = Data.LOCATIONS[ev["from"]]["pos"]
+	var from_ll: Vector2 = Data.place(ev["from"])["pos"]
 	var t := 1.0 - float(ev["left"]) / float(DEADLINE["captives"] + 1)
 	return from_ll.lerp(KREMLIN_LL, t * 0.8)
 
@@ -312,16 +312,16 @@ static func map_marks(world) -> Array:
 		if a["kind"] == "captives":
 			ll = captives_ll(a)
 		else:
-			ll = Data.CITIES[a["target"]]["pos"] if Data.CITIES.has(a["target"]) else Data.LOCATIONS[a["target"]]["pos"]
+			ll = Data.city(a["target"])["pos"] if Data.is_city(a["target"]) else Data.place(a["target"])["pos"]
 		out.append({"id": a["target"], "ll": ll, "icon": ICONS[a["kind"]], "label": "%s (%d)" % [name_of(a["kind"]), int(a["left"])], "kind": a["kind"]})
 	if not s["fair"].is_empty():
-		out.append({"id": s["fair"]["city"], "ll": Data.CITIES[s["fair"]["city"]]["pos"], "icon": "tent", "label": "Ярмарок (%d)" % int(s["fair"]["left"]), "kind": "fair"})
+		out.append({"id": s["fair"]["city"], "ll": Data.city(s["fair"]["city"])["pos"], "icon": "tent", "label": "Ярмарок (%d)" % int(s["fair"]["left"]), "kind": "fair"})
 	for loc in s["night"]:
-		out.append({"id": loc, "ll": Data.LOCATIONS[loc]["pos"], "icon": "moon", "label": "", "kind": "night"})
+		out.append({"id": loc, "ll": Data.place(loc)["pos"], "icon": "moon", "label": "", "kind": "night"})
 	for loc in s["treasure"]:
-		out.append({"id": loc, "ll": Data.LOCATIONS[loc]["pos"], "icon": "chest", "label": "", "kind": "treasure"})
+		out.append({"id": loc, "ll": Data.place(loc)["pos"], "icon": "chest", "label": "", "kind": "treasure"})
 	for loc in s["burned"]:
-		out.append({"id": loc, "ll": Data.LOCATIONS[loc]["pos"], "icon": "raid", "label": "", "kind": "burned"})
+		out.append({"id": loc, "ll": Data.place(loc)["pos"], "icon": "raid", "label": "", "kind": "burned"})
 	return out
 
 

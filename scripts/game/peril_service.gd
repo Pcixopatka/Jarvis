@@ -11,16 +11,16 @@ static var _ids := []
 
 
 static func is_peril(loc_id: String) -> bool:
-	return Data.LOCATIONS.has(loc_id) and Data.LOCATIONS[loc_id].has("peril")
+	return Data.is_place(loc_id) and Data.place(loc_id).has("peril")
 
 
 ## Печери за порядком відкриття.
 static func ids() -> Array:
 	if _ids.is_empty():
-		for id in Data.LOCATIONS:
-			if Data.LOCATIONS[id].has("peril"):
+		for id in Data.place_ids():
+			if Data.place(id).has("peril"):
 				_ids.append(id)
-		_ids.sort_custom(func(a, b): return int(Data.LOCATIONS[a]["peril"]) < int(Data.LOCATIONS[b]["peril"]))
+		_ids.sort_custom(func(a, b): return int(Data.place(a)["peril"]) < int(Data.place(b)["peril"]))
 	return _ids
 
 
@@ -51,7 +51,7 @@ static func previous(loc_id: String) -> String:
 
 
 static func land_name(loc_id: String) -> String:
-	return str(Peril.LANDS.get(str(Data.LOCATIONS[loc_id].get("land", "")), {}).get("name", ""))
+	return str(Peril.land(str(Data.place(loc_id).get("land", ""))).get("name", ""))
 
 
 ## Чому зараз не пускають ("" — пускають).
@@ -62,7 +62,7 @@ static func block_reason(world, player, loc_id: String) -> String:
 		return "Сюди пускають із %d-го рівня героя" % Peril.OPEN_LEVEL
 	var prev := previous(loc_id)
 	if prev != "" and cleared(world, prev) <= 0:
-		return "Спершу здолай печеру «%s»" % str(Data.LOCATIONS[prev]["name"])
+		return "Спершу здолай печеру «%s»" % str(Data.place(prev)["name"])
 	return ""
 
 
@@ -76,7 +76,7 @@ static func combat_mods(loc_id: String) -> Dictionary:
 
 ## Номер печери за порядком відкриття: 1..5 (0 — не надважка).
 static func number(loc_id: String) -> int:
-	return int(Data.LOCATIONS[loc_id].get("peril", 0)) if Data.LOCATIONS.has(loc_id) else 0
+	return int(Data.place(loc_id).get("peril", 0)) if Data.is_place(loc_id) else 0
 
 
 ## У скільки разів нечисть цієї печери міцніша за звичайну свого рівня.
@@ -111,9 +111,9 @@ static func titles(world) -> Array:
 static func title(world) -> String:
 	var out := ""
 	for id in ids():
-		var boss := str(Data.LOCATIONS[id]["boss"])
+		var boss := str(Data.place(id)["boss"])
 		if boss in titles(world):
-			out = str(Peril.TITLES.get(boss, ""))
+			out = str(Peril.boss_title(boss))
 	return out
 
 
@@ -121,7 +121,7 @@ static func title(world) -> String:
 static func title_fx(world) -> Dictionary:
 	var out := {}
 	for boss in titles(world):
-		var F: Dictionary = Peril.TITLE_FX.get(str(boss), {})
+		var F: Dictionary = Peril.boss_title_fx(str(boss))
 		for k in F:
 			out[k] = float(out.get(k, 0.0)) + float(F[k])
 	return out
@@ -143,17 +143,17 @@ static func on_clear(world, player, loc_id: String, seconds: float, slot: int = 
 	var s := state(world)
 	var first: bool = cleared(world, loc_id) == 0
 	s["cleared"][loc_id] = cleared(world, loc_id) + 1
-	var boss := str(Data.LOCATIONS[loc_id]["boss"])
+	var boss := str(Data.place(loc_id)["boss"])
 	if first:
-		if Peril.TITLES.has(boss) and not boss in s["titles"]:
+		if (Peril.boss_title(boss) != "") and not boss in s["titles"]:
 			s["titles"].append(boss)
-			var bonus: String = Valor.fx_text(Peril.TITLE_FX.get(boss, {}))
-			msgs.append("Іменна звитяга: %s%s" % [str(Peril.TITLES[boss]), (" (%s)" % bonus) if bonus != "" else ""])
+			var bonus: String = Valor.fx_text(Peril.boss_title_fx(boss))
+			msgs.append("Іменна звитяга: %s%s" % [str(Peril.boss_title(boss)), (" (%s)" % bonus) if bonus != "" else ""])
 			apply(world, player)
 		var order := ids()
 		var i := order.find(loc_id)
 		if i >= 0 and i + 1 < order.size():
-			msgs.append("Відкрито печеру «%s» (%s)" % [str(Data.LOCATIONS[order[i + 1]]["name"]), land_name(str(order[i + 1]))])
+			msgs.append("Відкрито печеру «%s» (%s)" % [str(Data.place(order[i + 1])["name"]), land_name(str(order[i + 1]))])
 		else:
 			msgs.append("Усі надважкі печери пройдено. Далі дороги нема")
 	var old := best_time(world, loc_id)

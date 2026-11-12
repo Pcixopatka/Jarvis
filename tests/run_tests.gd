@@ -45,6 +45,7 @@ func _run() -> void:
 	_suite_game_db()
 	_suite_party_db()
 	_suite_item_db()
+	_suite_world_db()
 	_suite_player()
 	_suite_save()
 	_suite_city()
@@ -166,6 +167,7 @@ func _run() -> void:
 	await _suite_reforge_rare()
 	await _suite_artifact_bag_icon()
 	await _suite_stun_arena()
+	await _suite_world_fights()
 	await _suite_mechanics()
 	await _suite_party_mechanics()
 	_suite_events_wiki()
@@ -410,8 +412,8 @@ func _suite_game_db() -> void:
 
 func _suite_data() -> void:
 	suite("Дані")
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		for e in L["enemies"]:
 			check((GameDB.mob_name(e) != "") and (GameDB.quest_item(e) != ""), "%s: невідомий ворог %s" % [id, e])
 		if L["type"] == "dungeon":
@@ -474,12 +476,12 @@ func _suite_data() -> void:
 	check(absf(float(rolled[3]) / 4000.0 - Data.rarity_share(75, 3)) < 0.015 and absf(float(rolled[2]) / 4000.0 - Data.rarity_share(75, 2)) < 0.04, "кидок рідкості відповідає часткам (легендарних %d із 4000)" % rolled[3])
 	# Завдання
 	var w = WorldState.new()
-	for city in Data.CITIES:
+	for city in Data.city_ids():
 		for i in 10:
 			var q: Dictionary = w._gen_quest(city)
 			check(q["type"] in ["kill", "fetch", "dungeon", "escort"], "тип завдання")
 			check(int(q["count"]) > 0 and int(q["gold"]) > 0 and int(q["xp"]) > 0 and int(q["loyalty"]) > 0, "нагорода/кількість")
-			check(Data.LOCATIONS.has(q["loc"]), "локація завдання")
+			check(Data.is_place(q["loc"]), "локація завдання")
 		var b: Array = w.board(city)
 		check(b.size() == 3, "дошка %s має 3 завдання" % city)
 
@@ -910,7 +912,7 @@ func _suite_plague() -> void:
 	check(PS.mods(2)["hp"] > PS.mods(0)["hp"] and PS.mods(2)["reward"] > 1.0 and PS.mods(1)["cloud_every"] == 0.0, "заражене — сильніше й щедріше")
 	seed(7)
 	var total0 := 0
-	for id in Data.LOCATIONS:
+	for id in Data.place_ids():
 		total0 += PS.level(w, id)
 	var spread_any := false
 	for i in 12:
@@ -919,7 +921,7 @@ func _suite_plague() -> void:
 		if not sp.is_empty():
 			spread_any = true
 	var total1 := 0
-	for id in Data.LOCATIONS:
+	for id in Data.place_ids():
 		total1 += PS.level(w, id)
 		check(PS.level(w, id) <= PS.MAX_LEVEL, "%s: рівень зарази в межах" % id)
 	check(spread_any and total1 > total0 and w.plague["day"] == 12, "зараза повзе між походами")
@@ -1305,7 +1307,7 @@ func _suite_challenges() -> void:
 	check(all_boards, "на дошці будь-якого міста є супровід, коли його просить виклик")
 	var bq: Array = wq.board("kyiv")
 	var esc: Array = bq.filter(func(q): return EscortS.is_open(q))
-	check(not esc.is_empty() and Data.LOCATIONS[esc[0]["loc"]]["type"] != "dungeon", "супровід веде в дику місцевість, не в печеру")
+	check(not esc.is_empty() and Data.place(esc[0]["loc"])["type"] != "dungeon", "супровід веде в дику місцевість, не в печеру")
 	check(DS.CHANCE_WANTED > DS.CHANCE * 2.0, "облога, яку просить виклик тижня, приходить швидше")
 	# Оновлення гри посеред дня: розпочате лишається, решта — за новою схемою
 	var wm = WorldState.new()
@@ -1648,7 +1650,7 @@ func _suite_specs() -> void:
 		var t: Dictionary = SS.TRIALS[spec]
 		check(not t["start"].is_empty() and not t["end"].is_empty() and t["item"]["type"] in info["weapons"], "%s: розмови й зброя класу" % spec)
 		var obj: Dictionary = t["objective"]
-		check(not obj.has("loc") or Data.LOCATIONS.has(obj["loc"]), "%s: місце випробування існує" % spec)
+		check(not obj.has("loc") or Data.is_place(obj["loc"]), "%s: місце випробування існує" % spec)
 	p.job_level = 29
 	check(SS.available(p).is_empty() and not SS.start(w, p, "plastun"), "до 30-ї майстерності випробувань немає")
 	p.job_level = 30
@@ -1853,7 +1855,7 @@ func _suite_volkhv_specs() -> void:
 	var places := {}
 	for spec in Classes.CLASSES["volkhv"]["next"]:
 		var info: Dictionary = Classes.CLASSES[spec]
-		check(Data.CITIES.has(info["where"]) and not places.has(info["where"]), "%s: окремий наставник у %s" % [spec, info["where"]])
+		check(Data.is_city(info["where"]) and not places.has(info["where"]), "%s: окремий наставник у %s" % [spec, info["where"]])
 		places[info["where"]] = true
 		check(SS.TRIALS.has(spec) and Classes.is_volkhv_line(spec) and info["weapons"] == ["staff"], "%s: випробування, посох" % spec)
 	SaveSystem.delete(TEST_SAVE)
@@ -2155,7 +2157,7 @@ func _suite_tower() -> void:
 	check(not TS.unlocked(p), "до 15 рівня Башта закрита")
 	p.level = 15
 	check(TS.unlocked(p) and TS.state(w)["max"] == 1 and TS.state(w)["best"] == 0, "з 15 рівня — перший поверх")
-	check(Data.LOCATIONS.has(TS.LOC_ID) and Data.LOCATIONS[TS.LOC_ID].get("endless", false) and Data.LOCATIONS[TS.LOC_ID].get("tower", false), "Башта на мапі")
+	check(Data.is_place(TS.LOC_ID) and Data.place(TS.LOC_ID).get("endless", false) and Data.place(TS.LOC_ID).get("tower", false), "Башта на мапі")
 	var a = TS.loc_for(1)
 	var b = TS.loc_for(30)
 	check(a["type"] == "tower" and a["level"] == 15 and a["boss"] == "" and a["mini"] != "" and a["waves"] == 2, "поверх 1: рівень 15, хвилі, міні-бос")
@@ -2192,7 +2194,7 @@ func _suite_tower() -> void:
 	check(not bad, "доручення не ведуть у Башту")
 	# Нові боси: є назви й камінь за першу перемогу
 	var SS = load("res://scripts/game/stone_service.gd")
-	for k in TS.SUPER_BOSSES:
+	for k in TS.super_bosses():
 		check(SS.FIRST_KILL.has(k) and (GameDB.mob_plural(k) != ""), "%s: камінь за першу перемогу" % k)
 	var CS = load("res://scripts/game/challenge_service.gd")
 	CS.now_override = 1762700000
@@ -2233,7 +2235,7 @@ func _suite_events() -> void:
 	w.events = {}
 	var cm: String = ES.start(w, p, "caravan", "kyiv")
 	var ev: Dictionary = ES.active(w)
-	check("Чумаки" in cm and ev["target"] == "kyiv" and ev["to"] != "kyiv" and Data.CITIES.has(ev["to"]), "валка: з Києва в інше місто")
+	check("Чумаки" in cm and ev["target"] == "kyiv" and ev["to"] != "kyiv" and Data.is_city(ev["to"]), "валка: з Києва в інше місто")
 	var L2: Dictionary = ES.battle_loc(w, ev, p)
 	check(L2["variant"] == "caravan" and L2["waves"] == 4, "бій валки: вози, 4 хвилі")
 	var to: String = ev["to"]
@@ -2443,7 +2445,7 @@ func _suite_trade() -> void:
 			hi = maxf(hi, Acts.TRADE_CITIES[c][g])
 		check(Acts.TRADE_GOODS.has(g) and lo <= 0.7 and hi >= 1.5, "%s: є де купити дешево й продати дорого" % g)
 	for c in Acts.TRADE_CITIES:
-		check(Data.CITIES.has(c) and TS.has_market(c), "%s — торгове місто" % c)
+		check(Data.is_city(c) and TS.has_market(c), "%s — торгове місто" % c)
 	check(not TS.has_market("kapyshche"), "на Капищі крамом не торгують")
 	var w = WorldState.new()
 	var p = _new_player()
@@ -4013,8 +4015,8 @@ func _suite_audio() -> void:
 			check(Index.SFX.has(GameDB.death_sound(kind)), "голос смерті для %s" % kind)
 	check(Sounds.death("vovkulaka") == "die_beast" and Sounds.death("невідоме") == "enemy_die", "невідома нечисть має загальний голос")
 	var biomes := {}
-	for id in Data.LOCATIONS:
-		biomes[Data.LOCATIONS[id]["biome"]] = true
+	for id in Data.place_ids():
+		biomes[Data.place(id)["biome"]] = true
 	var bad := []
 	for b in biomes:
 		var amb: String = Sounds.ambient_for(b)
@@ -4258,14 +4260,14 @@ func _suite_new_bosses() -> void:
 	var GfxS = load("res://scripts/world/gfx.gd")
 	var Stones = load("res://scripts/game/stone_service.gd")
 	for id in ["lysa_hora", "vii_church"]:
-		var L: Dictionary = Data.LOCATIONS[id]
+		var L: Dictionary = Data.place(id)
 		check(L["type"] == "dungeon" and GameDB.has_boss(L["boss"]) and (GameDB.mob_name(L["boss"]) != "") and GfxS.has(L["boss"]), "%s: печера з босом %s, спрайт є" % [id, L["boss"]])
 		var clash := false
-		for other in Data.LOCATIONS:
-			if other != id and Data.LOCATIONS[other]["pos"].distance_to(L["pos"]) < 0.6:
+		for other in Data.place_ids():
+			if other != id and Data.place(other)["pos"].distance_to(L["pos"]) < 0.6:
 				clash = true
-		for c in Data.CITIES:
-			if Data.CITIES[c]["pos"].distance_to(L["pos"]) < 0.6:
+		for c in Data.city_ids():
+			if Data.city(c)["pos"].distance_to(L["pos"]) < 0.6:
 				clash = true
 		check(not clash, "%s: не налазить на інші місця мапи" % id)
 		check(Stones.FIRST_KILL.has(L["boss"]), "%s: перша перемога дає камінь долі" % L["boss"])
@@ -4463,11 +4465,11 @@ func _suite_vigil() -> void:
 	for sid in Acts.SPOTS:
 		var S: Dictionary = Acts.SPOTS[sid]
 		var clash := false
-		for c in Data.CITIES:
-			if Data.CITIES[c]["pos"].distance_to(S["pos"]) < 0.5:
+		for c in Data.city_ids():
+			if Data.city(c)["pos"].distance_to(S["pos"]) < 0.5:
 				clash = true
-		for l in Data.LOCATIONS:
-			if Data.LOCATIONS[l]["pos"].distance_to(S["pos"]) < 0.5:
+		for l in Data.place_ids():
+			if Data.place(l)["pos"].distance_to(S["pos"]) < 0.5:
 				clash = true
 		check(not clash and S["name"] != "" and S["desc"] != "", "%s: не налазить на інші місця" % sid)
 	var w = WorldState.new()
@@ -4613,13 +4615,13 @@ func _suite_bounty() -> void:
 	var GS = load("res://scripts/game/glory_service.gd")
 	var Acts = load("res://scripts/data/activities.gd")
 	var Elites = load("res://scripts/data/elites.gd")
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if L["type"] != "field":
 			continue
 		var named := false
 		for k in L["enemies"]:
-			if Acts.BOUNTY_NAMES.has(k):
+			if not GameDB.bounty_names(k).is_empty():
 				named = true
 		check(named, "%s: є кого розшукувати" % id)
 	var w = WorldState.new()
@@ -4631,20 +4633,20 @@ func _suite_bounty() -> void:
 	check(b.size() == Acts.BOUNTY_BOARD, "на дошці два оголошення")
 	var ok := true
 	for bt in b:
-		var L: Dictionary = Data.LOCATIONS[bt["loc"]]
-		if L["type"] != "field" or not (bt["kind"] in L["enemies"]) or not (bt["name"] in Acts.BOUNTY_NAMES[bt["kind"]]):
+		var L: Dictionary = Data.place(bt["loc"])
+		if L["type"] != "field" or not (bt["kind"] in L["enemies"]) or not (bt["name"] in GameDB.bounty_names(bt["kind"])):
 			ok = false
 		if bt["affixes"].size() < 2 or bt["affixes"].size() > 3 or int(bt["gold"]) <= 0 or int(bt["glory"]) <= 0 or bt["killed"]:
 			ok = false
 		for a in bt["affixes"]:
-			if not Elites.AFFIXES.has(a):
+			if not Elites.is_affix(a):
 				ok = false
 		if int(L["level"]) > p.level + 3:
 			ok = false
 	check(ok, "оголошення: дика місцевість до снаги, вид звідти, ім'я, властивості, нагорода")
 	check(b[0]["name"] != b[1]["name"] and b[0]["id"] != b[1]["id"], "оголошення різні")
 	check(BS.board(w, "kyiv", p) == b, "дошка не змінюється без походів")
-	for c in Data.CITIES:
+	for c in Data.city_ids():
 		check(BS.board(w, c, p).size() == Acts.BOUNTY_BOARD and not BS.candidates(c, p).is_empty(), "%s: дошка розшуку заповнена" % c)
 	# Узяти
 	var first: Dictionary = b[0]
@@ -5020,7 +5022,7 @@ func _suite_tower_battle() -> void:
 		frames += 1
 	check(game.state == game.State.PLAYING and game.combat.loc.get("floor", 0) == 2 and game.combat.is_tower(), "портал «Вище» — поверх 2 без виходу (кадрів: %d)" % frames)
 	# Супербоси створюються й б'ються без помилок
-	for k in game.TowerService.SUPER_BOSSES:
+	for k in game.TowerService.super_bosses():
 		game.combat.spawn_enemy(k, 20, true, Vector2(0, -300))
 		var e = game.combat._last_enemy()
 		check(e.is_boss and e.kind == k and e.max_hp > 1000.0, "супербос %s на арені" % k)
@@ -5090,7 +5092,7 @@ func _suite_escort() -> void:
 	var types := {}
 	for i in 900:
 		var q: Dictionary = w._gen_quest(["sich", "kyiv", "lviv"][i % 3])
-		var L: Dictionary = Data.LOCATIONS[q["loc"]]
+		var L: Dictionary = Data.place(q["loc"])
 		types[q["type"]] = true
 		if L["type"] != "dungeon":
 			field_n += 1
@@ -5123,7 +5125,7 @@ func _suite_escort() -> void:
 	check(int(q1["progress"]) == 0, "зачистка печери теж")
 	# Опис бою
 	var B: Dictionary = ES.battle_loc(q1)
-	var L1: Dictionary = Data.LOCATIONS["rapids"]
+	var L1: Dictionary = Data.place("rapids")
 	check(B["type"] == "defense" and B["variant"] == "escort" and int(B["waves"]) == Acts.ESCORT_WAVES and int(B["escort"]) == 77 and B["who"] == "kobzar", "бій: оборона з мандрівником, три засідки")
 	check(int(B["level"]) == int(L1["level"]) and B["enemies"] == L1["enemies"] and B["target"] == "rapids" and B["biome"] == L1["biome"], "рівень, нечисть і краєвид — від місцевості")
 	check(is_equal_approx(float(B["gate_hp"]), Acts.ESCORT_HP + Acts.ESCORT_HP_LVL * int(L1["level"])) and ES.hp(10) > ES.hp(2), "здоров'я мандрівника росте з рівнем")
@@ -5135,7 +5137,7 @@ func _suite_escort() -> void:
 	p.gold = 0
 	var won: String = ES.win(w2, p, 77, 1.0)
 	check(w2.is_done(q1) and not ES.is_open(q1) and ES.at(w2, "rapids").is_empty(), "перемога: завдання виконано")
-	check(p.gold == Acts.ESCORT_TIP * 2 and "дійшов" in won and Data.CITIES["sich"]["name"] in won and str(Acts.ESCORT_WHO["kobzar"]["thanks"]) in won, "подяка й гривні на дорогу: %d" % p.gold)
+	check(p.gold == Acts.ESCORT_TIP * 2 and "дійшов" in won and Data.city("sich")["name"] in won and str(Acts.ESCORT_WHO["kobzar"]["thanks"]) in won, "подяка й гривні на дорогу: %d" % p.gold)
 	check(ES.win(w2, p, 77, 1.0) == "Мандрівник дійшов." and p.gold == Acts.ESCORT_TIP * 2, "двічі те саме завдання не зарахувати")
 	check(not w2.quest_targets().has("rapids"), "позначка з мапи зникла")
 	var g0: int = p.gold
@@ -5830,7 +5832,7 @@ func _suite_travel_ride() -> void:
 	game.world.story = {"chapter": StoryT.CHAPTERS.size(), "step": 0, "stage": "done", "progress": 0}
 	game.world.travel = {"cooldown": 99, "seen": {}}
 	var go_texts := ["Вирушити", "Увійти до міста", "Увійти на хутір", "Спуститися", "Піднятися", "Вирушити до табору", "Полювати", "Рибалити", "Стати на варту", "Стати в коло"]
-	var all_places: Array = Data.CITIES.keys() + Data.LOCATIONS.keys() + ActsT.SPOTS.keys() + [CampT.CAMP_ID]
+	var all_places: Array = Data.city_ids() + Data.place_ids() + ActsT.SPOTS.keys() + [CampT.CAMP_ID]
 	var rode := []
 	var jumped := []
 	for id in all_places:
@@ -5919,7 +5921,7 @@ func _suite_travel_ride() -> void:
 	mv.point_tapped.connect(catch)
 	mv._tap(mv._proj(free_ll))
 	check(heard.size() == 1 and heard[0].distance_to(free_ll) < 0.05 and game.travel_to == game.POINT_ID and game.state == game.State.MAP, "дотик до порожнього місця мапи: герой рушає просто туди")
-	check(mv.travel.has("to_ll") and mv.travel["to_ll"].distance_to(free_ll) < 0.05 and mv._travel_ll(0.0).distance_to(Data.CITIES["sich"]["pos"]) < 0.01 and mv._travel_ll(1.0).distance_to(free_ll) < 0.05, "шлях на мапі веде від Січі до цієї точки")
+	check(mv.travel.has("to_ll") and mv.travel["to_ll"].distance_to(free_ll) < 0.05 and mv._travel_ll(0.0).distance_to(Data.city("sich")["pos"]) < 0.01 and mv._travel_ll(1.0).distance_to(free_ll) < 0.05, "шлях на мапі веде від Січі до цієї точки")
 	game._go_point(Vector2(36.0, 50.5))
 	check(game.travel_point.distance_to(free_ll) < 0.05, "у дорозі другий дотик маршруту не міняє")
 	frames = 0
@@ -5935,7 +5937,7 @@ func _suite_travel_ride() -> void:
 	await _frames(2)
 	check(game.map_at_point and mv.current_ll != null and mv.current_ll.distance_to(free_ll) < 0.05, "після екрана героя він стоїть там само")
 	# дотик до значка місця лише обирає його, а не веде у вільну точку
-	mv._tap(mv._proj(Data.CITIES["poltava"]["pos"]))
+	mv._tap(mv._proj(Data.city("poltava")["pos"]))
 	await _frames(1)
 	check(game.map_sel == "poltava" and game.travel_to == "" and heard.size() == 1, "дотик до значка місця обирає місце, а не точку поруч")
 	game._go_to(near)
@@ -5960,7 +5962,7 @@ func _suite_travel_ride() -> void:
 	check(game.travel_point.distance_to(Vector2(mv.LON0 + mv.EDGE, mv.LAT1 - mv.EDGE)) < 0.01, "за край мапи виїхати не можна: точка стає на межу %s" % str(game.travel_point))
 	game.travel_to = ""
 	mv.travel = {}
-	check(mv.at_sea(Vector2(33.6, 43.2)) and mv.at_sea(Vector2(37.2, 46.3)) and not mv.at_sea(Vector2(31.65, 49.4)) and not mv.at_sea(Data.CITIES["kyiv"]["pos"]), "над морем пливе чайка, суходолом їде вершник")
+	check(mv.at_sea(Vector2(33.6, 43.2)) and mv.at_sea(Vector2(37.2, 46.3)) and not mv.at_sea(Vector2(31.65, 49.4)) and not mv.at_sea(Data.city("kyiv")["pos"]), "над морем пливе чайка, суходолом їде вершник")
 	check("порожнього місця" in ride_art and "чайка" in ride_art, "довідник каже про вільне пересування мапою")
 	mv.point_tapped.disconnect(catch)
 	game.enter_map()
@@ -6570,21 +6572,21 @@ func _suite_far_lands() -> void:
 	var Sounds = load("res://scripts/data/sounds.gd")
 	var Camp = load("res://scripts/data/camp_data.gd")
 	var Ground = load("res://scripts/world/ground.gd")
-	check(Data.REGION_ORDER.size() == 8 and Data.REGIONS.size() == 8, "вісім далеких країв: чотири українські, три в Московії й Семигород")
+	check(Data.region_ids().size() == 8 and Data.region_ids().size() == 8, "вісім далеких країв: чотири українські, три в Московії й Семигород")
 	var all_regions_ok := true
-	for r in Data.REGION_ORDER:
+	for r in Data.region_ids():
 		var pl: Dictionary = Far.places(r)
-		all_regions_ok = all_regions_ok and pl["cities"].size() >= 1 and pl["fields"].size() >= 3 and pl["dungeons"].size() >= 1 and str(Data.REGIONS[r]["name"]) != ""
+		all_regions_ok = all_regions_ok and pl["cities"].size() >= 1 and pl["fields"].size() >= 3 and pl["dungeons"].size() >= 1 and str(Data.region(r)["name"]) != ""
 	check(all_regions_ok, "у кожному краї місто, щонайменше три місцевості й печера з босом")
-	check(Data.CITIES.size() >= 15 and Data.LOCATIONS.size() >= 40, "мапа значно більша: міст %d, місць %d" % [Data.CITIES.size(), Data.LOCATIONS.size()])
+	check(Data.city_ids().size() >= 15 and Data.place_ids().size() >= 40, "мапа значно більша: міст %d, місць %d" % [Data.city_ids().size(), Data.place_ids().size()])
 	var data_ok := true
 	var far_n := 0
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if not L.get("scale", false):
 			continue
 		far_n += 1
-		data_ok = data_ok and Data.REGIONS.has(str(L.get("region", ""))) and str(L["desc"]) != ""
+		data_ok = data_ok and Data.is_region(str(L.get("region", ""))) and str(L["desc"]) != ""
 		for e in L["enemies"]:
 			data_ok = data_ok and (GameDB.mob_name(e) != "") and (GameDB.mob_plural(e) != "") and (GameDB.quest_item(e) != "") and GfxS.has(e)
 		if L["type"] == "dungeon":
@@ -6593,18 +6595,18 @@ func _suite_far_lands() -> void:
 	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden", "morskyi_tsar", "shubin", "bila_pani"]:
 		check((GameDB.mob_name(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "", "%s: ім'я, спрайт і голос смерті" % kind)
 	for kind in ["potopelnyk", "pesyholovets", "kamiana_baba", "mara", "zlyden"]:
-		check(Acts.BOUNTY_NAMES.has(kind) and Acts.BOUNTY_NAMES[kind].size() >= 3, "%s: імена для дошки розшуку" % kind)
-	check(Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).begins_with("Вогняна") and Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).ends_with("Кам'яна баба") and "mara" in Elites.FEMININE, "еліти жіночого роду мають правильні прикметники")
+		check(not GameDB.bounty_names(kind).is_empty() and GameDB.bounty_names(kind).size() >= 3, "%s: імена для дошки розшуку" % kind)
+	check(Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).begins_with("Вогняна") and Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).ends_with("Кам'яна баба") and Elites.is_feminine("mara"), "еліти жіночого роду мають правильні прикметники")
 	for city in ["baturyn", "ostroh", "izium", "khadzhybei"]:
 		var prices: Dictionary = Acts.TRADE_CITIES.get(city, {})
-		check(Data.REGIONS.has(str(Data.CITIES[city].get("region", ""))) and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
-	check("sand" in Ground.TILED and Camp.BIOME_RESOURCE.has("sand") and Sounds.AMBIENT.has("sand"), "піски: тайли, ресурс і шум вітру")
+		check(Data.is_region(str(Data.city(city).get("region", ""))) and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
+	check("sand" in Ground.TILED and GameDB.row("biomes", "sand").has("resource") and Sounds.ambient_for("sand") != "", "піски: тайли, ресурс і шум вітру")
 	# Ніщо не налазить одне на одне
 	var places := {}
-	for id in Data.CITIES:
-		places[id] = Data.CITIES[id]["pos"]
-	for id in Data.LOCATIONS:
-		places[id] = Data.LOCATIONS[id]["pos"]
+	for id in Data.city_ids():
+		places[id] = Data.city(id)["pos"]
+	for id in Data.place_ids():
+		places[id] = Data.place(id)["pos"]
 	for id in Acts.SPOTS:
 		places[id] = Acts.SPOTS[id]["pos"]
 	places[Camp.CAMP_ID] = Camp.CAMP["pos"]
@@ -6622,8 +6624,8 @@ func _suite_far_lands() -> void:
 		map_ok = map_ok and pos.x > WM0.LON0 + 0.5 and pos.x < WM0.LON1 - 0.5 and pos.y > WM0.LAT0 + 0.5 and pos.y < WM0.LAT1 - 0.5
 	check(map_ok, "усе вміщається в межах мапи")
 	# Рівні
-	var L16: Dictionary = Data.LOCATIONS["oleshky"]
-	check(Data.loc_level(L16, 10) == 16 and Data.loc_level(L16, 40) == 40 and Data.loc_level(Data.LOCATIONS["rapids"], 40) == 2, "далекий край росте з героєм, старі місця — ні")
+	var L16: Dictionary = Data.place("oleshky")
+	check(Data.loc_level(L16, 10) == 16 and Data.loc_level(L16, 40) == 40 and Data.loc_level(Data.place("rapids"), 40) == 2, "далекий край росте з героєм, старі місця — ні")
 	var weak = _new_player()
 	weak.level = 12
 	weak.recalc()
@@ -6636,8 +6638,8 @@ func _suite_far_lands() -> void:
 	var m_hi: Dictionary = Far.mods(L16, hero)
 	check(Far.matched(L16, hero) and int(m_hi["level"]) == 60 and int(m_hi["hero_level"]) == 60 and int(m_hi["base_level"]) == 16, "бувалому — нечисть його рівня")
 	check(not m_hi.has("std_hp") and not m_hi.has("std_dmg") and not m_hi.has("xp_mult"), "сила й досвід нечисті далекого краю — звичайні для її рівня, без надбавок")
-	check(Far.mods(Data.LOCATIONS["rapids"], hero).is_empty(), "старі місцевості без змін")
-	check(not Far.mods(Data.LOCATIONS["zmiinyi"], hero).has("goal"), "у печерах мети зачистки нема")
+	check(Far.mods(Data.place("rapids"), hero).is_empty(), "старі місцевості без змін")
+	check(not Far.mods(Data.place("zmiinyi"), hero).has("goal"), "у печерах мети зачистки нема")
 	check(Far.region_of("oleshky") == "pivden" and Far.region_of("izium") == "slobid" and Far.region_of("kyiv") == "" and Far.open_level("pivden") == 16, "край за місцем і рівень, з якого він відкривається")
 	# Завдання й події для бувалого героя
 	var w = WorldState.new()
@@ -6645,7 +6647,7 @@ func _suite_far_lands() -> void:
 	var far_q := {}
 	for i in 300:
 		var q: Dictionary = w._gen_quest("khadzhybei")
-		if Data.LOCATIONS[q["loc"]].get("scale", false):
+		if Data.place(q["loc"]).get("scale", false):
 			far_q = q
 			break
 	check(not far_q.is_empty() and int(far_q["lvl"]) == 60 and int(far_q["gold"]) >= 40 + 25 * 60, "завдання в далекий край платять за рівнем героя: %s" % str(far_q.get("gold", "")))
@@ -6655,7 +6657,7 @@ func _suite_far_lands() -> void:
 	check(int(EscS.battle_loc(eq)["level"]) == 60 and int(EscS.battle_loc({"id": 2, "city": "kyiv", "loc": "rapids", "progress": 0, "lvl": 2, "target": "kobzar"})["level"]) == 2, "супровід у далекому краї — за рівнем героя")
 	var ES = load("res://scripts/game/event_service.gd")
 	var reach: Array = ES.reachable_locs(w, hero)
-	check(not reach.is_empty() and reach.all(func(id): return Data.LOCATIONS[id].get("scale", false)), "і героєві 60-го рівня є де статись подіям: %d місць" % reach.size())
+	check(not reach.is_empty() and reach.all(func(id): return Data.place(id).get("scale", false)), "і героєві 60-го рівня є де статись подіям: %d місць" % reach.size())
 	weak.free()
 	hero.free()
 
@@ -6795,7 +6797,7 @@ func _suite_far_lands_game() -> void:
 		await _frames(2)
 	# Мапа: значки, позначки рівня, панель краю
 	var wm = game.hud.map_view
-	check(wm._loc_icon(Data.LOCATIONS["zmiinyi"]) == "island" and wm._loc_icon(Data.LOCATIONS["oleshky"]) == "dune" and wm._loc_icon(Data.LOCATIONS["bakhmut_kopalni"]) == "mine" and wm.ICON_ORDER.has("izba"), "особливі значки нових місць")
+	check(wm._loc_icon(Data.place("zmiinyi")) == "island" and wm._loc_icon(Data.place("oleshky")) == "dune" and wm._loc_icon(Data.place("bakhmut_kopalni")) == "mine" and wm.ICON_ORDER.has("izba"), "особливі значки нових місць")
 	var built: Control = load("res://scripts/ui/map_panel.gd").build("pidhirtsi", game.world, p, func(_x): pass)
 	var ptext := ""
 	for n in built.find_children("*", "Label", true, false):
@@ -6837,38 +6839,38 @@ func _suite_muscovy() -> void:
 	var Wiki = load("res://scripts/data/wiki_data.gd")
 	var WM = load("res://scripts/ui/world_map.gd")
 	var EnemyS = load("res://scripts/entities/enemy.gd")
-	check(Data.REGION_ORDER.slice(4, 7) == ["oka", "tvershchyna", "zalissia"], "три краї Московії йдуть після українських")
+	check(Data.region_ids().slice(4, 7) == ["oka", "tvershchyna", "zalissia"], "три краї Московії йдуть після українських")
 	# Краї йдуть кільцями без прогалин у рівнях
 	var bands := {}
 	for r in ["oka", "tvershchyna", "zalissia"]:
 		var lv := []
 		var pl: Dictionary = Far.places(r)
 		for id in pl["fields"] + pl["dungeons"]:
-			lv.append(int(Data.LOCATIONS[id]["level"]))
+			lv.append(int(Data.place(id)["level"]))
 		lv.sort()
 		bands[r] = [lv[0], lv[lv.size() - 1], lv.size()]
 	check(bands["oka"] == [14, 18, 6] and bands["tvershchyna"] == [19, 23, 5] and bands["zalissia"] == [24, 30, 7], "рівні країв без прогалин: %s" % str(bands))
 	for city in ["yelets", "tver", "cherkaskyi_stan"]:
 		var prices: Dictionary = Acts.TRADE_CITIES.get(city, {})
-		check(Data.CITIES.has(city) and Data.CITIES[city]["region"] in ["oka", "tvershchyna", "zalissia"] and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
+		check(Data.is_city(city) and Data.city(city)["region"] in ["oka", "tvershchyna", "zalissia"] and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
 	for kind in MUSCOVY_MINIONS:
 		var ok: bool = (GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != ""
-		ok = ok and Acts.BOUNTY_NAMES.has(kind) and Acts.BOUNTY_NAMES[kind].size() >= 3 and not GameDB.mob_wiki(kind).is_empty() and str(GameDB.mob_wiki(kind)["tip"]) != ""
+		ok = ok and not GameDB.bounty_names(kind).is_empty() and GameDB.bounty_names(kind).size() >= 3 and not GameDB.mob_wiki(kind).is_empty() and str(GameDB.mob_wiki(kind)["tip"]) != ""
 		ok = ok and load("res://scripts/mechanics/mechanic.gd").has_hook(GameDB.mechanic(kind), "ability") and GameDB.hit_status(kind) != ""
 		check(ok, "%s: ім'я, спрайт, голос, розшук, довідник і свій прийом" % kind)
 	for loc_id in MUSCOVY_BOSSES:
 		var b: String = MUSCOVY_BOSSES[loc_id]
-		var L: Dictionary = Data.LOCATIONS[loc_id]
+		var L: Dictionary = Data.place(loc_id)
 		check(L["type"] == "dungeon" and L["boss"] == b and L.get("scale", false) and GameDB.has_boss(b) and GfxS.has(b) and GameDB.death_sound(b) != "" and not GameDB.boss_wiki(b).is_empty() and WM.ICON_ORDER.has(str(L.get("icon", ""))), "%s: лігво, спрайт, голос, довідник і свій значок на мапі" % GameDB.boss_name(b, b))
-	check(GameDB.boss_name("idolyshche") == "Ідолище Погане" and not "п'ятидесятник" in str(Acts.BOUNTY_NAMES["mertvyi_strilets"]).to_lower(), "назви без мовних огріхів")
+	check(GameDB.boss_name("idolyshche") == "Ідолище Погане" and not "п'ятидесятник" in str(GameDB.bounty_names("mertvyi_strilets")).to_lower(), "назви без мовних огріхів")
 	var snow := []
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id]["biome"] == "snow" and not Data.LOCATIONS[id].has("peril"):
+	for id in Data.place_ids():
+		if Data.place(id)["biome"] == "snow" and not Data.place(id).has("peril"):
 			snow.append(id)
-	check(snow.size() == 3 and "snow" in Ground.TILED and Data.LOCATIONS["kryzhanyi_ostroh"].get("night", false), "три снігові місця, у Крижаному острозі вічна ніч: %s" % str(snow))
+	check(snow.size() == 3 and "snow" in Ground.TILED and Data.place("kryzhanyi_ostroh").get("night", false), "три снігові місця, у Крижаному острозі вічна ніч: %s" % str(snow))
 	var icons_tex: Texture2D = load("res://assets/gfx/sprites/map_icons.png")
 	check(icons_tex.get_width() == WM.ICON_ORDER.size() * 24, "на аркуші значків мапи є всі %d значків" % WM.ICON_ORDER.size())
-	check(WM.LAT1 >= 58.6 and Data.LOCATIONS["kryzhanyi_ostroh"]["pos"].y < WM.LAT1 - 0.3, "мапа сягає півночі за Кострому")
+	check(WM.LAT1 >= 58.6 and Data.place("kryzhanyi_ostroh")["pos"].y < WM.LAT1 - 0.3, "мапа сягає півночі за Кострому")
 	var town_names := []
 	for t in WM.TOWNS:
 		town_names.append(t[0])
@@ -7052,7 +7054,7 @@ func _suite_muscovy_game() -> void:
 		await _frames(2)
 	# Мапа й довідник
 	var wm = game.hud.map_view
-	check(wm._loc_icon(Data.LOCATIONS["tula_zbroiarnia"]) == "cannon" and wm._loc_icon(Data.LOCATIONS["uhlych"]) == "bell" and wm._loc_icon(Data.LOCATIONS["volochok"]) == "pine", "значки нових місць на мапі")
+	check(wm._loc_icon(Data.place("tula_zbroiarnia")) == "cannon" and wm._loc_icon(Data.place("uhlych")) == "bell" and wm._loc_icon(Data.place("volochok")) == "pine", "значки нових місць на мапі")
 	var built: Control = load("res://scripts/ui/map_panel.gd").build("kryzhanyi_ostroh", game.world, p, func(_x): pass)
 	var ptext := ""
 	for n in built.find_children("*", "Label", true, false):
@@ -7065,7 +7067,7 @@ func _suite_muscovy_game() -> void:
 	var Camp2 = load("res://scripts/data/camp_data.gd")
 	var Acts2 = load("res://scripts/data/activities.gd")
 	var wide := []
-	for id in Data.CITIES.keys() + Data.LOCATIONS.keys() + Acts2.SPOTS.keys() + [Camp2.CAMP_ID]:
+	for id in Data.city_ids() + Data.place_ids() + Acts2.SPOTS.keys() + [Camp2.CAMP_ID]:
 		game._on_map_select(id)
 		await _frames(2)
 		if game.hud.map_panel.size.x > 380.0 or game.hud.map_panel.size.y > game.get_viewport().get_visible_rect().size.y - 100.0:
@@ -7120,10 +7122,10 @@ func _suite_uniques() -> void:
 	check(tiers_ok, "у кожному з шести ступенів щонайменше три речі: %s" % str(per_tier))
 	# Кожен бос гри має свій ступінь (новий бос без ступеня провалить цю перевірку)
 	var bosses := {}
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].has("boss"):
-			bosses[Data.LOCATIONS[id]["boss"]] = true
-	for b in Tower.SUPER_BOSSES + Depth.BOSSES:
+	for id in Data.place_ids():
+		if Data.place(id).has("boss"):
+			bosses[Data.place(id)["boss"]] = true
+	for b in Tower.super_bosses() + Depth.bosses():
 		bosses[b] = true
 	var no_tier := []
 	for b in bosses:
@@ -7406,10 +7408,10 @@ func _suite_artifacts() -> void:
 	var Glory = load("res://scripts/game/glory_service.gd")
 	# Кожен бос має свій артефакт (новий бос без трофея провалить перевірку)
 	var bosses := {}
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].has("boss"):
-			bosses[Data.LOCATIONS[id]["boss"]] = true
-	for b in Tower.SUPER_BOSSES + Depth.BOSSES:
+	for id in Data.place_ids():
+		if Data.place(id).has("boss"):
+			bosses[Data.place(id)["boss"]] = true
+	for b in Tower.super_bosses() + Depth.bosses():
 		bosses[b] = true
 	var missing := []
 	for b in bosses:
@@ -7596,14 +7598,14 @@ func _suite_souls() -> void:
 	# Повнота: у кожної нечисті й кожного боса гри є своя записана душа
 	var kinds := {}
 	var bosses := {}
-	for id in Data.LOCATIONS:
-		for k in Data.LOCATIONS[id]["enemies"]:
+	for id in Data.place_ids():
+		for k in Data.place(id)["enemies"]:
 			kinds[k] = true
-		if Data.LOCATIONS[id].has("boss"):
-			bosses[Data.LOCATIONS[id]["boss"]] = true
-	for k in Tower.POOL:
+		if Data.place(id).has("boss"):
+			bosses[Data.place(id)["boss"]] = true
+	for k in Tower.pool():
 		kinds[k] = true
-	for b in Tower.SUPER_BOSSES + Depth.BOSSES:
+	for b in Tower.super_bosses() + Depth.bosses():
 		bosses[b] = true
 	var no_soul := []
 	for k in kinds:
@@ -8897,8 +8899,8 @@ func _suite_quick_raid() -> void:
 	check("надто сильне" in QS.block_reason(w, p, "black_forest"), "сильніше за героя місце швидко не пройти")
 	p.level = 20
 	# Обсяг: поле за своєю зачисткою, печера за кімнатами
-	var LF: Dictionary = Data.LOCATIONS["wild_field"]
-	var LD: Dictionary = Data.LOCATIONS["zmii_cave"]
+	var LF: Dictionary = Data.place("wild_field")
+	var LD: Dictionary = Data.place("zmii_cave")
 	var rooms_sum := 0
 	for room in range(1, int(LD["rooms"]) + 1):
 		rooms_sum += Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER
@@ -9311,7 +9313,7 @@ func _suite_way() -> void:
 		var pl: String = str(g["place"])
 		if pl == "" and int(g["tab"]) < 0:
 			lost.append(str(st["id"]) + ": нікуди")
-		if pl != "" and not (Data.CITIES.has(pl) or Data.LOCATIONS.has(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
 			lost.append("%s→%s" % [st["id"], pl])
 	check(lost.is_empty(), "кожен крок кудись веде: %s" % ", ".join(lost))
 	# порадник показує нинішній крок
@@ -9466,7 +9468,7 @@ func _suite_guide() -> void:
 	var k0: Array = kinds.call()
 	check(not k0.is_empty() and "explore" in k0 and "board" in k0 and not "story" in k0 and not "turn_in" in k0, "без справ порадник шле в похід і до дошки завдань: %s" % ", ".join(k0))
 	var spot: String = GS.best_place(w, p, "sich")
-	check(Data.LOCATIONS.has(spot) and abs(Data.loc_level(Data.LOCATIONS[spot], p.level) - p.level) <= 6, "запасна порада веде в місцевість по силі: %s" % spot)
+	check(Data.is_place(spot) and abs(Data.loc_level(Data.place(spot), p.level) - p.level) <= 6, "запасна порада веде в місцевість по силі: %s" % spot)
 	# Порядок важливості: здати виконане, облога, історія, очки, розшук, завдання
 	w.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
 	w.quests.append({"id": 950, "city": "kyiv", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 5, "count": 5, "text": "Знищ 5 мавок (Дике Поле)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
@@ -9492,7 +9494,7 @@ func _suite_guide() -> void:
 		var pl: String = str(it["place"])
 		if pl == "" and int(it["tab"]) < 0:
 			broken.append(str(it["kind"]) + ": нікуди")
-		if pl != "" and not (Data.CITIES.has(pl) or Data.LOCATIONS.has(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
 			broken.append(str(it["kind"]) + "→" + pl)
 	check(broken.is_empty(), "кожна порада кудись веде: %s" % ", ".join(broken))
 	# Очки вмінь радимо вкладати, лише коли є куди
@@ -9633,11 +9635,11 @@ func _suite_event_lift() -> void:
 	var esc: Dictionary = EscS.battle_loc(eq, strong)
 	check(int(esc["level"]) == 59 and esc.has("min_std_hp") and is_equal_approx(float(esc["gate_hp"]), EscS.hp(59) * Far.guard_mult(59, esc)) and int(EscS.battle_loc(eq)["level"]) == 2 and not EscS.battle_loc(eq).has("min_std_hp"), "супровід: рівень і мірка героя, мандрівник міцніший")
 	# Ніч: у полі рівень підтягується до героя, обсяг зачистки лишається за місцем; у печері лише мірка
-	var nf: Dictionary = Far.night_mods(Data.LOCATIONS["black_forest"], strong)
-	var nd: Dictionary = Far.night_mods(Data.LOCATIONS["zmii_cave"], strong)
-	check(int(nf["level"]) == 60 and int(nf["base_level"]) == int(Data.LOCATIONS["black_forest"]["level"]) and int(nf["goal"]) == Data.FIELD_GOAL_BASE + int(Data.LOCATIONS["black_forest"]["level"]) * Data.FIELD_GOAL_PER_LEVEL and is_equal_approx(float(nf["min_std_hp"]), Data.enemy_std_hp(60) * Far.EVENT_FLOOR * Far.NIGHT_MULT), "ніч у полі: рівень героя, мірка на %d%% лютіша, зачистка за місцем" % roundi((Far.NIGHT_MULT - 1.0) * 100.0))
-	check(not nd.has("level") and nd.has("min_std_hp") and not Far.night_mods(Data.LOCATIONS["black_forest"], weak).has("level"), "ніч у печері й для слабшого героя рівня не міняє")
-	check(not Far.night_mods(Data.LOCATIONS["ridne_selo"], strong).has("goal"), "місце з власним обсягом зачистки його зберігає")
+	var nf: Dictionary = Far.night_mods(Data.place("black_forest"), strong)
+	var nd: Dictionary = Far.night_mods(Data.place("zmii_cave"), strong)
+	check(int(nf["level"]) == 60 and int(nf["base_level"]) == int(Data.place("black_forest")["level"]) and int(nf["goal"]) == Data.FIELD_GOAL_BASE + int(Data.place("black_forest")["level"]) * Data.FIELD_GOAL_PER_LEVEL and is_equal_approx(float(nf["min_std_hp"]), Data.enemy_std_hp(60) * Far.EVENT_FLOOR * Far.NIGHT_MULT), "ніч у полі: рівень героя, мірка на %d%% лютіша, зачистка за місцем" % roundi((Far.NIGHT_MULT - 1.0) * 100.0))
+	check(not nd.has("level") and nd.has("min_std_hp") and not Far.night_mods(Data.place("black_forest"), weak).has("level"), "ніч у печері й для слабшого героя рівня не міняє")
+	check(not Far.night_mods(Data.place("ridne_selo"), strong).has("goal"), "місце з власним обсягом зачистки його зберігає")
 	weak.free()
 	strong.free()
 	# ---- У грі ----
@@ -9726,7 +9728,7 @@ func _suite_event_lift() -> void:
 	var night_ok := true
 	for e in foes.call():
 		night_ok = night_ok and e.level == 60 and floor_ok.call(e, Far.NIGHT_MULT, Far.NIGHT_MULT)
-	check(c.loc.get("night", false) and int(c.loc["level"]) == 60 and foes.call().size() > 0 and night_ok and c.field_goal == Data.FIELD_GOAL_BASE + int(Data.LOCATIONS["black_forest"]["level"]) * Data.FIELD_GOAL_PER_LEVEL, "нічний похід: нечисть рівня героя й лютіша за мірку, зачистка за місцем")
+	check(c.loc.get("night", false) and int(c.loc["level"]) == 60 and foes.call().size() > 0 and night_ok and c.field_goal == Data.FIELD_GOAL_BASE + int(Data.place("black_forest")["level"]) * Data.FIELD_GOAL_PER_LEVEL, "нічний похід: нечисть рівня героя й лютіша за мірку, зачистка за місцем")
 	_clear_enemies(game)
 	game.enter_map()
 	await _frames(2)
@@ -10059,28 +10061,28 @@ func _suite_events_wiki() -> void:
 	check(icons_ok, "у всіх статей справжні значки")
 	# Повнота: усе, що є в грі, є й у довіднику
 	var kinds_used := {}
-	for id in Data.LOCATIONS:
-		for e in Data.LOCATIONS[id]["enemies"]:
+	for id in Data.place_ids():
+		for e in Data.place(id)["enemies"]:
 			kinds_used[e] = true
 	var en_ok := true
 	for k in kinds_used:
 		en_ok = en_ok and not GameDB.mob_wiki(k).is_empty() and k in Wiki.ENEMY_ORDER
 	check(en_ok and Wiki.ENEMY_ORDER.size() == _mobs_with(func(k): return not GameDB.mob_wiki(k).is_empty()), "уся нечисть мапи описана в довіднику")
 	var bosses := {}
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].has("boss"):
-			bosses[Data.LOCATIONS[id]["boss"]] = true
-	for b in load("res://scripts/game/tower_service.gd").SUPER_BOSSES + Acts.RING_POOL + load("res://scripts/game/depth_service.gd").BOSSES:
+	for id in Data.place_ids():
+		if Data.place(id).has("boss"):
+			bosses[Data.place(id)["boss"]] = true
+	for b in load("res://scripts/game/tower_service.gd").super_bosses() + Acts.RING_POOL + load("res://scripts/game/depth_service.gd").bosses():
 		bosses[b] = true
 	var b_ok := true
 	for b in bosses:
 		b_ok = b_ok and not GameDB.boss_wiki(b).is_empty() and b in Wiki.BOSS_ORDER and titles.has(GameDB.boss_name(b))
 	check(b_ok and Wiki.BOSS_ORDER.size() == _mobs_with(func(k): return not GameDB.boss_wiki(k).is_empty()), "усі боси описані: %d" % bosses.size())
 	var map_ok := true
-	for id in Data.CITIES:
-		map_ok = map_ok and titles.has(Data.CITIES[id]["name"])
-	for id in Data.LOCATIONS:
-		map_ok = map_ok and titles.has(Data.LOCATIONS[id]["name"])
+	for id in Data.city_ids():
+		map_ok = map_ok and titles.has(Data.city(id)["name"])
+	for id in Data.place_ids():
+		map_ok = map_ok and titles.has(Data.place(id)["name"])
 	for id in Acts.SPOTS:
 		map_ok = map_ok and titles.has(Acts.SPOTS[id]["name"])
 	check(map_ok, "у розділі «Мапа» кожне місто, місцевість і місце занять")
@@ -10103,8 +10105,8 @@ func _suite_events_wiki() -> void:
 	var rules_ok := true
 	for st in Status.INFO:
 		rules_ok = rules_ok and Wiki.STATUS_TEXT.has(st) and titles.has(Status.INFO[st]["name"])
-	for a in Elites.AFFIXES:
-		rules_ok = rules_ok and titles.has(Elites.AFFIXES[a]["m"])
+	for a in Elites.affix_ids():
+		rules_ok = rules_ok and titles.has(Elites.affix(a)["name"]["m"])
 	for k in Data.affix_pool():
 		rules_ok = rules_ok and WS.PROP_NAMES.has(k)
 	for sl in Data.slots():
@@ -10242,19 +10244,19 @@ func _suite_events_wiki_game() -> void:
 	var near_ok := true
 	for from in ["wild_field", "black_forest", "hutir", "varta"]:
 		var got: String = EBs.place("trade", game.world, from)
-		for c in Data.CITIES:
-			if EBs._ll(from).distance_to(Data.CITIES[c]["pos"]) < EBs._ll(from).distance_to(Data.CITIES[got]["pos"]) - 0.0001:
+		for c in Data.city_ids():
+			if EBs._ll(from).distance_to(Data.city(c)["pos"]) < EBs._ll(from).distance_to(Data.city(got)["pos"]) - 0.0001:
 				near_ok = false
 	check(EBs.place("dice", game.world, "kyiv") == "kyiv" and near_ok and EBs.place("trade", game.world, "black_forest") == "chyhyryn", "«у будь-якому місті» веде до міста, де герой стоїть, або до найближчого")
 	check(EBs.place("trail", game.world, "sich") == "" and EBs.place("holidays", game.world, "sich") == "" and EBs.place("challenges", game.world, "sich") == "", "події без місця на мапі місця не вигадують")
 	var far_place: String = EBs.place("far", game.world, "sich")
-	check(Data.LOCATIONS.has(far_place) and Data.LOCATIONS[far_place].get("scale", false), "далекі краї ведуть до найближчого далекого краю: %s" % far_place)
+	check(Data.is_place(far_place) and Data.place(far_place).get("scale", false), "далекі краї ведуть до найближчого далекого краю: %s" % far_place)
 	# кожна подія або має місце, або чесно його не має: жодна не веде в неіснуюче місце
 	var bad_places := []
 	var ActsD = load("res://scripts/data/activities.gd")
 	for e in EBs.Wiki.EVENTS:
 		var pl: String = EBs.place(e["id"], game.world, "sich")
-		if pl != "" and not (Data.CITIES.has(pl) or Data.LOCATIONS.has(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
 			bad_places.append("%s→%s" % [e["id"], pl])
 	check(bad_places.is_empty(), "місця всіх подій є на мапі: %s" % ", ".join(bad_places))
 	var cue_n := 0
@@ -10281,7 +10283,7 @@ func _suite_events_wiki_game() -> void:
 	var mvw = game.hud.map_view
 	mvw._layout()
 	var vis: Rect2 = mvw.map_rect if mvw.map_rect.size.x > 10 else Rect2(Vector2.ZERO, mvw.size)
-	check(vis.grow(-20.0).has_point(mvw._proj(Data.LOCATIONS[raid_place]["pos"])), "місце події видно на мапі")
+	check(vis.grow(-20.0).has_point(mvw._proj(Data.place(raid_place)["pos"])), "місце події видно на мапі")
 	game.open_character()
 	game.char_tab = ev_i
 	game._build_character()
@@ -10936,7 +10938,7 @@ func _suite_gameplay() -> void:
 		max_room = maxi(max_room, game.combat.room)
 		await process_frame
 		frames += 1
-	check(max_room == int(Data.LOCATIONS["zmii_cave"]["rooms"]), "пройдено всі кімнати")
+	check(max_room == int(Data.place("zmii_cave")["rooms"]), "пройдено всі кімнати")
 	check(game.world.cleared.get("zmii_cave", 0) == 1, "печеру очищено (кадрів: %d)" % frames)
 	check(game.state == game.State.MAP, "вихід із печери на мапу")
 	check(Engine.time_scale == 1.0, "час не лишився сповільненим")
@@ -11086,20 +11088,20 @@ func _suite_peril() -> void:
 	var data_ok := true
 	var boss_kinds := []
 	for id in ids:
-		var L: Dictionary = Data.LOCATIONS[id]
+		var L: Dictionary = Data.place(id)
 		levels.append(int(L["level"]))
 		lands[str(L["land"])] = true
 		boss_kinds.append(str(L["boss"]))
-		data_ok = data_ok and L["type"] == "dungeon" and not L.get("scale", false) and Peril.LANDS.has(L["land"]) and GameDB.has_boss(L["boss"]) and GfxS.has(L["boss"]) and not GameDB.boss_wiki(L["boss"]).is_empty() and WM.ICON_ORDER.has(str(L["icon"])) and Peril.TITLES.has(L["boss"]) and Peril.TITLE_FX.has(L["boss"]) and int(L["rooms"]) >= 6
+		data_ok = data_ok and L["type"] == "dungeon" and not L.get("scale", false) and Peril.is_land(L["land"]) and GameDB.has_boss(L["boss"]) and GfxS.has(L["boss"]) and not GameDB.boss_wiki(L["boss"]).is_empty() and WM.ICON_ORDER.has(str(L["icon"])) and (Peril.boss_title(L["boss"]) != "") and (not Peril.boss_title_fx(L["boss"]).is_empty()) and int(L["rooms"]) >= 6
 		for e in L["enemies"]:
 			data_ok = data_ok and (GameDB.mob_name(e) != "") and GfxS.has(e) and not GameDB.mob_wiki(e).is_empty() and Souls.has(e)
-	check(ids.size() == 5 and levels == [100, 110, 120, 130, 140] and lands.size() == 5 and Peril.LAND_ORDER.size() == 5, "п'ять печер у п'яти землях, рівні від 100 до 140 з кроком 10: %s" % str(levels))
+	check(ids.size() == 5 and levels == [100, 110, 120, 130, 140] and lands.size() == 5 and Peril.land_ids().size() == 5, "п'ять печер у п'яти землях, рівні від 100 до 140 з кроком 10: %s" % str(levels))
 	check(data_ok, "кожна печера: земля, бос зі спрайтом, описом і званням, нечисть з описами й душами")
 	check(Classes.BASE_LEVEL_MAX < int(levels[0]) and PS.is_peril(ids[0]) and not PS.is_peril("zmii_cave") and not PS.is_peril("nema"), "нечисть надважких печер вища за стелю рівня героя")
 	var w = WorldState.new()
 	var no_quests := true
 	for i in 200:
-		var q: Dictionary = w._gen_quest(Data.CITIES.keys()[i % Data.CITIES.size()])
+		var q: Dictionary = w._gen_quest(Data.city_ids()[i % Data.city_ids().size()])
 		no_quests = no_quests and not PS.is_peril(str(q["loc"]))
 	check(no_quests, "доручень у надважкі печери не дають")
 	# ---- Сила нечисті росте від печери до печери ----
@@ -11129,9 +11131,9 @@ func _suite_peril() -> void:
 	var hp0: float = p.max_hp
 	var m1: Array = PS.on_clear(w, p, ids[0], 300.0, 0)
 	var said: String = "\n".join(m1)
-	check(PS.cleared(w, ids[0]) == 1 and PS.bosses_down(w) == 1 and PS.title(w) == str(Peril.TITLES[boss_kinds[0]]) and PS.block_reason(w, p, ids[1]) == "" and PS.block_reason(w, p, ids[2]) != "", "перша перемога: звання й відкрита наступна печера")
-	check("Іменна звитяга" in said and str(Data.LOCATIONS[ids[1]]["name"]) in said and "5:00" in said, "про звання, наступну печеру й час сказано: %s" % said.replace("\n", " | "))
-	check(is_equal_approx(p.max_hp / hp0, 1.0 + float(Peril.TITLE_FX[boss_kinds[0]]["hp"]) / 100.0) and PS.title_fx(w) == {"hp": 3.0}, "іменна звитяга одразу дає свій бонус")
+	check(PS.cleared(w, ids[0]) == 1 and PS.bosses_down(w) == 1 and PS.title(w) == str(Peril.boss_title(boss_kinds[0])) and PS.block_reason(w, p, ids[1]) == "" and PS.block_reason(w, p, ids[2]) != "", "перша перемога: звання й відкрита наступна печера")
+	check("Іменна звитяга" in said and str(Data.place(ids[1])["name"]) in said and "5:00" in said, "про звання, наступну печеру й час сказано: %s" % said.replace("\n", " | "))
+	check(is_equal_approx(p.max_hp / hp0, 1.0 + float(Peril.boss_title_fx(boss_kinds[0])["hp"]) / 100.0) and PS.title_fx(w) == {"hp": 3.0}, "іменна звитяга одразу дає свій бонус")
 	check(is_equal_approx(PS.best_time(w, ids[0]), 300.0) and int(PS.family_best(w, ids[0])["slot"]) == 0 and PS.time_text(75.4) == "1:15", "найкращий час героя й роду записано")
 	var m2: Array = PS.on_clear(w, p, ids[0], 240.0, 1)
 	check(PS.cleared(w, ids[0]) == 2 and is_equal_approx(PS.best_time(w, ids[0]), 240.0) and "Рекорд роду побито" in "\n".join(m2) and PS.titles(w).size() == 1, "швидший похід іншого героя забирає рекорд роду, звання двічі не дають")
@@ -11142,7 +11144,7 @@ func _suite_peril() -> void:
 	check(PS.cleared(w2, ids[0]) == 3 and PS.title(w2) == PS.title(w) and is_equal_approx(PS.best_time(w2, ids[0]), 240.0), "поступ у надважких печерах зберігається")
 	for i in range(1, ids.size()):
 		PS.on_clear(w, p, ids[i], 400.0, 0)
-	check(PS.bosses_down(w) == 5 and PS.title(w) == str(Peril.TITLES[boss_kinds[4]]) and PS.title_fx(w).size() == 5, "п'ять босів: показуємо звання за найдальшого, діють усі п'ять бонусів")
+	check(PS.bosses_down(w) == 5 and PS.title(w) == str(Peril.boss_title(boss_kinds[4])) and PS.title_fx(w).size() == 5, "п'ять босів: показуємо звання за найдальшого, діють усі п'ять бонусів")
 	check("peril_bosses" in Acts.RECORD_ORDER and "valor" in Acts.RECORD_ORDER and int(Rec.hero_values(w, p)["peril_bosses"]) == 5, "надважкі боси й звитяги є в літописі рекордів")
 	var rec_ok := true
 	for key in Acts.RECORD_ORDER:
@@ -11179,7 +11181,7 @@ func _suite_peril() -> void:
 				fav[b] = true
 	check(tier_ok and fav.size() == 5, "шостий ступінь мають лише надважкі боси, і в кожного є улюблена річ")
 	var fc = FakeCombat.new()
-	fc.loc = Data.LOCATIONS[ids[0]].duplicate()
+	fc.loc = Data.place(ids[0]).duplicate()
 	var boss = EnemyS.new()
 	boss.setup(boss_kinds[0], int(levels[0]), true)
 	check(Loot.is_lair_boss(fc, boss) and Loot.worthy(fc, p, boss) and Loot.boss_tier(fc, boss) == 6, "надважкий бос у своїй печері: шостий ступінь")
@@ -11341,7 +11343,7 @@ func _suite_sets() -> void:
 	check(staff_ok, "зброя набору завжди до руки класу, рівень речі — рівень печери")
 	# ---- Де падає ----
 	var fc = FakeCombat.new()
-	fc.loc = Data.LOCATIONS[ids[0]].duplicate()
+	fc.loc = Data.place(ids[0]).duplicate()
 	var boss = EnemyS.new()
 	boss.setup(str(fc.loc["boss"]), int(fc.loc["level"]), true)
 	var first: Dictionary = SetS.on_boss(fc, sp, boss, true)
@@ -11363,7 +11365,7 @@ func _suite_sets() -> void:
 		if not SetS.on_elite(fc, sp, el).is_empty():
 			en += 1
 	check(plain == 0 and en > 50 and en < 140, "елітна нечисть надважкої печери зрідка дає річ набору, рядова — ніколи (%d із 3000)" % en)
-	fc.loc = Data.LOCATIONS["zmii_cave"].duplicate()
+	fc.loc = Data.place("zmii_cave").duplicate()
 	check(SetS.on_boss(fc, sp, boss, true).is_empty() and SetS.on_elite(fc, sp, el).is_empty(), "поза надважкими печерами наборів нема")
 	boss.free()
 	el.free()
@@ -11482,7 +11484,7 @@ func _suite_peril_game() -> void:
 	game._on_map_select(id0)
 	await _frames(1)
 	var far_text: String = panel_text.call()
-	check("Надважка печера" in far_text and "Вирушити до табору" in far_text and not "Увійти до печери" in far_text and str(GameDB.boss_name(Data.LOCATIONS[id0]["boss"])) in far_text and "Тобі тут" in far_text, "здалеку панель показує правила й кнопку дороги до табору")
+	check("Надважка печера" in far_text and "Вирушити до табору" in far_text and not "Увійти до печери" in far_text and str(GameDB.boss_name(Data.place(id0)["boss"])) in far_text and "Тобі тут" in far_text, "здалеку панель показує правила й кнопку дороги до табору")
 	await _ride(game, id0)
 	var camp_text: String = panel_text.call()
 	check(game.map_here == id0 and game.state == game.State.MAP and "Табір біля входу" in camp_text and "Увійти до печери" in camp_text and "Перепочити" in camp_text and "Зілля здоров'я" in camp_text, "дорога веде до табору, а не одразу в бій")
@@ -11574,8 +11576,8 @@ func _suite_peril_game() -> void:
 	for ch in c.entities.get_children():
 		if ch.get_script() == c.PickupScript and ch.kind == "item" and ch.item.has("set") and not ch.is_queued_for_deletion():
 			piece = ch.item
-	check(PS.cleared(w, id0) == 1 and PS.title(w) == str(Peril.TITLES[Data.LOCATIONS[id0]["boss"]]) and PS.best_time(w, id0) >= 245.0 and PS.best_time(w, id0) < 250.0, "перемога: печеру пройдено, звання й час записано")
-	check(Sets.is_set(piece) and int(piece["ilvl"]) == int(Data.LOCATIONS[id0]["level"]), "перша перемога лишає річ набору рівня печери")
+	check(PS.cleared(w, id0) == 1 and PS.title(w) == str(Peril.boss_title(Data.place(id0)["boss"])) and PS.best_time(w, id0) >= 245.0 and PS.best_time(w, id0) < 250.0, "перемога: печеру пройдено, звання й час записано")
+	check(Sets.is_set(piece) and int(piece["ilvl"]) == int(Data.place(id0)["level"]), "перша перемога лишає річ набору рівня печери")
 	check(p.max_hp > hp_before * 1.02 and not p.title_fx.is_empty() and PS.block_reason(w, p, ids[1]) == "", "іменна звитяга діє одразу, друга печера відкрита")
 	check(int(w.stats.get("peril_bosses", 0)) == 1 and int(w.stats.get("peril", 0)) == 1 and game.ChallengeService.state(w, p)["ach"].has("peril_1"), "досягнення за першого надважкого боса")
 	game.enter_map()
@@ -11597,7 +11599,7 @@ func _suite_peril_game() -> void:
 		all_text += l.text + "\n"
 	for b in game.hud.screen_root.find_children("*", "Button", true, false):
 		all_text += b.text + "\n"
-	check(str(Peril.TITLES[Data.LOCATIONS[id0]["boss"]]) in all_text and "Звитяга 3" in all_text and "Лють" in all_text and "Талан" in all_text and "Іменні звитяги" in all_text, "екран героя: звання в заголовку, смуга звитяги, лінії й іменні звитяги")
+	check(str(Peril.boss_title(Data.place(id0)["boss"])) in all_text and "Звитяга 3" in all_text and "Лють" in all_text and "Талан" in all_text and "Іменні звитяги" in all_text, "екран героя: звання в заголовку, смуга звитяги, лінії й іменні звитяги")
 	var dmg0: float = p.damage
 	game.char_do("valor", "dmg")
 	await _frames(2)
@@ -12135,7 +12137,7 @@ func _suite_strilets() -> void:
 	check(Classes.lineage("samopalnyk") == ["peasant", "strilets", "samopalnyk"] and Classes.lineage("opryshok") == ["peasant", "strilets", "opryshok"] and Classes.is_strilets_line("sokolnyk") and Classes.is_strilets_line("samopalnyk") and not Classes.is_strilets_line("plastun"), "дорога стрільця від Селянина до спеціалізацій")
 	var data_ok := true
 	for cls in ["strilets", "sahaidachnyk", "opryshok", "sokolnyk"]:
-		data_ok = data_ok and Classes.TREES.has(cls) and Paths.CARDS.has(cls) and str(C[cls]["address"]) != "" and Data.CITIES.has(str(C[cls]["where"]))
+		data_ok = data_ok and Classes.TREES.has(cls) and Paths.CARDS.has(cls) and str(C[cls]["address"]) != "" and Data.is_city(str(C[cls]["where"]))
 		for wt in C[cls]["weapons"]:
 			data_ok = data_ok and wt in Data.agi_weapons() and GfxS.has("%s_%s" % [cls, wt])
 		data_ok = data_ok and GfxS.has("hunter_" + cls) and GfxS.has("plain_" + cls)
@@ -12213,7 +12215,7 @@ func _suite_strilets() -> void:
 		trials_ok = trials_ok and Spec.TRIALS.has(spec) and Story.NPCS.has(str(C[spec]["mentor"])) and Data.has_weapon(str(Spec.TRIALS[spec]["item"]["type"])) and str(Spec.TRIALS[spec]["item"]["type"]) in C[spec]["weapons"]
 		var obj: Dictionary = Spec.TRIALS[spec]["objective"]
 		if obj.has("loc"):
-			trials_ok = trials_ok and Data.LOCATIONS.has(str(obj["loc"]))
+			trials_ok = trials_ok and Data.is_place(str(obj["loc"]))
 	check(trials_ok, "у кожної спеціалізації стрільця є наставник, випробування й зброя в нагороду")
 	v.job_level = Classes.JOB_CHANGE_AT[1]
 	check(Spec.available(v) == C["strilets"]["next"] and Spec.start(w, v, "sokolnyk"), "стрілець із майстерністю %d обирає спеціалізацію" % Classes.JOB_CHANGE_AT[1])
@@ -13210,7 +13212,7 @@ func _suite_auto() -> void:
 	game.enter_map()
 	await _frames(2)
 	var peril_id: String = load("res://scripts/game/peril_service.gd").ids()[0]
-	c.loc = Data.LOCATIONS[peril_id]
+	c.loc = Data.place(peril_id)
 	check(not AS.applies(c, peril_id) and not AS.applies(c, "hlybyny") and not AS.applies(c, "duel"), "у надважкій печері, Глибинах і особливих боях автобою нема")
 	# ---- Довідник ----
 	var art := ""
@@ -13240,11 +13242,11 @@ func _suite_saga() -> void:
 	var data_ok := true
 	var locs := []
 	for st in Saga.STEPS:
-		data_ok = data_ok and Story.NPCS.has(st["giver"]) and Data.CITIES.has(st["city"]) and Data.LOCATIONS.has(st["objective"]["loc"]) and not st["start"].is_empty() and not st["end"].is_empty() and int(st["reward"]["gold"]) > 0
+		data_ok = data_ok and Story.NPCS.has(st["giver"]) and Data.is_city(st["city"]) and Data.is_place(st["objective"]["loc"]) and not st["start"].is_empty() and not st["end"].is_empty() and int(st["reward"]["gold"]) > 0
 		locs.append(st["objective"]["loc"])
 		for ln in st["start"] + st["end"]:
 			data_ok = data_ok and Story.NPCS.has(ln[0]) and str(ln[1]).length() > 10
-		data_ok = data_ok and str(int(Data.LOCATIONS[st["objective"]["loc"]]["level"])) in str(st["objective"]["text"])
+		data_ok = data_ok and str(int(Data.place(st["objective"]["loc"])["level"])) in str(st["objective"]["text"])
 	check(data_ok and locs == Peril.ids() and Saga.STEPS.size() == 5, "п'ять кроків: кожен веде до свого надважкого боса, оповідачі й міста існують")
 	var top := 0
 	for a in Ach.ACHIEVEMENTS:
@@ -14269,15 +14271,15 @@ func _suite_legends() -> void:
 	var EnemyS = load("res://scripts/entities/enemy.gd")
 	var GfxS = load("res://scripts/world/gfx.gd")
 	# ---- Семигород: земля, нечисть, бос ----
-	var land_ok: bool = Data.REGIONS.has("semyhorod") and "semyhorod" in Data.REGION_ORDER
+	var land_ok: bool = Data.is_region("semyhorod") and "semyhorod" in Data.region_ids()
 	for id in ["tihutsa", "hoia", "tyrhovyshte", "zamok_drakuly"]:
-		var L: Dictionary = Data.LOCATIONS[id]
+		var L: Dictionary = Data.place(id)
 		land_ok = land_ok and L.get("scale", false) and L["region"] == "semyhorod" and int(L["level"]) >= 30 and str(L["desc"]) != ""
-	var brashov: Dictionary = Data.CITIES.get("brashov", {})
-	check(land_ok and Data.LOCATIONS["zamok_drakuly"]["boss"] == "drakula" and Data.LOCATIONS["zamok_drakuly"]["type"] == "dungeon", "Семигород на мапі: три місцевості й Замок Дракули")
-	check(str(brashov.get("region", "")) == "semyhorod" and Acts.TRADE_CITIES.get("brashov", {}).size() == Acts.TRADE_ORDER.size() and Data.REGION_ORDER[-1] == "semyhorod", "Брашов: місто Семигороду з торгом, край стоїть у списку останнім")
+	var brashov: Dictionary = Data.city("brashov")
+	check(land_ok and Data.place("zamok_drakuly")["boss"] == "drakula" and Data.place("zamok_drakuly")["type"] == "dungeon", "Семигород на мапі: три місцевості й Замок Дракули")
+	check(str(brashov.get("region", "")) == "semyhorod" and Acts.TRADE_CITIES.get("brashov", {}).size() == Acts.TRADE_ORDER.size() and Data.region_ids()[-1] == "semyhorod", "Брашов: місто Семигороду з торгом, край стоїть у списку останнім")
 	for kind in ["strygoi", "moroi"]:
-		check((GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "" and not GameDB.mob_wiki(kind).is_empty() and kind in Wiki.ENEMY_ORDER and Souls.has(kind) and kind in Souls.ids() and GameDB.hit_status(kind) != "" and Acts.BOUNTY_NAMES.has(kind), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % GameDB.mob_name(kind, kind))
+		check((GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "" and not GameDB.mob_wiki(kind).is_empty() and kind in Wiki.ENEMY_ORDER and Souls.has(kind) and kind in Souls.ids() and GameDB.hit_status(kind) != "" and not GameDB.bounty_names(kind).is_empty(), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % GameDB.mob_name(kind, kind))
 	check(GameDB.has_boss("drakula") and (GameDB.mob_name("drakula") != "") and GfxS.has("drakula") and GameDB.death_sound("drakula") != "" and not GameDB.boss_wiki("drakula").is_empty() and "drakula" in Wiki.BOSS_ORDER and Souls.has("b_drakula") and Arts.by_boss("drakula") != "" and GameDB.boss_tier("drakula") == Uniq.TOP_COMMON_TIER and GameDB.is_phase2_boss("drakula"), "Дракула: ім'я, спрайт, голос, душа, артефакт, довідник, другий етап бою")
 	check("Влад" in str(GameDB.boss_wiki("drakula")["text"]) and "украв" in str(GameDB.boss_wiki("drakula")["text"]), "довідник відділяє упиря від справжнього воєводи Влада")
 	# ---- Дані лінійок ----
@@ -14289,18 +14291,18 @@ func _suite_legends() -> void:
 		for i in LL["steps"].size():
 			var st: Dictionary = LL["steps"][i]
 			var obj: Dictionary = st["objective"]
-			ok = ok and Story.NPCS.has(st["giver"]) and Data.CITIES.has(st["city"]) and not st["start"].is_empty() and not st["end"].is_empty() and str(obj["text"]) != "" and int(st["reward"]["gold_lvl"]) > 0
+			ok = ok and Story.NPCS.has(st["giver"]) and Data.is_city(st["city"]) and not st["start"].is_empty() and not st["end"].is_empty() and str(obj["text"]) != "" and int(st["reward"]["gold_lvl"]) > 0
 			for ln in st["start"] + st["end"]:
 				ok = ok and Story.NPCS.has(ln[0]) and str(ln[1]).length() > 8
 			var loc: String = str(obj.get("loc", ""))
-			ok = ok and Data.LOCATIONS.has(loc)
+			ok = ok and Data.is_place(loc)
 			match str(obj["type"]):
 				"clear":
-					ok = ok and Data.LOCATIONS[loc]["type"] == "field"
+					ok = ok and Data.place(loc)["type"] == "field"
 				"dungeon":
-					ok = ok and Data.LOCATIONS[loc]["type"] == "dungeon"
+					ok = ok and Data.place(loc)["type"] == "dungeon"
 				"kill", "fetch":
-					ok = ok and (GameDB.mob_name(obj["enemy"]) != "") and obj["enemy"] in Data.LOCATIONS[loc]["enemies"] and int(obj["count"]) > 1
+					ok = ok and (GameDB.mob_name(obj["enemy"]) != "") and obj["enemy"] in Data.place(loc)["enemies"] and int(obj["count"]) > 1
 					if obj["type"] == "fetch":
 						ok = ok and str(obj["item"]) != "" and float(obj["chance"]) > 0.0
 				_:
@@ -14375,7 +14377,7 @@ func _suite_legends() -> void:
 	# ---- Місце переказу міряється з героєм ----
 	LS.on_dialogue_done(w, p, "legend_start", "vii")
 	var m: Dictionary = LS.mods_for(w, p, "lysa_hora")
-	check(int(m.get("level", 0)) == 50 and int(m["base_level"]) == int(Data.LOCATIONS["lysa_hora"]["level"]) and LS.mods_for(w, p, "crypt").is_empty(), "Лиса гора під час переказу має рівень героя, інші печери ні")
+	check(int(m.get("level", 0)) == 50 and int(m["base_level"]) == int(Data.place("lysa_hora")["level"]) and LS.mods_for(w, p, "crypt").is_empty(), "Лиса гора під час переказу має рівень героя, інші печери ні")
 	var low = _new_player()
 	low.level = 5
 	check(LS.mods_for(w, low, "lysa_hora").is_empty(), "слабшого за печеру героя переказ не підтягує")
@@ -14402,7 +14404,7 @@ func _suite_legends() -> void:
 		var key := "Переказ «%s»" % Leg.LINES[line]["title"]
 		wiki_ok = wiki_ok and titles.has(key) and str(Leg.LINES[line]["source"]) in titles[key] and str(Leg.LINES[line]["title"]) in titles.get("Перекази", "")
 	check(wiki_ok, "довідник описує кожен переказ і його джерело")
-	check("самі не починаються" in titles.get("Ратуша", "") and "«Поговорити»" in titles.get("Ратуша", "") and Data.HALL_NAMES["sich"] in titles.get("Ратуша", "") and "в ратуші" in titles.get("Перекази", ""), "довідник має статтю «Ратуша»: розмови самі не починаються")
+	check("самі не починаються" in titles.get("Ратуша", "") and "«Поговорити»" in titles.get("Ратуша", "") and Data.hall_name("sich") in titles.get("Ратуша", "") and "в ратуші" in titles.get("Перекази", ""), "довідник має статтю «Ратуша»: розмови самі не починаються")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -14638,11 +14640,11 @@ func _suite_audit() -> void:
 		var steps: Array = Leg.LINES[line]["steps"]
 		for i in steps.size():
 			var lloc := str(steps[i]["objective"].get("loc", ""))
-			if leg_goal < 0 and Data.LOCATIONS.has(lloc) and int(Data.LOCATIONS[lloc]["level"]) < 99:
+			if leg_goal < 0 and Data.is_place(lloc) and int(Data.place(lloc)["level"]) < 99:
 				lw.legends[line] = {"step": i, "stage": "active", "progress": 0}
 				var lm: Dictionary = LS.mods_for(lw, lp, lloc)
 				leg_goal = int(lm.get("goal", -1))
-				leg_base = int(Data.LOCATIONS[lloc]["level"])
+				leg_base = int(Data.place(lloc)["level"])
 				check(int(lm.get("level", 0)) == 99 and QS.step_target(lw, lloc), "місце переказу міряється рівнем із героєм і є метою кроку")
 				check("справа" in QS.block_reason(_cleared_world(lw, lloc), lp, lloc), "швидкий похід у місце, де чекає крок переказу, не дається")
 	check(leg_goal > 0 and leg_goal <= int(Far.GOAL_MAX) and leg_goal == mini(int(Far.GOAL_MAX), Data.FIELD_GOAL_BASE + leg_base * Data.FIELD_GOAL_PER_LEVEL), "мета зачистки рахується від рідного рівня місця: %d, а не сотні" % leg_goal)
@@ -18173,3 +18175,184 @@ func _suite_party_mechanics() -> void:
 	await _frames(3)
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Видобуток повідомлень перевірки, у яких є всі шматки тексту.
+func _has_problem(probs: Array, parts: Array) -> bool:
+	for p in probs:
+		var ok := true
+		for x in parts:
+			ok = ok and str(x) in str(p)
+		if ok:
+			return true
+	return false
+
+
+func _suite_world_db() -> void:
+	suite("База світу")
+	var Peril = load("res://scripts/data/peril.gd")
+	var Elites = load("res://scripts/data/elites.gd")
+	var Tower = load("res://scripts/game/tower_service.gd")
+	var Depth = load("res://scripts/game/depth_service.gd")
+	var probs := GameDB.problems()
+	check(probs.is_empty(), "у базі нема проблем%s" % ("" if probs.is_empty() else ": " + "; ".join(probs.slice(0, 5))))
+	var expect := {"regions": 8, "cities": 19, "places": 67, "lands": 5, "biomes": 11, "elite_affixes": 7}
+	var count_bad := []
+	for t in expect:
+		if GameDB.ids(t).size() != int(expect[t]):
+			count_bad.append("%s %d" % [t, GameDB.ids(t).size()])
+	check(count_bad.is_empty(), "у таблицях світу стільки записів, скільки було в коді: %s" % str(count_bad))
+	# ---- Порядок: колишні REGION_ORDER і LAND_ORDER — тепер порядок файлу ----
+	check(Data.region_ids() == ["siver", "volyn", "slobid", "pivden", "oka", "tvershchyna", "zalissia", "semyhorod"], "краї в тому самому порядку")
+	check(Peril.land_ids() == ["kavkaz", "balkany", "baltyka", "ural", "pivnich"], "нові землі в порядку печер")
+	check(Data.place_ids()[0] == "ridne_selo" and Data.place_ids()[-1] == "chertohy_chornoboha" and Data.city_ids()[0] == "sich" and Data.city_ids()[-1] == "cherkaskyi_stan", "місця й міста в порядку файлу")
+	# ---- Номери сталі ----
+	check(Data.region("siver")["num"] == 6001 and Data.region("semyhorod")["num"] == 6008 and Data.city("sich")["num"] == 6101 and Data.city("cherkaskyi_stan")["num"] == 6119
+		and Data.place("ridne_selo")["num"] == 6201 and Data.place("bashta")["num"] == 6221 and Data.place("chertohy_chornoboha")["num"] == 6267
+		and Peril.land("kavkaz")["num"] == 6401 and Peril.land("pivnich")["num"] == 6405 and GameDB.row("biomes", "steppe")["num"] == 6501 and GameDB.row("biomes", "snow")["num"] == 6511
+		and Elites.affix("fiery")["num"] == 6601 and Elites.affix("explosive")["num"] == 6607, "номери світу ті самі, що їм дали")
+	check(GameDB.by_num("places", 6221) == "bashta" and GameDB.by_num("cities", 6104) == "kyiv" and GameDB.by_num("places", 6101) == "", "пошук місця й міста за номером")
+	# ---- Типи: позиції — Vector2, рівні й номери цілі ----
+	var types_ok := true
+	var bad := []
+	for c in Data.city_ids():
+		var C: Dictionary = Data.city(c)
+		var ok: bool = typeof(C["pos"]) == TYPE_VECTOR2 and typeof(C["level"]) == TYPE_INT and typeof(C["num"]) == TYPE_INT and C["hall"] is String
+		types_ok = types_ok and ok
+		if not ok:
+			bad.append(c)
+	for p in Data.place_ids():
+		var L: Dictionary = Data.place(p)
+		var ok: bool = typeof(L["pos"]) == TYPE_VECTOR2 and typeof(L["level"]) == TYPE_INT and L["enemies"] is Array
+		for k in ["goal", "rooms", "peril", "plague_start"]:
+			ok = ok and (not L.has(k) or typeof(L[k]) == TYPE_INT)
+		for k in ["scale", "night", "endless", "tower"]:
+			ok = ok and (not L.has(k) or typeof(L[k]) == TYPE_BOOL)
+		types_ok = types_ok and ok
+		if not ok:
+			bad.append(p)
+	for l in Peril.land_ids():
+		for k in Peril.land(l)["title_fx"]:
+			types_ok = types_ok and typeof(Peril.land(l)["title_fx"][k]) == TYPE_INT
+	for a in Elites.affix_ids():
+		types_ok = types_ok and typeof(Elites.affix(a)["color"]) == TYPE_COLOR
+	for k in GameDB.mob_ids():
+		var R: Dictionary = GameDB.mob(k)
+		types_ok = types_ok and (not R.has("blood") or typeof(R["blood"]) == TYPE_COLOR) and (not R.has("feminine") or typeof(R["feminine"]) == TYPE_BOOL)
+	check(types_ok, "позиції — Vector2, рівні й номери цілі, прапорці так/ні, кольори — Color: %s" % str(bad))
+	check(Data.place("ridne_selo")["pos"] == Vector2(36.3, 49.75) and Data.city("kyiv")["pos"] == Vector2(30.52, 50.45) and Data.place("votchyna")["pos"] == Vector2(41, 57), "позиції ті самі до останнього знака")
+	check(GameDB.mob("upyr")["blood"] == Color(0.55, 0.05, 0.08) and not GameDB.mob("chort").has("blood") and Elites.affix("frost")["color"] == Color(0.55, 0.85, 1.0), "кольори крові й властивостей ті самі")
+	# ---- Лише для читання й без копій ----
+	var L0: Dictionary = Data.place("zmii_cave")
+	check(L0.is_read_only() and L0["enemies"].is_read_only() and Data.city("kyiv").is_read_only() and Data.place("bashta")["floors"]["pool"].is_read_only() and Data.place_ids().is_read_only() and Data.city_ids().is_read_only() and Peril.land("kavkaz")["title_fx"].is_read_only(), "записи світу заморожені")
+	check(is_same(Data.place("zmii_cave"), Data.place("zmii_cave")) and is_same(Data.places()["zmii_cave"], L0), "місце читається без копії")
+	check(Data.place("nova").is_empty() and Data.city("nova").is_empty() and not Data.is_place("nova") and not Data.is_city("nova") and Data.hall_name("nova") == "" and Peril.boss_title("zmii") == "" and Peril.boss_title_fx("zmii").is_empty(), "невідомі місто й місце — порожні записи")
+	# ---- Те, що раніше лежало окремо, тепер у записах ----
+	check(Data.hall_name("sich") == "Курінь" and Data.hall_name("kyiv") == "Ратуша" and Data.hall_name("molfar_hut") == "Світлиця", "назва ратуші — у записі міста")
+	check(Peril.boss_title("dev") == "Девоборець" and Peril.boss_title_fx("chornoboh") == {"dmg": 3} and Peril.land_of_boss("velnias") == "baltyka", "звання за надважкого боса — у записі його землі")
+	check(Tower.super_bosses() == ["baba_yaha", "solovei", "lykho", "oprychnyk"] and Tower.pool().size() == 8 and Tower.mini_titles()[0] == "Сотник" and Depth.bosses()[-1] == "putinoid" and Depth.pool().size() == 7, "поверхи Башти й Глибин — у записах цих місць")
+	check(Elites.is_feminine("mara") and not Elites.is_feminine("upyr") and GameDB.bounty_names("mavka").size() == 3 and GameDB.bounty_names("zmii").is_empty(), "рід і імена розшуку — у записі нечисті")
+	check(load("res://scripts/data/camp_data.gd").biome_resource("mountain") == "iron" and load("res://scripts/data/camp_data.gd").biome_resource("maidan") == "wood" and load("res://scripts/data/sounds.gd").ambient_for("maidan") == "crowd" and Data.place_icon(Data.place("rapids")) == "wave" and Data.place_icon(Data.place("chaklun_lair")) == "skull", "краєвид: ресурс, шум, значок")
+	check(load("res://scripts/game/plague_service.gd").start_levels() == {"ridne_selo": 1, "polissia": 1, "bryansk_forest": 3, "chaklun_lair": 3}, "зараза на початку гри — у записах місць")
+	# ---- Файли в єдиному вигляді й проходять перевірку ----
+	var fmt_ok := true
+	var raws := {}
+	for t in expect:
+		var text := FileAccess.get_file_as_string(GameDB.path_of(t))
+		raws[t] = JSON.parse_string(text)
+		fmt_ok = fmt_ok and load("res://tools/data_format.gd").format_table(t, raws[t]) == text and not "\\u0" in text and GameDB.validate(t, raws[t]).is_empty()
+	check(fmt_ok, "файли світу в єдиному вигляді й проходять перевірку")
+	# ---- Перевірка ловить зламаний запис у кожній таблиці ----
+	var b: Dictionary = raws["regions"].duplicate(true)
+	b["siver"]["name"] = " "
+	b["nova"] = {"num": 6001, "name": "Нова", "desc": "x"}
+	var pr := GameDB.validate("regions", b)
+	check(_has_problem(pr, ["regions/siver", "«name» порожнє"]) and _has_problem(pr, ["regions/nova", "6001"]) and _has_problem(pr, ["regions/nova", "нема жодного міста"]), "зламаний край: %s" % str(pr))
+	b = raws["cities"].duplicate(true)
+	b["kyiv"]["pos"] = [100.0, 10.0]
+	b["lviv"]["region"] = "nova"
+	b["poltava"].erase("hall")
+	b["sich"]["pos"] = [1.0]
+	pr = GameDB.validate("cities", b)
+	check(_has_problem(pr, ["cities/kyiv", "поза мапою"]) and _has_problem(pr, ["cities/lviv", "нема краю «nova»"]) and _has_problem(pr, ["cities/poltava", "«hall»"]) and _has_problem(pr, ["cities/sich.pos", "[x, y]"]), "зламане місто: %s" % str(pr))
+	b = raws["places"].duplicate(true)
+	b["wild_field"]["enemies"] = ["nova_nevidoma"]
+	b["zmii_cave"]["boss"] = "mavka"
+	b["rapids"]["biome"] = "lava"
+	b["rapids"]["rooms"] = 3
+	b["crypt"]["icon"] = "nope"
+	b["crypt"]["type"] = "town"
+	b["polissia"]["pos"] = [10.0, 10.0]
+	b["bashta"]["floors"]["pool"] = ["nova_nevidoma"]
+	b["kremlin"]["plague_start"] = 9
+	b["devova_ushchelyna"]["peril"] = 2
+	pr = GameDB.validate("places", b)
+	check(_has_problem(pr, ["місце wild_field", "nova_nevidoma", "немає в mobs.json"]) and _has_problem(pr, ["місце zmii_cave (бос)", "нема запису «boss»"])
+		and _has_problem(pr, ["places/rapids", "нема краєвиду «lava»"]) and _has_problem(pr, ["places/rapids", "«rooms» буває лише в печери"])
+		and _has_problem(pr, ["places/crypt", "нема значка «nope»"]) and _has_problem(pr, ["places/crypt.type", "town"]) and _has_problem(pr, ["places/polissia", "поза мапою"])
+		and _has_problem(pr, ["місце bashta (поверхи)", "nova_nevidoma"]) and _has_problem(pr, ["places/bashta", "замало нечисті"]) and _has_problem(pr, ["places/kremlin", "plague_start"])
+		and _has_problem(pr, ["places/devova_ushchelyna", "«peril» 2"]), "зламане місце: %s" % str(pr))
+	b = raws["lands"].duplicate(true)
+	b["kavkaz"]["title_fx"] = {"nope": 3}
+	b["nova"] = {"num": 6409, "name": "Нова", "desc": "x", "title": "y", "title_fx": {"hp": 1}}
+	pr = GameDB.validate("lands", b)
+	check(_has_problem(pr, ["lands/kavkaz", "«nope»"]) and _has_problem(pr, ["lands/nova", "рівно одна", "а їх 0"]), "зламана земля: %s" % str(pr))
+	b = raws["biomes"].duplicate(true)
+	b["steppe"]["ambient"] = "nope"
+	b["forest"]["resource"] = "gold"
+	b["lava"] = {"num": 6590, "name": "Лава", "ambient": "fire", "icon": "mountain", "dungeon_icon": "cave"}
+	pr = GameDB.validate("biomes", b)
+	check(_has_problem(pr, ["biomes/steppe", "«nope»"]) and _has_problem(pr, ["biomes/forest", "«gold»"]) and _has_problem(pr, ["biomes/lava", "Ground.TILED"]), "зламаний краєвид: %s" % str(pr))
+	b = raws["elite_affixes"].duplicate(true)
+	b["fiery"]["status"] = "nope"
+	b["iron"]["name"].erase("f")
+	b["swift"]["num"] = 6999
+	pr = GameDB.validate("elite_affixes", b)
+	check(_has_problem(pr, ["elite_affixes/fiery", "«nope»"]) and _has_problem(pr, ["elite_affixes/iron.name", "«f»"]) and _has_problem(pr, ["elite_affixes/swift", "поза проміжком"]), "зламана властивість еліти: %s" % str(pr))
+	var mobs: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("mobs")))
+	mobs["mavka"]["feminine"] = false
+	mobs["upyr"]["bounty_names"] = []
+	mobs["zmii"]["blood"] = [2.0, 0.0, 0.0]
+	mobs.erase("kikimora")
+	pr = GameDB.validate("mobs", mobs)
+	check(_has_problem(pr, ["mobs/mavka", "«feminine»"]) and _has_problem(pr, ["mobs/upyr", "«bounty_names» порожні"]) and _has_problem(pr, ["mobs/zmii.blood"]) and _has_problem(pr, ["місце", "«kikimora»", "немає в mobs.json"]), "зламана нечисть у світі: %s" % str(pr))
+
+
+## Бій починається в кожному місці мапи: нечисть з'являється, земля й шум — краєвиду місця.
+func _suite_world_fights() -> void:
+	suite("Бій у кожному місці")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	for k in game.world.hints.keys() + ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full"]:
+		game.world.hints[k] = true
+	var Sounds = load("res://scripts/data/sounds.gd")
+	var bad := []
+	var n := 0
+	for id in Data.place_ids():
+		n += 1
+		seed(900 + n)
+		game.combat.custom_loc = {}
+		game.enter_location(id)
+		game.player.hp = game.player.max_hp
+		await _frames(2)
+		var c = game.combat
+		var foes: Array = c.get_tree().get_nodes_in_group("enemies")
+		var L: Dictionary = Data.place(id)
+		var ok: bool = c.active and c.loc_id == id and str(c.loc["name"]) == str(L["name"]) and c.ground.biome == L["biome"] and not foes.is_empty()
+		ok = ok and foes.all(func(e): return e.kind in L["enemies"] or e.kind == L.get("boss", "") or e.is_boss or e.elite)
+		ok = ok and Sounds.ambient_for(str(c.loc["biome"])) == str(GameDB.row("biomes", L["biome"])["ambient"])
+		if not ok:
+			bad.append(id)
+		game.enter_map()
+		await _frames(1)
+	check(bad.is_empty() and n == 67, "бій починається в кожному з %d місць: нечисть місця, земля й шум краєвиду%s" % [n, ("" if bad.is_empty() else ": " + str(bad))])
+	game.queue_free()
+	await _frames(2)

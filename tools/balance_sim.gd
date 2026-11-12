@@ -46,11 +46,11 @@ func _run() -> void:
 	var levels = []
 	for l in _env_list("SIM_LEVELS", ["1", "2", "3", "4", "6", "8", "10", "12"]):
 		levels.append(int(l))
-	var locs: Array = _env_list("SIM_LOCS", Data.LOCATIONS.keys())
+	var locs: Array = _env_list("SIM_LOCS", Data.place_ids())
 	var seeds = int(OS.get_environment("SIM_SEEDS")) if OS.get_environment("SIM_SEEDS") != "" else 2
 	var t0 = Time.get_ticks_msec()
 	for loc_id in locs:
-		var L: Dictionary = Data.LOCATIONS[loc_id]
+		var L: Dictionary = Data.place(loc_id)
 		for lvl in levels:
 			# Не ганяємо явно безглузді поєднання
 			if lvl < int(L["level"]) - 3 or lvl > int(L["level"]) + 4:
@@ -325,7 +325,7 @@ func _report() -> void:
 		"|---|---|---|---|---|---|---|---|---|",
 	]
 	for r in results:
-		var L: Dictionary = Data.LOCATIONS[r["loc"]]
+		var L: Dictionary = Data.place(r["loc"])
 		lines.append("| %s (%d) | %d | %d%% | %d%% | %.0f | %.0f%% | %.0f | %.0f | %.1f |" % [
 			L["name"], L["level"], r["hero"], r["cleared"] * 100, r["died"] * 100, r["time"],
 			r["dmg_pct"] * 100, r["xp_min"], r["gold_min"], r["lvl_minutes"]])

@@ -141,7 +141,7 @@ static func best_place(world, player, here: String = "") -> String:
 	var best := ""
 	var best_d := INF
 	for id in _svc("event_service").reachable_locs(world, player):
-		var d: float = _ll(here).distance_to(Data.LOCATIONS[id]["pos"])
+		var d: float = _ll(here).distance_to(Data.place(id)["pos"])
 		if d < best_d:
 			best_d = d
 			best = id

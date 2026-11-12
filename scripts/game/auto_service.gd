@@ -16,9 +16,9 @@ const AID_AT := 0.6  # «Перша допомога» лише коли здо�
 
 ## Чи буває автобій у цьому бою взагалі (тоді показуємо кнопку).
 static func applies(combat, loc_id: String) -> bool:
-	if not Data.LOCATIONS.has(loc_id) or combat.loc.has("hunt"):
+	if not Data.is_place(loc_id) or combat.loc.has("hunt"):
 		return false
-	var L: Dictionary = Data.LOCATIONS[loc_id]
+	var L: Dictionary = Data.place(loc_id)
 	return L["type"] in ["field", "dungeon"] and not L.get("endless", false) and not L.has("peril")
 
 

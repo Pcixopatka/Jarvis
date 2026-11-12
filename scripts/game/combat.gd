@@ -115,7 +115,7 @@ var _sweep_sold := 0  # скільки речей продано при приб
 var _sweep_gold := 0
 const FIELD_PAIR_CHANCE := 0.5  # шанс, що в далекому полі замість одного ворога вийдуть двоє
 var drop_boost := 1.0  # ×2 здобичі за рекламу (виставляє Game щокадру)
-var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість Data.LOCATIONS)
+var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість місця з data/places.json)
 var gate = null
 var wave := 0
 var wave_timer := 0.0
@@ -215,7 +215,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	loc_id = id
 	lost = false
 	runs += 1
-	if not Data.LOCATIONS.has(id):
+	if not Data.is_place(id):
 		# Особливі бої, описані службами (оборона, події, герць...)
 		match str(defense_loc.get("type", "")):
 			"duel":
@@ -230,7 +230,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	plague = plague_level
 	plague_mods = PlagueService.mods(plague)
 	cloud_timer = 4.0
-	loc = Data.LOCATIONS[id]
+	loc = Data.place(id)
 	if loc.get("endless", false) and not custom_loc.is_empty():
 		loc = custom_loc  # Глибини зарази: печера потрібної глибини
 	if not extra.is_empty():
@@ -271,7 +271,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 			spawn_enemy(en[randi() % en.size()], maxi(int(loc["level"]) + 1, player.level), false, gp)
 			var g = _last_enemy()
 			lift_to_hero(g)
-			var gk := Elites.AFFIXES.keys()
+			var gk := Elites.affix_ids().duplicate()
 			gk.shuffle()
 			g.make_elite(gk.slice(0, 2))
 			g.max_hp *= 1.5
@@ -730,7 +730,7 @@ func _spawn_tower_boss() -> void:
 	# Міні-бос: іменована еліта з 2–3 властивостями, удвічі міцніша за звичайну
 	spawn_enemy(loc["mini"], lvl, false, pos)
 	var e = _last_enemy()
-	var keys := Elites.AFFIXES.keys()
+	var keys := Elites.affix_ids().duplicate()
 	keys.shuffle()
 	e.make_elite(keys.slice(0, int(loc["mini_affixes"])))
 	e.max_hp *= 3.0
@@ -1366,7 +1366,7 @@ func _drop_loot(e: Node2D) -> void:
 		_resource_bundle(pos, roundi(4 * drop_boost))
 		Events.treasure_found.emit(loc_id)
 	elif e.elite:
-		Events.banner.emit("%s переможена!" % e.title if e.kind in Elites.FEMININE else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
+		Events.banner.emit("%s переможена!" % e.title if Elites.is_feminine(e.kind) else "%s переможений!" % e.title, Color(1.0, 0.85, 0.35))
 		for i in 3:
 			spawn_pickup(pos, "coin", maxi(1, e.xp_value / 3))
 		if randf() < Elites.ITEM_CHANCE * (1.0 + float(festive.get("loot", 0.0))) * drop_boost:
@@ -1427,7 +1427,7 @@ func _res_amount(n: int) -> int:
 ## Ресурс для хутора: здебільшого той, яким багатий ландшафт.
 func _roll_resource() -> String:
 	if randf() < 0.7:
-		return Camp.BIOME_RESOURCE.get(loc.get("biome", "steppe"), "wood")
+		return Camp.biome_resource(str(loc.get("biome", "steppe")))
 	return Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
 
 

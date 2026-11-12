@@ -73,7 +73,7 @@ static func key(kind: String, id: String) -> String:
 static func _peril_bosses() -> Array:
 	var out := []
 	for loc in PerilService.ids():
-		out.append(str(Data.LOCATIONS[loc]["boss"]))
+		out.append(str(Data.place(loc)["boss"]))
 	return out
 
 

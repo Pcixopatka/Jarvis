@@ -297,8 +297,8 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 			return v
 		v.add_child(UI.button("Увійти на хутір", on_go.bind(sel), Vector2(350, 70), 26))
 		return v
-	if Data.CITIES.has(sel):
-		var C: Dictionary = Data.CITIES[sel]
+	if Data.is_city(sel):
+		var C: Dictionary = Data.city(sel)
 		v.add_child(_wrapped(C["name"], 28, UI.GOLD))
 		v.add_child(UI.label("Місто", 18, UI.MUTED, false))
 		v.add_child(_wrapped(C["desc"], 18, UI.TEXT))
@@ -319,14 +319,14 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 			return v
 		v.add_child(UI.button("Увійти до міста", on_go.bind(sel), Vector2(350, 70), 26))
 		return v
-	var L: Dictionary = Data.LOCATIONS[sel]
+	var L: Dictionary = Data.place(sel)
 	v.add_child(_wrapped(L["name"], 28, UI.GOLD))
 	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], GameDB.boss_name(L["boss"])]) if L["type"] == "dungeon" else "Дика місцевість"
 	v.add_child(_wrapped(kind_text, 17, UI.MUTED))
 	var danger: bool = L["level"] > player.level + 2
 	if L.get("scale", false):
 		var Far = load("res://scripts/game/far_service.gd")
-		var region: String = str(Data.REGIONS.get(str(L.get("region", "")), {}).get("name", "Далекий край"))
+		var region: String = str(Data.region(str(L.get("region", ""))).get("name", "Далекий край"))
 		v.add_child(_wrapped("%s  •  з %d-го рівня%s" % [region, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
 		if Far.matched(L, player):
 			v.add_child(_wrapped("Далекий край: нечисть тут твого %d-го рівня, з повною силою, досвідом і здобиччю цього рівня." % player.level, 16, UI.GOOD))
@@ -381,7 +381,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 static func build_peril(sel: String, world, player, here: bool, on_go: Callable, on_enter: Callable, on_camp: Callable) -> Control:
 	var PS = load("res://scripts/game/peril_service.gd")
 	var Peril = load("res://scripts/data/peril.gd")
-	var L: Dictionary = Data.LOCATIONS[sel]
+	var L: Dictionary = Data.place(sel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	v.add_child(_wrapped(L["name"], 28, UI.GOLD))

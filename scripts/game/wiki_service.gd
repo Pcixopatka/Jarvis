@@ -162,10 +162,22 @@ static func _basics() -> Array:
 	out.append(_e("Шлях козака", "ланцюжок перших цілей", "Ланцюжок із %d цілей, що по черзі вчить усьому в грі. Нинішній крок стоїть угорі вкладки «Журнал»: що зробити, як саме й яка нагорода. Виконав умову, і кнопка «Забрати нагороду» відкриє наступний крок. Бувалий герой забирає все вже зроблене одним дотиком. Порадник і кнопка «Далі» на мапі теж ведуть до наступного кроку.\n%s" % [Way.total(), "\n".join(way_lines)]))
 	out.append(_loot_entry())
 	var QS = load("res://scripts/game/quick_service.gd")
+	# Звичайна назва — та, що в більшості міст; решта міст ідуть гуртом за назвою (у порядку першої появи)
+	var by_hall := {}
+	for c in Data.city_ids():
+		if not by_hall.has(Data.hall_name(c)):
+			by_hall[Data.hall_name(c)] = []
+		by_hall[Data.hall_name(c)].append(c)
+	var hall_default := ""
+	for h in by_hall:
+		if hall_default == "" or by_hall[h].size() > by_hall[hall_default].size():
+			hall_default = h
 	var hall_other := []
-	for hc in Data.HALL_NAMES:
-		hall_other.append("%s: «%s»" % [Data.place_name(hc), Data.HALL_NAMES[hc]])
-	out.append(_e("Ратуша", "хто має до тебе справу", "Перша вкладка кожного міста. Тут чекають усі, хто має справу до героя: люди з історії, побратими, наставник після випробування й оповідачі переказів. Розмови самі не починаються. Зайшов у місто, і вгорі з'явиться напис, хто на тебе чекає, а біля назви вкладки буде число. Далі сам вирішуй, коли й до кого підійти: кнопка «Поговорити» в рядку. Зелена рамка й напис «Чекає з нагородою» означають, що справу вже зроблено й можна забрати своє. Якщо той самий співрозмовник одразу має наступну справу, розмова триває, а до інших підходиш окремо. Коли на героя чекає історія, місто відкривається одразу на цій вкладці. У містах будівля зветься «%s», в інших місцях по-своєму. %s." % [Data.HALL_DEFAULT, ". ".join(hall_other)], {"map": "castle"}))
+	for h in by_hall:
+		if h != hall_default:
+			for hc in by_hall[h]:
+				hall_other.append("%s: «%s»" % [Data.place_name(hc), h])
+	out.append(_e("Ратуша", "хто має до тебе справу", "Перша вкладка кожного міста. Тут чекають усі, хто має справу до героя: люди з історії, побратими, наставник після випробування й оповідачі переказів. Розмови самі не починаються. Зайшов у місто, і вгорі з'явиться напис, хто на тебе чекає, а біля назви вкладки буде число. Далі сам вирішуй, коли й до кого підійти: кнопка «Поговорити» в рядку. Зелена рамка й напис «Чекає з нагородою» означають, що справу вже зроблено й можна забрати своє. Якщо той самий співрозмовник одразу має наступну справу, розмова триває, а до інших підходиш окремо. Коли на героя чекає історія, місто відкривається одразу на цій вкладці. У містах будівля зветься «%s», в інших місцях по-своєму. %s." % [hall_default, ". ".join(hall_other)], {"map": "castle"}))
 	out.append(_e("Крамниця міста", "товари й торба сіткою значків", "Вкладка «Крамниця» в кожному місті. Ліворуч товари, посередині твоя торба, праворуч картка вибраної речі. Усе стоїть клітинками зі значками, так само як торба на екрані героя: колір рамки каже про рідкість, число в кутку про заточку, зірка про золоту річ. Під значком товару написана ціна, під значком твоєї речі те, скільки за неї дадуть. Зелена стрілка означає, що річ сильніша за вдягнену. Торкнись клітинки, і праворуч з'являться бонуси та кнопка «Купити» чи «Продати». Кнопка «Вибрати кілька» дає позначити кілька речей і продати разом: позначені клітинки стають зеленими з галочкою. Над сіткою є продаж гуртом за рідкістю й автопродаж звичайних при повній торбі. Артефакти в торбі видно, але вони не продаються. Таку саму крамницю будь-де відкриває Хованець.", {"map": "castle"}))
 	out.append(_e("Подорож мапою", "до кожного місця треба доїхати", "Обери місце на мапі й натисни кнопку на його панелі: «Вирушити», «Увійти до міста», «Спуститися», «Піднятися» чи іншу. Вершник із хоругвою поїде туди пунктирним шляхом, і лише після прибуття почнеться бій чи відчиниться місто. Дорога триває від півтори до чотирьох секунд, залежно від відстані. Дотик по мапі під час поїздки прискорює її втричі. Так герой дістається до кожного місця: міст, хутора, полів, печер, таборів надважких печер, занять, Башти Кощія й Глибин зарази. Одразу він заходить лише туди, де вже стоїть. Їздити можна й без мети: торкнись порожнього місця на мапі, і герой поїде просто туди й стане там. Далі до будь-якого місця він їде вже від цієї точки, тож дорога буде коротша. Над морем і великими озерами замість вершника пливе чайка з прапорцем. У вільній дорозі пригод нема. Дорогою до диких місць трапляються пригоди: поїздка зупиняється на розмову й триває далі. Дорогу скорочують кінь зі стайні, перк вершника, артефакти й Гетьманський універсал, який робить її вдвічі швидшою. Поза мапою лишаються бос дня й бос тижня та швидкий похід: там дороги нема, герой лишається, де стояв. Після смерті герой отямлюється в останньому місті, де бував.", {"map": "castle"}))
 	out.append(_e("Швидкий похід", "за перегляд реклами", "Місце, яке ти вже пройшов %d рази, можна зачистити миттю, без бою. Туди, де на тебе чекає крок історії, переказу чи справа побратима, швидкий похід не дається: таке місце треба пройти самому. На панелі місця з'являється кнопка «Швидкий похід за рекламу»: переглянь рекламу, і герой одразу дістане досвід, гривні, речі й ресурси, як за звичайний похід. Здобич рахується тими самими шансами, що й у бою, реклама «×2 здобичі» й свята на неї діють. Рідкісного з босів тут нема: золоті речі, артефакти, камені долі й душі дає лише справжній бій. Зараза, ніч, розшук і скарб у швидкому поході теж не діють, історія не просувається. Завдання міст на нечисть і печери він зараховує, а світ рахує його як похід: події й облоги чекають на один похід менше. На день дається %d швидких походів. Працює для диких місцевостей і печер, не сильніших за героя." % [QS.MIN_CLEARS, QS.PER_DAY]))
@@ -268,15 +280,15 @@ static func _peril() -> Array:
 	var first: String = ids[0]
 	var last: String = ids[ids.size() - 1]
 	var lands := []
-	for land in Peril.LAND_ORDER:
-		lands.append(str(Peril.LANDS[land]["name"]))
+	for land in Peril.land_ids():
+		lands.append(str(Peril.land(land)["name"]))
 	var out := []
 	out.append(_e("Надважкі печери", "п'ять печер за краєм мапи", "П'ять печер у нових землях по краях мапи: %s. Нечисть у них від %d-го до %d-го рівня, вища за стелю рівня героя. До того ж вона у %s–%s раза міцніша за звичайну нечисть свого рівня й б'є у %s–%s раза сильніше: що далі печера, то лютіша. Пускають із %d-го рівня героя. Печери відкриваються по черзі: щоб увійти в наступну, здолай боса попередньої. Міст у нових землях нема. Біля входу стоїть табір: там можна перепочити й купити зілля в маркітанта, у %s раза дорожче, ніж у місті. Розраховано на героя в найкращому спорядженні. Для кожної наступної печери потрібні речі з попередньої, набори, золото шостого ступеня й звитяги." % [
-		", ".join(lands), int(Data.LOCATIONS[first]["level"]), int(Data.LOCATIONS[last]["level"]), _num(PS.hp_mult(first)), _num(PS.hp_mult(last)), _num(PS.dmg_mult(first)), _num(PS.dmg_mult(last)), Peril.OPEN_LEVEL, _num(Peril.CAMP_POTION_MARKUP)], {}, "Надважкі печери"))
+		", ".join(lands), int(Data.place(first)["level"]), int(Data.place(last)["level"]), _num(PS.hp_mult(first)), _num(PS.hp_mult(last)), _num(PS.dmg_mult(first)), _num(PS.dmg_mult(last)), Peril.OPEN_LEVEL, _num(Peril.CAMP_POTION_MARKUP)], {}, "Надважкі печери"))
 	out.append(_e("Суворі правила", "смерть і лють боса", "Смерть у надважкій печері забирає %s%% досвіду рівня замість %s%%, а на останньому рівні стільки ж зі смуги звитяги. Отямлюється герой у таборі біля входу. Надважкий бос у %s раза міцніший за звичайного боса свого рівня. Якщо бій із ним триває довше за %s хв, бос лютішає: його удар росте на %d%% кожні %d с, і приголомшенням цей час не відтягнеш. Нечисть, яку бос прикликає, досвіду не дає. Зілля й побратими працюють як завжди. Доручень, розшуку й швидкого походу в надважких печерах нема." % [
 		_num(Data.DEATH_XP_LOSS * Peril.DEATH_XP_MULT * 100.0), _num(Data.DEATH_XP_LOSS * 100.0), _num(Peril.BOSS_HP_MULT), _num(Peril.ENRAGE_AFTER / 60.0), roundi(Peril.ENRAGE_DMG * 100.0), int(Peril.ENRAGE_EVERY)]))
 	out.append(_e("Нагороди надважких печер", "заради чого туди ходити", "Речі з нечисті мають рівень печери, від %d до %d. Вищих у грі нема, і коваль до такого рівня річ не оновить. Досвіду з цієї нечисті в %s раза більше. Бос дає золото шостого ступеня «%s» із шансом %s%%, свій артефакт із шансом %s%% і душу сьомого ступеня з шансом %s%%. Перша перемога над кожним босом дає річ набору напевно й іменну звитягу: звання з вічним бонусом. Далі бос дає річ набору з шансом %d%%, а елітна нечисть печери з шансом %d%%. Найкращий час проходження записується героєві й роду." % [
-		int(Data.LOCATIONS[first]["level"]), int(Data.LOCATIONS[last]["level"]), _num(Peril.XP_MULT), Uniques.tier_name(6), _num(Uniques.tier_chance(6) * 100.0), _num(Artifacts.CHANCE_PERIL * 100.0), _num(Souls.CHANCE_PERIL * 100.0), roundi(Sets.BOSS_CHANCE * 100.0), roundi(Sets.ELITE_CHANCE * 100.0)]))
+		int(Data.place(first)["level"]), int(Data.place(last)["level"]), _num(Peril.XP_MULT), Uniques.tier_name(6), _num(Uniques.tier_chance(6) * 100.0), _num(Artifacts.CHANCE_PERIL * 100.0), _num(Souls.CHANCE_PERIL * 100.0), roundi(Sets.BOSS_CHANCE * 100.0), roundi(Sets.ELITE_CHANCE * 100.0)]))
 	var lines := []
 	for id in Valor.ORDER:
 		lines.append("%s: %s за очко" % [Valor.LINES[id]["name"], Valor.text(id, float(Valor.LINES[id]["per"]))])
@@ -285,8 +297,8 @@ static func _peril() -> Array:
 		top, _big(Valor.bar(0)), _num(Valor.BAR_STEP * 100.0), ". ".join(lines), Valor.LINE_MAX], {}, "Звитяги"))
 	var named := []
 	for id in ids:
-		var boss: String = str(Data.LOCATIONS[id]["boss"])
-		named.append("«%s» за боса печери «%s»: %s" % [Peril.TITLES[boss], Data.LOCATIONS[id]["name"], Valor.fx_text(Peril.TITLE_FX[boss])])
+		var boss: String = str(Data.place(id)["boss"])
+		named.append("«%s» за боса печери «%s»: %s" % [Peril.boss_title(boss), Data.place(id)["name"], Valor.fx_text(Peril.boss_title_fx(boss))])
 	out.append(_e("Іменні звитяги", "звання за надважких босів", "Перша перемога над надважким босом дає героєві звання й вічний бонус. %s. Звання за найдальшого з подоланих босів стоїть біля назви класу на екрані героя, а бонуси всіх здобутих звань діють разом." % ". ".join(named)))
 	return out
 
@@ -376,9 +388,9 @@ static func _num(v) -> String:
 ## Де живе нечисть: назви місць, у яких вона трапляється.
 static func _homes(kind: String) -> Array:
 	var out := []
-	for id in Data.LOCATIONS:
-		if kind in Data.LOCATIONS[id]["enemies"]:
-			out.append(str(Data.LOCATIONS[id]["name"]))
+	for id in Data.place_ids():
+		if kind in Data.place(id)["enemies"]:
+			out.append(str(Data.place(id)["name"]))
 	return out
 
 
@@ -412,15 +424,15 @@ static func _enemies() -> Array:
 
 static func _boss_where(kind: String) -> Array:
 	var out := []
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if L.get("boss", "") == kind and not L.get("endless", false):
 			out.append(str(L["name"]))
-	if kind in _svc("tower_service").SUPER_BOSSES:
+	if kind in _svc("tower_service").super_bosses():
 		out.append("Башта Кощія (супербос)")
 	if kind in Acts.RING_POOL:
 		out.append("Коло Кожум'яки")
-	if kind in _svc("depth_service").BOSSES:
+	if kind in _svc("depth_service").bosses():
 		out.append("Глибини зарази")
 	return out
 
@@ -458,7 +470,7 @@ static func _bosses() -> Array:
 
 
 static func _loc_entry(id: String, head: String) -> Dictionary:
-	var L: Dictionary = Data.LOCATIONS[id]
+	var L: Dictionary = Data.place(id)
 	var lvl := ("%d+, росте з героєм" % int(L["level"])) if L.get("scale", false) else str(L["level"])
 	var sub := ""
 	if L.get("tower", false):
@@ -486,19 +498,13 @@ static func _loc_entry(id: String, head: String) -> Dictionary:
 	return _e(L["name"], sub, "%s\nНечисть: %s.%s" % [L["desc"], ", ".join(foes), more], {"map": _map_icon(L)}, head)
 
 
-## Той самий значок, що й на мапі (world_map.gd _loc_icon).
+## Той самий значок, що й на мапі (Data.place_icon).
 static func _map_icon(L: Dictionary) -> String:
-	if L.has("icon"):
-		return str(L["icon"])
-	if L.get("tower", false):
-		return "tower"
-	if L["type"] == "dungeon":
-		return "skull" if L["biome"] == "plague" else "cave"
-	return {"forest": "tree", "mountain": "mountain", "swamp": "swamp", "river": "wave", "village": "hut", "sand": "dune", "snow": "pine"}.get(L["biome"], "sabres")
+	return Data.place_icon(L)
 
 
 static func _city_entry(id: String, head: String) -> Dictionary:
-	var C: Dictionary = Data.CITIES[id]
+	var C: Dictionary = Data.city(id)
 	var parts := ["Місто", "завдання %d-го рівня" % int(C["level"])]
 	if Acts.TRADE_CITIES.has(id):
 		parts.append("торг")
@@ -518,14 +524,14 @@ static func _map() -> Array:
 	# Землі сюжету: міста й місця без краю, від слабших до сильніших
 	var cities := []
 	var locs := []
-	for id in Data.CITIES:
-		if not Data.CITIES[id].has("region"):
+	for id in Data.city_ids():
+		if not Data.city(id).has("region"):
 			cities.append(id)
-	for id in Data.LOCATIONS:
-		if not Data.LOCATIONS[id].has("region") and not Data.LOCATIONS[id].has("peril"):
+	for id in Data.place_ids():
+		if not Data.place(id).has("region") and not Data.place(id).has("peril"):
 			locs.append(id)
-	cities.sort_custom(func(a, b): return int(Data.CITIES[a]["level"]) < int(Data.CITIES[b]["level"]))
-	locs.sort_custom(func(a, b): return int(Data.LOCATIONS[a]["level"]) < int(Data.LOCATIONS[b]["level"]))
+	cities.sort_custom(func(a, b): return int(Data.city(a)["level"]) < int(Data.city(b)["level"]))
+	locs.sort_custom(func(a, b): return int(Data.place(a)["level"]) < int(Data.place(b)["level"]))
 	var head := "Землі сюжету"
 	for id in cities:
 		out.append(_city_entry(id, head))
@@ -537,24 +543,24 @@ static func _map() -> Array:
 		var S: Dictionary = Acts.SPOTS[sid]
 		out.append(_e(S["name"], "Місце заняття • з %d-го рівня" % int(S["level"]), S["desc"], {"map": S["icon"]}))
 	# Далекі краї
-	for r in Data.REGION_ORDER:
-		var R: Dictionary = Data.REGIONS[r]
+	for r in Data.region_ids():
+		var R: Dictionary = Data.region(r)
 		head = "%s: %s" % [R["name"], R["desc"]]
 		var p: Dictionary = _svc("far_service").places(r)
 		for id in p["cities"]:
 			out.append(_city_entry(id, head))
 			head = ""
 		var rl: Array = p["fields"] + p["dungeons"]
-		rl.sort_custom(func(a, b): return int(Data.LOCATIONS[a]["level"]) < int(Data.LOCATIONS[b]["level"]))
+		rl.sort_custom(func(a, b): return int(Data.place(a)["level"]) < int(Data.place(b)["level"]))
 		for id in rl:
 			out.append(_loc_entry(id, head))
 			head = ""
 	# Нові землі: надважкі печери
 	var Peril = load("res://scripts/data/peril.gd")
-	for land in Peril.LAND_ORDER:
+	for land in Peril.land_ids():
 		for id in _svc("peril_service").ids():
-			if str(Data.LOCATIONS[id].get("land", "")) == land:
-				out.append(_loc_entry(id, "%s: %s" % [Peril.LANDS[land]["name"], Peril.LANDS[land]["desc"]]))
+			if str(Data.place(id).get("land", "")) == land:
+				out.append(_loc_entry(id, "%s: %s" % [Peril.land(land)["name"], Peril.land(land)["desc"]]))
 	return out
 
 
@@ -768,7 +774,7 @@ static func _party() -> Array:
 	for id in GameDB.hero_ids():
 		var H: Dictionary = GameDB.hero(id)
 		var icon2 := {"sprite": "comp_" + id} if Gfx.has("comp_" + id) else {}
-		var text := str(H["bio"]) + " Де зустріти: %s. Іде в загін безкоштовно. Дружба росте за кожного ворога, здоланого разом; від %d дружби дає особисте завдання: «%s». Після нього стає сильнішим." % [str(Data.CITIES.get(str(H["join"]["city"]), {}).get("name", "у місті")), int(H["quest_bond"]), str(H["quest"]["objective"]["text"])]
+		var text := str(H["bio"]) + " Де зустріти: %s. Іде в загін безкоштовно. Дружба росте за кожного ворога, здоланого разом; від %d дружби дає особисте завдання: «%s». Після нього стає сильнішим." % [str(Data.city(str(H["join"]["city"])).get("name", "у місті")), int(H["quest_bond"]), str(H["quest"]["objective"]["text"])]
 		out.append(_e(str(H["name"]), "побратим • б'ється як %s • сила ×%s" % [str(GameDB.companion(H["base"])["name"]).to_lower(), _num(float(H["mult"]))], text, icon2, "Побратими" if first else ""))
 		first = false
 	return out
@@ -862,8 +868,8 @@ static func _rules() -> Array:
 		head = ""
 	head = "Еліти"
 	out.append(_e("Хто такі еліти", "золоте коло довкола ворога", "Сильніші за звичайну нечисть, мають ім'я й одну-три властивості, зате щедріші на здобич і трофеї.", {}, head))
-	for a in Elites.AFFIXES:
-		out.append(_e(Elites.AFFIXES[a]["m"], "властивість еліти", "Еліта %s." % Elites.AFFIXES[a]["desc"]))
+	for a in Elites.affix_ids():
+		out.append(_e(Elites.affix(a)["name"]["m"], "властивість еліти", "Еліта %s." % Elites.affix(a)["desc"]))
 	head = "Зараза"
 	var PS = _svc("plague_service")
 	for lvl in range(1, int(PS.MAX_LEVEL) + 1):

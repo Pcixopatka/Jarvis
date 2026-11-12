@@ -13,7 +13,7 @@ const BUY_MARKUP := 4.0
 
 static func shop_stock(world, player: Player, city: String) -> Array:
 	if not world.shops.has(city) or world.shop_dirty.get(city, true):
-		var C: Dictionary = Data.CITIES[city]
+		var C: Dictionary = Data.city(city)
 		var loyal: int = world.loyalty_level(city)
 		var ilvl: int = maxi(C["level"], player.level - 1) + loyal
 		var stock := []

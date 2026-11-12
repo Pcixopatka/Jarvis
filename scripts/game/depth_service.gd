@@ -7,9 +7,16 @@ const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
 const LOC_ID := "hlybyny"
-const BOSSES := ["zmii", "upyr", "vovkulaka", "chaklun", "koshchii", "putinoid"]
-const POOL := ["zarazhenyi", "pishchalnyk", "chort", "upyr", "vovkulaka", "bolotianyk", "mavka"]
 const BASE_LEVEL := 22
+
+
+## З кого складаються глибини — у записі Глибин (data/places.json, «floors»): рядова нечисть і боси по черзі.
+static func pool() -> Array:
+	return Data.place(LOC_ID)["floors"]["pool"]
+
+
+static func bosses() -> Array:
+	return Data.place(LOC_ID)["floors"]["bosses"]
 
 
 static func state(world) -> Dictionary:
@@ -33,20 +40,20 @@ static func loot_level(depth: int) -> int:
 	return mini(Data.ENDLESS_SOFT, level_of(depth))
 
 
-## Опис печери на цій глибині (як місцевість у Data.LOCATIONS).
+## Опис печери на цій глибині (як місце в data/places.json).
 static func loc_for(depth: int) -> Dictionary:
 	var lvl := level_of(depth)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = depth * 7919
-	var pool := POOL.duplicate()
-	for i in range(pool.size() - 1, 0, -1):
+	var mix := pool().duplicate()
+	for i in range(mix.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
-		var t = pool[i]
-		pool[i] = pool[j]
-		pool[j] = t
+		var t = mix[i]
+		mix[i] = mix[j]
+		mix[j] = t
 	return {"name": "Глибина %d" % depth, "type": "dungeon", "biome": "plague" if depth % 3 != 0 else "cave",
-		"level": lvl, "loot_level": loot_level(depth), "rooms": mini(8, 4 + depth / 5), "enemies": pool.slice(0, 3),
-		"boss": BOSSES[(depth - 1) % BOSSES.size()], "depth": depth,
+		"level": lvl, "loot_level": loot_level(depth), "rooms": mini(8, 4 + depth / 5), "enemies": mix.slice(0, 3),
+		"boss": bosses()[(depth - 1) % bosses().size()], "depth": depth,
 		"elite_bonus": minf(0.25, 0.04 + 0.01 * depth),
 		# Глибше — нечисть лютіша понад свій рівень (і щедріша на досвід). Надбавки малі: сама мірка нечисті
 		# тепер росте разом із рівнем глибини (Data.enemy_std_*), а не лінійно, як раніше.

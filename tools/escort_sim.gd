@@ -56,7 +56,7 @@ func _run() -> void:
 	for loc_id in locs:
 		if only != "" and not (loc_id in only.split(",")):
 			continue
-		var L: Dictionary = Data.LOCATIONS[loc_id]
+		var L: Dictionary = Data.place(loc_id)
 		for dl in [-1, 0, 2]:
 			var lvl: int = maxi(1, int(L["level"]) + dl)
 			var wins := 0

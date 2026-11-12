@@ -216,7 +216,7 @@ static func should_ambush(world, roll: float = -1.0) -> bool:
 
 ## Бій біля возів дорогою до міста (як оборона: відбий хвилі, вбережи вози).
 static func battle_loc(world, city: String, player) -> Dictionary:
-	var lvl := maxi(int(Data.CITIES[city]["level"]), player.level - 1)
+	var lvl := maxi(int(Data.city(city)["level"]), player.level - 1)
 	var enemies := ["zarazhenyi", "zarazhenyi", "upyr", "vovkulaka"]
 	if lvl >= 8:
 		enemies = ["zarazhenyi", "pishchalnyk", "vovkulaka", "upyr"]

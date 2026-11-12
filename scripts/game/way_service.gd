@@ -58,7 +58,7 @@ static func is_done(step: Dictionary, world, player) -> bool:
 				n += world.cleared.size()
 			"dungeon":
 				for id in world.cleared:
-					if Data.LOCATIONS.has(id) and Data.LOCATIONS[id]["type"] == "dungeon":
+					if Data.is_place(id) and Data.place(id)["type"] == "dungeon":
 						n += 1
 			"boss":
 				for k in world.stats:
@@ -212,8 +212,8 @@ static func _dungeon(player) -> String:
 	var best_lvl := -1
 	var easiest := ""
 	var easiest_lvl := 9999
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if L["type"] != "dungeon" or L.get("endless", false) or L.get("scale", false) or L.has("peril"):
 			continue
 		var lvl := int(L["level"])

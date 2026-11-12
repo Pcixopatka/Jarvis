@@ -10,17 +10,28 @@ const DMG_MULT := 1.25
 const XP_MULT := 3
 const ITEM_CHANCE := 0.35
 
-## status — стан, який накладає кожен удар; решта — особливі правила (див. enemy.gd)
-const AFFIXES := {
-	"fiery": {"m": "Вогняний", "f": "Вогняна", "color": Color(1.0, 0.5, 0.1), "status": "burn", "desc": "підпалює"},
-	"plague": {"m": "Зачумлений", "f": "Зачумлена", "color": Color(0.45, 0.9, 0.15), "status": "plague", "desc": "заражає"},
-	"frost": {"m": "Крижаний", "f": "Крижана", "color": Color(0.55, 0.85, 1.0), "status": "chill", "desc": "морозить"},
-	"swift": {"m": "Швидкий", "f": "Швидка", "color": Color(1.0, 1.0, 0.6), "desc": "дуже швидкий"},
-	"iron": {"m": "Залізний", "f": "Залізна", "color": Color(0.72, 0.74, 0.8), "desc": "тримає удар"},
-	"vampire": {"m": "Упирячий", "f": "Упиряча", "color": Color(0.85, 0.1, 0.25), "desc": "п'є кров"},
-	"explosive": {"m": "Вибуховий", "f": "Вибухова", "color": Color(1.0, 0.3, 0.1), "desc": "вибухає"},
-}
-const FEMININE := ["mavka", "kamiana_baba", "mara", "kikimora", "samodiva", "lauma", "chud"]
+const GameDB := preload("res://scripts/core/game_db.gd")
+const _EMPTY := {}
+
+
+## Властивість еліти (data/elite_affixes.json): name {m, f}, color, status (стан, який накладає кожен
+## удар), desc. Решта особливих правил — у коді (див. enemy.gd).
+static func affix(id: String) -> Dictionary:
+	return GameDB.table("elite_affixes").get(id, _EMPTY)
+
+
+static func is_affix(id: String) -> bool:
+	return GameDB.table("elite_affixes").has(id)
+
+
+## Властивості в порядку файлу (лише для читання; щоб перетасувати — duplicate()).
+static func affix_ids() -> Array:
+	return GameDB.ids("elite_affixes")
+
+
+## Нечисть жіночого роду («feminine» у data/mobs.json): «Крижана Мавка», «переможена».
+static func is_feminine(kind: String) -> bool:
+	return bool(GameDB.mob(kind).get("feminine", false))
 
 
 static func chance(loc_level: int, plague: int) -> float:
@@ -30,7 +41,7 @@ static func chance(loc_level: int, plague: int) -> float:
 
 
 static func roll_affixes(loc_level: int) -> Array:
-	var keys := AFFIXES.keys()
+	var keys := affix_ids().duplicate()
 	keys.shuffle()
 	var n := 2 if loc_level >= SECOND_AFFIX_LEVEL and randf() < 0.5 else 1
 	return keys.slice(0, n)
@@ -38,10 +49,10 @@ static func roll_affixes(loc_level: int) -> Array:
 
 ## «Вогняний залізний Упир», «Крижана Мавка».
 static func title(kind: String, base_name: String, affixes: Array) -> String:
-	var g := "f" if kind in FEMININE else "m"
+	var g := "f" if is_feminine(kind) else "m"
 	var words := []
 	for i in affixes.size():
-		var w: String = AFFIXES[affixes[i]][g]
+		var w: String = affix(affixes[i])["name"][g]
 		words.append(w if i == 0 else w.to_lower())
 	words.append(base_name)
 	return " ".join(words)

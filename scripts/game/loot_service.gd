@@ -30,8 +30,8 @@ static func boss_tier(combat, e) -> int:
 	var top: int = maxi(Uniques.TOP_COMMON_TIER, t)
 	if t == 0:
 		t = 3
-		for id in Data.LOCATIONS:
-			var L: Dictionary = Data.LOCATIONS[id]
+		for id in Data.place_ids():
+			var L: Dictionary = Data.place(id)
 			if str(L.get("boss", "")) == e.kind:
 				var lv: int = int(L["level"])
 				t = 1 if lv < 8 else (2 if lv < 12 else (3 if lv < 16 else 4))

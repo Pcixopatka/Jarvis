@@ -39,19 +39,19 @@ static func trips_left(world, target: String) -> int:
 static func name_of(target: String) -> String:
 	if target == Camp.CAMP_ID:
 		return Camp.CAMP["name"]
-	return Data.CITIES[target]["name"]
+	return Data.city(target)["name"]
 
 
 ## Міста, яким зараз загрожує облога (поруч заражені місцевості).
 static func threatened(world, player) -> Array:
 	var out := []
 	var levels: Dictionary = PlagueService.state(world)["levels"]
-	for city in Data.CITIES:
-		if int(Data.CITIES[city]["level"]) > player.level + 2:
+	for city in Data.city_ids():
+		if int(Data.city(city)["level"]) > player.level + 2:
 			continue
-		var pos: Vector2 = Data.CITIES[city]["pos"]
+		var pos: Vector2 = Data.city(city)["pos"]
 		for loc in levels:
-			if int(levels[loc]) > 0 and Data.LOCATIONS.has(loc) and pos.distance_to(Data.LOCATIONS[loc]["pos"]) < THREAT_RANGE:
+			if int(levels[loc]) > 0 and Data.is_place(loc) and pos.distance_to(Data.place(loc)["pos"]) < THREAT_RANGE:
 				out.append(city)
 				break
 	return out
@@ -94,7 +94,7 @@ static func tick(world, player) -> Array:
 
 ## Опис бою біля брами (як місцевість, але з хвилями).
 static func battle_loc(world, target: String, player) -> Dictionary:
-	var base_lvl: int = 2 if target == Camp.CAMP_ID else int(Data.CITIES[target]["level"])
+	var base_lvl: int = 2 if target == Camp.CAMP_ID else int(Data.city(target)["level"])
 	var lvl := maxi(base_lvl, player.level - 1)
 	var enemies := ["zarazhenyi", "zarazhenyi", "upyr", "vovkulaka"]
 	if lvl >= 8:

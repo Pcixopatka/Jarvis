@@ -80,7 +80,7 @@ static func stock(player) -> Array:
 			"trophy": int(Uniques.tier_fair(t)["trophy"]), "gold": int(Uniques.tier_fair(t)["gold"]), "limit": 1})
 	var peril := []
 	for loc in PerilService.ids():
-		peril.append(str(Data.LOCATIONS[loc]["boss"]))
+		peril.append(str(Data.place(loc)["boss"]))
 	var arts := []
 	for id in Artifacts.ids():
 		if not str(Artifacts.def(id).get("boss", "")) in peril:

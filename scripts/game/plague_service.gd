@@ -15,7 +15,6 @@ const SOURCE_RANGE := 4.0  # градусів: місцевості ближче
 const NEIGHBOR_RANGE := 3.6  # з якої відстані перекидається від сусіда
 const SPREAD_CHANCE := 0.22
 const MAX_SPREAD_PER_TRIP := 2
-const START := {"ridne_selo": 1, "polissia": 1, "bryansk_forest": 3, "chaklun_lair": 3}
 ## Які краї очищає завершення розділу (номер розділу в Story.CHAPTERS)
 const CHAPTER_CLEANSE := {
 	1: ["wild_field", "rapids", "black_forest", "zmii_cave", "ridne_selo"],
@@ -28,12 +27,21 @@ const FINAL_CHAPTER := 5  # Путіноїд повалений — зараза
 
 static func state(world) -> Dictionary:
 	if world.plague.is_empty():
-		world.plague = {"levels": START.duplicate(), "day": 0, "pressure": 1.0}
+		world.plague = {"levels": start_levels(), "day": 0, "pressure": 1.0}
 	return world.plague
 
 
+## Зараза на початку гри: {id місця: рівень} з «plague_start» у data/places.json (порядок файлу).
+static func start_levels() -> Dictionary:
+	var out := {}
+	for id in Data.place_ids():
+		if Data.place(id).has("plague_start"):
+			out[id] = int(Data.place(id)["plague_start"])
+	return out
+
+
 static func level(world, loc: String) -> int:
-	if Data.LOCATIONS.has(loc) and Data.LOCATIONS[loc].get("endless", false):
+	if Data.place(loc).get("endless", false):
 		return 0  # старі збереження: зараза на Башті й Глибинах більше не діє (вона ще й сильнішала босів дня)
 	return int(state(world)["levels"].get(loc, 0))
 
@@ -57,26 +65,27 @@ static func tick(world) -> Array:
 		return []
 	var levels: Dictionary = s["levels"]
 	var spread := []
-	var ids := Data.LOCATIONS.keys()
+	var ids := Data.place_ids().duplicate()
 	ids.shuffle()
 	for id in ids:
 		if spread.size() >= MAX_SPREAD_PER_TRIP:
 			break
 		var lvl := int(levels.get(id, 0))
-		if lvl >= MAX_LEVEL or Data.LOCATIONS[id].has("peril") or Data.LOCATIONS[id].get("endless", false):
+		var L: Dictionary = Data.place(id)
+		if lvl >= MAX_LEVEL or L.has("peril") or L.get("endless", false):
 			continue  # надважкі печери за краєм мапи; Башту й Глибини зачистити не можна, тож зараза там не осідає
-		var pos: Vector2 = Data.LOCATIONS[id]["pos"]
+		var pos: Vector2 = L["pos"]
 		var chance := 0.0
 		for src in SOURCES:
 			if pos.distance_to(src) < SOURCE_RANGE:
 				chance += SPREAD_CHANCE
 		for other in levels:
-			if other != id and int(levels[other]) > lvl and Data.LOCATIONS.has(other) \
-					and pos.distance_to(Data.LOCATIONS[other]["pos"]) < NEIGHBOR_RANGE:
+			if other != id and int(levels[other]) > lvl and Data.is_place(other) \
+					and pos.distance_to(Data.place(other)["pos"]) < NEIGHBOR_RANGE:
 				chance += SPREAD_CHANCE * 0.5 * (int(levels[other]) - lvl)
 		if randf() < minf(0.6, chance * pressure):
 			levels[id] = lvl + 1
-			spread.append(Data.LOCATIONS[id]["name"])
+			spread.append(L["name"])
 	return spread
 
 

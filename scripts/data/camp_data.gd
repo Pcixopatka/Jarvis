@@ -1,6 +1,7 @@
 extends RefCounted
 ## Козацький хутір: ресурси, будівлі, ціни і що дає кожен рівень.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
 const CAMP_ID := "hutir"
 const CAMP := {"name": "Козацький хутір", "pos": Vector2(35.9, 47.45),
 	"desc": "Твій власний хутір під Січчю. Тут відпочивають і будуються."}
@@ -22,9 +23,10 @@ static func res_name(r: String) -> String:
 		return TROPHY_NAME
 	return RESOURCES.get(r, FOOD_NAMES.get(r, r))
 
-# Який ресурс найчастіше дає ландшафт
-const BIOME_RESOURCE := {"steppe": "wood", "river": "herbs", "forest": "wood", "swamp": "herbs",
-	"mountain": "iron", "cave": "iron", "plague": "iron", "sand": "iron", "snow": "wood"}
+## Який ресурс найчастіше дає краєвид («resource» у data/biomes.json; без нього — дерево).
+static func biome_resource(biome: String) -> String:
+	return str(GameDB.row("biomes", biome).get("resource", "wood"))
+
 ## Скільки добра падає з нечисті. У версії 0.45 усе це вдвічі-втричі рідше: розвинений герой збирав
 ## ресурси десятками тисяч, і витратити їх було нікуди.
 const RESOURCE_DROP_CHANCE := 0.1  # шанс ресурсу з рядового ворога (було 0,25)

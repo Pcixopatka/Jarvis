@@ -32,7 +32,7 @@ static func matched(L: Dictionary, player) -> bool:
 	return is_far(L) and player.level >= int(L["level"])
 
 
-## Додатки до опису місцевості для бою (змішуються з Data.LOCATIONS[id] у combat.enter).
+## Додатки до опису місцевості для бою (змішуються з Data.place(id) у combat.enter).
 ## Нечисть далекого краю має рівень героя. Її сила — звичайна мірка цього рівня (Data.enemy_std_*),
 ## тож краще вдягненому героєві тут легше, а гірше вдягненому важче.
 static func mods(L: Dictionary, player) -> Dictionary:
@@ -89,22 +89,22 @@ static func night_mods(L: Dictionary, player) -> Dictionary:
 
 ## Край за місцем (місто чи місцевість) або "".
 static func region_of(id: String) -> String:
-	if Data.LOCATIONS.has(id):
-		return str(Data.LOCATIONS[id].get("region", ""))
-	if Data.CITIES.has(id):
-		return str(Data.CITIES[id].get("region", ""))
+	if Data.is_place(id):
+		return str(Data.place(id).get("region", ""))
+	if Data.is_city(id):
+		return str(Data.city(id).get("region", ""))
 	return ""
 
 
 ## Усі місця краю: {"cities": [...], "fields": [...], "dungeons": [...]}.
 static func places(region: String) -> Dictionary:
 	var out := {"cities": [], "fields": [], "dungeons": []}
-	for id in Data.CITIES:
-		if Data.CITIES[id].get("region", "") == region:
+	for id in Data.city_ids():
+		if Data.city(id).get("region", "") == region:
 			out["cities"].append(id)
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].get("region", "") == region:
-			out["dungeons" if Data.LOCATIONS[id]["type"] == "dungeon" else "fields"].append(id)
+	for id in Data.place_ids():
+		if Data.place(id).get("region", "") == region:
+			out["dungeons" if Data.place(id)["type"] == "dungeon" else "fields"].append(id)
 	return out
 
 
@@ -113,5 +113,5 @@ static func open_level(region: String) -> int:
 	var lvl := 999
 	var p := places(region)
 	for id in p["fields"] + p["dungeons"]:
-		lvl = mini(lvl, int(Data.LOCATIONS[id]["level"]))
+		lvl = mini(lvl, int(Data.place(id)["level"]))
 	return lvl

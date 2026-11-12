@@ -9,7 +9,8 @@ const DIR := "res://data/"
 
 ## Схема запису: поле → {"type": ..., "required": true}. Типи: string, int, float, bool,
 ## color (масив [r, g, b] або [r, g, b, a] із часток 0..1, стає Color), record (вкладений запис
-## зі своїми "fields"), enum (рядок із переліку "values"), list (масив значень, кожне за описом "of";
+## зі своїми "fields"), vector (масив [x, y] із двох чисел, стає Vector2: довгота й широта на мапі),
+## enum (рядок із переліку "values"), list (масив значень, кожне за описом "of";
 ## "size" — точна довжина), map (об'єкт {рядковий ключ: значення за описом "of"}; порядок ключів
 ## зберігається). Порядок полів у схемі — порядок ключів у файлі (див. tools/data_format.gd).
 const MOB_SCHEMA := {
@@ -17,6 +18,8 @@ const MOB_SCHEMA := {
 	"name": {"type": "string"},  # ім'я в однині; без нього нечисть не з'являється на мапі й у завданнях
 	"plural": {"type": "string"},  # родовий множини: «Знищ 10 мавок»
 	"quest_item": {"type": "string"},  # трофей для завдання «Принеси»
+	"feminine": {"type": "bool"},  # ім'я жіночого роду: «Крижана Мавка», «переможена» (див. Elites.title)
+	"bounty_names": {"type": "list", "of": {"type": "string"}},  # імена для дошки розшуку; без них вид не розшукують
 	"stats": {"type": "record", "required": true, "fields": {
 		"hp": {"type": "float", "required": true},  # здоров'я на 1-му рівні до мірки рівня
 		"speed": {"type": "float", "required": true},
@@ -26,6 +29,7 @@ const MOB_SCHEMA := {
 		"scale": {"type": "float"},  # зріст (1 — звичайний); бос усе одно вдвічі більший
 	}},
 	"color": {"type": "color", "required": true},
+	"blood": {"type": "color"},  # колір бризок від удару (без поля — білі)
 	"attack": {"type": "record", "required": true, "fields": {
 		"windup": {"type": "float", "required": true},  # замах перед ударом, с
 		"ranged": {"type": "bool"},  # стріляє
@@ -95,7 +99,7 @@ const HERO_SCHEMA := {
 	"color": {"type": "color", "required": true},
 	"bio": {"type": "string", "required": true},
 	"join": {"type": "record", "required": true, "fields": {  # де й коли зустріти
-		"city": {"type": "string", "required": true},  # місто (Data.CITIES)
+		"city": {"type": "string", "required": true},  # місто (cities.json)
 		"after": {"type": "string", "required": true},  # крок сюжету, який уже пройдено
 		"if": {"type": "string"},  # "крок=номер вибору"
 	}},
@@ -107,7 +111,7 @@ const HERO_SCHEMA := {
 			"type": {"type": "enum", "required": true, "values": ["kill", "fetch", "clear", "dungeon"]},
 			"enemy": {"type": "string"},  # kill, fetch: кого бити (mobs.json)
 			"count": {"type": "int"},  # kill, fetch: скільки
-			"loc": {"type": "string", "required": true},  # місце (Data.LOCATIONS)
+			"loc": {"type": "string", "required": true},  # місце (places.json)
 			"item": {"type": "string"},  # fetch: що здобути
 			"chance": {"type": "float"},  # fetch: шанс на кожного переможеного
 			"text": {"type": "string", "required": true},
@@ -367,6 +371,89 @@ const SHOP_KIND_SCHEMA := {
 	"full_price": {"type": "int"},  # увесь набір разом
 }
 
+# ---------- Світ ----------
+
+## Далекий край (Сіверщина, Слобожанщина...): об'єднує міста й місця з «region». Порядок файлу — порядок показу.
+const REGION_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (6001...)
+	"name": {"type": "string", "required": true},
+	"desc": {"type": "string", "required": true},
+}
+
+## Місто на мапі.
+const CITY_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (6101...)
+	"name": {"type": "string", "required": true},
+	"pos": {"type": "vector", "required": true},  # [довгота, широта]
+	"level": {"type": "int", "required": true},  # рівень міста: завдання, розшук, хто туди ходить
+	"region": {"type": "string"},  # далекий край (regions.json); без нього — стара мапа
+	"hall": {"type": "string", "required": true},  # як зветься будівля, де чекають ті, хто має справу до героя
+	"desc": {"type": "string", "required": true},
+}
+
+## Безкінечне місце (Башта, Глибини): з кого складаються поверхи чи глибини.
+const FLOORS_SCHEMA := {"type": "record", "fields": {
+	"pool": {"type": "list", "required": true, "of": {"type": "string"}},  # рядова нечисть, з якої кидаються поверхи
+	"bosses": {"type": "list", "required": true, "of": {"type": "string"}},  # боси по черзі
+	"titles": {"type": "list", "of": {"type": "string"}},  # прізвиська міні-босів Башти по черзі
+}}
+
+## Місце на мапі: поле (field) чи печера (dungeon).
+const PLACE_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (6201...)
+	"name": {"type": "string", "required": true},
+	"type": {"type": "enum", "required": true, "values": ["field", "dungeon"]},
+	"biome": {"type": "string", "required": true},  # краєвид (biomes.json): земля, шум, ресурс, значок
+	"pos": {"type": "vector", "required": true},  # [довгота, широта]
+	"level": {"type": "int", "required": true},  # рівень нечисті (для «scale» — найнижчий)
+	"scale": {"type": "bool"},  # далекий край: рівень росте разом із героєм (Data.loc_level)
+	"region": {"type": "string"},  # далекий край (regions.json)
+	"land": {"type": "string"},  # нова земля надважкої печери (lands.json)
+	"peril": {"type": "int"},  # надважка печера: порядковий номер (1...), відкриваються по черзі
+	"goal": {"type": "int"},  # поле: скільки нечисті знищити для зачистки (без поля — за рівнем, Data.FIELD_GOAL_*)
+	"rooms": {"type": "int"},  # печера: кімнат
+	"enemies": {"type": "list", "required": true, "of": {"type": "string"}},  # нечисть (mobs.json)
+	"boss": {"type": "string"},  # печера: бос (mobs.json, вид із «boss»)
+	"night": {"type": "bool"},  # вічна ніч
+	"endless": {"type": "bool"},  # безкінечне місце (Глибини, Башта): опис бою складає служба
+	"tower": {"type": "bool"},  # Башта: бій поверхами
+	"floors": FLOORS_SCHEMA,
+	"icon": {"type": "string"},  # особливий значок на мапі (без поля — за краєвидом, biomes.json)
+	"plague_start": {"type": "int"},  # зараза на початку гри (1–3)
+	"desc": {"type": "string", "required": true},
+}
+
+## Нова земля надважкої печери: назва, опис і іменна звитяга за її боса.
+const LAND_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (6401...)
+	"name": {"type": "string", "required": true},
+	"desc": {"type": "string", "required": true},
+	"title": {"type": "string", "required": true},  # звання героя за першу перемогу над босом печери цієї землі
+	"title_fx": {"type": "map", "required": true, "of": {"type": "int"}},  # вічний бонус звитяги (ключі Valor.LINES чи EXTRA_TEXT), відсотки
+}
+
+## Краєвид місця: фоновий шум, ресурс для хутора, значок на мапі. Земля й частинки малюються кодом.
+const BIOME_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (6501...)
+	"name": {"type": "string", "required": true},
+	"ambient": {"type": "string", "required": true},  # фоновий шум (SoundIndex.AMBIENT)
+	"resource": {"type": "string"},  # що найчастіше дає хуторові (CampData.RESOURCES); без поля — дерево
+	"icon": {"type": "string", "required": true},  # значок поля на мапі (WorldMap.ICON_ORDER)
+	"dungeon_icon": {"type": "string", "required": true},  # значок печери
+}
+
+## Властивість елітної нечисті: прикметник в обох родах, колір, стан від удару. Що вона робить — код (Enemy).
+const ELITE_AFFIX_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (6601...)
+	"name": {"type": "record", "required": true, "fields": {
+		"m": {"type": "string", "required": true},  # «Вогняний»
+		"f": {"type": "string", "required": true},  # «Вогняна» (нечисть із «feminine»)
+	}},
+	"color": {"type": "color", "required": true},
+	"status": {"type": "string"},  # стан, який накладає кожен удар (Status.INFO)
+	"desc": {"type": "string", "required": true},  # «підпалює»: у розшуку й довіднику
+}
+
 ## Таблиці бази: назва → файл і схема. Нова таблиця (уміння, речі...) додається сюди одним рядком,
 ## а її власні правила й перехресні посилання — у _rules() і _links().
 const TABLES := {
@@ -395,6 +482,12 @@ const TABLES := {
 	"gifts": {"file": "gifts.json", "schema": GIFT_SCHEMA},
 	"costumes": {"file": "costumes.json", "schema": COSTUME_SCHEMA},
 	"coin_packs": {"file": "coin_packs.json", "schema": COIN_PACK_SCHEMA},
+	"regions": {"file": "regions.json", "schema": REGION_SCHEMA},
+	"cities": {"file": "cities.json", "schema": CITY_SCHEMA},
+	"places": {"file": "places.json", "schema": PLACE_SCHEMA},
+	"lands": {"file": "lands.json", "schema": LAND_SCHEMA},
+	"biomes": {"file": "biomes.json", "schema": BIOME_SCHEMA},
+	"elite_affixes": {"file": "elite_affixes.json", "schema": ELITE_AFFIX_SCHEMA},
 }
 
 ## Проміжки сталих номерів за таблицями: [перший, останній]. Номер запису мусить лежати у своєму
@@ -406,7 +499,8 @@ const NUM_RANGES := {
 	"set_effects": [4701, 4799], "soul_effects": [4801, 4899], "soul_tiers": [4901, 4949], "gift_slots": [4951, 4979],
 	"shop_kinds": [4981, 4999], "golden": [5001, 5099], "sets": [5101, 5199], "artifacts": [5201, 5299],
 	"souls": [5301, 5399], "enchants": [5401, 5499], "gifts": [5501, 5599], "costumes": [5601, 5699],
-	"coin_packs": [5701, 5799],
+	"coin_packs": [5701, 5799], "regions": [6001, 6099], "cities": [6101, 6199], "places": [6201, 6399],
+	"lands": [6401, 6499], "biomes": [6501, 6599], "elite_affixes": [6601, 6699],
 }
 const BOSS_NUM_RANGE := [2001, 2999]  # boss.num у mobs.json
 
@@ -422,6 +516,7 @@ const MECHANIC_BASES := {
 const PET_GIFT_SLOTS := ["pet", "cart"]
 
 const _EMPTY := {}
+const _EMPTY_LIST := []
 
 static var _tables := {}  # назва → заморожені записи
 static var _ids := {}  # назва → заморожений масив id у порядку файлу
@@ -615,6 +710,11 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 					return Color(v[0], v[1], v[2], v[3] if v.size() == 4 else 1.0)
 			probs.append("%s: колір має бути масивом [r, g, b] із чисел від 0 до 1" % where)
 			return null
+		"vector":
+			if v is Array and v.size() == 2 and (v[0] is float or v[0] is int) and (v[1] is float or v[1] is int):
+				return Vector2(v[0], v[1])
+			probs.append("%s: має бути масивом [x, y] із двох чисел" % where)
+			return null
 		"record":
 			if v is Dictionary:
 				return _normalize(v, f["fields"], where, probs)
@@ -650,7 +750,7 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 
 static func _type_name(t: String) -> String:
 	return {"string": "рядком", "bool": "true або false", "int": "цілим числом", "float": "числом", "record": "об'єктом {...}",
-		"enum": "рядком", "list": "масивом [...]", "map": "об'єктом {...}"}.get(t, t)
+		"enum": "рядком", "list": "масивом [...]", "map": "об'єктом {...}", "vector": "масивом [x, y]"}.get(t, t)
 
 
 static func _type_name_of(v) -> String:
@@ -690,6 +790,16 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 				for k in ["name", "plural", "quest_item"]:
 					if R.has(k) and str(R[k]).strip_edges() == "":
 						out.append("mobs/%s: «%s» порожнє" % [id, k])
+				if R.has("feminine") and not R["feminine"]:
+					out.append("mobs/%s: «feminine» пишеться лише як true" % id)
+				if R.has("bounty_names"):
+					if R["bounty_names"].is_empty():
+						out.append("mobs/%s: «bounty_names» порожні (без розшуку поле не пишуть)" % id)
+					if not R.has("name"):
+						out.append("mobs/%s: «bounty_names» без «name»: розшук показує ім'я виду" % id)
+					for b in R["bounty_names"]:
+						if str(b).strip_edges() == "":
+							out.append("mobs/%s: порожнє ім'я в «bounty_names»" % id)
 				# Механіка: звичайна форма — лише з теки mob/, бос — лише з boss/
 				if R.has("mechanic") and not _is_mechanic_ref(R["mechanic"], "mob"):
 					out.append("mobs/%s: «mechanic» має бути \"mob/<файл>\", а не «%s»" % [id, R["mechanic"]])
@@ -723,6 +833,9 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 		_:
 			if ITEM_TABLES.has(name):
 				out.append_array(_item_rules(name, rows))
+				out.append_array(_unique_nums(name, rows))
+			elif WORLD_TABLES.has(name):
+				out.append_array(_world_rules(name, rows))
 				out.append_array(_unique_nums(name, rows))
 	return out
 
@@ -1047,6 +1160,8 @@ static func _links(name: String, rows: Dictionary) -> Array:
 		_:
 			if ITEM_TABLES.has(name):
 				out.append_array(_item_links(name, rows))
+			elif WORLD_TABLES.has(name):
+				out.append_array(_world_links(name, rows))
 	return out
 
 
@@ -1257,39 +1372,16 @@ static func _mob_links(rows: Dictionary) -> Array:
 			out.append("%s: «%s» тут бос, але в mobs.json у нього нема запису «boss»" % [what, id])
 		elif field != "" and field != "boss" and not R.has(field):
 			out.append("%s: у «%s» нема поля «%s»" % [what, id, field])
-	var Data = load("res://scripts/data/data.gd")
-	for lid in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[lid]
-		for e in L.get("enemies", []):
-			for f in ["name", "plural", "quest_item"]:
-				need.call(e, "місце %s" % lid, f)
-		if str(L.get("boss", "")) != "":
-			need.call(L["boss"], "місце %s (бос)" % lid, "boss")
-	var Tower = load("res://scripts/game/tower_service.gd")
-	var Depth = load("res://scripts/game/depth_service.gd")
+	# Місця (поля, печери, поверхи Башти й Глибин) — та сама перевірка, що й у таблиці місць (_world_links)
+	out.append_array(_place_mob_links(table("places"), rows))
 	var Acts = load("res://scripts/data/activities.gd")
 	var BossS = load("res://scripts/game/boss_service.gd")
-	for b in Tower.SUPER_BOSSES:
-		need.call(b, "Башта (супербос)", "boss")
-	for e in Tower.POOL:
-		need.call(e, "Башта (нечисть)", "name")
-	for b in Depth.BOSSES:
-		need.call(b, "Глибини (бос)", "boss")
-	for e in Depth.POOL:
-		need.call(e, "Глибини (нечисть)", "name")
 	for b in Acts.RING_POOL:
 		need.call(b, "Коло Кожум'яки", "boss")
 	for b in BossS.POOL:
 		need.call(b, "Боси дня й тижня", "boss")
-	for k in Acts.BOUNTY_NAMES:
-		need.call(k, "розшук (Activities.BOUNTY_NAMES)", "name")
 	for k in load("res://scripts/game/stone_service.gd").FIRST_KILL:
 		need.call(k, "камінь за першу перемогу", "boss")
-	var Peril = load("res://scripts/data/peril.gd")
-	for k in Peril.TITLES:
-		need.call(k, "звитяга надважкої печери", "boss")
-	for k in Peril.TITLE_FX:
-		need.call(k, "бонус звитяги надважкої печери", "boss")
 	# Речі, що посилаються на нечисть (ті самі перевірки є й у самих таблицях речей, див. _item_links)
 	for u in ids("golden"):
 		for b in row("golden", u).get("bosses", []):
@@ -1301,8 +1393,6 @@ static func _mob_links(rows: Dictionary) -> Array:
 			need.call(str(s).substr(2), "душа %s" % s, "boss")
 		else:
 			need.call(s, "душа %s" % s, "name")
-	for k in load("res://scripts/data/elites.gd").FEMININE:
-		need.call(k, "Elites.FEMININE")
 	var Wiki = load("res://scripts/data/wiki_data.gd")
 	for k in Wiki.ENEMY_ORDER:
 		need.call(k, "довідник (нечисть)", "wiki")
@@ -1401,7 +1491,6 @@ static func _companion_links(rows: Dictionary) -> Array:
 
 static func _hero_links(rows: Dictionary) -> Array:
 	var out := []
-	var Data = load("res://scripts/data/data.gd")
 	var Story = load("res://scripts/data/story.gd")
 	var steps := {}  # id кроку сюжету → скільки в нього виборів
 	for ch in Story.CHAPTERS:
@@ -1415,7 +1504,7 @@ static func _hero_links(rows: Dictionary) -> Array:
 		if table("companions").has(id):
 			out.append("%s: id збігається з найманцем (вигляд comp_<id> був би спільний)" % where)
 		var j: Dictionary = R.get("join", _EMPTY)
-		if j.has("city") and not Data.CITIES.has(j["city"]):
+		if j.has("city") and not _has_row("cities", j["city"]):
 			out.append("%s: «join.city» — невідоме місто «%s»" % [where, j["city"]])
 		if j.has("after") and not steps.has(j["after"]):
 			out.append("%s: «join.after» — нема кроку сюжету «%s»" % [where, j["after"]])
@@ -1432,7 +1521,7 @@ static func _hero_links(rows: Dictionary) -> Array:
 					out.append("%s: «%s[%d]» — мовця «%s» нема в Story.NPCS" % [where, k, i, dl[k][i][0]])
 		var o: Dictionary = R.get("quest", _EMPTY).get("objective", _EMPTY)
 		if o.has("loc"):
-			var L: Dictionary = Data.LOCATIONS.get(o["loc"], _EMPTY)
+			var L: Dictionary = row("places", str(o["loc"]))
 			if L.is_empty():
 				out.append("%s: «quest.objective.loc» — нема місця «%s»" % [where, o["loc"]])
 			else:
@@ -1470,6 +1559,182 @@ static func _pet_links(rows: Dictionary) -> Array:
 		if str(row("gifts", d).get("slot", "")) in PET_GIFT_SLOTS and not rows.has(d):
 			out.append("божий дар «%s» (гніздо «%s») не має запису в pets.json, тож у бою його не видно" % [d, row("gifts", d).get("slot", "")])
 	out.append_array(_mechanic_orphans(["pet"], used, "pets.json"))
+	return out
+
+
+# ---------- Світ: правила й посилання ----------
+
+## Таблиці світу: їхні правила — _world_rules, посилання — _world_links.
+const WORLD_TABLES := ["regions", "cities", "places", "lands", "biomes", "elite_affixes"]
+## Рядкові поля записів світу, які не можуть бути порожні.
+const _WORLD_TEXTS := ["name", "desc", "hall", "title", "ambient", "icon", "dungeon_icon", "status", "resource", "region", "land", "boss", "biome"]
+
+
+## Правила таблиць світу, що не залежать від інших таблиць.
+static func _world_rules(name: String, rows: Dictionary) -> Array:
+	var out := []
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var where := "%s/%s" % [name, id]
+		_not_blank(R, _WORLD_TEXTS, where, out)
+		for k in R:
+			if R[k] is bool and not R[k]:
+				out.append("%s: «%s» пишеться лише як true" % [where, k])
+		match name:
+			"cities":
+				_positive(R, ["level"], where, out)
+			"places":
+				_positive(R, ["level", "goal", "rooms", "peril"], where, out)
+				if R.get("enemies", []).is_empty():
+					out.append("%s: «enemies» порожні" % where)
+				var dungeon := str(R.get("type", "")) == "dungeon"
+				for k in ["rooms", "boss"]:
+					if dungeon and not R.has(k):
+						out.append("%s: печера потребує «%s»" % [where, k])
+					if not dungeon and R.has(k):
+						out.append("%s: «%s» буває лише в печери" % [where, k])
+				if R.has("goal") and dungeon:
+					out.append("%s: «goal» (зачистка) буває лише в поля" % where)
+				if R.has("peril") != R.has("land"):
+					out.append("%s: надважка печера має і «peril», і «land»" % where)
+				if R.has("peril") and not dungeon:
+					out.append("%s: надважкою буває лише печера" % where)
+				if R.has("region") != R.get("scale", false):
+					out.append("%s: місце далекого краю має і «region», і «scale» (росте з героєм), а інші — жодного" % where)
+				if R.get("endless", false) != R.has("floors"):
+					out.append("%s: безкінечне місце («endless») описує поверхи в «floors», і лише воно" % where)
+				if R.get("tower", false) and not R.get("endless", false):
+					out.append("%s: «tower» буває лише в безкінечного місця" % where)
+				var F: Dictionary = R.get("floors", _EMPTY)
+				if F.has("titles") != R.get("tower", false):
+					out.append("%s: прізвиська міні-босів («floors.titles») має Башта («tower»), і лише вона" % where)
+				for k in ["pool", "bosses", "titles"]:
+					if F.has(k) and F[k].is_empty():
+						out.append("%s: «floors.%s» порожні" % [where, k])
+				if F.has("pool") and F["pool"].size() < 4:
+					out.append("%s: «floors.pool» — замало нечисті: поверх бере трьох рядових і міні-боса" % where)
+				if R.has("plague_start"):
+					var PS = load("res://scripts/game/plague_service.gd")
+					if int(R["plague_start"]) < 1 or int(R["plague_start"]) > PS.MAX_LEVEL:
+						out.append("%s: «plague_start» має бути від 1 до %d" % [where, PS.MAX_LEVEL])
+					if R.get("endless", false) or R.has("peril"):
+						out.append("%s: зараза не осідає в безкінечних і надважких місцях" % where)
+			"lands":
+				if R.get("title_fx", _EMPTY).is_empty():
+					out.append("%s: «title_fx» порожній" % where)
+				for k in R.get("title_fx", _EMPTY):
+					if int(R["title_fx"][k]) <= 0:
+						out.append("%s: «title_fx.%s» має бути більшим за нуль" % [where, k])
+	if name == "places":
+		out.append_array(_contiguous(name, rows, "peril", 1))
+	return out
+
+
+## Межі мапи (довгота, широта): WorldMap.LON0..LON1, LAT0..LAT1.
+static func _in_map(p: Vector2) -> bool:
+	var WM = load("res://scripts/ui/world_map.gd")
+	return p.x >= WM.LON0 and p.x <= WM.LON1 and p.y >= WM.LAT0 and p.y <= WM.LAT1
+
+
+## Посилання місць на нечисть: рядова має ім'я, множину й трофей (завдання), бос — запис «boss».
+## Ту саму перевірку роблять і таблиця нечисті (зникла нечисть), і таблиця місць (хибне посилання).
+static func _place_mob_links(places: Dictionary, mobs: Dictionary) -> Array:
+	var out := []
+	for lid in places:
+		var L: Dictionary = places[lid]
+		var F: Dictionary = L.get("floors", _EMPTY)
+		var groups := [["місце %s" % lid, L.get("enemies", []), ["name", "plural", "quest_item"]],
+			["місце %s (поверхи)" % lid, F.get("pool", []), ["name"]],
+			["місце %s (бос)" % lid, [L["boss"]] if L.has("boss") else [], ["boss"]],
+			["місце %s (боси поверхів)" % lid, F.get("bosses", []), ["boss"]]]
+		for g in groups:
+			for e in g[1]:
+				var R: Dictionary = mobs.get(str(e), _EMPTY)
+				if R.is_empty():
+					out.append("%s посилається на нечисть «%s», якої немає в mobs.json" % [g[0], e])
+					continue
+				for f in g[2]:
+					if f == "boss" and not R.has("boss"):
+						out.append("%s: «%s» тут бос, але в mobs.json у нього нема запису «boss»" % [g[0], e])
+					elif f != "boss" and not R.has(f):
+						out.append("%s: у «%s» нема поля «%s»" % [g[0], e, f])
+	return out
+
+
+## Посилання таблиць світу на інші таблиці й на код гри.
+static func _world_links(name: String, rows: Dictionary) -> Array:
+	var out := []
+	var WM = load("res://scripts/ui/world_map.gd")
+	match name:
+		"regions":
+			for id in rows:
+				var used := false
+				for t in ["cities", "places"]:
+					for x in ids(t):
+						used = used or str(row(t, x).get("region", "")) == id
+				if not used:
+					out.append("regions/%s: у краї нема жодного міста чи місця" % id)
+		"cities":
+			for id in rows:
+				var R: Dictionary = rows[id]
+				if R.has("region") and not _has_row("regions", R["region"]):
+					out.append("cities/%s: «region» — нема краю «%s» у regions.json" % [id, R["region"]])
+				if R.has("pos") and not _in_map(R["pos"]):
+					out.append("cities/%s: «pos» %s поза мапою (WorldMap.LON0..LON1, LAT0..LAT1)" % [id, str(R["pos"])])
+				if _has_row("places", id):
+					out.append("cities/%s: місце з таким самим id уже є в places.json" % id)
+		"places":
+			out.append_array(_place_mob_links(rows, table("mobs")))
+			var land_order: Array = ids("lands")
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "places/" + id
+				if R.has("biome") and not _has_row("biomes", R["biome"]):
+					out.append("%s: «biome» — нема краєвиду «%s» у biomes.json" % [where, R["biome"]])
+				if R.has("region") and not _has_row("regions", R["region"]):
+					out.append("%s: «region» — нема краю «%s» у regions.json" % [where, R["region"]])
+				if R.has("land"):
+					var i := land_order.find(str(R["land"]))
+					if i < 0:
+						out.append("%s: «land» — нема землі «%s» у lands.json" % [where, R["land"]])
+					elif R.has("peril") and int(R["peril"]) != i + 1:
+						out.append("%s: «peril» %d, а земля «%s» стоїть у lands.json %d-ю: печери відкриваються в порядку земель" % [where, int(R["peril"]), R["land"], i + 1])
+				if R.has("icon") and not str(R["icon"]) in WM.ICON_ORDER:
+					out.append("%s: «icon» — нема значка «%s» у WorldMap.ICON_ORDER" % [where, R["icon"]])
+				if R.has("pos") and not _in_map(R["pos"]):
+					out.append("%s: «pos» %s поза мапою (WorldMap.LON0..LON1, LAT0..LAT1)" % [where, str(R["pos"])])
+		"lands":
+			var Valor = load("res://scripts/data/valor.gd")
+			for id in rows:
+				var n := 0
+				for p in ids("places"):
+					if str(row("places", p).get("land", "")) == id:
+						n += 1
+				if n != 1:
+					out.append("lands/%s: у землі має бути рівно одна надважка печера («land» у places.json), а їх %d" % [id, n])
+				for k in rows[id].get("title_fx", _EMPTY):
+					if not Valor.LINES.has(k) and not Valor.EXTRA_TEXT.has(k):
+						out.append("lands/%s: «title_fx» — ключа «%s» нема ні у Valor.LINES, ні у Valor.EXTRA_TEXT" % [id, k])
+		"biomes":
+			var Index = load("res://scripts/data/sound_index.gd")
+			var Camp = load("res://scripts/data/camp_data.gd")
+			var Ground = load("res://scripts/world/ground.gd")
+			for id in rows:
+				var R: Dictionary = rows[id]
+				if R.has("ambient") and not str(R["ambient"]) in Index.AMBIENT:
+					out.append("biomes/%s: «ambient» — нема шуму «%s» у SoundIndex.AMBIENT" % [id, R["ambient"]])
+				if R.has("resource") and not Camp.RESOURCES.has(R["resource"]):
+					out.append("biomes/%s: «resource» — невідомий ресурс «%s» (CampData.RESOURCES)" % [id, R["resource"]])
+				for k in ["icon", "dungeon_icon"]:
+					if R.has(k) and not str(R[k]) in WM.ICON_ORDER:
+						out.append("biomes/%s: «%s» — нема значка «%s» у WorldMap.ICON_ORDER" % [id, k, R[k]])
+				if not id in Ground.TILED:
+					out.append("biomes/%s: земля цього краєвиду не намальована (Ground.TILED): новий краєвид потребує коду й тайлів" % id)
+		"elite_affixes":
+			var Status = load("res://scripts/game/status.gd")
+			for id in rows:
+				if rows[id].has("status") and not Status.INFO.has(rows[id]["status"]):
+					out.append("elite_affixes/%s: невідомий стан «%s» (див. Status.INFO)" % [id, rows[id]["status"]])
 	return out
 
 
@@ -1558,6 +1823,11 @@ static func is_phase2_boss(id: String) -> bool:
 
 
 ## Стан, який накладає удар цього виду ("" — жодного).
+## Імена для дошки розшуку (порожньо — вид не розшукують).
+static func bounty_names(id: String) -> Array:
+	return mob(id).get("bounty_names", _EMPTY_LIST)
+
+
 static func hit_status(id: String) -> String:
 	return str(mob(id).get("hit_status", ""))
 

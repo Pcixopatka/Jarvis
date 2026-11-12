@@ -1048,7 +1048,7 @@ static func _named_valor(game, v: VBoxContainer) -> void:
 		return
 	var parts := []
 	for boss in got:
-		parts.append("%s (%s)" % [str(Peril.TITLES.get(boss, "")), game.player.Valor.fx_text(Peril.TITLE_FX.get(boss, {}))])
+		parts.append("%s (%s)" % [str(Peril.boss_title(boss)), game.player.Valor.fx_text(Peril.boss_title_fx(boss))])
 	var l := UI.label("Іменні звитяги: " + ", ".join(parts), 15, UI.GOOD)
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(l)

@@ -96,7 +96,7 @@ static func _value(v, f: Dictionary, depth: int, inline_only: bool) -> String:
 		return _record(v, f.get("fields", {}), depth)
 	if v is Array:
 		var parts := PackedStringArray()
-		var of: Dictionary = {"type": "float"} if t == "color" else f.get("of", {})
+		var of: Dictionary = {"type": "float"} if t in ["color", "vector"] else f.get("of", {})
 		for x in v:
 			parts.append(_value(x, of, depth + 1, true))
 		var one := "[" + ", ".join(parts) + "]"

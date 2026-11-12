@@ -16,12 +16,12 @@ func _run() -> void:
 	for l in _env_list("SIM_LEVELS", ["0", "30", "66"]):
 		levels.append(int(l))
 	var all := []
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].get("scale", false):
+	for id in Data.place_ids():
+		if Data.place(id).get("scale", false):
 			all.append(id)
 	var locs: Array = _env_list("SIM_LOCS", all)
 	for loc_id in locs:
-		var L: Dictionary = Data.LOCATIONS[loc_id]
+		var L: Dictionary = Data.place(loc_id)
 		var line := "%-16s (%2d+)" % [loc_id, int(L["level"])]
 		for lv in levels:
 			var lvl: int = int(L["level"]) if lv == 0 else lv

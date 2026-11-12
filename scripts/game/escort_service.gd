@@ -34,7 +34,7 @@ static func fill(q: Dictionary, roll: float) -> void:
 	q["type"] = "escort"
 	q["target"] = id
 	q["count"] = 1
-	q["text"] = "Проведи %s (%s)" % [Acts.ESCORT_WHO[id]["acc"], Data.LOCATIONS[q["loc"]]["name"]]
+	q["text"] = "Проведи %s (%s)" % [Acts.ESCORT_WHO[id]["acc"], Data.place(q["loc"])["name"]]
 
 
 static func hp(level: int) -> float:
@@ -44,7 +44,7 @@ static func hp(level: int) -> float:
 ## Опис бою для Combat.enter_defense.
 ## player — хто веде: нечисть підтягується до його рівня й сили (без нього — за рівнем місця, для довідок).
 static func battle_loc(q: Dictionary, player = null) -> Dictionary:
-	var L: Dictionary = Data.LOCATIONS[q["loc"]]
+	var L: Dictionary = Data.place(q["loc"])
 	var lvl := maxi(int(L["level"]), int(q.get("lvl", 0)) if L.get("scale", false) else 0)  # у далеких краях — за рівнем героя на час завдання
 	var lift := {}
 	var Far = load("res://scripts/game/far_service.gd")

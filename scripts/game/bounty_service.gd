@@ -8,6 +8,7 @@ extends RefCounted
 const Acts := preload("res://scripts/data/activities.gd")
 const Data := preload("res://scripts/data/data.gd")
 const Elites := preload("res://scripts/data/elites.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 
 const MIN_LEVEL := 4  # як і еліти: у найперших місцях розшуку нема
@@ -36,10 +37,10 @@ static func tick(world) -> void:
 
 ## Місцевості для оголошень цього міста: дикі місця поруч за рівнем і не надто сильні для героя.
 static func candidates(city: String, player) -> Array:
-	var lvl: int = int(Data.CITIES[city]["level"])
+	var lvl: int = int(Data.city(city)["level"])
 	var out := []
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if L["type"] != "field" or L.get("endless", false):
 			continue
 		var l: int = int(L["level"])
@@ -49,8 +50,8 @@ static func candidates(city: String, player) -> Array:
 		# Нічого поруч — беремо найближчу за рівнем дику місцевість
 		var best := ""
 		var best_d := 999
-		for id in Data.LOCATIONS:
-			var L: Dictionary = Data.LOCATIONS[id]
+		for id in Data.place_ids():
+			var L: Dictionary = Data.place(id)
 			if L["type"] != "field" or L.get("endless", false):
 				continue
 			var d: int = absi(int(L["level"]) - lvl)
@@ -65,11 +66,11 @@ static func _gen(world, city: String, player) -> Dictionary:
 	var s := state(world)
 	var locs := candidates(city, player)
 	var loc: String = locs[randi() % locs.size()]
-	var L: Dictionary = Data.LOCATIONS[loc]
-	var kinds: Array = L["enemies"].filter(func(k): return Acts.BOUNTY_NAMES.has(k))
+	var L: Dictionary = Data.place(loc)
+	var kinds: Array = L["enemies"].filter(func(k): return not GameDB.bounty_names(k).is_empty())
 	var kind: String = kinds[randi() % kinds.size()] if not kinds.is_empty() else "vovkulaka"
-	var names: Array = Acts.BOUNTY_NAMES[kind]
-	var keys := Elites.AFFIXES.keys()
+	var names: Array = GameDB.bounty_names(kind)
+	var keys := Elites.affix_ids().duplicate()
 	keys.shuffle()
 	var n := 3 if int(L["level"]) >= 12 else 2
 	var id: int = int(s["next_id"])
@@ -148,7 +149,7 @@ static func mods_for(world, loc: String, player) -> Dictionary:
 	if b.is_empty():
 		return {}
 	var info: Dictionary = b.duplicate()
-	info["level"] = maxi(int(Data.LOCATIONS[loc]["level"]) + 1, player.level)
+	info["level"] = maxi(int(Data.place(loc)["level"]) + 1, player.level)
 	return {"bounty": info}
 
 
@@ -192,5 +193,5 @@ static func turn_in(world, player, id: int) -> Array:
 static func traits(b: Dictionary) -> String:
 	var parts := []
 	for a in b["affixes"]:
-		parts.append(Elites.AFFIXES[a]["desc"])
+		parts.append(Elites.affix(a)["desc"])
 	return ", ".join(parts)

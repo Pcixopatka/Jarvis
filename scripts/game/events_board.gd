@@ -187,9 +187,9 @@ static func status(id: String, world, player) -> Dictionary:
 		"far":
 			var open := []
 			var FS = _svc("far_service")
-			for r in Data.REGION_ORDER:
+			for r in Data.region_ids():
 				if player.level >= FS.open_level(r):
-					open.append(str(Data.REGIONS[r]["name"]))
+					open.append(str(Data.region(r)["name"]))
 			return _st("Відкрито: " + ", ".join(open), true)
 		"tower":
 			var s: Dictionary = _svc("tower_service").state(world)
@@ -262,23 +262,23 @@ static func rows(world, player, here: String = "") -> Array:
 
 
 static func _ll(id: String) -> Vector2:
-	if Data.CITIES.has(id):
-		return Data.CITIES[id]["pos"]
-	if Data.LOCATIONS.has(id):
-		return Data.LOCATIONS[id]["pos"]
+	if Data.is_city(id):
+		return Data.city(id)["pos"]
+	if Data.is_place(id):
+		return Data.place(id)["pos"]
 	if Acts.SPOTS.has(id):
 		return Acts.SPOTS[id]["pos"]
-	return Camp.CAMP["pos"] if id == Camp.CAMP_ID else Data.CITIES["sich"]["pos"]
+	return Camp.CAMP["pos"] if id == Camp.CAMP_ID else Data.city("sich")["pos"]
 
 
 ## Найближче до героя місто (саме місто, якщо він у ньому).
 static func _near_city(here: String) -> String:
-	if Data.CITIES.has(here):
+	if Data.is_city(here):
 		return here
 	var best := "sich"
 	var best_d := INF
-	for c in Data.CITIES:
-		var d: float = _ll(here).distance_to(Data.CITIES[c]["pos"])
+	for c in Data.city_ids():
+		var d: float = _ll(here).distance_to(Data.city(c)["pos"])
 		if d < best_d:
 			best_d = d
 			best = c
@@ -329,9 +329,9 @@ static func place(id: String, world, here: String = "") -> String:
 		"far":
 			var best := ""
 			var best_d := INF
-			for loc in Data.LOCATIONS:
-				if Data.LOCATIONS[loc].get("scale", false):
-					var d: float = _ll(here).distance_to(Data.LOCATIONS[loc]["pos"])
+			for loc in Data.place_ids():
+				if Data.place(loc).get("scale", false):
+					var d: float = _ll(here).distance_to(Data.place(loc)["pos"])
 					if d < best_d:
 						best_d = d
 						best = loc

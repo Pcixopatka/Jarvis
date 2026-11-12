@@ -94,11 +94,11 @@ static func mod_names(kind: String) -> Array:
 
 ## Рідне лігво боса: звідти беруться прислужники й вигляд арени.
 static func home_of(boss: String) -> Dictionary:
-	for id in Data.LOCATIONS:
-		var L: Dictionary = Data.LOCATIONS[id]
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
 		if str(L.get("boss", "")) == boss and not L.get("endless", false) and not L.has("peril"):
 			return L
-	return Data.LOCATIONS["hlybyny"]
+	return Data.place("hlybyny")
 
 
 static func done(world, kind: String) -> bool:
@@ -124,7 +124,7 @@ static func available(world, player) -> int:
 	return n
 
 
-## Опис бою (як місцевість у Data.LOCATIONS): печера на одну кімнату, бос рівня героя.
+## Опис бою (як місце в data/places.json): печера на одну кімнату, бос рівня героя.
 static func loc_for(player, kind: String) -> Dictionary:
 	var boss := boss_id(kind)
 	var home := home_of(boss)

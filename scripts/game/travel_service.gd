@@ -37,13 +37,13 @@ static func roll(world, player) -> Dictionary:
 
 
 static func _city_name(id: String) -> String:
-	return Data.CITIES[id]["name"]
+	return Data.city(id)["name"]
 
 
 static func _random_city(player) -> String:
 	var ids := []
-	for id in Data.CITIES:
-		if int(Data.CITIES[id]["level"]) <= player.level + 2:
+	for id in Data.city_ids():
+		if int(Data.city(id)["level"]) <= player.level + 2:
 			ids.append(id)
 	return ids[randi() % ids.size()]
 
@@ -156,7 +156,7 @@ static func apply(world, player, outcome: Dictionary) -> String:
 	if outcome.has("loyalty"):
 		for city in outcome["loyalty"]:
 			world.add_loyalty(city, int(outcome["loyalty"][city]))
-			parts.append("%s +%d лояльності" % [Data.CITIES[city]["name"], int(outcome["loyalty"][city])])
+			parts.append("%s +%d лояльності" % [Data.city(city)["name"], int(outcome["loyalty"][city])])
 	if outcome.get("heal_full", false):
 		player.hp = player.max_hp
 		parts.append("здоров'я відновлено")

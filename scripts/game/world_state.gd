@@ -128,26 +128,26 @@ func _has_text(list: Array, text: String) -> bool:
 
 ## want_escort — потрібен саме супровід (його просить виклик): місцевість беремо лише дику.
 func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
-	var lvl: int = Data.CITIES[city]["level"] + loyalty_level(city)
+	var lvl: int = Data.city(city)["level"] + loyalty_level(city)
 	var locs := []
-	for id in Data.LOCATIONS:
-		if Data.LOCATIONS[id].get("endless", false) or Data.LOCATIONS[id].has("peril"):
+	for id in Data.place_ids():
+		if Data.place(id).get("endless", false) or Data.place(id).has("peril"):
 			continue  # Глибини й надважкі печери — не для доручень
-		if want_escort and Data.LOCATIONS[id]["type"] == "dungeon":
+		if want_escort and Data.place(id)["type"] == "dungeon":
 			continue
-		var l: int = Data.LOCATIONS[id]["level"]
+		var l: int = Data.place(id)["level"]
 		if l >= lvl - 2 and l <= lvl + 3:
 			locs.append(id)
 	if locs.is_empty() and want_escort:
-		for id in Data.LOCATIONS:
-			if Data.LOCATIONS[id]["type"] != "dungeon" and not Data.LOCATIONS[id].get("endless", false) and int(Data.LOCATIONS[id]["level"]) <= lvl + 3:
+		for id in Data.place_ids():
+			if Data.place(id)["type"] != "dungeon" and not Data.place(id).get("endless", false) and int(Data.place(id)["level"]) <= lvl + 3:
 				locs.append(id)
 	if locs.is_empty():
-		for id in Data.LOCATIONS:
-			if not Data.LOCATIONS[id].has("peril"):
+		for id in Data.place_ids():
+			if not Data.place(id).has("peril"):
 				locs.append(id)
 	var loc_id: String = locs[randi() % locs.size()]
-	var L: Dictionary = Data.LOCATIONS[loc_id]
+	var L: Dictionary = Data.place(loc_id)
 	# Далекі краї ростуть із героєм: нагорода за завдання туди — за його рівнем, обсяг — за рівнем краю
 	var eff: int = Data.loc_level(L, hero_level)
 	var q := {"id": next_quest_id, "city": city, "loc": loc_id, "progress": 0, "lvl": eff}

@@ -10,10 +10,20 @@ const LOC_ID := "bashta"
 const OPEN_LEVEL := 15
 const SUPER_EVERY := 5
 const BASE_LEVEL := 14  # поверх 1 — рівень 15
-const SUPER_BOSSES := ["baba_yaha", "solovei", "lykho", "oprychnyk"]
-const POOL := ["zarazhenyi", "pishchalnyk", "chort", "upyr", "vovkulaka", "bolotianyk", "mavka", "chaklun"]
-## Прізвиська міні-босів: сотники Кощієвої раті
-const MINI_TITLES := ["Сотник", "Осавул раті", "Десятник", "Воєвода поверху", "Кат", "Стражник", "Ключник", "Дозорець"]
+
+
+## З кого складаються поверхи — у записі Башти (data/places.json, «floors»): рядова нечисть,
+## супербоси по черзі й прізвиська міні-босів (сотники Кощієвої раті).
+static func pool() -> Array:
+	return Data.place(LOC_ID)["floors"]["pool"]
+
+
+static func super_bosses() -> Array:
+	return Data.place(LOC_ID)["floors"]["bosses"]
+
+
+static func mini_titles() -> Array:
+	return Data.place(LOC_ID)["floors"]["titles"]
 
 
 static func state(world) -> Dictionary:
@@ -45,26 +55,27 @@ static func waves_of(floor_: int) -> int:
 
 
 static func super_boss(floor_: int) -> String:
-	return SUPER_BOSSES[(floor_ / SUPER_EVERY - 1) % SUPER_BOSSES.size()]
+	var b := super_bosses()
+	return b[(floor_ / SUPER_EVERY - 1) % b.size()]
 
 
-## Опис поверху (як місцевість у Data.LOCATIONS; бій — тип "tower").
+## Опис поверху (як місце в data/places.json; бій — тип "tower").
 static func loc_for(floor_: int) -> Dictionary:
 	var lvl := level_of(floor_)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = floor_ * 104729
-	var pool := POOL.duplicate()
-	for i in range(pool.size() - 1, 0, -1):
+	var mix := pool().duplicate()
+	for i in range(mix.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
-		var t = pool[i]
-		pool[i] = pool[j]
-		pool[j] = t
+		var t = mix[i]
+		mix[i] = mix[j]
+		mix[j] = t
 	var sup := is_super(floor_)
 	var ring := floor_ / SUPER_EVERY  # скільки кіл по 5 поверхів уже пройдено
 	return {"name": "Башта, поверх %d" % floor_, "type": "tower", "biome": "plague" if sup else "cave",
-		"level": lvl, "loot_level": loot_level(floor_), "floor": floor_, "waves": waves_of(floor_), "enemies": pool.slice(0, 3),
-		"boss": super_boss(floor_) if sup else "", "mini": pool[3],
-		"mini_title": MINI_TITLES[(floor_ - 1) % MINI_TITLES.size()],
+		"level": lvl, "loot_level": loot_level(floor_), "floor": floor_, "waves": waves_of(floor_), "enemies": mix.slice(0, 3),
+		"boss": super_boss(floor_) if sup else "", "mini": mix[3],
+		"mini_title": mini_titles()[(floor_ - 1) % mini_titles().size()],
 		"mini_affixes": 2 if floor_ < 20 else 3,
 		"elite_bonus": minf(0.3, 0.05 + 0.01 * floor_),
 		# Вище — нечисть лютіша понад свій рівень. Надбавки малі: сама мірка нечисті росте з рівнем поверху.
