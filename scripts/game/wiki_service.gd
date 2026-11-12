@@ -653,7 +653,7 @@ static func _items() -> Array:
 	var props := []
 	for k in Data.AFFIX_POOL:
 		props.append(PROP_NAMES.get(k, k))
-	out.append(_e("Властивості", "що буває на речах", _cap(", ".join(props)) + "."))
+	out.append(_e("Властивості", "що буває на речах", _cap(", ".join(props)) + ". Досвід і гривні на одній речі не перевищують %s%% навіть при заточці +%d, хоч якого рівня й рідкості річ, золота вона чи з набору." % [_num(Data.XP_GOLD_MAX_TOP), Data.MAX_UPGRADE]))
 	var ch := []
 	for i in Data.SHARPEN_CHANCE.size():
 		ch.append("+%d: %d%%" % [i + 1, roundi(float(Data.SHARPEN_CHANCE[i]) * 100.0)])

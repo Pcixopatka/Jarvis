@@ -12,6 +12,7 @@ extends RefCounted
 
 const Data := preload("res://scripts/data/data.gd")
 const Clock := preload("res://scripts/core/clock.gd")
+const SaveSystem := preload("res://scripts/core/save_system.gd")
 
 const CHEST_SIZE := 40
 const CHEST_PER_SKLAD := 20  # кожен рівень Складу на хуторі — ще стільки місць у скрині
@@ -25,15 +26,23 @@ var records := {}
 var holidays := {}
 var shop := {}  # крамниця за донат: червінці й покупки роду (див. ShopService)
 var next_uid := 1000000  # uid речей у скрині — з окремого діапазону, щоб не збігались із героєвими
+## Позначка в файлі акаунта: досвід і гривні на речах у скрині вже перераховано під стелю
+## (Data.XP_GOLD_MAX_TOP). Файл акаунта версії не має, тож у нього своя позначка, окремо від героя.
+const XP_GOLD_KEY := "xp_gold_scaled"
 
 
 func to_dict() -> Dictionary:
 	# "clock": найпізніший час, який бачила гра, щоб переведений назад годинник нічого не скидав (Clock)
 	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "records": records, "holidays": holidays, "shop": shop, "next_uid": next_uid,
-		"clock": Clock.now()}
+		"clock": Clock.now(), XP_GOLD_KEY: 1}
 
 
 func from_dict(d: Dictionary) -> void:
+	if not d.has(XP_GOLD_KEY):
+		# старий акаунт: речі в скрині дістають нові числа досвіду й гривень рівно раз
+		# (а річ, що вже має позначку Data.XP_GOLD_MARK, не зменшується вдруге)
+		SaveSystem.rescale_items_xp_gold(d)
+		d[XP_GOLD_KEY] = 1
 	camp = d.get("camp", {})
 	chest = d.get("chest", {"gold": 0, "items": [], "stones": {}})
 	if not chest.has("stones"):

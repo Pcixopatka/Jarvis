@@ -151,6 +151,7 @@ static func renew(world, player, uid: int, levels: int = 0) -> bool:
 	it["base"] = {primary: Data._primary_value(it["slot"], target, int(it["rarity"]))}
 	for a in it["affixes"].keys():
 		# властивість кидається наново, та нижчою за нинішню не стає: оновлення річ не псує
-		it["affixes"][a] = maxf(float(it["affixes"][a]), Data._roll_value(a, target, int(it["rarity"])))
+		# досвід і гривні не вище стелі, навіть якщо нинішнє значення чомусь було більшим
+		it["affixes"][a] = Data.cap_affix(a, maxf(float(it["affixes"][a]), Data._roll_value(a, target, int(it["rarity"]))))
 	player.recalc()
 	return true

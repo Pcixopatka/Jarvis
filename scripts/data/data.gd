@@ -285,6 +285,18 @@ const SHARPEN_CHANCE := [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
 const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
 const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гривні: у стільки разів дорожча
 
+## Найбільший бонус досвіду чи гривень від однієї речі при найвищій заточці (+MAX_UPGRADE), у відсотках.
+## Шість речей із найкращою такою властивістю разом дають близько 100%. До версії 0.50 одна легендарна
+## шапка 99-го рівня на +10 давала +152% досвіду, а сума по всьому спорядженню сягала кількасот відсотків.
+const XP_GOLD_MAX_TOP := 16.7
+## Стеля самої властивості xp чи gold на речі (без заточки): заточка множить її до XP_GOLD_MAX_TOP.
+const XP_GOLD_CAP := XP_GOLD_MAX_TOP / (1.0 + UPGRADE_BONUS * MAX_UPGRADE)
+## Кидок властивостей досвіду й гривень до масштабу: [нижня межа, верхня межа, приріст за рівень речі].
+const XP_GOLD_ROLL := {"xp": [4.0, 8.0, 0.4], "gold": [8.0, 15.0, 1.0]}
+## Найкраща звичайна річ, від якої рахується масштаб: легендарна цього рівня з найвищим кидком дає рівно стелю.
+const XP_GOLD_TOP_LEVEL := 99
+const XP_GOLD_TOP_RARITY := 3
+
 const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна", "Унікальна", "Артефакт"]
 const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15), Color(1.0, 0.85, 0.3), Color(0.35, 0.88, 0.8)]
 const RARITY_PLURAL := ["Звичайні", "Добротні", "Рідкісні", "Легендарні"]  # для фільтра автопідбору
@@ -332,8 +344,8 @@ const STAT_FMT := {
 	"spi": ["+%s до Характерництва", 0], "flat_dmg": ["+%s шкоди", 0], "dmg_pct": ["+%s%% шкоди", 0],
 	"crit": ["+%s%% шансу криту", 1], "aspd": ["+%s%% швидкості удару", 0], "hp": ["+%s здоров'я", 0],
 	"armor": ["+%s%% захисту", 1], "regen": ["+%s здоров'я/с", 1], "lifesteal": ["+%s%% вампіризму", 1],
-	"speed": ["+%s%% швидкості бігу", 0], "xp": ["+%s%% досвіду", 0], "skill_power": ["+%s%% сили вмінь", 0],
-	"skill_cd": ["-%s%% перезарядки вмінь", 0], "pickup": ["+%s%% радіусу збору", 0], "gold": ["+%s%% гривень", 0],
+	"speed": ["+%s%% швидкості бігу", 0], "xp": ["+%s%% досвіду", 1], "skill_power": ["+%s%% сили вмінь", 0],
+	"skill_cd": ["-%s%% перезарядки вмінь", 0], "pickup": ["+%s%% радіусу збору", 0], "gold": ["+%s%% гривень", 1],
 }
 const INT_STATS := ["str", "agi", "vit", "spi"]
 const AFFIX_POOL := ["str", "agi", "vit", "spi", "dmg_pct", "crit", "aspd", "hp", "armor", "regen",
@@ -346,8 +358,46 @@ static func fmt_stat(id: String, value: float) -> String:
 	return f[0] % num
 
 
+## Масштаб властивості досвіду чи гривень: найвищий кидок легендарної речі XP_GOLD_TOP_LEVEL-го рівня
+## дорівнює XP_GOLD_CAP. Так само множаться й ці властивості на речах зі старих збережень.
+static func xp_gold_scale(id: String) -> float:
+	var r: Array = XP_GOLD_ROLL[id]
+	return XP_GOLD_CAP / ((float(r[1]) + float(r[2]) * XP_GOLD_TOP_LEVEL) * (1.0 + 0.15 * XP_GOLD_TOP_RARITY))
+
+
+## Значення властивості під стелею: досвід і гривні не більші за XP_GOLD_CAP, решта як є.
+static func cap_affix(id: String, value: float) -> float:
+	return minf(value, XP_GOLD_CAP) if XP_GOLD_ROLL.has(id) else value
+
+
+## Позначка на речі: її досвід і гривні вже перераховано під стелю (див. rescale_xp_gold).
+const XP_GOLD_MARK := "xg"
+
+
+## Перерахувати досвід і гривні старої речі на нові числа: той самий масштаб, що й у формулі, потім стеля.
+## Річ позначається, тож удруге не зменшиться, де б вона не лежала. Повертає true, якщо щось змінилося.
+## Золоту річ перераховує Uniques.value (див. SaveSystem.rescale_items_xp_gold).
+static func rescale_xp_gold(item: Dictionary) -> bool:
+	if item.has(XP_GOLD_MARK):
+		return false
+	var changed := false
+	for src in [item.get("base", {}), item.get("affixes", {})]:
+		if typeof(src) != TYPE_DICTIONARY:
+			continue
+		for id in XP_GOLD_ROLL:
+			if src.has(id):
+				src[id] = cap_affix(id, float(src[id]) * xp_gold_scale(id))
+				changed = true
+	if changed:
+		item[XP_GOLD_MARK] = 1
+	return changed
+
+
 static func _roll_value(id: String, ilvl: int, rarity: int) -> float:
 	var q := 1.0 + 0.15 * rarity
+	if XP_GOLD_ROLL.has(id):
+		var r: Array = XP_GOLD_ROLL[id]
+		return cap_affix(id, (randf_range(float(r[0]), float(r[1])) + float(r[2]) * ilvl) * q * xp_gold_scale(id))
 	match id:
 		"str", "agi", "vit", "spi":
 			return float(randi_range(1, 1 + ilvl / 3 + rarity / 2))
@@ -359,11 +409,9 @@ static func _roll_value(id: String, ilvl: int, rarity: int) -> float:
 		"regen": return (randf_range(0.3, 0.7) + 0.05 * ilvl) * q
 		"lifesteal": return (randf_range(0.8, 1.6) + 0.05 * ilvl) * q
 		"speed": return (randf_range(2, 4) + 0.2 * ilvl) * q
-		"xp": return (randf_range(4, 8) + 0.4 * ilvl) * q
 		"skill_power": return (randf_range(4, 7) + 0.4 * ilvl) * q
 		"skill_cd": return (randf_range(2, 4) + 0.2 * ilvl) * q
 		"pickup": return randf_range(10, 20) * q
-		"gold": return (randf_range(8, 15) + ilvl) * q
 	return 0.0
 
 

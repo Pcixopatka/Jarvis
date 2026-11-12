@@ -171,11 +171,16 @@ static func is_unique(item: Dictionary) -> bool:
 
 ## Значення властивості: стале, без випадковості. Цілі характеристики рівні найкращому кидку легендарної,
 ## решта — середина кидка з якістю золотої речі (1,6 проти 1,45 у легендарної).
+## Досвід і гривні множаться на той самий масштаб, що й у випадкових речей, і не перевищують стелі
+## (Data.xp_gold_scale, Data.XP_GOLD_CAP).
 static func value(stat: String, ilvl: int, m: float) -> float:
 	if stat in Data.INT_STATS:
 		return floorf(m * (2 + ilvl / 3))
 	var mid: Array = MID[stat]
-	return 1.6 * (float(mid[0]) + float(mid[1]) * ilvl) * m
+	var v := 1.6 * (float(mid[0]) + float(mid[1]) * ilvl) * m
+	if Data.XP_GOLD_ROLL.has(stat):
+		v = Data.cap_affix(stat, v * Data.xp_gold_scale(stat))
+	return v
 
 
 ## Створює золоту річ за її id для вказаного рівня.

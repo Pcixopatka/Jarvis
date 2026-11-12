@@ -158,6 +158,7 @@ func _run() -> void:
 	await _suite_scroll_keep()
 	await _suite_auto_buffs()
 	await _suite_sale_off()
+	await _suite_xp_gold_cap()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -13428,8 +13429,8 @@ func _suite_divine() -> void:
 	check(DS.equip(w5, p5, "khovanets") and DS.remote_shop(p5) and is_equal_approx(p5.speed, sp0) and p5.divine.size() == 1, "назад на Хованця: у гнізді завжди один дар")
 	DS.buy(w5, p5, "molot")
 	check(DS.buy(w5, p5, "ladanka") and DS.worn(p5, "relic") == "ladanka" and p5.fx("dmg") == 0.0 and is_equal_approx(float(p5.divine_fx["revive"]), 0.5), "ладанка лягає в гніздо «Реліквія» замість молота")
-	check(DS.buy(w5, p5, "nimb") and is_equal_approx(p5.xp_mult, xp0 + 2.0) and is_equal_approx(p5.gold_mult, gm0 + 2.0), "німб: досвід і гривні +200%% (множники %.2f і %.2f)" % [p5.xp_mult, p5.gold_mult])
-	# з Німбом та сама нагорода втричі більша, якщо інших надбавок нема
+	check(DS.buy(w5, p5, "nimb") and is_equal_approx(p5.xp_mult, xp0 + 5.0) and is_equal_approx(p5.gold_mult, gm0 + 5.0), "німб: досвід і гривні +500%% (множники %.2f і %.2f)" % [p5.xp_mult, p5.gold_mult])
+	# з Німбом та сама нагорода вшестеро більша, якщо інших надбавок нема
 	var pn0 = _new_player()
 	Camp.apply_effects(w5, pn0)
 	var pn1 = _new_player()
@@ -13439,7 +13440,7 @@ func _suite_divine() -> void:
 	pn1.gold = 0
 	pn0.add_gold(100)
 	pn1.add_gold(100)
-	check(is_equal_approx(pn0.xp_mult, 1.0) and is_equal_approx(pn0.gold_mult, 1.0) and is_equal_approx(pn1.xp_mult, 3.0) and is_equal_approx(pn1.gold_mult, 3.0) and pn0.gold == 100 and pn1.gold == 300, "з Німбом досвід і гривні втричі більші: %d проти %d грн" % [pn1.gold, pn0.gold])
+	check(is_equal_approx(pn0.xp_mult, 1.0) and is_equal_approx(pn0.gold_mult, 1.0) and is_equal_approx(pn1.xp_mult, 6.0) and is_equal_approx(pn1.gold_mult, 6.0) and pn0.gold == 100 and pn1.gold == 600, "з Німбом досвід і гривні вшестеро більші: %d проти %d грн" % [pn1.gold, pn0.gold])
 	check(DS.buy(w5, p5, "stiah") and is_equal_approx(float(p5.divine_fx["party"]), 0.25) and DS.buy(w5, p5, "likhtar") and bool(p5.divine_fx["sight"]) and float(p5.divine_fx["light"]) > 1.0, "стяг і ліхтар мають власні гнізда")
 	check(p5.divine.size() == 5 and p5.inventory.is_empty(), "п'ять гнізд зайнято: супутник, реліквія, німб, стяг, ліхтар")
 	var CompS = load("res://scripts/entities/companion.gd")
@@ -14516,7 +14517,7 @@ func _suite_audit() -> void:
 	check(thefts <= 1 and int(hw.camp.get("theft_day", -1)) == int(now_t / 86400.0), "за одну добу злодії приходять щонайбільше раз, скільки б разів не заходив у гру (%d)" % thefts)
 
 	# ---- Збереження: версія, безпечний запис, нечитаний слот, чужі поля ----
-	check(SaveSystem.SAVE_VERSION == 10 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 10, "формат збереження 10, дев'ятий підхоплюється")
+	check(SaveSystem.SAVE_VERSION == 11 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 11 and int(SaveSystem.migrate({"version": 10, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 11, "формат збереження 11, дев'ятий і десятий підхоплюються")
 	var wpath := "user://test_write.save"
 	check(SaveSystem.write_var(wpath, {"a": 1}) and SaveSystem.write_var(wpath, {"a": 2}) and FileAccess.file_exists(wpath + ".bak") and not FileAccess.file_exists(wpath + ".tmp"), "запис іде через тимчасовий файл, попередній лишається копією")
 	SaveSystem.delete(wpath)
@@ -16119,7 +16120,7 @@ func _suite_auto_buffs() -> void:
 	# ---- Тексти ----
 	var nl: Array = Div.DEFS["nimb"]["lines"]
 	check(nl.size() == 3 and "авто-бафи" in str(nl[2]) and ("%d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in str(nl[2]), "у Німба третій рядок про авто-бафи з порогом лікування")
-	check(int(Div.DEFS["nimb"]["price"]) == 1200 and is_equal_approx(float(Div.DEFS["nimb"]["xp"]), 2.0) and is_equal_approx(float(Div.DEFS["nimb"]["gold"]), 2.0) and str(nl[0]) == "+200% досвіду" and str(nl[1]) == "+200% гривень", "ціна та сама, Німб дає +200% досвіду й гривень")
+	check(int(Div.DEFS["nimb"]["price"]) == 1200 and is_equal_approx(float(Div.DEFS["nimb"]["xp"]), 5.0) and is_equal_approx(float(Div.DEFS["nimb"]["gold"]), 5.0) and str(nl[0]) == "+500% досвіду" and str(nl[1]) == "+500% гривень", "ціна та сама, Німб дає +500% досвіду й гривень")
 	var art := ""
 	for sec in WS.sections():
 		for e in sec["entries"]:
@@ -16605,5 +16606,384 @@ func _suite_sale_off() -> void:
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Стара річ (до версії 0.50): легендарна 99-го рівня, заточка +10, властивість досвіду 69,02 (152% при +10).
+func _old_xp_item(slot: String, xp: float, gold: float = 0.0) -> Dictionary:
+	var it := Data.gen_item(99, 3, slot, "sabre" if slot == "weapon" else "")
+	it["up"] = 10
+	it["affixes"] = {"xp": xp, "crit": 5.25}
+	if gold > 0.0:
+		it["affixes"]["gold"] = gold
+	return it
+
+
+func _suite_xp_gold_cap() -> void:
+	suite("Досвід і гривні на речах: стеля 16,7% при +10")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Sets = load("res://scripts/data/sets.gd")
+	var CR = load("res://scripts/game/craft_service.gd")
+	var Camp = load("res://scripts/game/camp_service.gd")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	var AccountS = load("res://scripts/game/account.gd")
+	var UIK = load("res://scripts/ui/ui_kit.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var top := 1.0 + Data.UPGRADE_BONUS * Data.MAX_UPGRADE
+	const LIMIT := 16.7
+	var cap := LIMIT / 2.2
+	check(is_equal_approx(top, 2.2) and is_equal_approx(Data.XP_GOLD_MAX_TOP, LIMIT) and is_equal_approx(Data.XP_GOLD_CAP, cap), "стеля одна: 16,7%% при +10, тобто %.4f без заточки" % Data.XP_GOLD_CAP)
+	# масштаб рахується незалежно: найвищий кидок легендарної 99-го рівня за старою формулою дає стелю
+	var sc := {"xp": cap / ((8.0 + 0.4 * 99) * 1.45), "gold": cap / ((15.0 + 99) * 1.45)}
+	check(absf(Data.xp_gold_scale("xp") - sc["xp"]) < 1e-9 and absf(Data.xp_gold_scale("gold") - sc["gold"]) < 1e-9, "масштаб досвіду %.4f, гривень %.4f" % [sc["xp"], sc["gold"]])
+	# ---- 1. Кидки ----
+	var over := 0
+	var not_grow := 0
+	var not_scaled := 0
+	var best := {"xp": 0.0, "gold": 0.0}
+	for id in ["xp", "gold"]:
+		for lvl in range(1, 141):
+			for r in 5:
+				for k in 12:
+					var sd: int = 1000 * lvl + 100 * r + k
+					seed(sd)
+					var v: float = Data._roll_value(id, lvl, r)
+					if v * top > LIMIT + 0.001:
+						over += 1
+					seed(sd)
+					var old: float = (randf_range(4, 8) + 0.4 * lvl) * (1.0 + 0.15 * r) if id == "xp" else (randf_range(8, 15) + lvl) * (1.0 + 0.15 * r)
+					if absf(v - minf(cap, old * float(sc[id]))) > 1e-9:
+						not_scaled += 1
+					seed(sd)
+					var up_l: float = Data._roll_value(id, mini(140, lvl + 1), r)
+					seed(sd)
+					var up_r: float = Data._roll_value(id, lvl, mini(4, r + 1))
+					if up_l < v - 1e-9 or up_r < v - 1e-9:
+						not_grow += 1
+		seed(7)
+		for k in 20000:
+			best[id] = maxf(best[id], Data._roll_value(id, 99, 3))
+	check(over == 0, "жоден кидок досвіду й гривень на рівнях 1..140 і рідкостях 0..4 не дає більше 16,7%% при +10 (%d)" % over)
+	check(not_scaled == 0, "кидок той самий, що й раніше, помножений на масштаб і обрізаний стелею (%d)" % not_scaled)
+	check(not_grow == 0, "значення ростуть із рівнем і рідкістю, як раніше (%d)" % not_grow)
+	check(absf(best["xp"] * top - LIMIT) < 0.05 and absf(best["gold"] * top - LIMIT) < 0.05, "найкраща легендарна 99-го рівня на +10: досвіду %.2f%%, гривень %.2f%%" % [best["xp"] * top, best["gold"] * top])
+	seed(11)
+	var lo := 999.0
+	var hi := 0.0
+	for k in 5000:
+		var v: float = Data._roll_value("xp", 1, 0)
+		lo = minf(lo, v)
+		hi = maxf(hi, v)
+	check(lo >= 4.4 * float(sc["xp"]) - 1e-6 and hi <= 8.4 * float(sc["xp"]) + 1e-6 and hi > lo, "той самий розкид кидка: звичайна 1-го рівня %.2f..%.2f" % [lo, hi])
+	# ---- 2. Золоті речі й речі наборів ----
+	var gold_bad := []
+	var gold_n := 0
+	for id in Uniques.ORDER:
+		var A: Dictionary = Uniques.DEFS[id]["affixes"]
+		if not (A.has("xp") or A.has("gold")):
+			continue
+		for lvl in [1, 50, 99, 140]:
+			var it: Dictionary = Uniques.make(id, lvl)
+			it["up"] = 10
+			var st := Data.item_stats(it)
+			for a in ["xp", "gold"]:
+				if A.has(a):
+					gold_n += 1
+					if float(st.get(a, 0.0)) > LIMIT + 0.001:
+						gold_bad.append("%s %d: %s %.2f" % [id, lvl, a, float(st[a])])
+			var re: Dictionary = Uniques.make(id, 1)
+			Uniques.rescale(re, lvl)
+			for a in ["xp", "gold"]:
+				if A.has(a) and absf(float(re["affixes"][a]) - float(it["affixes"][a])) > 1e-9:
+					gold_bad.append("rescale %s %d" % [id, lvl])
+	check(gold_n >= 12 and gold_bad.is_empty(), "золоті речі з досвідом чи гривнями (%d значень) на рівнях 1, 50, 99, 140 при +10 не більше 16,7%%: %s" % [gold_n, str(gold_bad)])
+	var lad99: Dictionary = Uniques.make("ladanka_mamaia", 99)
+	check(is_equal_approx(float(lad99["affixes"]["xp"]), cap) and float(Uniques.make("ladanka_mamaia", 30)["affixes"]["xp"]) < cap and float(Uniques.make("ladanka_mamaia", 30)["affixes"]["xp"]) > float(Uniques.make("ladanka_mamaia", 10)["affixes"]["xp"]), "Ладанка Мамая: досвід росте з рівнем і впирається в стелю")
+	var set_bad := 0
+	seed(5)
+	for set_id in Sets.ORDER:
+		for slot in Data.SLOTS:
+			for lvl in [1, 50, 99, 140]:
+				for k in 5:
+					var it: Dictionary = Sets.make(set_id, slot, lvl, "sabre")
+					it["affixes"]["xp"] = Data._roll_value("xp", lvl, int(it["rarity"]))
+					it["affixes"]["gold"] = Data._roll_value("gold", lvl, int(it["rarity"]))
+					it["up"] = 10
+					var st := Data.item_stats(it)
+					if float(st["xp"]) > LIMIT + 0.001 or float(st["gold"]) > LIMIT + 0.001:
+						set_bad += 1
+	check(set_bad == 0, "речі наборів (і з досвідом чи гривнями) при +10 не більше 16,7%%")
+	# ---- 3. Шість найкращих речей ----
+	for id in ["xp", "gold"]:
+		var p = _new_player()
+		p.equipment = {}
+		for slot in Data.SLOTS:
+			var it := Data.gen_item(99, 3, slot, "sabre" if slot == "weapon" else "")
+			it["affixes"] = {id: best[id]}
+			it["up"] = 10
+			p.assign_uid(it)
+			p.equipment[slot] = it
+		p.recalc()
+		check(p.eq(id) > 99.0 and p.eq(id) <= 100.3, "шість найкращих речей на %s при +10: %.2f%%" % [id, p.eq(id)])
+	# Німб додається окремо, стеля речей його не зрізає
+	var pn0 = _new_player()
+	var pn1 = _new_player()
+	for pn in [pn0, pn1]:
+		pn.equipment = {}
+		for slot in Data.SLOTS:
+			var it := Data.gen_item(99, 3, slot, "sabre" if slot == "weapon" else "")
+			it["affixes"] = {"xp": best["xp"], "gold": best["gold"]}
+			it["up"] = 10
+			pn.assign_uid(it)
+			pn.equipment[slot] = it
+	pn1.divine = {"halo": "nimb"}
+	var w0 = WorldState.new()
+	w0.shop = {"divine": {"nimb": true}}
+	Camp.apply_effects(w0, pn0)
+	Camp.apply_effects(w0, pn1)
+	check(is_equal_approx(pn1.xp_mult, 1.0 + 5.0 + pn1.eq("xp") / 100.0) and is_equal_approx(pn1.gold_mult, 1.0 + 5.0 + pn1.eq("gold") / 100.0) and is_equal_approx(pn1.xp_mult - pn0.xp_mult, 5.0) and pn1.eq("xp") > 99.0, "Німб і шість речей: досвід ×%.3f = 1 + 5 + %.2f%% речей, дар не зрізано" % [pn1.xp_mult, pn1.eq("xp")])
+	# ---- 4. Старе збереження версії 10 ----
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var op = _new_player()
+	op.equipment = {}
+	op.equip_new(_old_xp_item("head", 69.02))
+	op.add_item(_old_xp_item("belt", 69.02, 165.3))
+	var lad_old: Dictionary = Uniques.make("ladanka_mamaia", 99)
+	lad_old["affixes"]["xp"] = 1.6 * (6.0 + 0.4 * 99)  # як рахувала гра до 0.50
+	lad_old["up"] = 10
+	op.add_item(lad_old)
+	var sh_old: Dictionary = Uniques.make("cheres_shubina", 140)
+	sh_old["affixes"]["gold"] = 1.6 * (11.5 + 1.0 * 140)
+	op.add_item(sh_old)
+	var ow = WorldState.new()
+	ow.shops = {"sich": [op.assign_uid(_old_xp_item("boots", 69.02, 165.3))]}
+	ow.shop_dirty = {"sich": false}
+	var d10 := {"player": op.to_dict(), "world": ow.to_dict(), "meta": {"playtime": 60.0}, "version": 10}
+	d10 = bytes_to_var(var_to_bytes(d10))
+	var d10_copy: Dictionary = bytes_to_var(var_to_bytes(d10))
+	SaveSystem.write_var(TEST_SAVE, d10)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	var old_chest_item := _old_xp_item("amulet", 69.02, 165.3)
+	old_chest_item["uid"] = 1000000
+	SaveSystem.write_var(TEST_ACCOUNT, {"chest": {"gold": 3, "items": [old_chest_item], "stones": {}}, "next_uid": 1000001})
+	check(game.load_game(), "старе збереження версії 10 завантажилось")
+	var gp = game.player
+	var top_of := func(it: Dictionary, id: String) -> float:
+		return float(Data.item_stats(it).get(id, 0.0))
+	var bag_of := func(pl, slot: String) -> Dictionary:
+		for it in pl.inventory:
+			if str(it["slot"]) == slot:
+				return it
+		return {}
+	check(absf(top_of.call(gp.equipment["head"], "xp") - LIMIT) < 0.01 and is_equal_approx(float(gp.equipment["head"]["affixes"]["crit"]), 5.25), "шапка зі знімка (152%% при +10) тепер %.2f%%, інші властивості ті самі" % top_of.call(gp.equipment["head"], "xp"))
+	var belt: Dictionary = bag_of.call(gp, "belt")
+	check(absf(top_of.call(belt, "xp") - LIMIT) < 0.01 and absf(top_of.call(belt, "gold") - LIMIT) < 0.01, "річ у торбі: досвід %.2f%%, гривні %.2f%%" % [top_of.call(belt, "xp"), top_of.call(belt, "gold")])
+	var shop_it: Dictionary = game.world.shops["sich"][0]
+	check(absf(top_of.call(shop_it, "xp") - LIMIT) < 0.01 and absf(top_of.call(shop_it, "gold") - LIMIT) < 0.01, "річ у товарі крамниці перерахована")
+	# ---- 7. Золота річ ----
+	var lad_new: Dictionary = bag_of.call(gp, "amulet")
+	var lad_ref: Dictionary = lad_new.duplicate(true)
+	Uniques.rescale(lad_ref, 99)
+	var sh_new := {}
+	for it in gp.inventory:
+		if str(it.get("unique", "")) == "cheres_shubina":
+			sh_new = it
+	var sh_ref: Dictionary = sh_new.duplicate(true)
+	Uniques.rescale(sh_ref, 140)
+	check(is_equal_approx(float(lad_new["affixes"]["xp"]), float(lad_ref["affixes"]["xp"])) and is_equal_approx(float(sh_new["affixes"]["gold"]), float(sh_ref["affixes"]["gold"])) and lad_new["affixes"].keys() == lad_ref["affixes"].keys(), "золоті речі зі старого збереження збігаються з Uniques.rescale: досвід %.3f, гривні %.3f" % [float(lad_new["affixes"]["xp"]), float(sh_new["affixes"]["gold"])])
+	var lad_def: Dictionary = Uniques.make("ladanka_mamaia", 99)
+	var same_rest := true
+	for a in lad_def["affixes"]:
+		same_rest = same_rest and is_equal_approx(float(lad_new["affixes"][a]), float(lad_def["affixes"][a]))
+	check(same_rest, "решта властивостей золотої речі та сама")
+	# ---- 5. Скриня роду ----
+	var ch_it: Dictionary = game.account.chest["items"][0]
+	check(absf(top_of.call(ch_it, "xp") - LIMIT) < 0.01 and absf(top_of.call(ch_it, "gold") - LIMIT) < 0.01 and int(game.account.chest["gold"]) == 3, "річ у старій скрині роду перерахована")
+	# повторне збереження й завантаження нічого не міняє
+	var snap := func() -> Array:
+		var out := [top_of.call(game.player.equipment["head"], "xp")]
+		for it in game.player.inventory:
+			out.append(var_to_str(it["affixes"]))
+		out.append(var_to_str(game.world.shops["sich"][0]["affixes"]))
+		for it in game.account.chest["items"]:
+			out.append(var_to_str(it["affixes"]))
+		return out
+	var s1: Array = snap.call()
+	game.save_game()
+	check(int(SaveSystem.load_data(TEST_SAVE)["version"]) == SaveSystem.SAVE_VERSION and SaveSystem.SAVE_VERSION == 11, "збереження тепер версії 11")
+	for i in 2:
+		check(game.load_game(), "повторне завантаження %d" % (i + 1))
+		check(snap.call() == s1, "після збереження й завантаження значення ті самі (%d)" % (i + 1))
+		game.save_game()
+	# ---- 6. Перенесення між перерахованим героєм і скринею ----
+	gp = game.player
+	var hb: Dictionary = bag_of.call(gp, "belt")
+	var hb_aff: String = var_to_str(hb["affixes"])
+	var moved: Dictionary = gp.remove_from_bag(int(hb["uid"]))
+	check(game.account.put_item(moved, 0), "річ героя лягла в скриню")
+	var back: Dictionary = game.account.take_item(int(game.account.chest["items"][0]["uid"]))
+	var back_aff: String = var_to_str(back["affixes"])
+	gp.add_item(back)
+	game.save_game()
+	check(game.load_game(), "завантаження після перенесення")
+	gp = game.player
+	var in_chest := ""
+	for it in game.account.chest["items"]:
+		in_chest = var_to_str(it["affixes"])
+	var in_bag := ""
+	for it in gp.inventory:
+		if str(it["slot"]) == "amulet" and not it.has("unique"):
+			in_bag = var_to_str(it["affixes"])
+	check(in_chest == hb_aff and in_bag == back_aff, "річ із героя в скриню й зі скрині в героя не зменшилась удруге")
+	# позначена річ у ще не перерахованій скрині чи старому герої теж не зменшується
+	var marked: Dictionary = bytes_to_var(var_to_bytes(gp.equipment["head"]))
+	var acc_old := {"chest": {"gold": 0, "items": [marked.duplicate(true)], "stones": {}}}
+	var acc = AccountS.new()
+	acc.from_dict(acc_old)
+	check(is_equal_approx(float(acc.chest["items"][0]["affixes"]["xp"]), float(marked["affixes"]["xp"])) and acc.to_dict().has(AccountS.XP_GOLD_KEY), "перерахована річ героя в старій скрині не зменшується вдруге")
+	var d_old: Dictionary = bytes_to_var(var_to_bytes(d10_copy))
+	d_old["player"]["inventory"].append(bytes_to_var(var_to_bytes(acc.chest["items"][0])))
+	var m_old := SaveSystem.migrate(d_old)
+	var last: Dictionary = m_old["player"]["inventory"][m_old["player"]["inventory"].size() - 1]
+	check(is_equal_approx(float(last["affixes"]["xp"]), float(marked["affixes"]["xp"])) and absf(float(m_old["player"]["equipment"]["head"]["affixes"]["xp"]) * top - LIMIT) < 0.01, "річ зі скрині в старому герої не зменшується вдруге, а його власні речі перераховано")
+	var mm := SaveSystem.migrate(bytes_to_var(var_to_bytes(m_old)))
+	check(var_to_str(mm["player"]) == var_to_str(m_old["player"]), "мігроване збереження вдруге не міняється")
+	# скриня вже перерахована, а новий старий герой перераховується окремо
+	var ch_before: String = var_to_str(game.account.chest)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.write_var(TEST_SAVE, bytes_to_var(var_to_bytes(d10_copy)))
+	check(game.load_game() and absf(top_of.call(game.player.equipment["head"], "xp") - LIMIT) < 0.01 and var_to_str(game.account.chest) == ch_before, "інший старий герой перерахувався, а скриня, уже перерахована, лишилась як була")
+	# скриня з позначкою, а в ній ще не перерахована річ (такої не буває, бо позначку пише лише перерахована скриня)
+	# не чіпаємо; стара скриня без позначки перераховується рівно раз
+	var acc2 = AccountS.new()
+	var raw := {"chest": {"gold": 0, "items": [_old_xp_item("boots", 69.02)], "stones": {}}}
+	acc2.from_dict(raw)
+	var once := float(acc2.chest["items"][0]["affixes"]["xp"])
+	var acc3 = AccountS.new()
+	acc3.from_dict(bytes_to_var(var_to_bytes(acc2.to_dict())))
+	check(absf(once * top - LIMIT) < 0.01 and is_equal_approx(float(acc3.chest["items"][0]["affixes"]["xp"]), once), "стара скриня перерахована рівно раз")
+	# .bak: основного файла нема, копія версії 10
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.write_var(TEST_SAVE, bytes_to_var(var_to_bytes(d10_copy)))
+	SaveSystem.write_var(TEST_SAVE, bytes_to_var(var_to_bytes(d10_copy)))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE))
+	var from_bak := SaveSystem.load_data(TEST_SAVE)
+	check(not from_bak.is_empty() and absf(float(from_bak["player"]["equipment"]["head"]["affixes"]["xp"]) * top - LIMIT) < 0.01, "копія .bak версії 10 теж перераховується")
+	# код перенесення роду зі старим героєм і старою скринею
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var profile := {"v": 1, "account": {"chest": {"gold": 0, "items": [_old_xp_item("amulet", 69.02, 165.3)], "stones": {}}}, "heroes": [{"slot": 1, "data": bytes_to_var(var_to_bytes(d10_copy))}]}
+	var code: String = ST.pack(profile)
+	var un: Dictionary = ST.unpack(code)
+	check(un["ok"] and ST.apply(un["profile"], {1: TEST_SAVE}, TEST_ACCOUNT), "код роду зі старими речами прийнято")
+	check(game.load_game() and absf(top_of.call(game.player.equipment["head"], "xp") - LIMIT) < 0.01 and absf(top_of.call(game.account.chest["items"][0], "gold") - LIMIT) < 0.01, "після перенесення кодом і герой, і скриня перераховані")
+	game.save_game()
+	check(game.load_game() and absf(top_of.call(game.player.equipment["head"], "xp") - LIMIT) < 0.01 and absf(top_of.call(game.account.chest["items"][0], "gold") - LIMIT) < 0.01, "і вдруге не зменшуються")
+	for path in [TEST_SAVE, TEST_ACCOUNT]:
+		for suffix in [ST.BACKUP, ST.NONE]:
+			if FileAccess.file_exists(path + suffix):
+				DirAccess.remove_absolute(path + suffix)
+	# ---- 8. Перекування й оновлення ----
+	var cw = WorldState.new()
+	cw.camp = {"buildings": {"kuznia": 3}}
+	var cp = _new_player()
+	cp.level = 99
+	cp.gold = 100000000
+	cp.resources = {"wood": 0, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	var rf := Data.gen_item(140, 3, "head")
+	cp.add_item(rf)
+	var rf_over := 0
+	var rf_hits := 0
+	seed(3)
+	for k in 300:
+		var a: String = str(rf["affixes"].keys()[k % rf["affixes"].size()])
+		var got: String = CR.reforge(cw, cp, int(rf["uid"]), a)
+		if got in ["xp", "gold"]:
+			rf_hits += 1
+			if float(rf["affixes"][got]) > cap + 1e-6:
+				rf_over += 1
+	check(rf_hits > 5 and rf_over == 0, "перекування на досвід чи гривні (%d разів) не дає більше стелі" % rf_hits)
+	var rn := Data.gen_item(1, 3, "head")
+	rn["affixes"] = {"xp": cap + 5.0, "gold": 0.5}
+	cp.add_item(rn)
+	check(CR.renew(cw, cp, int(rn["uid"])) and int(rn["ilvl"]) == 99 and float(rn["affixes"]["xp"]) <= cap + 1e-9 and float(rn["affixes"]["gold"]) <= cap + 1e-9 and float(rn["affixes"]["gold"]) > 0.5, "оновлення речі не дає більше стелі")
+	var ug: Dictionary = Uniques.make("oberih_berehyni", 40)
+	cp.add_item(ug)
+	check(CR.renew(cw, cp, int(ug["uid"])) and is_equal_approx(float(ug["affixes"]["xp"]), float(Uniques.make("oberih_berehyni", 99)["affixes"]["xp"])) and float(ug["affixes"]["xp"]) <= cap + 1e-9, "оновлення золотої речі: досвід за новими правилами")
+	# ---- 9. Показ ----
+	check(Data.fmt_stat("xp", cap * top) == "+16.7% досвіду" and Data.fmt_stat("gold", cap * top) == "+16.7% гривень" and Data.fmt_stat("xp", 3.04) == "+3.0% досвіду", "рядок властивості з одним знаком після коми: %s" % Data.fmt_stat("xp", cap * top))
+	check(Data.fmt_stat("dmg_pct", 12.4) == "+12% шкоди" and Data.fmt_stat("crit", 2.46) == "+2.5% шансу криту" and Data.fmt_stat("hp", 120.4) == "+120 здоров'я" and Data.fmt_stat("str", 7.0) == "+7 до Сили" and Data.fmt_stat("skill_power", 9.6) == "+10% сили вмінь", "інші властивості показуються як раніше")
+	var shown := _old_xp_item("head", cap, cap)
+	shown["affixes"]["dmg_pct"] = 12.4
+	var worse := _old_xp_item("head", cap * 0.5)
+	worse["up"] = 0
+	var card = UIK.item_card(shown, worse)
+	var lt := []
+	for l in card.find_children("*", "Label", true, false):
+		lt.append(l.text)
+	card.free()
+	check("+16.7% досвіду" in lt and "+16.7% гривень" in lt and "+27% шкоди" in lt and Data.fmt_stat("crit", 5.25 * top) in lt, "картка речі в порівнянні: %s" % str(lt))
+	var card2 = UIK.item_card(worse, shown)
+	var lt2 := []
+	for l in card2.find_children("*", "Label", true, false):
+		lt2.append(l.text)
+	card2.free()
+	var lost_ok := false
+	for t in lt2:
+		lost_ok = lost_ok or (str(t).begins_with("Втратиш:") and "+16.7% гривень" in str(t) and "+27% шкоди" in str(t))
+	check("+3.8% досвіду" in lt2 and lost_ok, "порівняння показує втрачене з одним знаком: %s" % str(lt2))
+	# ---- 10. Інші властивості не змінились ----
+	var old_f := {
+		"dmg_pct": func(l, q): return (randf_range(3, 6) + 0.4 * l) * q,
+		"crit": func(l, q): return (randf_range(1.5, 3.5) + 0.15 * l) * q,
+		"aspd": func(l, q): return (randf_range(3, 6) + 0.3 * l) * q,
+		"hp": func(l, q): return (randf_range(8, 16) + 3.0 * l) * q,
+		"armor": func(l, q): return (randf_range(1.5, 3.0) + 0.2 * l) * q,
+		"regen": func(l, q): return (randf_range(0.3, 0.7) + 0.05 * l) * q,
+		"lifesteal": func(l, q): return (randf_range(0.8, 1.6) + 0.05 * l) * q,
+		"speed": func(l, q): return (randf_range(2, 4) + 0.2 * l) * q,
+		"skill_power": func(l, q): return (randf_range(4, 7) + 0.4 * l) * q,
+		"skill_cd": func(l, q): return (randf_range(2, 4) + 0.2 * l) * q,
+		"pickup": func(_l, q): return randf_range(10, 20) * q,
+	}
+	var diff := []
+	for id in old_f:
+		for lvl in [1, 7, 50, 99, 140]:
+			for r in 5:
+				seed(lvl * 31 + r)
+				var nv: float = Data._roll_value(id, lvl, r)
+				seed(lvl * 31 + r)
+				var ov: float = old_f[id].call(lvl, 1.0 + 0.15 * r)
+				if nv != ov:
+					diff.append("%s %d %d" % [id, lvl, r])
+	for id in ["str", "agi", "vit", "spi"]:
+		for lvl in [1, 50, 99]:
+			seed(lvl)
+			var nv: float = Data._roll_value(id, lvl, 3)
+			seed(lvl)
+			if nv != float(randi_range(1, 1 + lvl / 3 + 3 / 2)):
+				diff.append(id)
+	check(diff.is_empty(), "інші властивості кидаються за тими самими формулами: %s" % str(diff))
+	var u_ok := true
+	for st_id in ["dmg_pct", "hp", "crit", "skill_power", "armor"]:
+		u_ok = u_ok and is_equal_approx(Uniques.value(st_id, 80, 1.1), 1.6 * (float(Uniques.MID[st_id][0]) + float(Uniques.MID[st_id][1]) * 80) * 1.1)
+	check(u_ok, "золоті речі: інші властивості ті самі")
+	# ---- Довідник ----
+	var prop_txt := ""
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			if str(e["title"]) == "Властивості":
+				prop_txt = str(e["text"])
+	check("не перевищують 16,7% навіть при заточці +10" in prop_txt and not ("—" in prop_txt), "довідник: досвід і гривні на одній речі не більше 16,7%% при +10")
+	game.queue_free()
+	await _frames(3)
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)

@@ -4,8 +4,9 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 10
+const SAVE_VERSION := 11
 const Data := preload("res://scripts/data/data.gd")
+const Uniques := preload("res://scripts/data/uniques.gd")
 const SAVE_PATH := "user://hero.save"  # старий єдиний файл — стає слотом 1 при першому запуску
 const ACCOUNT_PATH := "user://account.save"  # спільне на всіх персонажів
 const MAX_SLOTS := 5
@@ -207,8 +208,45 @@ static func migrate(d: Dictionary) -> Dictionary:
 		# v10: зі світом зберігається товар крамниць, у метаданих — позначка незавершеного герцю,
 		# в акаунті — годинник гри. Старому збереженню нічого доробляти: нові поля мають типові значення.
 		v = 10
+	if v == 10:
+		# v11: досвід і гривні на речах не більші за Data.XP_GOLD_MAX_TOP при +10. Усі речі героя й світу
+		# (вдягнені, у торбі, у крамницях і будь-де ще) перераховуються під нові числа.
+		rescale_items_xp_gold(d)
+		v = 11
 	d["version"] = v
 	return d
+
+
+## Чи це річ спорядження (а не, скажімо, оголошення розшуку з масивом "affixes").
+static func _is_item(n: Dictionary) -> bool:
+	return typeof(n.get("affixes")) == TYPE_DICTIONARY and typeof(n.get("base")) == TYPE_DICTIONARY and n.has("rarity")
+
+
+## Перерахувати досвід і гривні на всіх речах усередині node (словники й масиви будь-якої глибини).
+## Кожна річ перераховується раз: на ній лишається позначка Data.XP_GOLD_MARK. Золота річ дістає
+## рівно ті значення, що й Uniques.make на її рівні. Повертає, скільки речей змінено.
+static func rescale_items_xp_gold(node) -> int:
+	var n := 0
+	if node is Array:
+		for x in node:
+			n += rescale_items_xp_gold(x)
+	elif node is Dictionary:
+		if _is_item(node):
+			return 1 if _rescale_item(node) else 0
+		for k in node:
+			n += rescale_items_xp_gold(node[k])
+	return n
+
+
+static func _rescale_item(item: Dictionary) -> bool:
+	if not Data.rescale_xp_gold(item):
+		return false
+	if Uniques.is_unique(item):
+		var def_affixes: Dictionary = Uniques.DEFS[str(item["unique"])]["affixes"]
+		for id in Data.XP_GOLD_ROLL:
+			if item["affixes"].has(id) and def_affixes.has(id):
+				item["affixes"][id] = Uniques.value(id, int(item.get("ilvl", 1)), float(def_affixes[id]))
+	return true
 
 
 # ---------- Налаштування ----------
