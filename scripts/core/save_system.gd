@@ -30,7 +30,8 @@ static func slot_summaries() -> Array:
 		var st: Dictionary = w.get("story", {})
 		out.append({"slot": i, "job": p.get("job", "cossack"), "level": int(p.get("level", 1)), "job_level": int(p.get("job_level", 1)),
 			"rank": p.get("rank", ""), "chapter": int(st.get("chapter", 0)), "done": st.get("stage", "") == "done",
-			"playtime": float(d.get("meta", {}).get("playtime", 0.0)), "name": p.get("name", "")})
+			"playtime": float(d.get("meta", {}).get("playtime", 0.0)),
+			"nick": load("res://scripts/game/name_service.gd").from_save(p.get("nick", ""))})
 	return out
 
 

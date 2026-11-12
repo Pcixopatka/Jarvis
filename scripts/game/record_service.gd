@@ -46,8 +46,10 @@ static func record(world, key: String) -> Dictionary:
 	return world.records.get(key, {})
 
 
+## Хто тримає рекорд: «Сірко, Характерник 34 рівня» (без імені: «Характерник 34 рівня»).
 static func who(player) -> String:
-	return "%s %d рівня" % [player.class_name_ua(), player.level]
+	var nick := str(player.nick)
+	return "%s%s %d рівня" % [(nick + ", ") if nick != "" else "", player.class_name_ua(), player.level]
 
 
 ## Звірити героя з рекордами роду. Повертає повідомлення про побиті рекорди й славу за віхи.

@@ -149,6 +149,7 @@ func _run() -> void:
 	await _suite_grid_shops()
 	await _suite_audit()
 	await _suite_place_restore()
+	await _suite_hero_names()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -14890,3 +14891,324 @@ func _suite_place_restore() -> void:
 func _cleared_world(w, loc_id: String):
 	w.cleared[loc_id] = 9
 	return w
+
+
+## Текст кнопок поточного меню-оверлею.
+func _overlay_buttons(game) -> Dictionary:
+	var out := {}
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion():
+			out[b.text] = b
+	return out
+
+
+func _suite_hero_names() -> void:
+	suite("Імена героїв")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var NS = load("res://scripts/game/name_service.gd")
+	var Names = load("res://scripts/data/names_data.gd")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	var RS = load("res://scripts/game/record_service.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+
+	# ---- 1. Правила ----
+	check(NS.check("Іва") == "" and NS.check("Абвгґдеєжзиіїйк") == "" and NS.check("Абвгґдеєжзиіїйкл") == "", "3 і 16 знаків годяться")
+	check("Закоротке" in NS.check("Ів") and "Закоротке" in NS.check("   ") and "Задовге" in NS.check("Абвгґдеєжзиіїйклм"), "2 і 17 знаків ні, причина словами")
+	check(NS.clean("  Тарас    Бульба \t") == "Тарас Бульба" and NS.check("  Тарас    Бульба ") == "", "пробіли по краях зрізаються, кілька поспіль стискаються")
+	check(NS.check("Мар'яна") == "" and NS.check("Мар’яна") == "" and NS.clean("Марʼяна") == "Мар’яна" and NS.check("Олексій-2") == "" and NS.check("John Smith") == "", "апостроф (обидва), дефіс, цифри й латинка дозволені")
+	var signs_ok := true
+	for s in ["Тарас@", "Тарас!", "Та_рас", "Ёжик", "Тарас.", "Тарас😀", "Ta#ras"]:
+		if not ("Такі знаки" in NS.check(s)):
+			signs_ok = false
+			print("    пропущено «%s»" % s)
+	check(signs_ok, "інші знаки й російські літери не можна")
+	check("літеру" in NS.check("1648") and "літеру" in NS.check("--''") and "літеру" in NS.check("12 - 34"), "лише цифри й розділові: ні")
+	var reserved_ok := true
+	for s in ["Адмін", "admin", "АДМІН Тарас", "Adm1n", "Модератор", "moderator", "Розробник", "Developer", "Система", "system", "Підтримка", "Support", "GM", "GM Тарас", "gm1", "Гм-Петро"]:
+		if NS.check(s) == "" or ("служби" not in NS.check(s) and "Закоротке" not in NS.check(s)):
+			reserved_ok = false
+			print("    не зарезервовано «%s»: %s" % [s, NS.check(s)])
+	check(reserved_ok, "імена служби гри зарезервовані цілим іменем і початком")
+	var rude_ok := true
+	for s in ["хуй", "ХУУУЙ", "х у й", "х-у-й", "xyй", "Хуйло", "пізда", "пiзда", "п1зда", "сука", "cyka", "suka", "Сучка Сука", "блядь", "6лядь", "бля", "блять", "ебать", "їбати", "єбан", "мудак", "підор", "pidor", "fuck", "FuUuCk", "f u c k", "sh1t", "shit", "Pussy", "bitch", "hitler", "Гітлер", "гандон", "курва", "жопа"]:
+		if NS.check(s) != NS.BAD_TEXT:
+			rude_ok = false
+			print("    пропущено лайку «%s»: %s" % [s, NS.check(s)])
+	check(rude_ok, "лайка й обхідні написання не проходять, причина нейтральна")
+	var plain_ok := true
+	for s in ["Тарас", "Олена", "Остап", "Андрій", "Мирослава", "Богдан", "Наталка", "Ярема", "Северин", "Ivan", "Kateryna", "Christopher", "Небаба", "Стебло", "Гмиря", "Шабля", "Довбня", "Командарм", "Nigel", "Sebastian", "Д'Артаньян", "Козак 1648"]:
+		if NS.check(s) != "":
+			plain_ok = false
+			print("    звичайне ім'я «%s» не пройшло: %s" % [s, NS.check(s)])
+	for s in Names.READY:
+		if NS.check(s) != "":
+			plain_ok = false
+			print("    готове прізвисько «%s» не пройшло: %s" % [s, NS.check(s)])
+	for v in Names.VERBS:
+		for n in Names.NOUNS:
+			if NS.check(v + n) != "":
+				plain_ok = false
+				print("    складене «%s» не пройшло: %s" % [v + n, NS.check(v + n)])
+	check(plain_ok, "звичайні імена й усі прізвиська генератора (%d) проходять" % (Names.READY.size() + Names.VERBS.size() * Names.NOUNS.size()))
+	check(NS.from_save(42) == "" and NS.from_save("хуй") == "" and NS.from_save(" Сірко ") == "Сірко", "ім'я зі збереження: не рядок чи недопустиме стає порожнім")
+
+	# ---- 2. Жереб ----
+	var r1 := RandomNumberGenerator.new()
+	r1.seed = 1648
+	var r2 := RandomNumberGenerator.new()
+	r2.seed = 1648
+	var a := []
+	var b := []
+	for i in 20:
+		a.append(NS.roll(r1))
+		b.append(NS.roll(r2))
+	check(a == b, "жереб із тим самим зерном дає ті самі імена")
+	var seen := {}
+	var roll_ok := true
+	var rr := RandomNumberGenerator.new()
+	rr.seed = 7
+	for i in 1000:
+		var n: String = NS.roll(rr)
+		seen[n] = true
+		if NS.check(n) != "" or n.length() < 3 or n.length() > 16:
+			roll_ok = false
+			print("    жереб дав «%s»" % n)
+	check(roll_ok, "тисяча кидків: усі імена 3–16 знаків і проходять перевірку")
+	check(seen.size() >= 200, "різних імен на тисячу кидків: %d" % seen.size())
+	check(NS.check(NS.roll()) == "", "жереб без свого генератора теж годиться")
+
+	# ---- 3. Збереження ----
+	var p = _new_player()
+	p.nick = "Сірко"
+	p.level = 12
+	var p2 = _new_player()
+	p2.from_dict(p.to_dict())
+	check(p2.nick == "Сірко", "ім'я переживає запис і читання героя")
+	var dd: Dictionary = p.to_dict()
+	dd["nick"] = "сука"
+	p2.from_dict(dd)
+	var bad_ok: bool = p2.nick == ""
+	dd["nick"] = 777
+	p2.nick = "x"
+	p2.from_dict(dd)
+	bad_ok = bad_ok and p2.nick == ""
+	dd.erase("nick")
+	p2.nick = "x"
+	p2.from_dict(dd)
+	check(bad_ok, "недопустиме ім'я у збереженні стає порожнім")
+	check(p2.nick == "" and p2.level == 12, "старе збереження без імені: ім'я порожнє, решта на місці")
+	var prof := {"v": ST.FORMAT, "account": {}, "heroes": [{"slot": 1, "data": _transfer_hero(12, 500)}, {"slot": 2, "data": _transfer_hero(5, 10)}], "made": 0}
+	prof["heroes"][0]["data"]["player"]["nick"] = "Сірко"
+	prof["heroes"][1]["data"]["player"]["nick"] = "хуй"
+	var lines: Array = ST.summary(prof)
+	check(ST.check(prof) == "" and lines[0] == "Слот 1: Сірко, Козак, рівень 12" and lines[1] == "Слот 2: Козак, рівень 5", "код роду: недопустиме ім'я не причина відмови, підсумок показує ім'я (%s)" % str(lines))
+	var prof_bad: Dictionary = prof.duplicate(true)
+	prof_bad["heroes"][0]["data"]["player"]["nick"] = 12
+	check(ST.check(prof_bad) != "", "ім'я в коді роду не рядок: відмова")
+	var last: String = SaveSystem.slot_path(SaveSystem.MAX_SLOTS)
+	if not SaveSystem.exists(last):
+		SaveSystem.save({"player": p.to_dict(), "world": WorldState.new().to_dict(), "meta": {"playtime": 10.0}}, last)
+		check(SaveSystem.slot_summaries()[SaveSystem.MAX_SLOTS - 1].get("nick", "") == "Сірко", "підсумок слота знає ім'я героя")
+		SaveSystem.delete(last)
+	# 6. Перейменування у файлі (герой не той, яким грають)
+	var rpath := "user://test_rename.save"
+	SaveSystem.delete(rpath)
+	SaveSystem.save({"player": p.to_dict(), "world": WorldState.new().to_dict(), "meta": {"playtime": 77.0}}, rpath)
+	var before: Dictionary = SaveSystem.load_data(rpath)
+	check(not NS.rename_file(rpath, "хуй") and not NS.rename_file("user://nema_takoho.save", "Тарас"), "недопустиме ім'я чи нема файла: перейменування не відбувається")
+	check(NS.rename_file(rpath, "  Нечай  ") , "перейменування у файлі")
+	var after: Dictionary = SaveSystem.load_data(rpath)
+	var nick_after: String = after["player"]["nick"]
+	before["player"].erase("nick")
+	after["player"].erase("nick")
+	check(nick_after == "Нечай" and var_to_str(before) == var_to_str(after) and int(after["version"]) == SaveSystem.SAVE_VERSION, "ім'я змінилось, решта збереження й версія ті самі")
+	SaveSystem.delete(rpath)
+
+	# ---- 7. Де ім'я видно ----
+	p.change_class("cossack")
+	check(RS.who(p).begins_with("Сірко, ") and "рівня" in RS.who(p), "рекорд записується з іменем: %s" % RS.who(p))
+	p2.nick = ""
+	check(not RS.who(p2).begins_with(","), "герой без імені: як раніше")
+	p.free()
+	p2.free()
+
+	# ---- 8. Довідник ----
+	var found := false
+	for e in load("res://scripts/game/wiki_service.gd")._entries("basics"):
+		if str(e["title"]) == "Ім'я героя" and "не унікальні" in str(e["text"]) and "Кинути жереб" in str(e["text"]):
+			found = true
+	check(found, "довідник: стаття «Ім'я героя» в розділі «Як грати»")
+
+	# ================= У грі =================
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	check(game.ask_name, "справжня поведінка (питати ім'я старого героя) типова")
+	# Прямий виклик new_game(): як раніше, з випадковим прізвиськом
+	game.new_game()
+	game.hud.close_dialogue()
+	check(game.naming == "" and NS.check(game.player.nick) == "", "new_game() без імені: герой має допустиме прізвисько (%s)" % game.player.nick)
+	# Підпис слота: найдовший має влазити в кнопку
+	var longest := ""
+	for c in Classes.CLASSES:
+		if str(Classes.CLASSES[c]["name"]).length() > longest.length():
+			longest = c
+	var s_long := {"job": longest, "level": 99, "rank": "", "chapter": 5, "done": true, "playtime": 999.0 * 3600.0 + 59 * 60, "nick": "Перебийніс-Сірко"}
+	var title: String = game._slot_title(s_long)
+	var title_ok := true
+	for line in title.split("\n"):
+		if line.length() > 36:
+			title_ok = false
+	check(title.begins_with("Перебийніс-Сірко • ") and title_ok, "підпис слота починається з імені, кожен рядок до 36 знаків: %s" % title.replace("\n", " / "))
+	check(not game._slot_title({"job": "cossack", "level": 3, "rank": "", "chapter": 0, "done": false, "playtime": 0.0}).begins_with(" "), "підпис слота без імені")
+	game.hud.open_overlay()
+	var probes := []
+	for nk in ["Перебийніс-Сірко", "ШШШШШШШШШШШШШШШШ", "шшшшшшшшшшшшшшшш", "WWWWWWWWWWWWWWWW", "Жмшщюжмшщю-Жмшщю"]:
+		for cur in [true, false]:
+			var sx: Dictionary = s_long.duplicate()
+			sx["nick"] = nk
+			var txt: String = game._slot_row_text(sx, cur)
+			var pb = load("res://scripts/ui/ui_kit.gd").button(txt, func(): pass, Vector2(game.HERO_ROW_PLAY, 64), 20)
+			game.hud.overlay_box.add_child(pb)
+			probes.append(pb)
+			check(nk in txt.split("\n")[0], "ім'я в підписі не обрізане: %s" % txt.replace("\n", " / "))
+	var probe2 = load("res://scripts/ui/ui_kit.gd").button("Продовжити: " + title, func(): pass, Vector2(480, 80))
+	game.hud.overlay_box.add_child(probe2)
+	await _frames(2)
+	var widest := 0.0
+	for pb in probes:
+		widest = maxf(widest, pb.get_combined_minimum_size().x)
+	check(widest <= game.HERO_ROW_PLAY + 0.5, "найдовші підписи влазять у кнопку слота (%.0f із %d)" % [widest, game.HERO_ROW_PLAY])
+	check(probe2.get_combined_minimum_size().x <= 1000.0, "і в кнопку «Продовжити» головного меню (%.0f)" % probe2.get_combined_minimum_size().x)
+	game.hud.close_overlay()
+
+	# ---- 4. Кнопка «Нова гра»: спершу ім'я ----
+	game._forget_hero()
+	SaveSystem.delete(TEST_SAVE)
+	game._show_main_menu()
+	await _frames(2)
+	var btns: Dictionary = _overlay_buttons(game)
+	check(btns.has("Нова гра"), "у головному меню без героя є «Нова гра»")
+	btns["Нова гра"].pressed.emit()
+	await _frames(2)
+	btns = _overlay_buttons(game)
+	check(game.naming == "new" and game.name_edit != null and NS.check(game.name_edit.text) == "" and btns.has("Готово") and btns.has("Кинути жереб") and btns.has("Назад"), "«Нова гра» спершу питає ім'я, поле заповнене жеребом")
+	check(game.player == null and game.hud.dialogue_root == null, "до «Готово» гра не почалась")
+	var rolled: String = game.name_edit.text
+	for i in 5:
+		btns["Кинути жереб"].pressed.emit()
+		if game.name_edit.text != rolled:
+			break
+	check(game.name_edit.text != rolled and NS.check(game.name_edit.text) == "", "«Кинути жереб» дає інше ім'я")
+	game.name_edit.text = "Ів"
+	game.name_edit.text_changed.emit("Ів")
+	btns["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "new" and game.player == null and "Закоротке" in game.name_why.text, "«Готово» з недопустимим іменем не пускає далі й показує причину")
+	game.name_edit.text = "сука"
+	btns["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "new" and game.player == null and game.name_why.text == NS.BAD_TEXT, "лайка: причина нейтральна")
+	# поле й причина у верхній половині екрана, кнопки поруч
+	var vh: float = game.get_viewport().get_visible_rect().size.y
+	var er: Rect2 = game.name_edit.get_global_rect()
+	var wr: Rect2 = game.name_why.get_global_rect()
+	var dr: Rect2 = btns["Готово"].get_global_rect()
+	check(er.end.y <= vh / 2.0 and wr.end.y <= vh / 2.0 and dr.end.y <= vh / 2.0 + 10.0 and er.position.y >= 0.0, "поле, причина й «Готово» у верхній половині екрана (%.0f, %.0f, %.0f із %.0f)" % [er.end.y, wr.end.y, dr.end.y, vh])
+	# «Назад» вертає в меню й героя не створює
+	game.go_back(true)
+	await _frames(2)
+	btns = _overlay_buttons(game)
+	check(game.naming == "" and game.state == game.State.MENU and btns.has("Нова гра") and game.player == null and not SaveSystem.exists(TEST_SAVE), "системна «Назад» з екрана імені: у меню, героя нема")
+	btns["Нова гра"].pressed.emit()
+	await _frames(2)
+	btns = _overlay_buttons(game)
+	btns["Назад"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "" and _overlay_buttons(game).has("Нова гра") and game.player == null, "кнопка «Назад» на екрані імені теж")
+	_overlay_buttons(game)["Нова гра"].pressed.emit()
+	await _frames(2)
+	game.name_edit.text = "  Тарас   Сірко "
+	_overlay_buttons(game)["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "" and game.player != null and game.player.nick == "Тарас Сірко" and game.hud.dialogue_root != null, "«Готово» з допустимим іменем починає гру з цим іменем")
+	game.hud.close_dialogue()
+	var gw = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "kleinody", "duel", "defense", "bag_full", "mana_potion", "statuses", "peril_camp"]:
+		gw.hints[k] = true
+	game.map_here = "wild_field"
+	game.map_sel = ""
+	game.enter_map()
+	await _frames(2)
+	check(str(SaveSystem.load_data(TEST_SAVE)["player"].get("nick", "")) == "Тарас Сірко", "ім'я в збереженні")
+	game.open_character()
+	await _frames(2)
+	var heads := []
+	for l in game.hud.screen_root.find_children("*", "Label", true, false):
+		heads.append(l.text)
+	check("\n".join(heads).contains("Тарас Сірко • "), "екран героя: ім'я в заголовку")
+	game.close_character()
+	await _frames(2)
+
+	# ---- 5. Старий герой без імені ----
+	game.player.nick = ""
+	game.save_game()
+	game._show_main_menu()
+	game.ask_name = false
+	game._continue_game()
+	await _frames(2)
+	check(game.naming == "" and game.state == game.State.MAP, "тести з вимкненим прапорцем не спиняються на екрані імені")
+	game._show_main_menu()
+	game.ask_name = true
+	game._continue_game()
+	await _frames(2)
+	btns = _overlay_buttons(game)
+	check(game.naming == "first" and game.hud.overlay.visible and btns.has("Готово") and not btns.has("Назад") and NS.check(game.name_edit.text) == "", "старий герой без імені: після входу екран імені з жеребом, без «Назад»")
+	game.go_back(true)
+	await _frames(2)
+	check(game.naming == "first" and game.hud.overlay.visible and game.state == game.State.MAP, "системна «Назад» не дає вийти без імені й нічого не ламає")
+	var offered: String = game.name_edit.text
+	btns["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "" and not game.hud.overlay.visible and game.player.nick == offered, "одним дотиком: герой має запропоноване ім'я (%s)" % offered)
+	check(str(SaveSystem.load_data(TEST_SAVE)["player"].get("nick", "")) == offered, "і воно в збереженні")
+	check(game.state == game.State.MAP and game.map_here == "wild_field", "гравець там, де стояв")
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(2)
+	check(game.naming == "" and not game.hud.overlay.visible, "з іменем екран більше не показується")
+
+	# ---- Перейменування з меню ----
+	game._show_main_menu()
+	await _frames(1)
+	game._ask_rename(1)
+	await _frames(2)
+	btns = _overlay_buttons(game)
+	check(game.naming == "rename" and game.name_edit.text == offered and btns.has("Назад"), "перейменування: поле заповнене нинішнім іменем")
+	game.go_back(true)
+	await _frames(2)
+	check(game.naming == "" and game.state == game.State.MENU and _overlay_buttons(game).has("Перенести на інший пристрій") and str(SaveSystem.load_data(TEST_SAVE)["player"]["nick"]) == offered, "«Назад» з перейменування: у «Персонажі», ім'я те саме")
+	game._ask_rename(1)
+	await _frames(2)
+	game.name_edit.text = "Адмін"
+	_overlay_buttons(game)["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "rename" and "служби" in game.name_why.text, "ім'я служби гри не приймається")
+	game.name_edit.text = "Вернигора"
+	_overlay_buttons(game)["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "" and str(SaveSystem.load_data(TEST_SAVE)["player"]["nick"]) == "Вернигора" and game.player.nick == "Вернигора", "нове ім'я у файлі слота й у героя")
+	check(is_equal_approx(game.hud.overlay.color.a, 0.72), "після екрана імені тло меню знову звичайне")
+	check(game._slot_title({"job": "peasant", "level": 1, "rank": "", "chapter": 0, "done": false, "playtime": 0.0, "nick": "Вернигора"}).begins_with("Вернигора • Селянин 1"), "підпис слота з іменем")
+
+	game.queue_free()
+	await _frames(2)
+	get_root().get_tree().paused = false
+	Data.sell_mult = 1.0
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)

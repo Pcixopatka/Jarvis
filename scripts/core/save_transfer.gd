@@ -12,6 +12,7 @@ extends RefCounted
 
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const Data := preload("res://scripts/data/data.gd")
+const NameService := preload("res://scripts/game/name_service.gd")
 const PREFIX := "KZ1"
 const FORMAT := 1
 const MAX_RAW := 8 * 1024 * 1024  # більшого збереження не буває: захист від зіпсованого заголовка
@@ -121,6 +122,9 @@ static func check(v) -> String:
 			return bad
 		if not Data.Classes.CLASSES.has(str(p.get("job", "peasant"))):
 			return "У коді є герой класу, якого ця версія гри не знає. Спершу онови гру на цьому пристрої."
+		# ім'я, якщо є, має бути рядком; недопустиме не причина відмови: при вході воно стане порожнім
+		if p.has("nick") and typeof(p["nick"]) != TYPE_STRING:
+			return bad
 	return ""
 
 
@@ -133,7 +137,8 @@ static func summary(profile: Dictionary) -> Array:
 		var title: String = Data.Classes.CLASSES.get(job, {}).get("name", "Герой")
 		if str(p.get("rank", "")) == "hetman":
 			title = "Гетьман"
-		out.append("Слот %d: %s, рівень %d" % [int(h["slot"]), title, int(p.get("level", 1))])
+		var nick: String = NameService.from_save(p.get("nick", ""))
+		out.append("Слот %d: %s%s, рівень %d" % [int(h["slot"]), (nick + ", ") if nick != "" else "", title, int(p.get("level", 1))])
 	return out
 
 

@@ -25,7 +25,7 @@ static func build(game) -> Control:
 		["Виклики" + _pts(game.ChallengeService.ready_count(game.world, p)), func(): return _challenges(game)],
 	]
 	var title: String = game.PerilService.title(game.world)
-	return UI.screen("%s%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), (" «%s»" % title) if title != "" else "", p.level, UI.num(p.gold)], "Назад", game.close_character,
+	return UI.screen("%s%s%s — рівень %d   •   Гривні: %s" % [(p.nick + " • ") if p.nick != "" else "", ("Гетьман" if p.rank == "hetman" else p.class_name_ua()), (" «%s»" % title) if title != "" else "", p.level, UI.num(p.gold)], "Назад", game.close_character,
 		pages, game.char_tab, func(i: int): game.char_tab = i, [["Крамниця", func(): game.open_shop(game._build_character)], ["Довідник", func(): game.open_wiki(game._build_character)]])
 
 

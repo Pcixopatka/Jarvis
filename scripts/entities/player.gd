@@ -19,12 +19,14 @@ const Sets := preload("res://scripts/data/sets.gd")
 const Valor := preload("res://scripts/data/valor.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
 const Power := preload("res://scripts/game/power.gd")
+const NameService := preload("res://scripts/game/name_service.gd")
 const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
 const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
 
 var combat: Combat
 
 # --- Прогрес ---
+var nick := ""  # ім'я героя (не name: це назва вузла); правила в NameService
 var level := 1
 var xp := 0
 var xp_next := Data.xp_for_level(1)
@@ -450,7 +452,7 @@ func to_dict() -> Dictionary:
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
 		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "costume": costume, "pet": pet, "divine": divine, "u_luck": u_luck, "art_luck": art_luck,
 		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found,
-		"valor": valor, "valor_xp": valor_xp, "valor_spent": valor_spent}
+		"valor": valor, "valor_xp": valor_xp, "valor_spent": valor_spent, "nick": nick}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -458,8 +460,10 @@ func from_dict(d: Dictionary) -> void:
 	# не має міняти вузол (позицію, скрипт, видимість)
 	var known := to_dict()
 	for k in d:
-		if known.has(k):
+		if known.has(k) and k != "nick":
 			set(k, d[k])
+	# ім'я зі збереження проходить ті самі правила, що й ввід: зіпсоване чи недопустиме стає порожнім
+	nick = NameService.from_save(d.get("nick", ""))
 	# Ціна рівня могла змінитися між версіями: частка пройденого шляху до наступного рівня лишається тією самою
 	var want: int = Data.xp_for_level(level)
 	if xp_next != want:

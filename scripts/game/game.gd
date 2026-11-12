@@ -47,6 +47,7 @@ const TavernService := preload("res://scripts/game/tavern_service.gd")
 const GardenService := preload("res://scripts/game/garden_service.gd")
 const ExpeditionService := preload("res://scripts/game/expedition_service.gd")
 const RecordService := preload("res://scripts/game/record_service.gd")
+const NameService := preload("res://scripts/game/name_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
 const Sounds := preload("res://scripts/data/sounds.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
@@ -390,7 +391,9 @@ func _sync_class() -> void:
 	StoryService.hero_class = "volkhv" if player.Classes.is_volkhv_line(player.job) else ("strilets" if player.Classes.is_strilets_line(player.job) else player.job)
 
 
-func new_game() -> void:
+## Нова гра. nick: ім'я з екрана «Як тебе звати»; без нього (прямий виклик, тести) герой дістає
+## випадкове козацьке прізвисько.
+func new_game(nick: String = "") -> void:
 	_reset_session()
 	tower_sel = 1
 	depth_sel = 1
@@ -401,6 +404,9 @@ func new_game() -> void:
 	_new_hero({})
 	_remember_slot()
 	_make_peasant()
+	player.nick = NameService.from_save(nick)
+	if player.nick == "":
+		player.nick = NameService.roll()
 	CampService.apply_effects(world, player)
 	player.gold = 20
 	map_here = "ridne_selo"
@@ -523,6 +529,8 @@ func _continue_game() -> void:
 		if meta.get("notice", "") == "classes":
 			meta.erase("notice")
 			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка «Персонаж»)", UI.GOLD)
+		if ask_name and player.nick == "":
+			_ask_first_name()  # герой зі збереження, де імен ще не було
 	elif SaveSystem.exists(save_path):
 		# Збереження є, та не читається (зіпсоване чи з новішої версії гри). Нову гру поверх нього
 		# не починаємо: вона затерла б героя. Файл лишається, як був.
@@ -2765,6 +2773,7 @@ func _reset_session() -> void:
 	sell_multi = false
 	sell_marked.clear()
 	confirm_action = ""
+	_name_closed()
 	Data.sell_mult = 1.0
 
 
@@ -2796,12 +2805,12 @@ func _show_main_menu() -> void:
 			hud.add_button("Продовжити: " + _slot_title(sums[slot - 1]), _continue_game)
 		hud.add_button("Персонажі", _show_heroes_menu)
 		if not any:
-			hud.add_button("Нова гра", new_game)
+			hud.add_button("Нова гра", _ask_new_hero.bind(_show_main_menu))
 	elif SaveSystem.exists(save_path):
 		hud.add_button("Продовжити", _continue_game)
 		hud.add_button("Нова гра", _confirm_new_game)
 	else:
-		hud.add_button("Нова гра", new_game)
+		hud.add_button("Нова гра", _ask_new_hero.bind(_show_main_menu))
 	hud.add_button("Довідник", func(): open_wiki(_show_main_menu))
 	if account_notice != "":
 		hud.add_title(account_notice, 20, UI.BAD)
@@ -2809,15 +2818,32 @@ func _show_main_menu() -> void:
 	hud.add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
 
 
-## Підпис слота: «Козак 12 • Розділ II • 3 год 20 хв».
-func _slot_title(s_: Dictionary) -> String:
+## Підпис слота у два рядки: «Сірко • Козак 12» і «Розділ II • 3 год 20 хв».
+## Ім'я стоїть першим і ніколи не обрізається. max_w (ширина тексту кнопки, шрифт font): якщо
+## перший рядок не влазить, ім'я йде окремим рядком, а клас переходить у другий замість часу гри.
+func _slot_title(s_: Dictionary, max_w: float = 0.0, font: int = 20) -> String:
 	var cls: String = ClassesData.CLASSES.get(s_["job"], {}).get("name", "Герой")
 	if s_.get("rank", "") == "hetman":
 		cls = "Гетьман"
 	var story := "сюжет пройдено" if s_["done"] else ("Пролог" if s_["chapter"] == 0 else "Розділ %s" % ["", "I", "II", "III", "IV", "V"][mini(5, s_["chapter"])])
 	var h := int(s_["playtime"]) / 3600
 	var m := (int(s_["playtime"]) % 3600) / 60
-	return "%s %d • %s • %d год %02d хв" % [cls, s_["level"], story, h, m]
+	var head := "%s %d" % [cls, s_["level"]]
+	var tail := "%s • %d год %02d хв" % [story, h, m]
+	var nick := str(s_.get("nick", ""))
+	if nick == "":
+		return head + "\n" + tail
+	var one := nick + " • " + head
+	if max_w > 0.0 and ThemeDB.fallback_font.get_string_size(one, HORIZONTAL_ALIGNMENT_LEFT, -1, font).x > max_w:
+		return nick + "\n" + head + " • " + story
+	return one + "\n" + tail
+
+
+## Текст кнопки «грати» в меню «Персонажі»: має влізти в HERO_ROW_PLAY шрифтом 20.
+func _slot_row_text(s_: Dictionary, current: bool) -> String:
+	var lead := "▶ " if current else ""
+	var room: float = HERO_ROW_PLAY - HERO_ROW_PAD - ThemeDB.fallback_font.get_string_size(lead, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	return lead + _slot_title(s_, room)
 
 
 ## Екран «Персонажі»: до 5 слотів — грати, новий, видалити.
@@ -2831,10 +2857,7 @@ func _show_heroes_menu() -> void:
 		var s_: Dictionary = sums[i]
 		var n := i + 1
 		if s_.is_empty():
-			hud.add_button("Слот %d — новий персонаж" % n, func():
-				slot = n
-				save_path = SaveSystem.slot_path(n)
-				new_game(), Vector2(620, 64))
+			hud.add_button("Слот %d — новий персонаж" % n, _ask_new_hero.bind(_show_heroes_menu, n), Vector2(620, 64))
 		elif s_.get("broken", false):
 			# файл є, та не читається: показуємо як є, а не вільним слотом. Затерти можна лише свідомо, хрестиком.
 			var bad := UI.button("Слот %d: збереження не читається" % n, func():
@@ -2842,12 +2865,13 @@ func _show_heroes_menu() -> void:
 			var del_bad := UI.button("✕", func(): _confirm_delete_slot(n), Vector2(84, 64), 24)
 			hud.add_row([bad, del_bad])
 		else:
-			var play := UI.button(("▶ " if n == slot else "") + _slot_title(s_), func():
+			var play := UI.button(_slot_row_text(s_, n == slot), func():
 				slot = n
 				save_path = SaveSystem.slot_path(n)
-				_continue_game(), Vector2(520, 64), 20)
+				_continue_game(), Vector2(HERO_ROW_PLAY, 64), 20)
+			var ren := UI.button("Ім'я", _ask_rename.bind(n), Vector2(84, 64), 20)
 			var del := UI.button("✕", func(): _confirm_delete_slot(n), Vector2(84, 64), 24)
-			hud.add_row([play, del])
+			hud.add_row([play, ren, del])
 	hud.add_button("Перенести на інший пристрій", _show_transfer_menu, Vector2(620, 56))
 	hud.add_button("Назад", _show_main_menu)
 
@@ -2974,8 +2998,148 @@ func _confirm_new_game() -> void:
 	_menu_back = _show_main_menu
 	hud.add_title("Почати нову гру?", 48)
 	hud.add_title("Поточне збереження буде втрачено.", 24, UI.TEXT)
-	hud.add_button("Так, нова гра", new_game)
+	hud.add_button("Так, нова гра", _ask_new_hero.bind(_show_main_menu))
 	hud.add_button("Ні", _show_main_menu)
+
+
+# ---------- Ім'я героя: «Як тебе звати» (правила в NameService) ----------
+
+const HERO_ROW_PLAY := 420  # ширина кнопки «грати» в рядку слота: з «Ім'я» й «✕» разом 620, як решта меню
+const HERO_ROW_PAD := 32.0  # поля кнопки довкола тексту
+const NAME_SPACER := 320  # порожнеча під екраном імені: поле й кнопки стоять у верхній половині, над клавіатурою
+
+var ask_name := true  # тести вимикають, щоб старі герої без імені не спинялись на екрані імені
+var naming := ""  # відкрито екран імені: "new" (новий герой), "first" (старий герой без імені), "rename"
+var name_edit: LineEdit = null
+var name_why: Label = null
+var _name_done := Callable()  # що зробити з іменем, що пройшло перевірку
+var _name_back := Callable()  # куди веде «Назад» (порожнє: вийти без імені не можна)
+var _name_paused := false
+var _name_overlay := Color(0, 0, 0, 0.72)  # звичайне тло меню, повертається, коли екран імені закрито
+
+
+## Один екран на три випадки. start: чим одразу заповнене поле.
+func _name_screen(kind: String, start: String, back: Callable, done: Callable, sub: String) -> void:
+	if naming == "":
+		_name_overlay = hud.overlay.color
+	naming = kind
+	_name_back = back
+	_name_done = done
+	_name_paused = get_tree().paused
+	_open_menu()
+	# тло щільніше за звичайне меню: написи, що спливають після входу (свято, досягнення), не лізуть на поле
+	hud.overlay.color = Color(0.03, 0.03, 0.025, 0.97)
+	_menu_back = Callable()  # «Назад» тут розбирає go_back за naming
+	hud.add_title("Нове ім'я героя" if kind == "rename" else "Як тебе звати?", 44)
+	hud.add_title(sub, 20, UI.TEXT)
+	name_edit = LineEdit.new()
+	name_edit.max_length = NameService.MAX_LEN
+	name_edit.text = start
+	name_edit.custom_minimum_size = Vector2(520, 68)
+	name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_edit.select_all_on_focus = true  # дотик виділяє запропоноване ім'я: своє пишеться одразу поверх
+	name_edit.placeholder_text = "Ім'я героя"
+	name_edit.add_theme_font_size_override("font_size", 30)
+	name_edit.text_changed.connect(func(_t): _name_hint())
+	name_edit.text_submitted.connect(func(_t): name_submit())
+	hud.add_row([name_edit, UI.button("Кинути жереб", name_roll, Vector2(230, 68), 22)])
+	name_why = UI.label("", 20, UI.TEXT)
+	name_why.custom_minimum_size = Vector2(0, 28)
+	hud.overlay_box.add_child(name_why)
+	var btns := []
+	if back.is_valid():
+		btns.append(UI.button("Назад", _name_cancel, Vector2(230, 64), 24))
+	btns.append(UI.button("Готово", name_submit, Vector2(300, 64), 26))
+	hud.add_row(btns)
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, NAME_SPACER)
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.overlay_box.add_child(spacer)
+	_name_hint()
+
+
+## Рядок під полем: причина, коли ім'я не годиться, інакше коротко правила.
+func _name_hint() -> void:
+	if name_why == null or not is_instance_valid(name_why) or name_edit == null or not is_instance_valid(name_edit):
+		return
+	var why := NameService.check(name_edit.text)
+	name_why.text = why if why != "" else "Від 3 до 16 знаків: літери, цифри, пробіл, дефіс, апостроф"
+	name_why.add_theme_color_override("font_color", UI.BAD if why != "" else UI.MUTED)
+
+
+## Екран імені закрито (будь-яким шляхом): тло меню знову звичайне.
+func _name_closed() -> void:
+	if naming != "":
+		hud.overlay.color = _name_overlay
+	naming = ""
+	_name_done = Callable()
+	_name_back = Callable()
+
+
+func name_roll() -> void:
+	if name_edit != null and is_instance_valid(name_edit):
+		name_edit.text = NameService.roll()
+		_name_hint()
+
+
+## «Готово»: поки ім'я не пройшло перевірку, нічого не робить (причина видна під полем).
+func name_submit() -> void:
+	if naming == "" or name_edit == null or not is_instance_valid(name_edit):
+		return
+	var n := NameService.clean(name_edit.text)
+	if NameService.check(n) != "":
+		_name_hint()
+		return
+	var done := _name_done
+	_name_closed()
+	done.call(n)
+
+
+func _name_cancel() -> void:
+	var back := _name_back
+	if naming == "" or not back.is_valid():
+		return  # старий герой без імені: вийти без імені не можна, жереб уже в полі
+	_name_closed()
+	back.call()
+
+
+## Кнопки «Нова гра» й «Слот N: новий персонаж»: спершу ім'я, тоді гра. n: слот (0: нинішній).
+func _ask_new_hero(back: Callable, n: int = 0) -> void:
+	_name_screen("new", NameService.roll(), back, func(nick: String):
+		if n > 0:
+			slot = n
+			save_path = SaveSystem.slot_path(n)
+		new_game(nick), "Ім'я видно в меню героїв і в Літописі слави. Змінити його можна будь-коли.")
+
+
+## Старий герой без імені: після входу в гру, один раз. Запропоноване прізвисько проходить одним дотиком.
+func _ask_first_name() -> void:
+	_name_screen("first", NameService.roll(), Callable(), func(nick: String):
+		player.nick = nick
+		save_game()
+		hud.close_overlay()
+		get_tree().paused = _name_paused, "У героя ще нема імені. Впиши своє або візьми те, що випав жереб.")
+
+
+func _slot_file(n: int) -> String:
+	return SaveSystem.slot_path(n) if use_slots else save_path
+
+
+## Перейменування з меню «Персонажі»: ім'я міняється просто у файлі слота, герой може бути й не нинішнім.
+func _ask_rename(n: int) -> void:
+	var path := _slot_file(n)
+	var d := SaveSystem.load_data(path)
+	if d.is_empty():
+		return
+	var cur := NameService.from_save(d["player"].get("nick", ""))
+	_name_screen("rename", cur if cur != "" else NameService.roll(), _show_heroes_menu, func(nick: String):
+		if not NameService.rename_file(path, nick):
+			_show_heroes_menu()
+			hud.show_banner("Не вдалося записати ім'я. Збереження лишилось, як було.", UI.BAD)
+			return
+		if n == slot and player != null:
+			player.nick = nick
+		_show_heroes_menu(), "Слот %d. Зміна імені безплатна." % n)
 
 
 func _show_pause() -> void:
@@ -3103,6 +3267,8 @@ func _save_settings() -> void:
 func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
+	if naming != "" and event.physical_keycode != KEY_ESCAPE:
+		return  # літери пишуться в поле імені, а не відкривають екран героя
 	var playing := state == State.PLAYING
 	match event.physical_keycode:
 		KEY_K, KEY_SHIFT:
@@ -3167,6 +3333,9 @@ var quit_requested := false
 func go_back(from_system: bool) -> void:
 	if Ads.is_busy() or Billing.is_busy() or hud.dialogue_root != null:
 		return  # рекламу, оплату й розмову з вибором треба довести до кінця
+	if naming != "":
+		_name_cancel()  # новий герой і перейменування: назад у меню; старий герой без імені лишається тут
+		return
 	if wiki_open:
 		close_wiki()
 		return
