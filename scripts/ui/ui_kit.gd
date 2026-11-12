@@ -369,15 +369,33 @@ static func icon_row(items: Array, size: int = 20, col: Color = TEXT) -> HBoxCon
 
 
 static func scroll(content: Control) -> ScrollContainer:
+	var sc := _scroll_shell()
+	sc.get_child(0).add_child(content)
+	return sc
+
+
+## Порожня прокрутка з полями: вміст кладуть у її перший вузол.
+static func _scroll_shell() -> ScrollContainer:
 	var sc := ScrollContainer.new()
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
 	var m := MarginContainer.new()
 	m.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for side in ["left", "right", "top", "bottom"]:
 		m.add_theme_constant_override("margin_" + side, 12)
-	m.add_child(content)
 	sc.add_child(m)
 	return sc
+
+
+## Збудувати вміст лінивої вкладки, якщо його ще нема (див. screen).
+static func _fill_tab(tabs: TabContainer, i: int) -> void:
+	if i < 0 or i >= tabs.get_tab_count():
+		return
+	var sc: Control = tabs.get_tab_control(i)
+	if sc == null or not sc.has_meta("build"):
+		return
+	var build: Callable = sc.get_meta("build")
+	sc.remove_meta("build")
+	sc.get_child(0).add_child(build.call())
 
 
 static func grid(cols: int) -> GridContainer:
@@ -419,12 +437,23 @@ static func screen(title: String, close_text: String, close_cb: Callable, pages:
 	var tabs := TabContainer.new()
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(tabs)
+	# Вміст вкладки може бути готовим вузлом або функцією, що його будує. Функція викликається лише тоді,
+	# коли вкладку відкрито: екран перебудовується після кожної дії, і будувати щоразу всі вкладки,
+	# яких гравець не бачить, означало б у кілька разів довший відгук на дотик.
 	for i in pages.size():
-		tabs.add_child(scroll(pages[i][1]))
+		var content = pages[i][1]
+		if content is Callable:
+			var shell := _scroll_shell()
+			shell.set_meta("build", content)
+			tabs.add_child(shell)
+		else:
+			tabs.add_child(scroll(content))
 		tabs.set_tab_title(i, pages[i][0])
 	# Вкладку виставляємо, коли контейнер уже в дереві сцени (інакше він скидається на першу).
 	var idx := clampi(current, 0, pages.size() - 1)
+	_fill_tab(tabs, idx)
 	tabs.ready.connect(func():
 		tabs.current_tab = idx
+		tabs.tab_changed.connect(func(i: int): _fill_tab(tabs, i))
 		tabs.tab_changed.connect(on_tab))
 	return root

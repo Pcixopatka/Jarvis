@@ -263,7 +263,7 @@ func add_item(item: Dictionary, force: bool = false) -> bool:
 		return false
 	inventory.append(item)
 	if Artifacts.is_artifact(item):
-		recalc()  # артефакт діє з торби одразу
+		recalc_gear()  # артефакт діє з торби одразу
 	return true
 
 
@@ -287,7 +287,7 @@ func equip(uid: int) -> bool:
 			if equipment.has(slot):
 				inventory.append(equipment[slot])
 			equipment[slot] = it
-			recalc()
+			recalc_gear()
 			return true
 	return false
 
@@ -301,6 +301,9 @@ func gear_score() -> float:
 	return s
 
 
+var _gain_cache := {}  # хеш речі -> приріст сили від неї (gain_from); скидає recalc
+var _gain_sim := false  # іде примірка: recalc усередині неї кешу не скидає
+
 ## На скільки зміниться сила героя, якщо вдягнути цю річ замість тієї, що зараз у її клітинці.
 ## Частка: 0.05 — на 5% сильніший, від'ємна — слабший. Нічого не міняє: приміряє й повертає як було.
 func gain_from(item: Dictionary) -> float:
@@ -309,6 +312,12 @@ func gain_from(item: Dictionary) -> float:
 	var slot: String = item["slot"]
 	if equipment.has(slot) and equipment[slot].get("uid", -1) == item.get("uid", -2):
 		return 0.0
+	# Примірка коштує двох перерахунків героя, а екрани питають про кожну річ торби після кожного дотику.
+	# Тож відповідь пам'ятаємо, доки не зміниться сам герой (recalc) чи ця річ (її хеш).
+	var key: int = item.hash()
+	if _gain_cache.has(key):
+		return float(_gain_cache[key])
+	_gain_sim = true
 	var hp0 := hp
 	var mana0 := mana
 	var before := gear_score()
@@ -324,7 +333,10 @@ func gain_from(item: Dictionary) -> float:
 	recalc()
 	hp = hp0  # примірка не лікує й не ранить
 	mana = mana0
-	return after / maxf(before, 0.001) - 1.0
+	_gain_sim = false
+	var gain: float = after / maxf(before, 0.001) - 1.0
+	_gain_cache[key] = gain
+	return gain
 
 
 ## Найкращі речі з торби для кожної клітинки, якщо вони сильніші за вдягнене: {клітинка: річ}.
@@ -359,7 +371,7 @@ func unequip(uid: int) -> bool:
 		if equipment[slot]["uid"] == uid:
 			inventory.append(equipment[slot])
 			equipment.erase(slot)
-			recalc()
+			recalc_gear()
 			return true
 	return false
 
@@ -370,7 +382,7 @@ func remove_from_bag(uid: int) -> Dictionary:
 			var it: Dictionary = inventory[i]
 			inventory.remove_at(i)
 			if Artifacts.is_artifact(it):
-				recalc()  # артефакт покинув торбу й більше не діє
+				recalc_gear()  # артефакт покинув торбу й більше не діє
 			return it
 	return {}
 
@@ -442,8 +454,12 @@ func to_dict() -> Dictionary:
 
 
 func from_dict(d: Dictionary) -> void:
+	# лише ті поля, які герой сам і зберігає: чужий ключ зі зіпсованого чи підробленого файла
+	# не має міняти вузол (позицію, скрипт, видимість)
+	var known := to_dict()
 	for k in d:
-		set(k, d[k])
+		if known.has(k):
+			set(k, d[k])
 	# Ціна рівня могла змінитися між версіями: частка пройденого шляху до наступного рівня лишається тією самою
 	var want: int = Data.xp_for_level(level)
 	if xp_next != want:
@@ -633,7 +649,18 @@ func _bonus(id: String) -> int:
 	return stat(id) - Data.STAT_BASE
 
 
+## Перерахунок після зміни спорядження. Частка здоров'я лишається тією самою: зняти й знову вдягти
+## річ із запасом здоров'я посеред бою більше не лікує (раніше кожне таке коло додавало різницю).
+func recalc_gear() -> void:
+	var part := hp / maxf(1.0, max_hp)
+	recalc()
+	if alive and not _gain_sim:
+		hp = minf(hp, maxf(1.0, max_hp * part))
+
+
 func recalc() -> void:
+	if not _gain_sim:
+		_gain_cache.clear()  # герой змінився: старі примірки речей більше не чинні
 	var old_max := max_hp
 	_calc_equipment()
 	art = Artifacts.mods(inventory)
@@ -1381,7 +1408,7 @@ func _tick_unique(delta: float) -> void:
 
 func _alive_enemies() -> Array:
 	var out := []
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in combat.enemies_now():
 		if not e.dead:
 			out.append(e)
 	return out
@@ -2484,10 +2511,11 @@ func _musket() -> bool:
 # ================= Отримання шкоди =================
 
 ## Повертає true, якщо удар таки поранив (не блок-парирування, не невразливість).
-func take_damage(amount: float, source = null) -> bool:
+## area — шкода від хмари чи калюжі: її не парирують і вона не дає миті невразливості.
+func take_damage(amount: float, source = null, area: bool = false) -> bool:
 	if not alive or invuln > 0.0:
 		return false
-	if blocking:
+	if blocking and not area:
 		if block_time <= PARRY_WINDOW:
 			_parry(source)
 			return false
@@ -2516,13 +2544,20 @@ func take_damage(amount: float, source = null) -> bool:
 		amount *= 0.8
 	hp -= amount
 	hurt_flash = 0.2
-	invuln = 0.35
-	combat.shake(7.0)
+	if not area:
+		invuln = 0.35
+		combat.shake(7.0)
 	Audio.play("hurt", 0.1)
 	Events.player_hurt.emit()
 	combat.float_text(global_position + Vector2(0, -50), str(int(amount)), Color(1.0, 0.35, 0.3))
 	_check_death()
 	return true
+
+
+## Шкода від хмари зарази чи відьминого зілля. Перекид її оминає, броня й обереги зменшують, та миті
+## невразливості вона не дає й не парирується: раніше в хмарі герой був невразливий до ударів дві третини часу.
+func take_area(amount: float) -> bool:
+	return take_damage(amount, null, true)
 
 
 ## Шкода від станів: оминає блок і невразливість, але не броню.

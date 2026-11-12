@@ -29,22 +29,23 @@ static func resources_text(p) -> String:
 
 static func build(game) -> Control:
 	var w = game.world
-	var pages := [["Будівлі", _buildings(game)], ["Скриня", _chest(game)]]
+	# Вкладки будуються ліниво: функція викликається лише для відкритої (UI.screen).
+	var pages := [["Будівлі", func(): return _buildings(game)], ["Скриня", func(): return _chest(game)]]
 	if CampService.level(w, "kuznia") >= 1:
-		pages.append(["Кузня", _forge(game)])
-		pages.append(["Кування", _crafting(game)])
+		pages.append(["Кузня", func(): return _forge(game)])
+		pages.append(["Кування", func(): return _crafting(game)])
 	if CampService.level(w, "zillia") >= 1:
-		pages.append(["Зілляварня", _brewery(game)])
+		pages.append(["Зілляварня", func(): return _brewery(game)])
 	if CampService.level(w, "pasika") >= 1:
-		pages.append(["Пасіка", _pasika(game)])
+		pages.append(["Пасіка", func(): return _pasika(game)])
 	if GardenService.level(w) >= 1:
 		var ripe := GardenService.ready_count(w)
-		pages.append(["Город" + ((" (%d)" % ripe) if ripe > 0 else ""), _garden(game)])
-	pages.append(["Казан", _kazan(game)])
-	pages.append(["Клейноди", _kleinody(game)])
-	pages.append(["Стайня", _pets(game)])
+		pages.append(["Город" + ((" (%d)" % ripe) if ripe > 0 else ""), func(): return _garden(game)])
+	pages.append(["Казан", func(): return _kazan(game)])
+	pages.append(["Клейноди", func(): return _kleinody(game)])
+	pages.append(["Стайня", func(): return _pets(game)])
 	if FairService.unlocked(game.player):
-		pages.append(["Ярмарок", _fair(game)])
+		pages.append(["Ярмарок", func(): return _fair(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
 		pages, game.camp_tab, func(i: int): game.camp_tab = i,

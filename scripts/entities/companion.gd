@@ -111,6 +111,9 @@ func _attack(target) -> void:
 			target.take_damage(damage * randf_range(0.9, 1.1), dir * 160.0, false)
 		"strilets":
 			combat.spawn_bullet(global_position + dir * 20.0, dir, damage, false)
+			var shot = combat.last_projectile()
+			if shot != null:
+				shot.ally = true  # влучання рахується побратимові, а не героєві
 		"znakhar":
 			target.take_damage(damage, dir * 60.0, false)
 

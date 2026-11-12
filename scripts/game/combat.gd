@@ -86,6 +86,8 @@ var defense_loc := {}
 var custom_loc := {}
 var tower_boss_spawned := false  # Башта: міні-бос/супербос поверху вже на арені
 var duel_over := false  # герць: суперник упав
+var lost := false  # бій програно (герой поліг чи здався): перемоги, портали й хвилі більше не рахуються
+var runs := 0  # номер бою від запуску гри: щоб відкладена дія не зачепила вже інший бій
 var vigil_time := 0.0  # варта: скільки секунд вистояно
 var vigil_kills := 0
 var vigil_minute := 0
@@ -140,6 +142,8 @@ func _ready() -> void:
 	ground = GroundScript.new()
 	add_child(ground)
 	entities = Node2D.new()
+	entities.child_entered_tree.connect(func(_n): enemies_dirty())
+	entities.child_exiting_tree.connect(func(_n): enemies_dirty())
 	entities.y_sort_enabled = true
 	add_child(entities)
 	ground.props_parent = entities
@@ -208,6 +212,8 @@ func set_visible_world(v: bool) -> void:
 ## companions — список {"type", "downed"} зі стану світу.
 func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictionary = {}) -> void:
 	loc_id = id
+	lost = false
+	runs += 1
 	if not Data.LOCATIONS.has(id):
 		# Особливі бої, описані службами (оборона, події, герць...)
 		match str(defense_loc.get("type", "")):
@@ -471,7 +477,7 @@ func _vigil_minute_up() -> void:
 		vigil_done = true
 		Audio.jingle("victory")
 		field_cleared = true
-		_spawn_portal("З варти", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
+		_spawn_portal("З варти", _portal_spot(220.0))
 	Events.vigil_minute.emit(vigil_minute)
 
 
@@ -557,7 +563,7 @@ func _update_duel(_delta: float) -> void:
 		var hp_now: float = rival.hp
 		if loc.has("team"):
 			hp_now = 0.0
-			for e in get_tree().get_nodes_in_group("enemies"):
+			for e in enemies_now():
 				hp_now += e.hp
 		if hp_now < _duel_hp - 1.0:
 			cheer()
@@ -623,10 +629,11 @@ func _update_ring(delta: float) -> void:
 		return
 	# Чудовисько впало: його посіпаки розбігаються
 	_ring_boss = null
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in enemies_now():
 		e.remove_from_group("enemies")
 		fx.ring(e.global_position, Color(0.8, 0.8, 0.8), 20, 300, 5, 0.4)
 		e.queue_free()
+	enemies_dirty()
 	ring_stage += 1
 	cheer(2.0)
 	Audio.play("quest", 0.0)
@@ -889,7 +896,7 @@ func _defense_complete() -> void:
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 3)
 	spawn_pickup(pos, "item", 0, Data.gen_item(loot_level(), Data.roll_rarity(loot_level(), 1)))
-	_spawn_portal("До брами" if not (loc.has("event") or loc.has("escort")) else "На мапу", _clamp_in(player.global_position + Vector2(0, -220), 100.0))
+	_spawn_portal("До брами" if not (loc.has("event") or loc.has("escort")) else "На мапу", _portal_spot(220.0))
 	Events.defense_won.emit(loc["target"])
 
 
@@ -949,12 +956,18 @@ func _start_pos() -> Vector2:
 func _clear() -> void:
 	spectators.clear()
 	_drop_trail()
+	var back := 0
 	for c in entities.get_children():
 		if c == player:
 			continue
 		if c.is_in_group("enemies"):
+			back += int(c.loot_gold)  # злидень, якого не добили, крадене кидає: гроші не зникають разом із ним
 			c.remove_from_group("enemies")
 		c.queue_free()
+	enemies_dirty()
+	if back > 0 and player != null:
+		player.gold += back
+		Events.banner.emit("Злидні покидали крадене: +%d грн" % back, Color(1.0, 0.85, 0.3))
 	companion_nodes.clear()
 	for c in effects.get_children():
 		c.queue_free()
@@ -1042,6 +1055,8 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2.ZERO
 	player.attack_held = attack_input.call()
 	player.block_held = block_input.call()
+	if lost or not player.alive:
+		return  # програний бій доживає мить до екрана поразки: суперник, що впав у цю мить, перемоги не дає
 	if is_duel():
 		_update_duel(delta)
 	elif is_vigil():
@@ -1132,6 +1147,7 @@ func _spawn_room() -> void:
 			hb.hp = hb.max_hp
 			hb.damage *= float(loc.get("boss_dmg_mult", 1.0))
 			hb.speed *= float(loc.get("boss_speed_mult", 1.0))
+			hb._base_speed *= float(loc.get("boss_speed_mult", 1.0))  # Лісовий Дід рахує швидкість від неї, коли міняє зріст
 			if loc.has("enrage_after"):
 				hb.enrage_after = float(loc["enrage_after"]) + float(player.art.get("enrage", 0.0))
 		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
@@ -1200,7 +1216,7 @@ func _field_complete() -> void:
 	for i in 6:
 		spawn_pickup(pos, "coin", int(loc["level"]) * 2)
 	_resource_bundle(pos, 5)
-	_spawn_portal("На мапу", _clamp_in(player.global_position + Vector2(0, -260), 100.0))
+	_spawn_portal("На мапу", _portal_spot(260.0))
 	Events.field_cleared.emit(loc_id)
 	Events.hint.emit("cleared", "Місцевість очищено! Збери скарб і зайди в портал, щоб повернутися на мапу.")
 
@@ -1235,6 +1251,9 @@ func collect_all() -> void:
 						player.gold += fg
 						_filter_sold += 1
 						_filter_gold += fg
+					elif c.keep:
+						player.add_item(c.item, true)  # разова нагорода лягає понад місце
+						Events.item_found.emit(c.item)
 					else:
 						pick_item(c.item, true)
 				"res":
@@ -1431,7 +1450,7 @@ func add_resource(r: String, amount: int) -> void:
 ## Чи бере фільтр автопідбору річ такої рідкості. Золоті речі й артефакти беруться завжди.
 func filter_allows(item: Dictionary) -> bool:
 	var r: int = int(item["rarity"])
-	return r > Data.RARITY_MAX_RANDOM or r < 0 or bool(pickup_filter[r])
+	return Data.is_precious(item) or r < 0 or bool(pickup_filter[r])
 
 
 ## Чому герой не підніме цю річ: "" — підніме, "filter" — фільтр автопідбору її не бере,
@@ -1440,13 +1459,27 @@ func filter_allows(item: Dictionary) -> bool:
 func pick_block(item: Dictionary, manual: bool = false) -> String:
 	if not manual and not filter_allows(item):
 		return "filter"
-	if not player.bag_full() or int(item["rarity"]) > Data.RARITY_MAX_RANDOM:
+	if not player.bag_full() or Data.is_precious(item):
 		return ""
 	return "" if autosell and int(item["rarity"]) == 0 else "full"
 
 
 func can_pick_item(item: Dictionary, manual: bool = false) -> bool:
 	return pick_block(item, manual) == ""
+
+
+## Гру згортають чи закривають посеред бою. Золоті, наборні речі й разові нагороди (keep) одразу
+## лягають у торбу: якщо телефон вивантажить гру, вони не пропадуть разом із землею арени.
+## Решта здобичі лишається лежати, як лежала.
+func secure_loot() -> int:
+	var n := 0
+	for c in entities.get_children():
+		if c.get_script() == PickupScript and not c.is_queued_for_deletion() and c.kind == "item" and (c.keep or Data.is_precious(c.item)):
+			player.add_item(c.item, true)
+			Events.item_found.emit(c.item)
+			c.queue_free()
+			n += 1
+	return n
 
 
 ## Скільки речей лежить на землі, бо фільтр їх не бере.
@@ -1489,8 +1522,8 @@ func pick_item(item: Dictionary, sweep: bool = false) -> bool:
 		player.gold += g0
 		float_text(player.global_position + Vector2(0, -70), "Мотлох продано: +%d грн" % g0, col)
 		return true
-	# золоту річ ніколи не лишаємо за повну торбу: вона лягає понад місце
-	if player.add_item(item, int(item["rarity"]) > Data.RARITY_MAX_RANDOM):
+	# золоту й наборну річ ніколи не лишаємо за повну торбу: вона лягає понад місце
+	if player.add_item(item, Data.is_precious(item)):
 		float_text(player.global_position + Vector2(0, -70), item["name"], col)
 		Audio.play("item", 0.0)
 		Events.item_found.emit(item)
@@ -1548,7 +1581,7 @@ func allies() -> Array:
 func nearest_enemy(from: Vector2, max_dist: float) -> Node2D:
 	var best: Node2D = null
 	var best_d := max_dist
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in enemies_now():
 		if e.dead:
 			continue
 		var d: float = from.distance_to(e.global_position) - e.radius
@@ -1581,7 +1614,7 @@ func objective() -> Dictionary:
 	if not active or player == null or not player.alive:
 		return {}
 	var guard = null
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in enemies_now():
 		if e.is_queued_for_deletion() or e.dead:
 			continue
 		if e.bounty_id > 0:
@@ -1600,7 +1633,7 @@ func objective() -> Dictionary:
 		# Чарівний ліхтар: коли іншої мети нема, стрілка веде до найближчої еліти
 		var near = null
 		var near_d := 1.0e12
-		for e in get_tree().get_nodes_in_group("enemies"):
+		for e in enemies_now():
 			if e.is_queued_for_deletion() or e.dead or not e.elite:
 				continue
 			var dd: float = player.global_position.distance_squared_to(e.global_position)
@@ -1613,7 +1646,27 @@ func objective() -> Dictionary:
 
 
 func alive_enemy_count() -> int:
-	return get_tree().get_nodes_in_group("enemies").size()
+	return enemies_now().size()
+
+
+var _enemy_cache: Array = []
+var _enemy_frame := -1
+
+
+## Жива нечисть на цей кадр. Список береться з групи раз на кадр, а не для кожного ворога, снаряда
+## й пастки окремо: раніше кожен із сотні ворогів щокадру отримував власну копію всього списку.
+## Список не міняти: він спільний. Коли нечисть з'являється чи зникає, він збирається наново.
+func enemies_now() -> Array:
+	var f := Engine.get_process_frames()
+	if f != _enemy_frame:
+		_enemy_frame = f
+		_enemy_cache = get_tree().get_nodes_in_group("enemies")
+	return _enemy_cache
+
+
+## Склад нечисті змінився (хтось з'явився, загинув чи зник): наступний запит збере список наново.
+func enemies_dirty() -> void:
+	_enemy_frame = -1
 
 
 func get_move_input() -> Vector2:
@@ -1622,6 +1675,20 @@ func get_move_input() -> Vector2:
 
 func _clamp_in(pos: Vector2, margin: float) -> Vector2:
 	return pos.clamp(arena.position + Vector2(margin, margin), arena.end - Vector2(margin, margin))
+
+
+## Місце для порталу виходу: за dist над героєм. Якщо там край арени й портал став би просто на героя,
+## береться інший бік, де місця більше. Інакше герой виходив, не встигнувши зібрати здобич.
+func _portal_spot(dist: float) -> Vector2:
+	var here: Vector2 = player.global_position
+	var best := _clamp_in(here + Vector2(0, -dist), 100.0)
+	if best.distance_to(here) >= 150.0:
+		return best
+	for dir in [Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
+		var spot := _clamp_in(here + dir * dist, 100.0)
+		if spot.distance_to(here) > best.distance_to(here):
+			best = spot
+	return best
 
 
 func spawn_enemy(kind: String, level: int, boss: bool = false, pos = null) -> void:
@@ -1796,7 +1863,7 @@ func _maybe_elite(e) -> void:
 
 
 func _last_enemy():
-	var list := get_tree().get_nodes_in_group("enemies")
+	var list := enemies_now()
 	return list[-1] if not list.is_empty() else null
 
 
@@ -1883,7 +1950,8 @@ func take_loot(kind: String, value: int, item: Dictionary, pos: Vector2) -> bool
 	return true
 
 
-func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {}) -> void:
+## keep — разова нагорода, яку вдруге не дадуть: вона не продається й не губиться (див. secure_loot).
+func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {}, keep: bool = false) -> void:
 	# Хованець: здобич не падає на землю, а одразу лягає в торбу. На землі лишається тільки те,
 	# що нема куди покласти (повна торба, повний запас зілля) або чого не бере фільтр автопідбору.
 	if player != null and player.alive and bool(player.divine_fx.get("loot", false)):
@@ -1897,6 +1965,7 @@ func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {})
 	p.kind = kind
 	p.value = value
 	p.item = item
+	p.keep = keep
 	p.position = pos
 	p.spawn_vel = Vector2.from_angle(randf() * TAU) * randf_range(60, 200)
 	entities.add_child(p)

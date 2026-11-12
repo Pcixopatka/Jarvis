@@ -14,8 +14,8 @@ var companions := []  # [{"type": "dzhura", "downed": false}]
 var cleared := {}  # печера -> скільки разів очищено
 var last_city := "sich"
 var next_quest_id := 1
-var shops := {}  # місто -> товари (не зберігаються, оновлюються після походів)
-var shop_dirty := {}
+var shops := {}  # місто -> товари; оновлюються після походів (shop_dirty)
+var shop_dirty := {}  # зберігаються разом зі світом: вихід у головне меню товар не перекидає
 var hints := {}  # які підказки вже показано
 var story := {}  # стан сюжету (див. StoryService)
 var camp := {}  # хутір: будівлі, пасіка (див. CampService)
@@ -269,11 +269,13 @@ func has_companion(type: String) -> bool:
 # ---------- Збереження ----------
 
 func to_dict() -> Dictionary:
-	return {"legends": legends, "saga": saga, "fair": fair, "boss_hunt": boss_hunt, "peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
+	return {"shops": shops, "shop_dirty": shop_dirty, "legends": legends, "saga": saga, "fair": fair, "boss_hunt": boss_hunt, "peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
 		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "ring": ring, "muster": muster, "trade": trade, "outdoors": outdoors, "tavern": tavern, "way": way}
 
 
 func from_dict(d: Dictionary) -> void:
+	shops = d.get("shops", {})
+	shop_dirty = d.get("shop_dirty", {})
 	peril = d.get("peril", {})
 	boss_hunt = d.get("boss_hunt", {})
 	fair = d.get("fair", {})

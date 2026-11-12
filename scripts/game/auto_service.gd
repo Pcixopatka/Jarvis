@@ -60,7 +60,7 @@ static func drive(game) -> void:
 		if tp.length() > 12.0:
 			dir = tp.normalized()
 	# Ухилення: ворог поруч замахується або герой стоїть у червоній зоні
-	for e in c.get_tree().get_nodes_in_group("enemies"):
+	for e in c.enemies_now():
 		if e.windup > 0.0 and e.windup < 0.2 and p.global_position.distance_to(e.global_position) < e.radius + 60.0:
 			p.dodge()
 	for t in c.effects.get_children():

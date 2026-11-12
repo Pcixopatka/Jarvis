@@ -3,6 +3,7 @@ extends RefCounted
 ##   {"buildings": {id: рівень}, "pasika_ts": час останнього збору (unix)}
 ## Ресурси героя — player.resources {"wood", "iron", "herbs"}.
 
+const Clock := preload("res://scripts/core/clock.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
@@ -12,7 +13,7 @@ static func state(world) -> Dictionary:
 	# Заповнюємо наявний словник, а не підміняємо: хутір спільний на всіх персонажів (посилання з акаунта)
 	if not world.camp.has("buildings"):
 		world.camp["buildings"] = {}
-		world.camp["pasika_ts"] = Time.get_unix_time_from_system()
+		world.camp["pasika_ts"] = Clock.now()
 	return world.camp
 
 
@@ -59,7 +60,7 @@ static func build(world, player, id: String) -> bool:
 		player.resources[r] = int(player.resources.get(r, 0)) - int(cost.get(r, 0))
 	state(world)["buildings"][id] = level(world, id) + 1
 	if id == "pasika" and level(world, id) == 1:
-		state(world)["pasika_ts"] = Time.get_unix_time_from_system()
+		state(world)["pasika_ts"] = Clock.now()
 	apply_effects(world, player)
 	return true
 
@@ -123,7 +124,7 @@ static func pasika_ready(world, hero_level: int, now: float = -1.0) -> int:
 	if level(world, "pasika") == 0:
 		return 0
 	if now < 0.0:
-		now = Time.get_unix_time_from_system()
+		now = Clock.now()
 	var hours := clampf((now - float(state(world)["pasika_ts"])) / 3600.0, 0.0, Camp.PASIKA_CAP_HOURS)
 	return int(hours * pasika_rate(world, hero_level))
 
@@ -132,7 +133,7 @@ static func collect_pasika(world, player, now: float = -1.0) -> int:
 	var g := pasika_ready(world, player.level, now)
 	if g > 0:
 		player.gold += g
-		state(world)["pasika_ts"] = now if now >= 0.0 else Time.get_unix_time_from_system()
+		state(world)["pasika_ts"] = now if now >= 0.0 else Clock.now()
 	return g
 
 

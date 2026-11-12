@@ -24,12 +24,13 @@ const COIN_COLOR := Color(1.0, 0.78, 0.3)
 
 
 static func build(game) -> Control:
-	var pages := [["Червінці", _packs(game)]]
+	# Вкладки будуються ліниво: функція викликається лише для відкритої (UI.screen).
+	var pages := [["Червінці", func(): return _packs(game)]]
 	for kind in Shop.KINDS:
-		pages.append([Shop.KIND_NAMES[kind], _sets(game) if kind == "set" else _goods(game, kind)])
-	pages.append(["Божі дари", load("res://scripts/ui/ui_divine.gd").shop_page(game)])
-	pages.append(["Вбрання", _costumes(game)])
-	pages.append(["Універсал", _premium(game)])
+		pages.append([Shop.KIND_NAMES[kind], (func(): return _sets(game)) if kind == "set" else _goods.bind(game, kind)])
+	pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
+	pages.append(["Вбрання", func(): return _costumes(game)])
+	pages.append(["Універсал", func(): return _premium(game)])
 	var title := "Крамниця   •   %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))]
 	if Premium.active(game.world):
 		title += "   •   універсал: ще %d дн." % Premium.days_left(game.world)

@@ -224,6 +224,7 @@ var _k := 1.0  # множник розміру підписів і значкі�
 var _pulse := 0.0
 var _markers := {}  # id -> екранна позиція
 var _touches := {}  # індекс дотику -> позиція (для щипка)
+var is_covered := Callable()  # чи мапу зараз затуляє інший екран: тоді щипок її не масштабує
 var _pinch_dist := 0.0
 var _dragging := false
 var _press_pos := Vector2.ZERO
@@ -267,10 +268,35 @@ func _zoom_button(f: float) -> void:
 	_zoom_at(map_rect.get_center(), f)
 
 
+## Скільки разів на секунду мапа перемальовується, коли на ній нічого не рухається. Пульсують лише
+## позначки (зірка сюжету, коло вибраного місця, значки подій), і їм цього досить. Повне перемалювання
+## мапи коштує в сотню разів більше за будь-який інший екран: шістдесят разів на секунду воно лише гріло телефон.
+const IDLE_FPS := 12.0
+var _idle_t := 0.0  # скільки ще чекати до наступного перемалювання в спокої
+var redraws := 0  # скільки разів мапу перемальовано (для перевірки, що вона не працює вхолосту)
+
+
 func _process(delta: float) -> void:
 	if not is_visible_in_tree():
+		_idle_t = 0.0  # щойно мапу покажуть, вона намалюється в тому ж кадрі
 		return
 	_pulse += delta * 4.0
+	if not travel.is_empty():
+		# Камера м'яко слідує за фігуркою: у дорозі малюємо кожен кадр
+		var want := _unit(_travel_ll(travel["t"]))
+		center = center.lerp(want, minf(1.0, delta * 4.0))
+		_place_overlays()
+		queue_redraw()
+		return
+	_idle_t -= delta
+	if _idle_t <= 0.0:
+		_idle_t = 1.0 / IDLE_FPS
+		_place_overlays()
+		queue_redraw()
+
+
+## Кнопки поверх мапи: масштаб і порада «Далі: …».
+func _place_overlays() -> void:
 	if _zoom_box:
 		_zoom_box.position = Vector2(map_rect.position.x + 8, map_rect.end.y - 216)
 	if guide_btn and guide_btn.visible:
@@ -279,11 +305,6 @@ func _process(delta: float) -> void:
 		var want: float = guide_btn.get_theme_font("font").get_string_size(guide_btn.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 36.0
 		guide_btn.size = Vector2(clampf(want, 160.0, maxf(160.0, map_rect.size.x - 100.0)), 60.0)
 		guide_btn.position = Vector2(map_rect.position.x + 84, map_rect.end.y - 68)
-	if not travel.is_empty():
-		# Камера м'яко слідує за фігуркою
-		var want := _unit(_travel_ll(travel["t"]))
-		center = center.lerp(want, minf(1.0, delta * 4.0))
-	queue_redraw()
 
 
 ## Координати (довгота, широта) точки шляху для прогресу t — пряма між місцями.
@@ -374,9 +395,11 @@ func _zoom_at(screen_pt: Vector2, factor: float) -> void:
 
 func focus_ll(ll: Vector2) -> void:
 	center = _unit(ll)
+	queue_redraw()
 
 
 func focus_on(id: String) -> void:
+	queue_redraw()
 	center = _unit(_place_ll(id))
 	# подія, що рухається мапою (конвой із бранцями), стоїть не там, де її мета
 	for ev in events:
@@ -387,7 +410,7 @@ func focus_on(id: String) -> void:
 # ---------- Керування: тап, перетягування, щипок, коліщатко ----------
 
 func _input(event: InputEvent) -> void:
-	if not is_visible_in_tree():
+	if not is_visible_in_tree() or (is_covered.is_valid() and is_covered.call()):
 		_touches.clear()
 		return
 	if event is InputEventScreenTouch:
@@ -442,6 +465,7 @@ func _tap(pos: Vector2) -> void:
 			best = id
 	if best != "":
 		selected = best
+		queue_redraw()  # коло вибраного місця з'являється одразу, не чекаючи спокійного такту
 		location_selected.emit(best)
 	elif map_rect.has_point(pos):
 		point_tapped.emit(ll_at(pos))  # порожнє місце: козак може їхати просто туди
@@ -450,6 +474,7 @@ func _tap(pos: Vector2) -> void:
 # ---------- Малювання ----------
 
 func _draw() -> void:
+	redraws += 1
 	_layout()
 	var font := ThemeDB.fallback_font
 	var k := _k

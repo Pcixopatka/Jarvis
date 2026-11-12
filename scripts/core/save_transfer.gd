@@ -119,6 +119,8 @@ static func check(v) -> String:
 		var lvl := int(p.get("level", 0))
 		if lvl < 1 or lvl > Data.Classes.BASE_LEVEL_MAX or typeof(p.get("job", "")) != TYPE_STRING:
 			return bad
+		if not Data.Classes.CLASSES.has(str(p.get("job", "peasant"))):
+			return "У коді є герой класу, якого ця версія гри не знає. Спершу онови гру на цьому пристрої."
 	return ""
 
 

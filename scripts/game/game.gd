@@ -70,6 +70,7 @@ const CostumeService := preload("res://scripts/game/costume_service.gd")
 const PetService := preload("res://scripts/game/pet_service.gd")
 const AutoService := preload("res://scripts/game/auto_service.gd")
 const DivineService := preload("res://scripts/game/divine_service.gd")
+const Clock := preload("res://scripts/core/clock.gd")
 const LegendService := preload("res://scripts/game/legend_service.gd")
 const UiDivine := preload("res://scripts/ui/ui_divine.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
@@ -115,7 +116,11 @@ var wiki_query := ""
 var _wiki_back := Callable()
 var char_sel_uid := -1
 var char_return := State.MAP
-var city_tab := 0
+var city_tab := 0:
+	set(v):
+		city_tab = v
+		city_tab_key = ""  # номер виставлено напряму: запам'ятана назва більше не чинна
+var city_tab_key := ""  # назва відкритої вкладки міста: у кожному місті й після нових відкриттів номери різні
 var city_tab_want := ""  # назва вкладки, на якій має відкритися місто (UiCity.build знайде її номер)
 var city_sel_uid := -1
 var sell_multi := false  # крамниця: режим вибору кількох речей
@@ -384,6 +389,9 @@ func _sync_class() -> void:
 
 
 func new_game() -> void:
+	_reset_session()
+	tower_sel = 1
+	depth_sel = 1
 	world = WorldState.new()
 	meta = {"playtime": 0.0, "created": Time.get_unix_time_from_system()}
 	_load_account()
@@ -439,18 +447,15 @@ func save_game() -> void:
 func _save_account() -> void:
 	if account_path == SaveSystem.ACCOUNT_PATH and not use_slots:
 		return  # тести без слотів не чіпають справжній акаунт
-	var f := FileAccess.open(account_path + ".tmp", FileAccess.WRITE)
-	if f == null:
-		return
-	f.store_var(account.to_dict())
-	f.close()
-	if FileAccess.file_exists(account_path):
-		DirAccess.copy_absolute(account_path, account_path + ".bak")
-	DirAccess.rename_absolute(account_path + ".tmp", account_path)
+	SaveSystem.write_var(account_path, account.to_dict())
+
+
+var account_notice := ""  # що сказати гравцеві, якщо спільне майно не прочиталось
 
 
 func _load_account() -> void:
 	account = AccountScript.new()
+	account_notice = ""
 	if account_path == SaveSystem.ACCOUNT_PATH and not use_slots:
 		return  # тести без слотів не читають справжній акаунт
 	for p in [account_path, account_path + ".bak"]:
@@ -462,6 +467,11 @@ func _load_account() -> void:
 				if d is Dictionary and not d.is_empty():
 					account.from_dict(d)
 					return
+	# Файл спільного майна є, та не читається ні він, ні його копія. Гра піде з порожнім, але зіпсований
+	# файл лишаємо поруч (.broken): так хутір, скриню й червінці ще можна врятувати, і гравець про це знає.
+	if FileAccess.file_exists(account_path):
+		DirAccess.copy_absolute(account_path, account_path + ".broken")
+		account_notice = "Спільне майно роду (хутір, скриня, червінці) не прочиталось.\nЗіпсований файл збережено поруч, гра почала з порожнього."
 
 
 ## Спільне майно підключається до світу персонажа посиланнями.
@@ -474,6 +484,8 @@ func load_game() -> bool:
 	var d := SaveSystem.load_data(save_path)
 	if d.is_empty():
 		return false
+	if not ClassesData.CLASSES.has(str(d["player"].get("job", "peasant"))):
+		return false  # клас, якого ця версія гри не знає: герой із новішої збірки
 	world = WorldState.new()
 	world.from_dict(d["world"])
 	meta = d.get("meta", meta)
@@ -481,7 +493,11 @@ func load_game() -> bool:
 	_attach_account()
 	tower_sel = int(TowerService.state(world)["max"])
 	depth_sel = int(DepthService.state(world)["max"])
-	theft_notice = EventService.check_theft(world, Time.get_unix_time_from_system(), CampService.level(world, "kurin"))
+	Data.sell_mult = 1.0
+	fight_notice = ""
+	if str(meta.get("fight", "")) != "":
+		fight_notice = "Ти покинув бій посеред сутички.\n" + _fight_forfeit()
+	theft_notice = EventService.check_theft(world, Clock.now(), CampService.level(world, "kurin"))
 	_new_hero(d["player"])
 	_sync_class()
 	Party.normalize(world, player.level)
@@ -489,13 +505,25 @@ func load_game() -> bool:
 	return true
 
 
+var fight_notice := ""  # що сказати після завантаження, якщо гру закрили посеред герцю
+
+
 func _continue_game() -> void:
 	if load_game():
 		map_here = world.last_city
 		enter_city(world.last_city)
+		if fight_notice != "":
+			hud.show_banner(fight_notice, UI.BAD)
+			fight_notice = ""
+			save_game()
 		if meta.get("notice", "") == "classes":
 			meta.erase("notice")
 			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка «Персонаж»)", UI.GOLD)
+	elif SaveSystem.exists(save_path):
+		# Збереження є, та не читається (зіпсоване чи з новішої версії гри). Нову гру поверх нього
+		# не починаємо: вона затерла б героя. Файл лишається, як був.
+		_show_main_menu()
+		hud.show_banner("Збереження не читається.\nЙого не чіпали. Онови гру або видали героя в «Персонажі».", UI.BAD)
 	else:
 		new_game()
 
@@ -505,6 +533,8 @@ func _continue_game() -> void:
 func _leave_combat() -> void:
 	hud.close_dialogue()
 	AutoService.stop(self)
+	defense_target = ""  # портал після оборони веде в місто лише з цього бою (_on_exit забирає ціль раніше)
+	meta.erase("fight")
 	if combat.active:
 		if combat.is_vigil():
 			leave_notice = "\n".join(VigilService.finish(world, player, combat.vigil_time, combat.vigil_kills))
@@ -518,6 +548,7 @@ func enter_map() -> void:
 		_record("valor", player.valor)
 	var from_trip: bool = combat.active and combat.counts_as_trip()
 	_leave_combat()
+	_price_city("")
 	hud.clear_screen()
 	hud.close_overlay()
 	state = State.MAP
@@ -530,7 +561,9 @@ func enter_map() -> void:
 	hud.show_map(true)
 	var mv = hud.map_view
 	mv.current = "" if map_at_point else map_here
-	mv.current_ll = map_point if map_at_point else null
+	mv.current_ll = null
+	if map_at_point:
+		mv.current_ll = map_point
 	if map_at_point:
 		mv.focus_ll(map_point)
 	else:
@@ -655,7 +688,7 @@ func enter_city(id: String) -> void:
 	Audio.play_ambient("")
 	get_tree().paused = true
 	city_id = id
-	Data.sell_mult = EventService.sell_mult(world, id)
+	_price_city(id)
 	map_here = id
 	world.last_city = id
 	player.revive()
@@ -689,8 +722,15 @@ func leave_city() -> void:
 	enter_map()
 
 
+## Надбавка до ціни продажу діє лише в місті, де ярмарок (і в Хованця, що торгує за цінами цього міста).
+## Поза містом ціна звичайна: інакше після ярмарку подвійна ціна лишалась на автопродаж і швидкі походи.
+func _price_city(id: String) -> void:
+	Data.sell_mult = EventService.sell_mult(world, id) if id != "" else 1.0
+
+
 func enter_location(id: String) -> void:
 	map_here = id
+	_price_city("")
 	for cid in Data.CITIES:
 		world.shop_dirty[cid] = true
 	hud.clear_screen()
@@ -748,6 +788,7 @@ func open_trader(back: Callable) -> void:
 	trader_city = world.last_city if Data.CITIES.has(world.last_city) else "sich"
 	_trader_prev_city = city_id
 	city_id = trader_city  # дії крамниці (city_do) рахують ціни цього міста
+	_price_city(trader_city)
 	city_sel_uid = -1
 	sell_multi = false
 	sell_marked.clear()
@@ -770,6 +811,9 @@ func close_trader() -> void:
 		return
 	trader_open = false
 	city_id = _trader_prev_city
+	# ціни вертаються до місця, де герой стоїть насправді: у місті — його, деінде — звичайні
+	var in_city: bool = state == State.CITY or (state == State.CHARACTER and char_return == State.CITY)
+	_price_city(city_id if in_city else "")
 	city_sel_uid = -1
 	sell_multi = false
 	sell_marked.clear()
@@ -840,18 +884,22 @@ func _on_enemy_killed(e: Node2D) -> void:
 		# чудовиська Кола — не ті, що в лігвах: ні сюжету, ні каменів долі, ні досягнень за боса
 		_record("kill")
 		return
-	for m in world.on_kill(e.kind):
-		combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
-	_story_event("kill", e.kind)
-	_hero_event("kill", e.kind)
+	# Бос дня чи тижня це не господар лігва: сюжет, перекази, камені долі й досягнення за босів лігв
+	# на нього не зважають. Інакше крок «здолай Кощія» закривався без походу до Кощія.
+	var hunt_boss: bool = e.is_boss and combat.loc.has("hunt")
+	if not hunt_boss:
+		for m in world.on_kill(e.kind):
+			combat.float_text(player.global_position + Vector2(0, -90), m, UI.GOLD)
+		_story_event("kill", e.kind)
+		_hero_event("kill", e.kind)
+		_record("kill:" + e.kind)
+		_spec_event("kill", e.kind)
 	_record("kill")
-	_record("kill:" + e.kind)
-	_spec_event("kill", e.kind)
 	if e.elite:
 		_spec_event("elite", "")
 	if e.elite:
 		_record("elite")
-	if e.is_boss:
+	if e.is_boss and not hunt_boss:
 		_record("boss")
 		_record("boss:" + e.kind)
 		var stone_msgs := StoneService.on_boss(player, e.kind, int(world.stats.get("boss:" + e.kind, 0)) == 1)
@@ -1202,9 +1250,16 @@ func _on_level_up(lvl: int) -> void:
 
 
 func _on_player_died() -> void:
+	if combat.lost:
+		return  # бій уже програно (здався чи впав): вдруге поразку не рахуємо
 	if combat.is_duel():
+		if combat.duel_over:
+			# суперник упав першим: перемога вже зарахована, спроба лишається при героєві
+			_soft_defeat("Перемога за тобою, та рани звалили з ніг.\nПобратими донесли тебе до куреня.", str(Acts.MUSTER_CITY) if combat.loc.get("muster", false) else "sich")
+			return
 		_duel_lost()
 		return
+	combat.lost = true
 	if combat.is_vigil():
 		_soft_defeat("Варту знято: нечисть прорвалась.\nПобратими винесли тебе з могили.", world.last_city)
 		return
@@ -1228,12 +1283,16 @@ func _on_player_died() -> void:
 	hud.set_mode(true, false)
 	hud.char_btn.visible = false
 	hud.show_banner("Козак поліг...", Color(1.0, 0.4, 0.35))
-	await get_tree().create_timer(1.4).timeout
+	# Кара за смерть лягає одразу й одразу зберігається: згорнути гру, поки екран темніє, не поможе
 	var lost := int(player.gold * Data.DEATH_GOLD_LOSS)
 	player.gold -= lost
 	# у надважкій печері смерть коштує більше досвіду, а отямлюється герой у таборі біля входу
 	var peril_id: String = combat.loc_id if PerilService.is_peril(combat.loc_id) else ""
 	var lost_xp: int = player.death_xp_loss(Peril.DEATH_XP_MULT if peril_id != "" else 1.0)
+	save_game()
+	await get_tree().create_timer(1.4).timeout
+	if state != State.DEAD:
+		return  # за цю мить гравець уже деінде (тест чи головне меню): екран поразки не потрібен
 	_open_menu()
 	hud.add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
 	var price := "Втрачено %d грн." % lost
@@ -1469,6 +1528,7 @@ func _arrive_point() -> void:
 	mv.current = ""
 	mv.current_ll = map_point
 	_build_map_panel()
+	_refresh_guide()
 
 
 ## Найближче до точки місце мапи: місто, місцевість, хутір чи заняття.
@@ -1526,8 +1586,10 @@ func _arrive_camp(id: String) -> void:
 	map_here = id
 	map_sel = id
 	hud.map_view.current = id
+	hud.map_view.current_ll = null  # приїхали з вільної точки: вершник стоїть у таборі, а не там
 	hud.map_view.selected = id
 	_build_map_panel()
+	_refresh_guide()
 	save_game()
 	hint("peril_camp", "Табір біля входу до надважкої печери. Тут можна перепочити й купити зілля. Нечисть у печері сильніша за будь-якого героя, смерть коштує втричі більше досвіду, а бос лютішає, коли бій затягнувся.")
 
@@ -1646,11 +1708,11 @@ func start_boss(kind: String) -> void:
 
 
 func _on_boss_hunt_won(kind: String) -> void:
-	var r: Dictionary = BossService.on_win(world, player, kind, combat.run_time)
+	var r: Dictionary = BossService.on_win(world, player, kind, combat.run_time, str(combat.loc.get("boss", "")))
 	var pos: Vector2 = player.global_position + Vector2(0, -120)
 	var items: Array = r["items"]
 	for i in items.size():
-		combat.spawn_pickup(pos + Vector2(70.0 * (i - (items.size() - 1) / 2.0), 0), "item", 0, items[i])
+		combat.spawn_pickup(pos + Vector2(70.0 * (i - (items.size() - 1) / 2.0), 0), "item", 0, items[i], true)
 	hud.show_banner("\n".join(r["msgs"]), UI.GOLD)
 	_record("boss_" + kind)
 	_record("dungeon")
@@ -1687,7 +1749,7 @@ func _on_tower_cleared(floor_: int) -> void:
 		if TowerService.is_super(floor_):
 			var stone := "alatyr" if randf() < 0.4 else "zabuttia"
 			StoneService.grant(player, stone)
-			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl + 1, 3))
+			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl + 1, 3), true)
 			combat.float_text(pos + Vector2(0, -40), "Знайдено: %s!" % StoneService.NAMES[stone], Color(0.85, 0.7, 1.0))
 			msg += "\nЛегендарна річ і камінь долі!"
 		else:
@@ -1736,10 +1798,19 @@ func start_duel(free: bool = false) -> void:
 		combat.defense_loc = DuelService.battle_loc(world, player)
 	enter_location("duel")
 	map_here = "sich"
+	_fight_begin("free" if free else "duel")
 	hint("duel", "Герць — сам на сам. Червоні зони на землі показують, куди вдарить суперник: виходь із них або відбивай «Блоком». Смерті на майдані нема.")
 
 
+## Бій на спроби почався: позначка лягає в збереження одразу. Якщо гру закриють посеред герцю,
+## при наступному вході він рахується програним (див. load_game), тож спроби так не вберегти.
+func _fight_begin(kind: String) -> void:
+	meta["fight"] = kind
+	save_game()
+
+
 func _on_duel_won() -> void:
+	meta.erase("fight")
 	if combat.loc.get("muster", false):
 		defense_target = str(Acts.MUSTER_CITY)  # з порталу — назад у Чигирин
 		world.revive_companions()  # на огляді б'ються до першої крові: поранених нема
@@ -1767,6 +1838,9 @@ func _on_duel_won() -> void:
 
 ## Поразка чи здача в герці: без втрат, лише мінус спроба; повертаємось на Січ.
 func _duel_lost() -> void:
+	if combat.lost or state == State.DEAD:
+		return  # уже програно: здався, а за мить ще й упав — спроба списується один раз
+	meta.erase("fight")
 	if combat.loc.get("muster", false):
 		world.revive_companions()
 		_soft_defeat(MusterService.lose(world), str(Acts.MUSTER_CITY))
@@ -1784,11 +1858,13 @@ func start_muster() -> void:
 	combat.defense_loc = MusterService.battle_loc(world, player)
 	enter_location("duel")
 	map_here = str(Acts.MUSTER_CITY)
+	_fight_begin("muster")
 	hint("muster", "Огляд: гурт на гурт. Побратими б'ються поруч і відвертають удари на себе. Спершу клади стрільців і тих, хто насідає на знахарку.")
 
 
 ## Поразка без втрат (герць, варта): показати повідомлення й за мить отямитись у місті.
 func _soft_defeat(text: String, city: String) -> void:
+	combat.lost = true
 	hud.close_overlay()
 	hud.show_banner(text, UI.BAD)
 	state = State.DEAD
@@ -2038,7 +2114,7 @@ func _on_ring_stage(stage: int) -> void:
 		if f["record"]:
 			lines.append("Новий рекорд часу")
 		if int(f["item"]) >= 0:
-			combat.spawn_pickup(player.global_position + Vector2(0, -110), "item", 0, Data.gen_item(player.level, int(f["item"])))
+			combat.spawn_pickup(player.global_position + Vector2(0, -110), "item", 0, Data.gen_item(player.level, int(f["item"])), true)
 			lines.append("Рідкісна річ і %d трофеї" % int(f["trophy"]))
 		_record("ring_clear")
 		if t < float(Acts.RING_FAST):
@@ -2057,7 +2133,7 @@ func _on_vigil_minute(m: int) -> void:
 		text += "\n+%d грн, +%d слави" % [r["gold"], r["glory"]]
 		var pos: Vector2 = player.global_position + Vector2(0, -110)
 		if int(r["item"]) >= 0:
-			combat.spawn_pickup(pos, "item", 0, Data.gen_item(player.level, int(r["item"])))
+			combat.spawn_pickup(pos, "item", 0, Data.gen_item(player.level, int(r["item"])), true)
 		for msg in r["msgs"]:
 			text += "\n" + msg
 	elif m <= goal_min:
@@ -2131,31 +2207,37 @@ func _on_defense_won(target: String) -> void:
 func _on_defense_lost(target: String) -> void:
 	if combat.loc.has("escort"):
 		hud.show_banner(EscortService.lose(world, int(combat.loc["escort"])), UI.BAD)
-		await get_tree().create_timer(2.5).timeout
-		if state == State.PLAYING and combat.is_defense():
-			enter_map()
+		_leave_lost_defense("")
 		return
 	if combat.loc.get("ambush", false):
 		hud.show_banner(TradeService.lose_half(world), UI.BAD)
 		save_game()
-		await get_tree().create_timer(2.5).timeout
-		if state == State.PLAYING and combat.is_defense():
-			enter_city(target)
+		_leave_lost_defense(target)
 		return
 	var ev := EventService.battle_at(world, target)
 	if not ev.is_empty():
 		hud.show_banner(EventService.lose(world, player, ev), UI.BAD)
 		save_game()
-		await get_tree().create_timer(2.5).timeout
-		if state == State.PLAYING and combat.is_defense():
-			enter_map()
+		_leave_lost_defense("")
 		return
 	if not DefenseService.is_besieged(world, target):
 		return
 	hud.show_banner(DefenseService.lose(world, player, target), UI.BAD)
 	save_game()
+	_leave_lost_defense("")
+
+
+## Програну оборону покидаємо за мить: у місто city або на мапу. Якщо саме тоді відкрито паузу чи
+## екран героя, чекаємо, поки їх закриють: раніше герой у такому разі лишався в програному бою.
+func _leave_lost_defense(city: String) -> void:
 	await get_tree().create_timer(2.5).timeout
-	if state == State.PLAYING and combat.is_defense():
+	while is_inside_tree() and combat.active and combat.is_defense() and combat.defense_over and (state == State.PAUSED or state == State.CHARACTER):
+		await get_tree().create_timer(0.25).timeout
+	if not is_inside_tree() or state != State.PLAYING or not combat.is_defense() or not combat.defense_over:
+		return
+	if city != "":
+		enter_city(city)
+	else:
 		enter_map()
 
 
@@ -2238,6 +2320,7 @@ func city_do(action: String, arg) -> void:
 		"buy":
 			if CityService.buy(world, player, city_id, arg):
 				Audio.play("coins", 0.05)
+				city_sel_uid = -1  # куплена річ уже в торбі: другий дотик по тій самій кнопці не має її продати
 		"sell":
 			CityService.sell(player, arg)
 			city_sel_uid = -1
@@ -2586,8 +2669,39 @@ func _open_menu() -> void:
 	get_tree().paused = true
 
 
+var _menu_back := Callable()  # куди веде «Назад» із підменю головного меню (порожнє на самому меню)
+
+
+## Скидає все, що могло лишитись від попереднього екрана чи героя: відкриті крамниці, ціль порталу
+## після оборони, вибране на мапі й у крамниці, ціни ярмарку. Без цього воно спливало в наступній грі.
+func _reset_session() -> void:
+	if trader_open:
+		city_id = _trader_prev_city
+	trader_open = false
+	_trader_back = Callable()
+	shop_open = false
+	_shop_back = Callable()
+	shop_confirm = ""
+	wiki_open = false
+	defense_target = ""
+	leave_notice = ""
+	map_sel = ""
+	map_legend = false
+	city_sel_uid = -1
+	char_sel_uid = -1
+	camp_sel_uid = -1
+	chest_sel = ""
+	sell_multi = false
+	sell_marked.clear()
+	confirm_action = ""
+	Data.sell_mult = 1.0
+
+
 func _show_main_menu() -> void:
 	state = State.MENU
+	_menu_back = Callable()
+	_reset_session()
+	hud.clear_screen()  # екран, з якого сюди прийшли (крамниця, герой), під меню не лишається
 	Audio.play_music("menu")
 	Audio.play_ambient("")
 	hud.set_mode(false, false)
@@ -2604,7 +2718,7 @@ func _show_main_menu() -> void:
 		for s_ in sums:
 			if not s_.is_empty():
 				any = true
-		if any and not sums[slot - 1].is_empty():
+		if any and not sums[slot - 1].is_empty() and not sums[slot - 1].get("broken", false):
 			hud.add_button("Продовжити: " + _slot_title(sums[slot - 1]), _continue_game)
 		hud.add_button("Персонажі", _show_heroes_menu)
 		if not any:
@@ -2615,6 +2729,8 @@ func _show_main_menu() -> void:
 	else:
 		hud.add_button("Нова гра", new_game)
 	hud.add_button("Довідник", func(): open_wiki(_show_main_menu))
+	if account_notice != "":
+		hud.add_title(account_notice, 20, UI.BAD)
 	_add_sound_toggles(_show_main_menu)
 	hud.add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
 
@@ -2633,6 +2749,7 @@ func _slot_title(s_: Dictionary) -> String:
 ## Екран «Персонажі»: до 5 слотів — грати, новий, видалити.
 func _show_heroes_menu() -> void:
 	_open_menu()
+	_menu_back = _show_main_menu
 	hud.add_title("Персонажі", 56)
 	hud.add_title("Хутір, скриня, досягнення й виклики — спільні для всіх.", 20, UI.TEXT)
 	var sums := SaveSystem.slot_summaries()
@@ -2644,6 +2761,12 @@ func _show_heroes_menu() -> void:
 				slot = n
 				save_path = SaveSystem.slot_path(n)
 				new_game(), Vector2(620, 64))
+		elif s_.get("broken", false):
+			# файл є, та не читається: показуємо як є, а не вільним слотом. Затерти можна лише свідомо, хрестиком.
+			var bad := UI.button("Слот %d: збереження не читається" % n, func():
+				hud.show_banner("Це збереження зіпсоване або з новішої версії гри.\nОнови гру. Якщо не поможе, слот можна звільнити хрестиком.", UI.BAD), Vector2(520, 64), 20)
+			var del_bad := UI.button("✕", func(): _confirm_delete_slot(n), Vector2(84, 64), 24)
+			hud.add_row([bad, del_bad])
 		else:
 			var play := UI.button(("▶ " if n == slot else "") + _slot_title(s_), func():
 				slot = n
@@ -2673,6 +2796,7 @@ func _transfer_paths() -> Dictionary:
 
 func _show_transfer_menu(note: String = "", col: Color = UI.TEXT) -> void:
 	_open_menu()
+	_menu_back = _transfer_back
 	hud.add_title("Перенесення роду", 52)
 	hud.add_title("Усі персонажі, хутір і скриня одним кодом.\nСкопіюй код тут, надішли його собі (пошта, нотатки, месенджер)\nі встав на іншому пристрої в цьому ж меню.", 20, UI.TEXT)
 	if note != "":
@@ -2681,12 +2805,15 @@ func _show_transfer_menu(note: String = "", col: Color = UI.TEXT) -> void:
 	hud.add_button("Вставити код" if transfer_buffer == "" else "Вставити наступну частину", transfer_paste, Vector2(620, 64))
 	if SaveTransfer.has_backup(_transfer_paths(), account_path):
 		hud.add_button("Повернути рід, який був до перенесення", transfer_restore, Vector2(620, 56))
-	hud.add_button("Назад", func():
-		transfer_buffer = ""
-		if use_slots:
-			_show_heroes_menu()
-		else:
-			_show_main_menu())
+	hud.add_button("Назад", _transfer_back)
+
+
+func _transfer_back() -> void:
+	transfer_buffer = ""
+	if use_slots:
+		_show_heroes_menu()
+	else:
+		_show_main_menu()
 
 
 func transfer_copy() -> void:
@@ -2720,6 +2847,7 @@ func transfer_paste() -> void:
 
 func _transfer_confirm(profile: Dictionary) -> void:
 	_open_menu()
+	_menu_back = _show_transfer_menu
 	hud.add_title("Замінити рід на цьому пристрої?", 44)
 	hud.add_title("У коді:\n" + "\n".join(SaveTransfer.summary(profile)), 22, UI.GOLD)
 	hud.add_title("Нинішні персонажі, хутір і скриня на цьому пристрої зникнуть.\nЇх можна буде повернути в цьому ж меню до наступного перенесення.", 20, UI.TEXT)
@@ -2757,6 +2885,7 @@ func _forget_hero() -> void:
 
 func _confirm_delete_slot(n: int) -> void:
 	_open_menu()
+	_menu_back = _show_heroes_menu
 	hud.add_title("Видалити персонажа зі слота %d?" % n, 44)
 	hud.add_title("Хутір і скриня лишаться — вони спільні. Самого героя не повернути.", 22, UI.TEXT)
 	hud.add_button("Так, видалити", func():
@@ -2767,6 +2896,7 @@ func _confirm_delete_slot(n: int) -> void:
 
 func _confirm_new_game() -> void:
 	_open_menu()
+	_menu_back = _show_main_menu
 	hud.add_title("Почати нову гру?", 48)
 	hud.add_title("Поточне збереження буде втрачено.", 24, UI.TEXT)
 	hud.add_button("Так, нова гра", new_game)
@@ -2782,6 +2912,9 @@ func _show_pause() -> void:
 	# Другорядні кнопки стоять парами: інакше меню не вміщалось на низькому екрані
 	hud.add_row([
 		UI.button("Персонаж", func():
+			if combat.is_duel() and not combat.duel_over:
+				hud.show_banner("Під час герцю не до торби", UI.BAD)  # пауза лишається: інакше гра завмирала без кнопок
+				return
 			hud.close_overlay()
 			state = State.PLAYING
 			open_character(), HALF_BTN, 22),
@@ -2803,10 +2936,33 @@ func _show_pause() -> void:
 		hud.add_button("Здатися (мінус спроба)", _duel_lost, WIDE_BTN)
 	else:
 		hud.add_button(leave_text, enter_map, WIDE_BTN)
-	hud.add_button("Головне меню", func():
-		save_game()
-		combat.leave()
-		_show_main_menu(), WIDE_BTN)
+	hud.add_button("Головне меню", _quit_to_menu, WIDE_BTN)
+
+
+## З паузи в головне меню. Бій закінчується так само, як вихід на мапу: здобич із землі йде в торбу,
+## варта зараховується. Незавершений герць чи огляд рахується поразкою, інакше так берегли б спроби.
+func _quit_to_menu() -> void:
+	if combat.active and combat.is_duel() and not combat.duel_over and state != State.DEAD:
+		_fight_forfeit()
+	_leave_combat()
+	save_game()
+	_show_main_menu()
+
+
+## Списати спробу за покинутий бій на спроби (герць, огляд, вільний герць). Повертає повідомлення.
+func _fight_forfeit() -> String:
+	var kind := str(meta.get("fight", ""))
+	if kind == "" and combat.active and combat.is_duel():
+		kind = "muster" if combat.loc.get("muster", false) else ("free" if combat.loc.get("free", false) else "duel")
+	meta.erase("fight")
+	match kind:
+		"muster":
+			return MusterService.lose(world)
+		"free":
+			return DuelService.free_lose(world)
+		"duel":
+			return DuelService.lose(world)
+	return ""
 
 
 const HALF_BTN := Vector2(232, 64)  # дві такі кнопки в ряд займають ширину звичайної
@@ -2841,6 +2997,8 @@ func _add_sound_toggles(refresh: Callable, shop: bool = false) -> void:
 ## Фільтр автопідбору: речі яких рідкостей герой підбирає сам. back — меню, з якого прийшли.
 func _show_pickup_menu(back: Callable) -> void:
 	_open_menu()
+	if state == State.MENU:
+		_menu_back = back
 	hud.add_title("Фільтр автопідбору")
 	hud.add_title("Вимкнена рідкість не підбирається: річ лежить тьмяна,\nа коли йдеш із місця, продається. Золоті речі й артефакти беруться завжди.", 22, UI.TEXT)
 	for r in 4:
@@ -2909,7 +3067,12 @@ func _input(event: InputEvent) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST:
-		save_game()
+		# У головному меню героя вже нема (його могли щойно видалити чи ще не створити до кінця):
+		# зберігати нічого. Інакше видалений герой вертався, а новий записувався ще до першого бою.
+		if state != State.MENU and player != null:
+			if combat.active:
+				combat.secure_loot()  # золоте, наборне й разові нагороди не лишаються на землі, якщо гру закриють
+			save_game()
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and state == State.PLAYING:
 		_show_pause()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
@@ -2924,10 +3087,17 @@ var quit_requested := false
 ## «Назад»: системна кнопка чи жест на Android (from_system) або Esc на комп'ютері.
 ## Крок назад із будь-якого екрана; із застосунку виходить лише з головного меню й лише системне «Назад».
 func go_back(from_system: bool) -> void:
-	if Ads.is_busy() or hud.dialogue_root != null:
-		return  # рекламу й розмову з вибором треба довести до кінця
+	if Ads.is_busy() or Billing.is_busy() or hud.dialogue_root != null:
+		return  # рекламу, оплату й розмову з вибором треба довести до кінця
 	if wiki_open:
 		close_wiki()
+		return
+	# Крамниці лежать поверх будь-якого екрана: «Назад» спершу закриває їх, а не екран під ними
+	if shop_open:
+		close_shop()
+		return
+	if trader_open:
+		close_trader()
 		return
 	match state:
 		State.PLAYING:
@@ -2948,7 +3118,11 @@ func go_back(from_system: bool) -> void:
 			else:
 				_show_map_menu()
 		State.MENU:
-			if from_system:
+			if _menu_back.is_valid():
+				var back := _menu_back  # підменю («Персонажі», перенесення): крок назад, а не вихід із гри
+				_menu_back = Callable()
+				back.call()
+			elif from_system:
 				_quit_app()
 
 
@@ -3140,6 +3314,7 @@ func _quit_app() -> void:
 
 func enter_camp() -> void:
 	_leave_combat()
+	_price_city("")
 	hud.close_overlay()
 	state = State.CAMP
 	Audio.play_music(_home_music("camp"))

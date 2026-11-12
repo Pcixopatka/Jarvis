@@ -492,8 +492,19 @@ static func sharpen_chance(item: Dictionary) -> float:
 static var sell_mult: float = 1.0
 
 
+## Ціна речі без надбавки ярмарку: від неї рахується, за скільки річ продає крамниця.
+static func base_price(item: Dictionary) -> int:
+	return int(8 * (1 + item["rarity"]) * (1.0 + 0.35 * item["ilvl"]) + item["spent"] * 0.3)
+
+
+## Цінна річ: золота, іменна чи з набору. Її не можна ні купити, ні викувати, тож за повну торбу
+## вона не продається й не лишається на землі, а лягає понад місце.
+static func is_precious(item: Dictionary) -> bool:
+	return int(item.get("rarity", 0)) > RARITY_MAX_RANDOM or item.has("unique") or item.has("set")
+
+
 static func sell_price(item: Dictionary) -> int:
-	return int((8 * (1 + item["rarity"]) * (1.0 + 0.35 * item["ilvl"]) + item["spent"] * 0.3) * sell_mult)
+	return int(base_price(item) * sell_mult)
 
 
 # ======================= Світ =======================

@@ -33,6 +33,8 @@ static func state(world) -> Dictionary:
 
 
 static func level(world, loc: String) -> int:
+	if Data.LOCATIONS.has(loc) and Data.LOCATIONS[loc].get("endless", false):
+		return 0  # старі збереження: зараза на Башті й Глибинах більше не діє (вона ще й сильнішала босів дня)
 	return int(state(world)["levels"].get(loc, 0))
 
 
@@ -61,8 +63,8 @@ static func tick(world) -> Array:
 		if spread.size() >= MAX_SPREAD_PER_TRIP:
 			break
 		var lvl := int(levels.get(id, 0))
-		if lvl >= MAX_LEVEL or Data.LOCATIONS[id].has("peril"):
-			continue  # надважкі печери лежать за краєм мапи: зараза туди не доходить
+		if lvl >= MAX_LEVEL or Data.LOCATIONS[id].has("peril") or Data.LOCATIONS[id].get("endless", false):
+			continue  # надважкі печери за краєм мапи; Башту й Глибини зачистити не можна, тож зараза там не осідає
 		var pos: Vector2 = Data.LOCATIONS[id]["pos"]
 		var chance := 0.0
 		for src in SOURCES:

@@ -176,6 +176,8 @@ func _build() -> void:
 	map_view.set_anchors_preset(Control.PRESET_FULL_RECT)
 	map_view.visible = false
 	map_view.location_selected.connect(func(id): map_location_selected.emit(id))
+	# мапа під крамницею, довідником чи меню щипків не слухає
+	map_view.is_covered = func(): return screen_root != null or overlay.visible or dialogue_root != null
 	ui_root.add_child(map_view)
 
 	map_panel = PanelContainer.new()
@@ -234,6 +236,11 @@ func _build() -> void:
 	hint_panel.anchor_left = 0.5
 	hint_panel.anchor_right = 0.5
 	hint_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hint_panel.gui_input.connect(func(ev: InputEvent):
+		# На мапі підказка ловить дотик і зникає: раніше дотик провалювався крізь неї, і козак їхав у чисте поле
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT and not ev.pressed:
+			hide_hint()
+			hint_panel.accept_event())
 	hint_panel.visible = false
 	hint_panel.z_index = 5
 	hint_panel.add_theme_stylebox_override("panel", UI.style(Color(0.1, 0.08, 0.06, 0.9), Color(1.0, 0.8, 0.3)))
@@ -585,6 +592,8 @@ func show_hint(text: String, on_map: bool) -> void:
 	hint_panel.offset_bottom = hint_panel.offset_top
 	hint_panel.visible = true
 	hint_panel.modulate.a = 1.0
+	# у бою підказка дотиків не ловить (під нею кнопки й рух), на мапі ловить
+	hint_panel.mouse_filter = Control.MOUSE_FILTER_STOP if on_map else Control.MOUSE_FILTER_IGNORE
 	if _hint_tween:
 		_hint_tween.kill()
 	_hint_tween = hint_panel.create_tween()

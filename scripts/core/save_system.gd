@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 9
+const SAVE_VERSION := 10
 const Data := preload("res://scripts/data/data.gd")
 const SAVE_PATH := "user://hero.save"  # старий єдиний файл — стає слотом 1 при першому запуску
 const ACCOUNT_PATH := "user://account.save"  # спільне на всіх персонажів
@@ -21,7 +21,9 @@ static func slot_summaries() -> Array:
 	for i in range(1, MAX_SLOTS + 1):
 		var d := load_data(slot_path(i))
 		if d.is_empty():
-			out.append({})
+			# файл є, та не читається (зіпсований чи з новішої версії гри): слот не вільний,
+			# інакше новий герой затер би його
+			out.append({"slot": i, "broken": true} if exists(slot_path(i)) else {})
 			continue
 		var p: Dictionary = d.get("player", {})
 		var w: Dictionary = d.get("world", {})
@@ -40,24 +42,6 @@ static func migrate_single_to_slots() -> void:
 				DirAccess.rename_absolute(SAVE_PATH + suffix, slot_path(1) + suffix)
 
 
-static func save_account(data: Dictionary) -> bool:
-	var tmp := ACCOUNT_PATH + ".tmp"
-	var f := FileAccess.open(tmp, FileAccess.WRITE)
-	if f == null:
-		return false
-	f.store_var(data)
-	f.close()
-	if FileAccess.file_exists(ACCOUNT_PATH):
-		DirAccess.copy_absolute(ACCOUNT_PATH, ACCOUNT_PATH + ".bak")
-	return DirAccess.rename_absolute(tmp, ACCOUNT_PATH) == OK
-
-
-static func load_account() -> Dictionary:
-	for p in [ACCOUNT_PATH, ACCOUNT_PATH + ".bak"]:
-		var d := _read(p)
-		if not d.is_empty():
-			return d
-	return {}
 const SETTINGS_PATH := "user://settings.cfg"
 
 
@@ -67,13 +51,26 @@ static func exists(path: String = SAVE_PATH) -> bool:
 
 static func save(data: Dictionary, path: String = SAVE_PATH) -> bool:
 	data["version"] = SAVE_VERSION
+	return write_var(path, data)
+
+
+## Безпечний запис: спершу тимчасовий файл, і лише коли він записався повністю, ним заміняється
+## справжній (а попередній лишається копією .bak). Якщо місце на телефоні скінчилось і запис
+## обірвався, добрий файл ніхто не чіпає: раніше його заміняли й недописаним.
+static func write_var(path: String, data) -> bool:
 	var tmp := path + ".tmp"
 	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		push_error("Не вдалося відкрити %s для запису" % tmp)
 		return false
-	f.store_var(data)
+	var stored: bool = f.store_var(data)
+	var werr := f.get_error()
+	var size := f.get_length()
 	f.close()
+	if not stored or werr != OK or size <= 0:
+		push_error("Запис %s обірвався, попереднє збереження лишилось як було" % tmp)
+		DirAccess.remove_absolute(tmp)
+		return false
 	if FileAccess.file_exists(path):
 		DirAccess.copy_absolute(path, path + ".bak")
 	var err := DirAccess.rename_absolute(tmp, path)
@@ -205,6 +202,10 @@ static func migrate(d: Dictionary) -> Dictionary:
 			st["stage"] = "active"
 			st["progress"] = 0
 		v = 9
+	if v == 9:
+		# v10: зі світом зберігається товар крамниць, у метаданих — позначка незавершеного герцю,
+		# в акаунті — годинник гри. Старому збереженню нічого доробляти: нові поля мають типові значення.
+		v = 10
 	d["version"] = v
 	return d
 

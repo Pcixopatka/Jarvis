@@ -12,6 +12,7 @@ var value := 1
 var phase := randf() * TAU
 var pull_speed := 0.0
 var spawn_vel := Vector2.ZERO
+var keep := false  # разова нагорода (бос дня, перше проходження): за повну торбу лягає понад місце
 var manual := false  # викинута з торби річ: сама до героя не летить, підбирається лише впритул
 var hold := 0.0  # скільки секунд викинуту річ ще не можна підібрати
 
@@ -20,6 +21,8 @@ func _process(delta: float) -> void:
 	phase += delta * 4.0
 	position += spawn_vel * delta
 	spawn_vel = spawn_vel.move_toward(Vector2.ZERO, 600.0 * delta)
+	if spawn_vel != Vector2.ZERO:
+		position = combat._clamp_in(position, 24.0)  # здобич не вилітає за край арени, куди героєві не дійти
 	var p = combat.player
 	if not p.alive:
 		queue_redraw()

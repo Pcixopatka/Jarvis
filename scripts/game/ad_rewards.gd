@@ -55,8 +55,10 @@ static func drop_mult(world) -> float:
 	return 2.0 if drop2_left(world) > 0.0 or Premium.active(world) else 1.0
 
 
+## День обмежень той самий, що й у викликів: за годинником гри, який назад не йде (Clock).
 static func _today() -> String:
-	return Time.get_date_string_from_system()
+	var CS = load("res://scripts/game/challenge_service.gd")
+	return CS.day_key(CS._now())
 
 
 ## Скільки безпечних заточок можна взяти за день: з універсалом більше.

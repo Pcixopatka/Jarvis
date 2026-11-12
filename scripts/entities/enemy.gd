@@ -53,6 +53,8 @@ var shoot_cd := 2.0
 var shoot_timer := 1.5
 var knockback := Vector2.ZERO
 var flash := 0.0
+var _sep := Vector2.ZERO  # останнє пораховане розштовхування (оновлюється через кадр)
+var _sep_slot := randi() % 2
 var slow_timer := 0.0
 var contact_cd := 0.0
 var lunge_timer := 0.0
@@ -346,6 +348,8 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 	if k == "lisovyi_did":
 		_base_speed = speed
 	add_to_group("enemies")
+	if combat != null:
+		combat.enemies_dirty()
 
 
 ## Найближчий союзник (козак або супутник).
@@ -421,6 +425,10 @@ func _process(delta: float) -> void:
 		if _rock_timer <= 0.0:
 			_rock_timer = 1.6 if phase2 else 2.3
 			_drop_rock()
+	# Вікно стелі шкоди спадає завжди, і поки ворог приголомшений: інакше приголомшений суперник
+	# отримував менше шкоди, ніж притомний
+	if dmg_cap > 0.0:
+		_dmg_window = maxf(0.0, _dmg_window - max_hp * dmg_cap * delta)
 	if stun > 0.0:
 		stun -= delta * (2.5 if style != "" else 1.0)  # суперник у герці оговтується швидше
 		windup = 0.0
@@ -457,20 +465,24 @@ func _process(delta: float) -> void:
 				combat.fx.burst(global_position, Color(0.9, 0.35, 0.1), 14, 160, 6, 0.4)
 				windup = windup_max * 1.6  # даємо мить, щоб ухилитися
 
-	# Розштовхування, щоб нечисть не злипалась в одну купу
-	var sep := Vector2.ZERO
-	for o in get_tree().get_nodes_in_group("enemies"):
-		if o == self or o.dead:
-			continue
-		var d: Vector2 = global_position - o.global_position
-		var min_d: float = radius + o.radius
-		var l := d.length()
-		if l < min_d and l > 0.01:
-			sep += d / l * (min_d - l) / min_d
+	# Розштовхування, щоб нечисть не злипалась в одну купу. Рахується через кадр (половина нечисті
+	# на парних кадрах, половина на непарних): сусіди за один кадр майже не зсуваються, а робота,
+	# що росте як квадрат юрби, стає вдвічі меншою.
+	if (Engine.get_process_frames() + _sep_slot) % 2 == 0:
+		_sep = Vector2.ZERO
+		var here := global_position
+		for o in combat.enemies_now():
+			if o == self or o.dead:
+				continue
+			var d: Vector2 = here - o.global_position
+			var min_d: float = radius + o.radius
+			var l2 := d.length_squared()
+			if l2 < min_d * min_d and l2 > 0.0001:
+				var l := sqrt(l2)
+				_sep += d / l * (min_d - l) / min_d
+	var sep := _sep
 
 	cast_time = maxf(0.0, cast_time - delta)
-	if dmg_cap > 0.0:
-		_dmg_window = maxf(0.0, _dmg_window - max_hp * dmg_cap * delta)
 	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0) * (0.15 if windup > 0.0 else 1.0) * (0.05 if cast_time > 0.0 else 1.0) * Status.speed_mult(self)
 	if style in ["rubaka", "kharakternyk", "bulavnyk"] and dist > 280.0:
 		spd *= 1.7  # суперник ближнього бою рветься до стрільця
@@ -636,6 +648,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 		dead = true
 		dying = 0.35
 		remove_from_group("enemies")
+		combat.enemies_dirty()
 		if kind == "zarazhenyi" or "plague" in affixes:
 			combat.spawn_plague(global_position, damage * 0.6)
 		if "explosive" in affixes:
@@ -1593,7 +1606,7 @@ func _minion_ability(target, dist: float) -> void:
 			if dist > 700.0:
 				return
 			var near := 0
-			for o in get_tree().get_nodes_in_group("enemies"):
+			for o in combat.enemies_now():
 				if o.kind == "zlyden" and not o.dead and o.global_position.distance_to(global_position) < 700.0:
 					near += 1
 			if near >= 3:
@@ -1750,6 +1763,7 @@ func vanish() -> void:
 		return
 	dead = true
 	remove_from_group("enemies")
+	combat.enemies_dirty()
 	combat.fx.burst(global_position, Color(0.6, 0.3, 0.9, 0.8), 18, 200, 7, 0.5)
 	Audio.play("die_spirit", 0.2, -4.0)
 	queue_free()

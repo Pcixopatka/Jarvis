@@ -23,7 +23,7 @@ func _process(delta: float) -> void:
 	if _t >= life:
 		queue_free()
 		return
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in combat.enemies_now():
 		if not e.dead and global_position.distance_to(e.global_position) < radius + e.radius:
 			combat.player.hit(e, damage, Vector2.ZERO, crit)
 			if not e.dead:
@@ -38,7 +38,7 @@ func _process(delta: float) -> void:
 
 
 func _explode() -> void:
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in combat.enemies_now():
 		if e.dead:
 			continue
 		var to: Vector2 = e.global_position - global_position

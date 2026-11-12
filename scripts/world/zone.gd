@@ -59,7 +59,7 @@ func _process(delta: float) -> void:
 		_:
 			if _tick <= 0.0:
 				_tick = 0.3 if kind == "grad" else (tick if kind == "skill" else 0.5)
-				for e in get_tree().get_nodes_in_group("enemies"):
+				for e in combat.enemies_now():
 					if e.dead or global_position.distance_to(e.global_position) > radius + e.radius:
 						continue
 					match kind:

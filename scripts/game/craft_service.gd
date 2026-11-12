@@ -69,8 +69,11 @@ static func reforge_cost(item: Dictionary) -> Dictionary:
 	return {"gold": 20 + 8 * int(item["ilvl"]) * (1 + int(item["rarity"])), "herbs": 3, "trophy": 1}
 
 
+## Золоті речі й речі наборів не перековуються: їхні властивості сталі. Раніше золота річ брала гроші,
+## а при оновленні вертала старі властивості, а наборна отримувала властивість не зі свого набору.
 static func can_reforge(world, item: Dictionary) -> bool:
-	return CampService.level(world, "kuznia") >= 2 and not item["affixes"].is_empty()
+	return CampService.level(world, "kuznia") >= 2 and not item["affixes"].is_empty() \
+		and not item.has("unique") and not item.has("set")
 
 
 ## Нова властивість замість обраної (із тих, яких у речі ще немає). Повертає id нової або "".
@@ -147,6 +150,7 @@ static func renew(world, player, uid: int, levels: int = 0) -> bool:
 	var primary: String = Data.SLOT_PRIMARY[it["slot"]]
 	it["base"] = {primary: Data._primary_value(it["slot"], target, int(it["rarity"]))}
 	for a in it["affixes"].keys():
-		it["affixes"][a] = Data._roll_value(a, target, int(it["rarity"]))
+		# властивість кидається наново, та нижчою за нинішню не стає: оновлення річ не псує
+		it["affixes"][a] = maxf(float(it["affixes"][a]), Data._roll_value(a, target, int(it["rarity"])))
 	player.recalc()
 	return true

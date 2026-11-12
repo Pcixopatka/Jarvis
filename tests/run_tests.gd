@@ -147,6 +147,7 @@ func _run() -> void:
 	await _suite_divine()
 	await _suite_legends()
 	await _suite_grid_shops()
+	await _suite_audit()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -185,6 +186,18 @@ func _new_player():
 func _frames(n: int) -> void:
 	for i in n:
 		await process_frame
+
+
+## Вкладки екрана будуються ліниво: лише та, що відкрита (UI.screen). Тест, який шукає щось по всьому
+## екрану, спершу гортає всі вкладки, як це зробив би гравець, і вертається на ту, що була.
+func _reveal_tabs(game) -> void:
+	if game.hud.screen_root == null or not is_instance_valid(game.hud.screen_root):
+		return
+	for tc in game.hud.screen_root.find_children("*", "TabContainer", true, false):
+		var was: int = tc.current_tab
+		for i in tc.get_tab_count():
+			tc.current_tab = i
+		tc.current_tab = was
 
 
 ## Підійти до того, хто чекає в ратуші міста: розмови там самі не починаються (Game.hall_rows).
@@ -4019,6 +4032,7 @@ func _clear_enemies(game) -> void:
 	for e in game.combat.get_tree().get_nodes_in_group("enemies"):
 		e.remove_from_group("enemies")
 		e.queue_free()
+	game.combat.enemies_dirty()
 
 
 func _suite_new_bosses() -> void:
@@ -4666,6 +4680,7 @@ func _suite_duel_battle() -> void:
 	var DS = game.DuelService
 	var Acts = game.Acts
 	game.hud.close_dialogue()
+	_reveal_tabs(game)
 	var texts := ""
 	for n in game.hud.screen_root.find_children("*", "Button", true, false):
 		texts += n.text + "\n"
@@ -5900,6 +5915,7 @@ func _suite_kleinody_game() -> void:
 			out.append(tc.get_tab_title(i))
 		return out
 	var texts := func(g) -> String:
+		_reveal_tabs(g)
 		var out := ""
 		for n in g.hud.screen_root.find_children("*", "Label", true, false):
 			out += n.text + "\n"
@@ -5907,6 +5923,7 @@ func _suite_kleinody_game() -> void:
 			out += n.text + "\n"
 		return out
 	var button := func(g, part: String) -> Button:
+		_reveal_tabs(g)
 		for n in g.hud.screen_root.find_children("*", "Button", true, false):
 			if part in n.text:
 				return n
@@ -6267,6 +6284,7 @@ func _suite_ring_muster_game() -> void:
 	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 	for i in tc.get_tab_count():
 		titles.append(tc.get_tab_title(i))
+	_reveal_tabs(game)
 	var ctext := ""
 	for n in game.hud.screen_root.find_children("*", "Button", true, false):
 		ctext += n.text + "\n"
@@ -8045,6 +8063,7 @@ func _suite_journal() -> void:
 	await _frames(2)
 	var tc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 	check(tc.get_tab_title(1) == "Журнал  (+2)", "вкладка «Журнал» друга й показує, скільки можна здати: «%s»" % tc.get_tab_title(1))
+	tc.current_tab = 1  # відкрити вкладку «Журнал»
 	var text := ""
 	for n in tc.get_tab_control(1).find_children("*", "Label", true, false):
 		text += n.text + "\n"
@@ -9929,6 +9948,7 @@ func _suite_events_wiki_game() -> void:
 		if tc.get_tab_title(i).begins_with("Події"):
 			ev_i = i
 	check(ev_i >= 0 and "(+" in tc.get_tab_title(ev_i), "на екрані героя є вкладка «Події» з лічильником: %s" % (tc.get_tab_title(ev_i) if ev_i >= 0 else "—"))
+	tc.current_tab = ev_i  # відкрити вкладку «Події»
 	var et: String = texts.call(tc.get_child(ev_i))
 	check("Зараз на мапі" in et and "Набіг на село: " in et and "Щотижня" in et and "Події світу після походів" in et and "Герць на майдані" in et and "Коло Кожум'яки" in et, "у вкладці — що діє зараз і розклад")
 	var wb: Button = null
@@ -11287,6 +11307,7 @@ func _suite_peril_game() -> void:
 		if tc.get_tab_title(i).begins_with("Загартування"):
 			tab_i = i
 	check(tab_i >= 0 and "(+3)" in tc.get_tab_title(tab_i), "вкладка «Загартування» показує вільні очки звитяги")
+	_reveal_tabs(game)
 	var all_text := ""
 	for l in game.hud.screen_root.find_children("*", "Label", true, false):
 		all_text += l.text + "\n"
@@ -11475,6 +11496,7 @@ func _suite_shop_game() -> void:
 	await _frames(3)
 	check(SH.coins(w) == 1200 and int(game.account.shop["coins"]) == 1200, "набір червінців оплачено й зараховано")
 	var cost: int = SH.price("unique", "shablia_sirka")
+	game.shop_tab = game._shop_tab_index("Золоті речі")  # гравець купує на вкладці товару
 	game.shop_do("buy", ["unique", "shablia_sirka"])
 	await _frames(2)
 	check(game.shop_confirm == "unique:shablia_sirka" and SH.coins(w) == 1200 and p.inventory.is_empty(), "перший дотик лише просить підтвердити")
@@ -12188,6 +12210,7 @@ func _suite_premium() -> void:
 	await _frames(2)
 	game.open_shop(game.enter_map)
 	await _frames(2)
+	game.shop_tab = game._shop_tab_index("Універсал")
 	game.shop_do("premium", "")
 	await _frames(2)
 	check(game.shop_confirm == "premium" and not PR.active(gw), "перший дотик лише просить підтвердити")
@@ -12474,6 +12497,7 @@ func _suite_costumes() -> void:
 	await _frames(2)
 	game.open_shop(game.enter_map)
 	await _frames(2)
+	game.shop_tab = game._shop_tab_index("Вбрання")
 	game.shop_do("costume", top)
 	await _frames(2)
 	check(game.shop_confirm == "costume:" + top and not CS.owned(gw, top), "перший дотик лише просить підтвердити")
@@ -13629,6 +13653,25 @@ func _suite_grid_shops() -> void:
 	plain.free()
 	priced.free()
 	check(UCity.SHOP_CELL == UChar.CELL and UCity.BAG_COLS == 6, "клітинки крамниці такі самі, як у торбі героя: той самий розмір і шість стовпців")
+	# ---- Примірка речі пам'ятається, доки не зміниться герой чи сама річ ----
+	var cp = _new_player()
+	cp.change_class("cossack")
+	cp.level = 30
+	var worn0: Dictionary = Data.gen_item(30, 1, "head")
+	cp.add_item(worn0, true)
+	cp.equip(worn0["uid"])
+	var better: Dictionary = Data.gen_item(30, 3, "head")
+	cp.add_item(better, true)
+	var g1: float = cp.gain_from(better)
+	check(cp._gain_cache.size() == 1 and is_equal_approx(cp.gain_from(better), g1) and cp._gain_cache.size() == 1, "друга примірка тієї самої речі береться з пам'яті")
+	cp._gain_cache.clear()
+	check(is_equal_approx(cp.gain_from(better), g1), "з пам'яті й наново примірка дає те саме: %.4f" % g1)
+	better["up"] = 5
+	var g2: float = cp.gain_from(better)
+	check(g2 > g1 and cp._gain_cache.size() == 2, "заточена річ приміряється наново: %.4f проти %.4f" % [g2, g1])
+	cp.equip(better["uid"])
+	check(cp._gain_cache.is_empty() and is_equal_approx(cp.gain_from(better), 0.0) and cp.gain_from(worn0) < 0.0, "вдягнув іншу річ: стара пам'ять скинута, знята шапка тепер гірша за вдягнену")
+	cp.free()
 	# ---- Крамниця міста ----
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -13659,6 +13702,14 @@ func _suite_grid_shops() -> void:
 	for i in tc.get_tab_count():
 		if tc.get_tab_title(i) == "Крамниця":
 			shop_i = i
+	# вкладки будуються ліниво: поки вкладку не відкрито, її вміст не збудовано
+	var built := 0
+	for i in tc.get_tab_count():
+		if not tc.get_tab_control(i).has_meta("build"):
+			built += 1
+	check(built == 1 and tc.get_tab_control(shop_i).has_meta("build") and _cells(tc.get_tab_control(shop_i), UCity.SHOP_CELL).is_empty(), "з усіх вкладок міста збудовано лише відкриту (%d із %d)" % [built, tc.get_tab_count()])
+	tc.current_tab = shop_i  # відкрити вкладку «Крамниця»
+	check(not tc.get_tab_control(shop_i).has_meta("build") and game.city_tab == shop_i, "відкрита вкладка будується в ту ж мить")
 	var page: Control = tc.get_tab_control(shop_i)
 	var stock: Array = game.shop_stock("poltava")
 	var cells: Array = _cells(page, UCity.SHOP_CELL)
@@ -13776,6 +13827,7 @@ func _suite_grid_shops() -> void:
 	for i in stc.get_tab_count():
 		var tt: String = stc.get_tab_title(i)
 		if want.has(tt):
+			stc.current_tab = i  # вкладки будуються, коли їх відкривають
 			got[tt] = _cells(stc.get_tab_control(i), UShop.CELL).size()
 			grid_ok = grid_ok and int(got[tt]) == int(want[tt])
 	check(grid_ok and got.size() == want.size(), "золоті речі, артефакти, душі, набори, дари й вбрання стоять клітинками: %s" % str(got))
@@ -14129,3 +14181,527 @@ func _suite_legends() -> void:
 	get_root().get_tree().paused = false
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Перевірки знахідок повного аудиту 0.48.0: годинник, лазівки зі спробами й цінами, переходи між
+## екранами, збереження, зайва робота в бою.
+func _suite_audit() -> void:
+	suite("Аудит: годинник, лазівки, переходи, збереження")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Clock = load("res://scripts/core/clock.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var QS = load("res://scripts/game/quick_service.gd")
+	var AR = load("res://scripts/game/ad_rewards.gd")
+	var Prem = load("res://scripts/game/premium_service.gd")
+	var Acc = load("res://scripts/game/account.gd")
+	var City = load("res://scripts/game/city_service.gd")
+	var TR = load("res://scripts/game/trade_service.gd")
+	var Craft = load("res://scripts/game/craft_service.gd")
+	var LS = load("res://scripts/game/legend_service.gd")
+	var Leg = load("res://scripts/data/legends.gd")
+	var Far = load("res://scripts/game/far_service.gd")
+	var PS = load("res://scripts/game/plague_service.gd")
+	var TS = load("res://scripts/game/travel_service.gd")
+	var BS = load("res://scripts/game/boss_service.gd")
+	var ES = load("res://scripts/game/event_service.gd")
+	var Ach = load("res://scripts/data/achievements.gd")
+	var Sets = load("res://scripts/data/sets.gd")
+	var Uni = load("res://scripts/data/uniques.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Story = load("res://scripts/game/story_service.gd")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	var DuelS = load("res://scripts/game/duel_service.gd")
+	var DefS = load("res://scripts/game/defense_service.gd")
+	var DS = load("res://scripts/game/divine_service.gd")
+
+	# ---- Годинник гри: назад не йде ----
+	CS.now_override = 0
+	Prem.now_override = -1.0
+	var real: float = Time.get_unix_time_from_system()
+	Clock.high = 0.0
+	check(absf(Clock.now() - real) < 5.0 and not Clock.rolled_back(), "годинник гри йде за годинником телефона")
+	Clock.high = real + 5.0 * 86400.0  # гра вже бачила час на п'ять діб уперед, а телефон перевели назад
+	check(is_equal_approx(Clock.now(), real + 5.0 * 86400.0) and Clock.rolled_back(), "телефон перевели назад: годинник гри стоїть на найпізнішому баченому часі")
+	check(CS._now() == int(Clock.now()) and is_equal_approx(Prem.now(), Clock.now()), "виклики, боси, ярмарок і універсал рахують від годинника гри")
+	check(QS._today() == CS.day_key(CS._now()) and AR._today() == QS._today(), "швидкі походи й реклама мають той самий день, що й виклики (за Гринвічем)")
+	var acc = Acc.new()
+	var acc_d: Dictionary = acc.to_dict()
+	check(float(acc_d.get("clock", 0.0)) >= real + 5.0 * 86400.0 - 1.0, "найпізніший час зберігається з акаунтом")
+	Clock.high = 0.0
+	var acc2 = Acc.new()
+	acc2.from_dict(acc_d)
+	check(Clock.high >= real + 5.0 * 86400.0 - 1.0 and Clock.rolled_back(), "після перезапуску гра пам'ятає цей час: переведений назад годинник нічого не скидає")
+	Clock.high = real + 40.0 * 86400.0
+	check(absf(Clock.now() - real) < 5.0 and not Clock.rolled_back(), "бачений час далі ніж за місяць уперед вважається помилкою годинника: гра вертається до телефона")
+	Clock.high = 0.0  # далі тести йдуть за справжнім часом
+
+	# ---- Ціни: ярмарок, цінні речі ----
+	var it0: Dictionary = Data.gen_item(20, 2, "head")
+	var w0 = WorldState.new()
+	Data.sell_mult = 1.0
+	var base0: int = Data.sell_price(it0)
+	var buy0: int = City.buy_price(w0, "poltava", it0)
+	Data.sell_mult = 2.0
+	check(Data.sell_price(it0) == base0 * 2 and Data.base_price(it0) == base0 and City.buy_price(w0, "poltava", it0) == buy0, "ярмарок подвоює ціну продажу, а ціна в крамниці лишається та сама")
+	Data.sell_mult = 1.0
+	var set_it: Dictionary = Sets.make(Sets.SETS.keys()[0], "head", 100)
+	var gold_it: Dictionary = Uni.make(Uni.DEFS.keys()[0], 50)
+	check(Data.is_precious(set_it) and Data.is_precious(gold_it) and not Data.is_precious(it0), "золота й наборна речі цінні, звичайна рідкісна ні")
+
+	# ---- Торг: надбавки не діють на крам, куплений тут-таки ----
+	var tw = WorldState.new()
+	var tp = _new_player()
+	tp.change_class("cossack")
+	tp.level = 30
+	tp.gold = 10000000
+	var tcity: String = Acts.TRADE_CITIES.keys()[0]
+	var tgood: String = Acts.TRADE_GOODS.keys()[0]
+	ES.state(tw)["fair"] = {"city": tcity, "left": 3}
+	check(is_equal_approx(TR.sell_bonus(tw, tcity, tgood), 1.25), "на ярмарку привезений крам беруть на чверть дорожче")
+	var gold_t: int = tp.gold
+	var got_n: int = TR.buy(tw, tp, tcity, tgood, int(Acts.TRADE_STOCK))
+	check(got_n > 0 and is_equal_approx(TR.sell_bonus(tw, tcity, tgood), 1.0), "крам, куплений тут сьогодні, місто бере назад без надбавки")
+	TR.sell(tw, tp, tcity, tgood, got_n)
+	check(tp.gold < gold_t, "купити й одразу продати на ярмарку більше не дає прибутку (%d → %d)" % [gold_t, tp.gold])
+
+	# ---- Кузня: перековка й оновлення ----
+	var cw = WorldState.new()
+	cw.camp = {"buildings": {"kuznia": 3}}
+	var plain_it: Dictionary = Data.gen_item(20, 3, "body")
+	check(Craft.can_reforge(cw, plain_it) and not Craft.can_reforge(cw, set_it) and not Craft.can_reforge(cw, gold_it), "золоті й наборні речі не перековуються, звичайні перековуються")
+	var rp = _new_player()
+	rp.change_class("cossack")
+	rp.level = 60
+	rp.gold = 100000000
+	for r in ["iron", "wood", "herbs", "trophy"]:
+		rp.resources[r] = 100000
+	var never_lower := true
+	for i in 12:
+		var ri: Dictionary = Data.gen_item(10 + i, 3, "body")
+		rp.add_item(ri, true)
+		var before: Dictionary = ri["affixes"].duplicate()
+		if Craft.renew(cw, rp, ri["uid"], 3):
+			for a in before:
+				never_lower = never_lower and float(ri["affixes"][a]) >= float(before[a]) - 0.0001
+	check(never_lower, "оновлення речі не знижує жодної властивості")
+
+	# ---- Переказ: мета зачистки в межах ----
+	var lw = WorldState.new()
+	var lp = _new_player()
+	lp.level = 99
+	var leg_goal := -1
+	var leg_base := 0
+	for line in Leg.ORDER:
+		var steps: Array = Leg.LINES[line]["steps"]
+		for i in steps.size():
+			var lloc := str(steps[i]["objective"].get("loc", ""))
+			if leg_goal < 0 and Data.LOCATIONS.has(lloc) and int(Data.LOCATIONS[lloc]["level"]) < 99:
+				lw.legends[line] = {"step": i, "stage": "active", "progress": 0}
+				var lm: Dictionary = LS.mods_for(lw, lp, lloc)
+				leg_goal = int(lm.get("goal", -1))
+				leg_base = int(Data.LOCATIONS[lloc]["level"])
+				check(int(lm.get("level", 0)) == 99 and QS.step_target(lw, lloc), "місце переказу міряється рівнем із героєм і є метою кроку")
+				check("справа" in QS.block_reason(_cleared_world(lw, lloc), lp, lloc), "швидкий похід у місце, де чекає крок переказу, не дається")
+	check(leg_goal > 0 and leg_goal <= int(Far.GOAL_MAX) and leg_goal == mini(int(Far.GOAL_MAX), Data.FIELD_GOAL_BASE + leg_base * Data.FIELD_GOAL_PER_LEVEL), "мета зачистки рахується від рідного рівня місця: %d, а не сотні" % leg_goal)
+
+	# ---- Зараза не осідає на Башті й Глибинах ----
+	var pw = WorldState.new()
+	PS.state(pw)["levels"]["bashta"] = 3
+	PS.state(pw)["levels"]["hlybyny"] = 2
+	check(PS.level(pw, "bashta") == 0 and PS.level(pw, "hlybyny") == 0, "зараза на Башті й Глибинах не діє навіть зі старого збереження")
+	PS.state(pw)["levels"].clear()
+	PS.state(pw)["pressure"] = 50.0
+	for i in 40:
+		PS.tick(pw)
+	check(int(PS.state(pw)["levels"].get("bashta", 0)) == 0 and int(PS.state(pw)["levels"].get("hlybyny", 0)) == 0, "і нова зараза туди не доходить")
+
+	# ---- Чумаки: зілля стільки, скільки влазить ----
+	var cp = _new_player()
+	cp.change_class("cossack")
+	cp.level = 20
+	cp.gold = 100000
+	cp.potions = cp.potion_max() - 1
+	var one: Dictionary = {}
+	for ch in TS.prepare(WorldState.new(), cp, "chumaky")["choices"]:
+		if ch["outcome"].has("potions"):
+			one = ch
+	cp.potions = 0
+	var two: Dictionary = {}
+	for ch in TS.prepare(WorldState.new(), cp, "chumaky")["choices"]:
+		if ch["outcome"].has("potions"):
+			two = ch
+	check(not one.is_empty() and int(one["outcome"]["potions"]) == 1 and int(two["outcome"]["potions"]) == 2 and absi(int(one["outcome"]["gold"]) * 2 - int(two["outcome"]["gold"])) <= 1, "чумаки продають одне зілля за півціни, коли друге не влазить")
+
+	# ---- Досягнення, боси дня й тижня ----
+	var bond := {}
+	for a in Ach.ACHIEVEMENTS:
+		if a["id"] == "bond_3":
+			bond = a
+	check(int(bond.get("goal", 0)) == 2 and "двох" in str(bond.get("desc", "")), "«Побратими навіки» досяжне: дві історії")
+	var wk: String = BS.boss_id("week")
+	var raw_i: int = absi(hash("week:" + BS.key("week"))) % BS.POOL.size()
+	check(wk == BS.POOL[raw_i] and BS.boss_id("day") != wk, "бос тижня не міняється серед тижня: поступається бос дня")
+	var bw = WorldState.new()
+	var bp = _new_player()
+	bp.level = 40
+	var other_boss: String = BS.POOL[(BS.POOL.find(BS.boss_id("day")) + 2) % BS.POOL.size()]
+	BS.on_win(bw, bp, "day", 95.0, other_boss)
+	check(BS.best_time(bw, other_boss) == 95 and BS.best_time(bw, BS.boss_id("day")) == (95 if other_boss == BS.boss_id("day") else 0), "рекорд часу пишеться тому босові, з яким бились")
+
+	# ---- Крадіжка меду: щонайбільше раз на добу ----
+	var hw = WorldState.new()
+	var now_t := 1762700000.0
+	hw.camp = {"buildings": {"pasika": 1}, "pasika_ts": now_t - 20.0 * 3600.0}
+	var thefts := 0
+	for i in 60:
+		if ES.check_theft(hw, now_t, 0) != "":
+			thefts += 1
+	check(thefts <= 1 and int(hw.camp.get("theft_day", -1)) == int(now_t / 86400.0), "за одну добу злодії приходять щонайбільше раз, скільки б разів не заходив у гру (%d)" % thefts)
+
+	# ---- Збереження: версія, безпечний запис, нечитаний слот, чужі поля ----
+	check(SaveSystem.SAVE_VERSION == 10 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 10, "формат збереження 10, дев'ятий підхоплюється")
+	var wpath := "user://test_write.save"
+	check(SaveSystem.write_var(wpath, {"a": 1}) and SaveSystem.write_var(wpath, {"a": 2}) and FileAccess.file_exists(wpath + ".bak") and not FileAccess.file_exists(wpath + ".tmp"), "запис іде через тимчасовий файл, попередній лишається копією")
+	SaveSystem.delete(wpath)
+	var slot_p: String = SaveSystem.slot_path(SaveSystem.MAX_SLOTS)
+	if not SaveSystem.exists(slot_p):
+		var junk := FileAccess.open(slot_p, FileAccess.WRITE)
+		junk.store_var("це не збереження")
+		junk.close()
+		var sums: Array = SaveSystem.slot_summaries()
+		check(sums[SaveSystem.MAX_SLOTS - 1].get("broken", false) == true, "файл, що не читається, показується зайнятим слотом, а не вільним")
+		SaveSystem.delete(slot_p)
+		check(SaveSystem.slot_summaries()[SaveSystem.MAX_SLOTS - 1].is_empty(), "видалений слот знову вільний")
+	var fp = _new_player()
+	var fd: Dictionary = fp.to_dict()
+	fd["position"] = Vector2(4321, 1234)
+	fd["visible"] = false
+	fd["gold"] = 777
+	var fp2 = _new_player()
+	fp2.from_dict(fd)
+	check(fp2.gold == 777 and fp2.position == Vector2.ZERO and fp2.visible, "герой бере зі збереження лише свої поля")
+	var prof := {"v": ST.FORMAT, "account": {}, "heroes": [{"slot": 1, "data": _transfer_hero(12, 500)}], "made": 0}
+	var alien: Dictionary = prof.duplicate(true)
+	alien["heroes"][0]["data"]["player"]["job"] = "kosmonavt"
+	check(ST.check(prof) == "" and "не знає" in ST.check(alien), "код роду з невідомим класом не приймається")
+
+	# ---- Довідник знає про зміни ----
+	var WSv = load("res://scripts/game/wiki_service.gd")
+	var rule_titles := []
+	var all_text := ""
+	for sec in ["basics", "bosses", "items", "rules"]:
+		for e in WSv._entries(sec):
+			all_text += str(e["text"]) + "\n"
+			if sec == "rules":
+				rule_titles.append(str(e["title"]))
+	var want_titles := ["Годинник гри", "Покинутий бій", "Цінна здобич не губиться", "Кара за смерть", "Ціни й торг без лазівок"]
+	var have_all := true
+	for t in want_titles:
+		have_all = have_all and t in rule_titles
+	check(have_all, "довідник, розділ правил: годинник гри, покинутий бій, цінна здобич, кара за смерть, ціни без лазівок")
+	check("не перековуються" in all_text and "не стає нижчою" in all_text and "швидкий похід не дається" in all_text and "поступається бос дня" in all_text, "довідник: перековка золотих і наборних, оновлення без втрат, швидкий похід і бос тижня описані по-новому")
+
+	# ---- Герой: перевдягання в бою не лікує, хмара не дає невразливості ----
+	var hp_p = _new_player()
+	hp_p.change_class("cossack")
+	hp_p.level = 40
+	hp_p.recalc()
+	var hp_item: Dictionary = Data.gen_item(40, 3, "body")
+	hp_item["affixes"] = {"hp": 500.0}
+	hp_p.add_item(hp_item, true)
+	hp_p.equip(hp_item["uid"])
+	hp_p.hp = hp_p.max_hp * 0.2
+	var part0: float = hp_p.hp / hp_p.max_hp
+	var hp_start: float = hp_p.hp
+	for i in 6:
+		hp_p.unequip(hp_item["uid"])
+		hp_p.equip(hp_item["uid"])
+	check(hp_p.hp <= hp_start + 0.01 and absf(hp_p.hp / hp_p.max_hp - part0) < 0.01, "шість разів зняв і вдягнув річ із запасом здоров'я: здоров'я не додалося (%.0f → %.0f)" % [hp_start, hp_p.hp])
+	for q in [tp, rp, lp, cp, bp, fp, fp2, hp_p]:
+		q.free()
+
+	# ================= У грі =================
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "kleinody", "duel", "defense", "bag_full", "mana_potion", "statuses", "peril_camp"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.level = 30
+	gp.gold = 500000
+	gp.recalc()
+	gp.hp = gp.max_hp
+	check(game.tower_sel == 1 and game.depth_sel == 1 and game.map_sel == "" and game.defense_target == "", "новий герой починає без чужих слідів: поверх, глибина, вибране місце")
+
+	# ---- «Назад» у головному меню та його підменю ----
+	game._show_main_menu()
+	game._show_heroes_menu()
+	check(game._menu_back.is_valid(), "підменю «Персонажі» знає, куди вертатись")
+	game.go_back(true)
+	check(not game.quit_requested and not game._menu_back.is_valid() and game.state == game.State.MENU, "«Назад» у «Персонажах» веде в головне меню, а не закриває гру")
+	game._show_transfer_menu()
+	game.go_back(true)
+	check(not game.quit_requested, "і з перенесення роду теж крок назад")
+	# згортання гри в головному меню героя не зберігає
+	SaveSystem.delete(TEST_SAVE)
+	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(not SaveSystem.exists(TEST_SAVE), "у головному меню згортання гри нічого не зберігає: видалений герой не вертається")
+
+	# ---- Місто: ярмарок, крамниця, «Назад» із крамниць ----
+	ES.state(gw)["fair"] = {"city": "poltava", "left": 3}
+	game.enter_map()
+	await _frames(2)
+	game.enter_city("poltava")
+	await _frames(2)
+	check(is_equal_approx(Data.sell_mult, 2.0), "у місті з ярмарком речі продаються вдвічі дорожче")
+	var stock: Array = game.shop_stock("poltava")
+	var uids := []
+	for s_it in stock:
+		uids.append(int(s_it["uid"]))
+	check(City.buy_price(gw, "poltava", stock[0]) == int(Data.base_price(stock[0]) * City.BUY_MARKUP * (1.0 - gw.discount("poltava"))), "а крамниця цін не піднімає")
+	game.city_sel_uid = int(stock[0]["uid"])
+	var inv0: int = gp.inventory.size()
+	game.city_do("buy", int(stock[0]["uid"]))
+	check(gp.inventory.size() == inv0 + 1 and game.city_sel_uid == -1, "після купівлі річ не лишається вибраною: другий дотик її не продасть")
+	# товар крамниці зберігається
+	uids.remove_at(0)
+	game.save_game()
+	check(game.load_game(), "збереження читається")
+	gw = game.world
+	gp = game.player
+	var uids2 := []
+	for s_it in game.shop_stock("poltava"):
+		uids2.append(int(s_it["uid"]))
+	check(uids2 == uids and not uids.is_empty(), "товар крамниці той самий після виходу в меню й повернення")
+	game.enter_city("poltava")
+	await _frames(2)
+	# донатна крамниця поверх міста
+	game.open_shop(game._build_city)
+	await _frames(2)
+	check(game.shop_open, "донатну крамницю відкрито")
+	game.go_back(true)
+	await _frames(2)
+	check(not game.shop_open and game.state == game.State.CITY and game.hud.screen_root != null, "«Назад» закриває крамницю й лишає в місті")
+	# крамниця Хованця поверх мапи
+	load("res://scripts/game/shop_service.gd").state(gw)["coins"] = 100000
+	check(DS.buy(gw, gp, "khovanets") and DS.remote_shop(gp), "Хованця куплено")
+	gw.last_city = "poltava"
+	game.enter_map()
+	await _frames(2)
+	check(is_equal_approx(Data.sell_mult, 1.0), "поза містом ціна продажу звичайна")
+	game.open_trader(game.enter_map)
+	await _frames(2)
+	check(game.trader_open and game.city_id == "poltava" and is_equal_approx(Data.sell_mult, 2.0) and game.hud.map_view.is_covered.call(), "Хованець торгує за цінами останнього міста; мапа під крамницею щипків не слухає")
+	game.go_back(true)
+	await _frames(2)
+	check(not game.trader_open and game.state == game.State.MAP and is_equal_approx(Data.sell_mult, 1.0) and not game.hud.map_view.is_covered.call(), "«Назад» закриває крамницю Хованця: прапорець, місто й ціни вертаються")
+	# підказка на мапі ловить дотик
+	game.hud.show_hint("перевірка", true)
+	var on_map_stop: bool = game.hud.hint_panel.mouse_filter == Control.MOUSE_FILTER_STOP
+	game.hud.show_hint("перевірка", false)
+	check(on_map_stop and game.hud.hint_panel.mouse_filter == Control.MOUSE_FILTER_IGNORE, "підказка на мапі ловить дотик, у бою пропускає")
+	game.hud.hide_hint()
+	# вкладка міста запам'ятовується за назвою
+	game.enter_city("poltava")
+	await _frames(2)
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i) == "Коваль":
+			tc.current_tab = i
+	check(game.city_tab_key == "Коваль", "відкрита вкладка запам'ятовується за назвою")
+	game.enter_map()
+	game.enter_city("sich")
+	await _frames(2)
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(tc.get_tab_title(game.city_tab) == "Коваль" and tc.current_tab == game.city_tab, "в іншому місті відкривається та сама вкладка, хоч номер у неї інший")
+	game.city_tab_key = "Нема такої"
+	game._build_city()
+	await _frames(2)
+	check(game.city_tab == 0 and game.city_tab_key == "", "вкладки, якої тут нема, не шукаємо: відкривається перша")
+
+	# ---- Портал після оборони не веде в старе місто ----
+	game.defense_target = "kyiv"
+	game.enter_map()
+	await _frames(2)
+	check(game.defense_target == "", "ціль порталу скидається, щойно бій покинуто")
+
+	# ---- Бій: поразка, здобич, кеш нечисті ----
+	game.enter_location("wild_field")
+	await _frames(3)
+	var cb = game.combat
+	check(cb.active and not cb.lost and cb.runs >= 1, "новий бій починається чистим")
+	var list_a: Array = cb.enemies_now()
+	check(is_same(list_a, cb.enemies_now()), "список нечисті на кадр один на всіх")
+	var n0: int = cb.alive_enemy_count()
+	cb.spawn_enemy("zlyden", 5)
+	check(cb.alive_enemy_count() == n0 + 1, "нова нечисть у списку одразу, тим самим кадром")
+	var zl = cb._last_enemy()
+	zl.loot_gold = 77
+	zl.dmg_cap = 0.5
+	zl._dmg_window = zl.max_hp
+	zl.stun = 5.0
+	await _frames(20)
+	check(zl._dmg_window < zl.max_hp * 0.95 and zl.stun > 0.0, "стеля шкоди спадає й у приголомшеного ворога")
+	# портал не стає на героя
+	gp.global_position = Vector2(0, cb.arena.position.y + 20.0)
+	var spot: Vector2 = cb._portal_spot(260.0)
+	check(spot.distance_to(gp.global_position) >= 150.0 and cb.arena.has_point(spot), "портал біля краю арени стає осторонь, а не на героя")
+	gp.global_position = Vector2.ZERO
+	# цінне не лишається на землі за повної торби
+	while not gp.bag_full():
+		gp.add_item(Data.gen_item(5, 0, "head"), true)
+	var set2: Dictionary = Sets.make(Sets.SETS.keys()[0], "boots", 100)
+	check(cb.pick_block(set2) == "" and cb.pick_block(Data.gen_item(30, 3, "head")) == "full", "наборна річ береться й у повну торбу, звичайна легендарна ні")
+	var reward: Dictionary = Data.gen_item(30, 3, "head")
+	gp.assign_uid(reward)
+	cb.spawn_pickup(Vector2(900, -99999), "item", 0, reward, true)
+	await _frames(12)
+	var lying = null
+	for c in cb.entities.get_children():
+		if c.get_script() == cb.PickupScript and c.kind == "item" and c.item.get("uid", -1) == reward["uid"]:
+			lying = c
+	check(lying != null and cb.arena.has_point(lying.position), "здобич не вилітає за край арени")
+	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await _frames(2)
+	check(not gp.find_item(reward["uid"]).is_empty(), "гру згорнули посеред бою: разова нагорода вже в торбі, а не на землі")
+	game._resume_play()
+	# хмара зарази: без миті невразливості й без парирування
+	gp.hp = gp.max_hp
+	gp.invuln = 0.0
+	gp.blocking = true
+	gp.block_time = 0.0
+	var hp1: float = gp.hp
+	check(gp.take_area(10.0) and gp.hp < hp1 and is_equal_approx(gp.invuln, 0.0), "хмара ранить героя, що саме парирує, і невразливості не дає")
+	gp.blocking = false
+	# смерть: кара одразу, перемоги більше не рахуються
+	gp.gold = 10000
+	var kills0: int = cb.field_kills
+	gp.hp = 0.0
+	gp._check_death()
+	check(gp.gold < 10000 and cb.lost and game.state == game.State.DEAD, "кара за смерть лягає одразу, а не за півтори секунди")
+	var saved: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	check(int(saved["player"]["gold"]) == gp.gold, "і одразу записана у збереження")
+	cb.field_kills = cb.field_goal + 5
+	await _frames(10)
+	check(not cb.field_cleared, "після смерті героя місце не зараховується очищеним")
+	cb.field_kills = kills0
+	var gold_z: int = gp.gold
+	await _frames(100)
+	check(game.state == game.State.DEAD and game.hud.overlay.visible, "за мить з'являється екран поразки")
+	game.enter_city("poltava")
+	await _frames(2)
+	check(gp.gold == gold_z + 77, "злидень, якого не добили, крадене кинув: гроші повернулись (+77)")
+
+	# ---- Бос дня не рахується господарем лігва ----
+	game.enter_map()
+	game.enter_location("wild_field")
+	await _frames(3)
+	cb.loc = cb.loc.duplicate()
+	cb.loc["hunt"] = "day"
+	cb.spawn_enemy("koshchii", 30, true)
+	var boss = cb._last_enemy()
+	var boss_n: int = int(gw.stats.get("boss", 0))
+	var kill_n: int = int(gw.stats.get("kill", 0))
+	game._on_enemy_killed(boss)
+	check(int(gw.stats.get("boss", 0)) == boss_n and int(gw.stats.get("kill", 0)) == kill_n + 1 and int(gw.stats.get("boss:koshchii", 0)) == 0, "бос дня: вбивство рахується, а досягнення за боса лігва й сюжет ні")
+	cb.loc.erase("hunt")
+	game._on_enemy_killed(boss)
+	check(int(gw.stats.get("boss", 0)) == boss_n + 1, "звичайний бос лігва рахується, як і раніше")
+	game.enter_map()
+	await _frames(2)
+
+	# ---- Герць: спроба списується один раз, перемога після поразки не рахується ----
+	gp.revive()
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	var tries0: int = int(DuelS.state(gw)["tries"])
+	var wins0: int = int(DuelS.state(gw)["wins"])
+	game.start_duel()
+	await _frames(3)
+	check(cb.is_duel() and str(game.meta.get("fight", "")) == "duel" and str(SaveSystem.load_data(TEST_SAVE)["meta"].get("fight", "")) == "duel", "герць почався: позначка незавершеного бою вже у збереженні")
+	# пауза → «Персонаж» у герці не заморожує гру
+	game._show_pause()
+	var char_btn = null
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if b.text == "Персонаж":
+			char_btn = b
+	char_btn.pressed.emit()
+	check(game.state == game.State.PAUSED and game.hud.overlay.visible, "«Персонаж» із паузи посеред герцю лишає паузу з кнопками")
+	game._duel_lost()  # «Здатися»
+	check(int(DuelS.state(gw)["tries"]) == tries0 - 1 and cb.lost and not game.meta.has("fight"), "здався: мінус одна спроба")
+	gp.hp = 0.0
+	gp._check_death()
+	check(int(DuelS.state(gw)["tries"]) == tries0 - 1, "упав за мить після здачі: друга спроба не списується")
+	_clear_enemies(game)
+	await _frames(6)
+	check(not cb.duel_over and int(DuelS.state(gw)["wins"]) == wins0, "суперник зник після поразки: перемога не зараховується")
+	await _frames(110)
+	check(game.state == game.State.CITY and game.city_id == "sich", "після поразки герой отямлюється на Січі")
+	# гру закрили посеред герцю: при вході спроба списана
+	game.hud.close_dialogue()
+	gp.revive()
+	var tries1: int = int(DuelS.state(gw)["tries"])
+	game.start_duel()
+	await _frames(3)
+	check(cb.is_duel() and tries1 > 0, "другий герць почався")
+	check(game.load_game(), "гру закрили й відкрили знову")
+	gw = game.world
+	gp = game.player
+	check(int(DuelS.state(gw)["tries"]) == tries1 - 1 and "покинув" in game.fight_notice and not game.meta.has("fight"), "покинутий герць рахується поразкою: спробу списано")
+	cb.leave()
+	game.enter_city("sich")
+	game.hud.close_dialogue()
+	await _frames(2)
+	# вихід у головне меню посеред герцю теж поразка
+	var tries2: int = int(DuelS.state(gw)["tries"])
+	if tries2 > 0:
+		gp.level = 30
+		game.start_duel()
+		await _frames(3)
+		game._show_pause()
+		game._quit_to_menu()
+		await _frames(2)
+		check(int(DuelS.state(game.world)["tries"]) == tries2 - 1 and game.state == game.State.MENU and game.hud.screen_root == null and not cb.active, "«Головне меню» посеред герцю: спробу списано, бій закрито")
+		check(game.load_game(), "герой після виходу в меню читається")
+		gw = game.world
+		gp = game.player
+		check(int(DuelS.state(gw)["tries"]) == tries2 - 1 and game.fight_notice == "", "і вдруге спроба не списується")
+
+	# ---- Програна оборона з відкритим екраном героя ----
+	game.enter_map()
+	await _frames(2)
+	gp.level = 30
+	DefS.state(gw)["sieges"]["kyiv"] = 3
+	game.start_defense("kyiv")
+	await _frames(3)
+	check(cb.is_defense() and not cb.defense_over, "оборона Києва почалась")
+	cb.on_gate_destroyed()
+	game.open_character()
+	await _frames(170)
+	check(game.state == game.State.CHARACTER and cb.active, "браму зламано, а відкрито екран героя: гра чекає")
+	game.close_character()
+	await _frames(40)
+	check(game.state == game.State.MAP and not cb.active, "закрив екран героя: з програної оборони виведено на мапу")
+
+	game.queue_free()
+	await _frames(2)
+	get_root().get_tree().paused = false
+	Data.sell_mult = 1.0
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Копія світу, де місце вже пройдено кілька разів (для перевірок швидкого походу).
+func _cleared_world(w, loc_id: String):
+	w.cleared[loc_id] = 9
+	return w

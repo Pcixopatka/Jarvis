@@ -14,15 +14,15 @@ static func _pts(n: int) -> String:
 static func build(game) -> Control:
 	var p = game.player
 	var pages := [
-		["Герой" + _pts(p.stat_points), _hero(game)],
-		["Журнал" + _pts(load("res://scripts/game/journal_service.gd").ready_count(game.world, p) + (1 if game.WayService.ready(game.world, p) else 0)), _journal(game)],
-		["Вміння" + _pts(p.skill_points), _skills(game)],
-		["Загартування" + _pts(p.perk_points + p.valor_points()), _perks(game)],
-		["Літопис", _chronicle(game)],
-		["Слава", _glory(game)],
-		["Свята" + _pts(_holiday_ready(game)), _holidays(game)],
-		["Події" + _pts(game.EventsBoard.ready_count(game.world, p)), _events(game)],
-		["Виклики" + _pts(game.ChallengeService.ready_count(game.world, p)), _challenges(game)],
+		["Герой" + _pts(p.stat_points), func(): return _hero(game)],
+		["Журнал" + _pts(load("res://scripts/game/journal_service.gd").ready_count(game.world, p) + (1 if game.WayService.ready(game.world, p) else 0)), func(): return _journal(game)],
+		["Вміння" + _pts(p.skill_points), func(): return _skills(game)],
+		["Загартування" + _pts(p.perk_points + p.valor_points()), func(): return _perks(game)],
+		["Літопис", func(): return _chronicle(game)],
+		["Слава", func(): return _glory(game)],
+		["Свята" + _pts(_holiday_ready(game)), func(): return _holidays(game)],
+		["Події" + _pts(game.EventsBoard.ready_count(game.world, p)), func(): return _events(game)],
+		["Виклики" + _pts(game.ChallengeService.ready_count(game.world, p)), func(): return _challenges(game)],
 	]
 	var title: String = game.PerilService.title(game.world)
 	return UI.screen("%s%s — рівень %d   •   Гривні: %s" % [("Гетьман" if p.rank == "hetman" else p.class_name_ua()), (" «%s»" % title) if title != "" else "", p.level, UI.num(p.gold)], "Назад", game.close_character,

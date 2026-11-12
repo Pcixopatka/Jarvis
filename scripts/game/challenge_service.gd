@@ -11,6 +11,7 @@ const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 
 ## Версія складу викликів: змінилась — сьогоднішні й тижневі перескладаються (розпочаті лишаються).
+const Clock := preload("res://scripts/core/clock.gd")
 const VERSION := 2
 
 ## Для тестів можна підмінити «сьогодні» (unix-час); 0 — справжній годинник.
@@ -18,7 +19,7 @@ static var now_override := 0
 
 
 static func _now() -> int:
-	return now_override if now_override > 0 else int(Time.get_unix_time_from_system())
+	return now_override if now_override > 0 else int(Clock.now())
 
 
 static func day_key(t: int) -> String:

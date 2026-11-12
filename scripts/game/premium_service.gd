@@ -8,6 +8,7 @@ extends RefCounted
 ##  - щоденна платня червінцями, більша торба, швидша дорога мапою, автобій у будь-якому пройденому місці.
 
 const Shop := preload("res://scripts/data/shop.gd")
+const Clock := preload("res://scripts/core/clock.gd")
 
 const DAY := 86400.0
 const DAYS := 30  # на скільки днів один універсал
@@ -23,7 +24,7 @@ static var now_override := -1.0  # для тестів: «зараз» у сек
 
 
 static func now() -> float:
-	return now_override if now_override >= 0.0 else Time.get_unix_time_from_system()
+	return now_override if now_override >= 0.0 else Clock.now()
 
 
 static func today() -> String:

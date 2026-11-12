@@ -17,8 +17,10 @@ const PER_DAY := 10  # швидких походів на день
 static var _xp_cache := {}
 
 
+## День обмежень той самий, що й у викликів: за годинником гри, який назад не йде (Clock).
 static func _today() -> String:
-	return Time.get_date_string_from_system()
+	var CS = load("res://scripts/game/challenge_service.gd")
+	return CS.day_key(CS._now())
 
 
 static func used_today(world) -> int:
@@ -53,7 +55,21 @@ static func block_reason(world, player, loc_id: String) -> String:
 		return "місце ще надто сильне для тебе"
 	if left_today(world) <= 0:
 		return "на сьогодні скінчились, завтра буде ще %d" % per_day(world)
+	if step_target(world, loc_id):
+		return "тут на тебе чекає справа: пройди це місце сам"
 	return ""
+
+
+## Чи це місце зараз мета кроку історії, переказу, особистої справи побратима чи посвяти.
+## Швидкий похід такі кроки не зараховує, тож сюди його не даємо: інакше нагорода є, а крок стоїть.
+static func step_target(world, loc_id: String) -> bool:
+	if str(load("res://scripts/game/story_service.gd").target(world)) == loc_id:
+		return true
+	if str(load("res://scripts/game/spec_service.gd").target(world)) == loc_id:
+		return true
+	if loc_id in load("res://scripts/game/legend_service.gd").targets(world):
+		return true
+	return loc_id in load("res://scripts/game/hero_service.gd").targets(world)
 
 
 ## Досвід із ворога цього виду й рівня (як у бою).

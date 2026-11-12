@@ -19,6 +19,7 @@ var spear := false  # кинутий спис пластуна
 var pierce := 999  # скільки ворогів пробиває куля козака
 var status := ""  # стан, який накладає влучання (вміння за даними)
 var status_dur := 0.0
+var ally := false  # куля побратима: б'є своєю силою, без властивостей героя (крадіжка життя, душі, артефакти)
 var _hit_ids := []
 
 
@@ -26,7 +27,7 @@ func _process(delta: float) -> void:
 	position += velocity * delta
 	life -= delta
 	if friendly:
-		for e in get_tree().get_nodes_in_group("enemies"):
+		for e in combat.enemies_now():
 			if e.dead or e.get_instance_id() in _hit_ids:
 				continue
 			if global_position.distance_to(e.global_position) < radius + e.radius:
@@ -34,7 +35,10 @@ func _process(delta: float) -> void:
 				if explode_radius > 0.0:
 					_explode()
 					return
-				combat.player.hit(e, damage, velocity.normalized() * 160.0, crit)
+				if ally:
+					e.take_damage(damage, velocity.normalized() * 160.0, crit)
+				else:
+					combat.player.hit(e, damage, velocity.normalized() * 160.0, crit)
 				if stun_all and not e.dead and not e.is_boss:
 					e.stun = maxf(e.stun, 1.0)
 				if status != "" and not e.dead:
@@ -64,7 +68,7 @@ func _process(delta: float) -> void:
 
 ## Вогняна куля: шкода всім у колі, підпал.
 func _explode() -> void:
-	for e in get_tree().get_nodes_in_group("enemies"):
+	for e in combat.enemies_now():
 		if e.dead:
 			continue
 		var to: Vector2 = e.global_position - global_position

@@ -27,7 +27,8 @@ static func shop_stock(world, player: Player, city: String) -> Array:
 
 
 static func buy_price(world, city: String, item: Dictionary) -> int:
-	return int(Data.sell_price(item) * BUY_MARKUP * (1.0 - world.discount(city)))
+	# від ціни без надбавки ярмарку: ярмарок піднімає те, за скільки купують у героя, а не ціни крамниці
+	return int(Data.base_price(item) * BUY_MARKUP * (1.0 - world.discount(city)))
 
 
 static func hire_price(world, player: Player, city: String, type: String) -> int:

@@ -93,8 +93,17 @@ static func price(world, city: String, good: String, level: int) -> int:
 
 ## За скільки місто купить у тебе одиницю краму (на ярмарку — на чверть дорожче).
 static func sell_price(world, city: String, good: String, level: int) -> int:
+	return maxi(1, int(price(world, city, good, level) * Acts.TRADE_SPREAD * sell_bonus(world, city, good)))
+
+
+## Надбавка до ціни продажу: ярмарок (на чверть) і свіжа чутка з шинку. Крам, який це саме місто
+## продало тобі цього торгового дня, воно бере назад без надбавок: інакше на ярмарку можна було
+## купити й тут-таки продати з прибутком, скільки завгодно разів.
+static func sell_bonus(world, city: String, good: String) -> float:
+	if int(state(world)["moves"].get(city, {}).get("bought:" + good, 0)) > 0:
+		return 1.0
 	var fair: float = 1.25 if str(world.events.get("fair", {}).get("city", "")) == city else 1.0
-	return maxi(1, int(price(world, city, good, level) * Acts.TRADE_SPREAD * fair * tip_bonus(world, city, good)))
+	return fair * tip_bonus(world, city, good)
 
 
 ## Чутка з шинку: поки вона свіжа, названий крам у названому місті беруть дорожче.

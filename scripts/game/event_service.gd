@@ -249,7 +249,7 @@ static func win(world, player, ev: Dictionary, gate_part: float = 1.0) -> String
 			player.gold += gold
 			world.add_loyalty(ev["to"], 40)
 			var it := Data.gen_item(maxi(1, player.level), 2 if part >= 0.99 else 1)
-			player.add_item(it)
+			player.add_item(it, true)  # нагорода: за повної торби лягає понад місце, а не зникає
 			if part >= 0.99:
 				return "Валку довезено цілою! +%d грн, рідкісна річ із краму, +40 лояльності в місті %s." % [gold, place(ev["to"])]
 			return "Валку довезено, хоч і побиту: +%d грн, річ із краму, +40 лояльності в місті %s." % [gold, place(ev["to"])]
@@ -267,7 +267,7 @@ static func win(world, player, ev: Dictionary, gate_part: float = 1.0) -> String
 			return "Бранців звільнено! Вдячні люди: +%d грн, а один із них стане до тебе на службу задарма (наступний найм безкоштовний)." % g
 		"wounded":
 			s["free_hire"] = int(s["free_hire"]) + 1
-			player.add_item(Data.gen_item(maxi(1, player.level), 1))
+			player.add_item(Data.gen_item(maxi(1, player.level), 1), true)  # дарунок не зникає за повної торби
 			return "Козак вижив! Він дарує тобі річ зі своєї торби, а його побратим стане до тебе задарма (наступний найм безкоштовний)."
 	return "Перемога!"
 
@@ -410,6 +410,13 @@ static func check_theft(world, now: float, kurin_level: int, roll: float = -1.0)
 	if hours < THEFT_HOURS:
 		return ""
 	var chance := THEFT_CHANCE_KURIN if kurin_level >= 2 else THEFT_CHANCE
+	if roll < 0.0:
+		# злодії приходять щонайбільше раз на добу: раніше кидок ішов при кожному вході в гру,
+		# і хто часто заходив, того частіше обкрадали
+		var day := int(now / 86400.0)
+		if int(world.camp.get("theft_day", -1)) == day:
+			return ""
+		world.camp["theft_day"] = day
 	var r := roll if roll >= 0.0 else randf()
 	if r >= chance:
 		return ""

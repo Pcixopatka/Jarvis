@@ -55,11 +55,13 @@ static func prepare(world, player, id: String) -> Dictionary:
 	var ch: Array = ev["choices"]
 	match id:
 		"chumaky":
-			var price := int(Data.potion_price(lvl) * 1.5)
+			# зілля стільки, скільки влазить у запас (до двох), і плата за стільки ж
+			var fit: int = clampi(player.potion_max() - player.potions, 0, 2)
+			var price := int(Data.potion_price(lvl) * 1.5 * maxi(fit, 1) / 2.0)
 			ev["lines"] = [["chumak", "Гей, козаче! Везем сіль із Криму, а в возі — дещо й для вашого брата. Купуй, поки дешево!"]]
 			if player.gold >= price and player.potions < player.potion_max():
-				ch.append({"text": "Два зілля за %d грн" % price, "reply": "Бери, бери. На здоров'я, щоб не знадобились!",
-					"outcome": {"gold": -price, "potions": 2}})
+				ch.append({"text": ("Два зілля за %d грн" if fit >= 2 else "Одне зілля за %d грн (більше не влазить)") % price, "reply": "Бери, бери. На здоров'я, щоб не знадобились!",
+					"outcome": {"gold": -price, "potions": fit}})
 			var wood := int(player.resources.get("wood", 0))
 			if wood >= 3:
 				var g := wood * (3 + lvl)

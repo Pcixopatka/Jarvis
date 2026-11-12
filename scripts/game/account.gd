@@ -11,6 +11,7 @@ extends RefCounted
 ## world.camp / world.stats / world.challenges, не змінюються.
 
 const Data := preload("res://scripts/data/data.gd")
+const Clock := preload("res://scripts/core/clock.gd")
 
 const CHEST_SIZE := 40
 const CHEST_PER_SKLAD := 20  # кожен рівень Складу на хуторі — ще стільки місць у скрині
@@ -27,7 +28,9 @@ var next_uid := 1000000  # uid речей у скрині — з окремог�
 
 
 func to_dict() -> Dictionary:
-	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "records": records, "holidays": holidays, "shop": shop, "next_uid": next_uid}
+	# "clock": найпізніший час, який бачила гра, щоб переведений назад годинник нічого не скидав (Clock)
+	return {"camp": camp, "chest": chest, "stats": stats, "challenges": challenges, "records": records, "holidays": holidays, "shop": shop, "next_uid": next_uid,
+		"clock": Clock.now()}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -41,6 +44,7 @@ func from_dict(d: Dictionary) -> void:
 	holidays = d.get("holidays", {})
 	shop = d.get("shop", {})
 	next_uid = int(d.get("next_uid", 1000000))
+	Clock.adopt(float(d.get("clock", 0.0)))
 
 
 ## Підключити стан світу персонажа до спільних словників (посилання, не копії).

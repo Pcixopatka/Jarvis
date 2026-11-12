@@ -22,32 +22,41 @@ static func build(game, city: String) -> Control:
 	# Перша вкладка: ратуша. Тут чекають ті, хто має до героя справу; число в назві каже, скільки їх.
 	var waiting: Array = game.hall_rows(city)
 	var pages := [
-		[Data.hall_name(city) + ((" (%d)" % waiting.size()) if not waiting.is_empty() else ""), _hall(game, city, waiting)],
-		["Завдання", _quests(game, city)],
-		["Крамниця", _shop(game, city)],
-		["Коваль", _smith(game)],
-		["Корчма", _tavern(game, city)],
-		["Шинок", _shynok(game, city)],
+		[Data.hall_name(city) + ((" (%d)" % waiting.size()) if not waiting.is_empty() else ""), func(): return _hall(game, city, waiting)],
+		["Завдання", func(): return _quests(game, city)],
+		["Крамниця", func(): return _shop(game, city)],
+		["Коваль", func(): return _smith(game)],
+		["Корчма", func(): return _tavern(game, city)],
+		["Шинок", func(): return _shynok(game, city)],
 	]
 	if game.BountyService.unlocked(game.player):
-		pages.insert(2, ["Розшук", _bounty_tab(game, city)])
+		pages.insert(2, ["Розшук", func(): return _bounty_tab(game, city)])
 	if game.TradeService.has_market(city) and not game.player.is_peasant():
-		pages.append(["Торг", _trade(game, city)])
+		pages.append(["Торг", func(): return _trade(game, city)])
 	if city == "sich":
-		pages.append(["Майдан", _maidan(game)])
+		pages.append(["Майдан", func(): return _maidan(game)])
 	if city == game.Acts.MUSTER_CITY and not game.player.is_peasant():
-		pages.append(["Огляд", _muster(game)])
+		pages.append(["Огляд", func(): return _muster(game)])
 	if city == "sich" and game.PathService.choosing(game.world):
-		pages.insert(0, ["★ Дорога", _path_tab(game)])
+		pages.insert(0, ["★ Дорога", func(): return _path_tab(game)])
 	if not _city_specs(game, city).is_empty():
-		pages.append(["Наставники" if _city_specs(game, city).size() > 1 else "Наставник", _mentors(game, city)])
+		pages.append(["Наставники" if _city_specs(game, city).size() > 1 else "Наставник", func(): return _mentors(game, city)])
 	if game.city_tab_want != "":
-		for i in pages.size():
-			if str(pages[i][0]).begins_with(game.city_tab_want):
-				game.city_tab = i
+		game.city_tab_key = game.city_tab_want
 		game.city_tab_want = ""
+	# Вкладку шукаємо за назвою: набір вкладок у містах різний і міняється з поступом, тож той самий
+	# номер у Києві — крамниця, а на Січі вже коваль. Нема такої вкладки тут — відкривається перша.
+	if game.city_tab_key != "":
+		var key: String = game.city_tab_key
+		var found := -1
+		for i in pages.size():
+			if str(pages[i][0]).begins_with(key):
+				found = i
+		game.city_tab = maxi(found, 0)
+		game.city_tab_key = key if found >= 0 else ""
 	return UI.screen(title, "На мапу", game.leave_city, pages, game.city_tab, func(i: int):
 		game.city_tab = i
+		game.city_tab_key = str(pages[i][0]).get_slice(" (", 0)
 		game.city_tab_changed(str(pages[i][0])),
 		[["Персонаж" + ((" +%d" % game.player.unspent_points()) if game.player.unspent_points() > 0 else ""), game.open_character]])
 

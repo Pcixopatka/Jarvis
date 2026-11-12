@@ -64,7 +64,9 @@ static func state(world) -> Dictionary:
 static func boss_id(kind: String, period_key: String = "") -> String:
 	var k: String = period_key if period_key != "" else key(kind)
 	var i: int = absi(hash(kind + ":" + k)) % POOL.size()
-	if kind == "week" and period_key == "" and POOL[i] == boss_id("day"):
+	# Поступається бос дня: бос тижня той самий увесь тиждень. Раніше зсувався бос тижня,
+	# і серед тижня він раптом мінявся на іншого.
+	if kind == "day" and period_key == "" and POOL[i] == boss_id("week"):
 		i = (i + 1) % POOL.size()
 	return POOL[i]
 
@@ -157,9 +159,12 @@ static func reward_lines(player, kind: String) -> Array:
 
 ## Перемога: позначити період, видати гривні, трофеї й досвід. Повертає {"msgs": рядки для банера,
 ## "items": речі, що мають упасти біля героя, "record": чи побито власний час}.
-static func on_win(world, player, kind: String, seconds: float) -> Dictionary:
+## boss — кого саме здолано. Бій міг початися до півночі, а скінчитися після: рекорд часу пишеться
+## тому босові, з яким бились, а не тому, що вийшов уже в новій добі.
+static func on_win(world, player, kind: String, seconds: float, boss: String = "") -> Dictionary:
 	var s := state(world)
-	var boss := boss_id(kind)
+	if boss == "":
+		boss = boss_id(kind)
 	s[kind + "_done"] = true
 	s[kind + "_wins"] = int(s[kind + "_wins"]) + 1
 	var t: int = maxi(1, int(seconds))

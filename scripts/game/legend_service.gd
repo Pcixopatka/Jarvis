@@ -237,5 +237,7 @@ static func mods_for(world, player, loc_id: String) -> Dictionary:
 			continue
 		var st := current(world, line)
 		if not st.is_empty() and str(st["objective"].get("loc", "")) == loc_id:
-			return {"level": int(player.level), "hero_level": int(player.level), "base_level": base, "legend": line}
+			# мета зачистки рахується від рідного рівня місця: інакше на 99-му рівні просили б 535 вбивств
+			var goal: int = mini(load("res://scripts/game/far_service.gd").GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
+			return {"level": int(player.level), "hero_level": int(player.level), "base_level": base, "legend": line, "goal": goal}
 	return {}

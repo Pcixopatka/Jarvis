@@ -13,8 +13,8 @@ const CARD_LINE := Color(0.45, 0.36, 0.22)
 static func build(game) -> Control:
 	var pages := []
 	for s in WikiService.sections():
-		pages.append([s["title"], _page(s["entries"])])
-	pages.append(["Пошук", _search_page(game)])
+		pages.append([s["title"], _page.bind(s["entries"])])  # вкладки будуються ліниво, лише відкрита
+	pages.append(["Пошук", func(): return _search_page(game)])
 	var screen := UI.screen("Довідник • %d статей" % _count(), "Назад", game.close_wiki, pages, game.wiki_tab, func(i: int): game.wiki_tab = i)
 	# Довідник відкривається й посеред бою (з паузи), тож під ним — суцільне тло, а не арена
 	var bg := PanelContainer.new()
