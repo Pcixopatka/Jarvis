@@ -1,0 +1,121 @@
+{
+	"level": {
+		"num": 9831,
+		"name": "Найвищий рівень",
+		"fmt": "%d рівень",
+		"step": 0,
+		"glory": 0
+	},
+	"glory": {
+		"num": 9832,
+		"name": "Слава",
+		"fmt": "%d слави",
+		"step": 0,
+		"glory": 0
+	},
+	"tower": {
+		"num": 9833,
+		"name": "Башта Кощія",
+		"fmt": "%d поверх",
+		"step": 5,
+		"glory": 5
+	},
+	"depth": {
+		"num": 9834,
+		"name": "Глибини зарази",
+		"fmt": "глибина %d",
+		"step": 5,
+		"glory": 5
+	},
+	"vigil": {
+		"num": 9835,
+		"name": "Козацька варта",
+		"fmt": "time",
+		"step": 0,
+		"glory": 0
+	},
+	"vigil_kills": {
+		"num": 9836,
+		"name": "Вбито за одну варту",
+		"fmt": "%d ворогів",
+		"step": 0,
+		"glory": 0
+	},
+	"duel_titles": {
+		"num": 9837,
+		"name": "Чемпіон майдану",
+		"fmt": "титулів: %d",
+		"step": 1,
+		"glory": 3
+	},
+	"duel_streak": {
+		"num": 9838,
+		"name": "Серія у вільному герці",
+		"fmt": "%d поспіль",
+		"step": 5,
+		"glory": 4
+	},
+	"muster_titles": {
+		"num": 9839,
+		"name": "Гетьманський огляд",
+		"fmt": "перемог: %d",
+		"step": 1,
+		"glory": 3
+	},
+	"ring_titles": {
+		"num": 9840,
+		"name": "Коло Кожум'яки",
+		"fmt": "пройдено: %d",
+		"step": 5,
+		"glory": 5
+	},
+	"peril_bosses": {
+		"num": 9841,
+		"name": "Надважкі боси",
+		"fmt": "здолано: %d",
+		"step": 1,
+		"glory": 10
+	},
+	"valor": {
+		"num": 9842,
+		"name": "Звитяги",
+		"fmt": "звитяга %d",
+		"step": 10,
+		"glory": 5
+	},
+	"boss_day": {
+		"num": 9843,
+		"name": "Боси дня",
+		"fmt": "переможено: %d",
+		"step": 10,
+		"glory": 4
+	},
+	"boss_week": {
+		"num": 9844,
+		"name": "Боси тижня",
+		"fmt": "переможено: %d",
+		"step": 4,
+		"glory": 6
+	},
+	"bounties": {
+		"num": 9845,
+		"name": "Голови з дошки розшуку",
+		"fmt": "%d голів",
+		"step": 10,
+		"glory": 5
+	},
+	"trade_profit": {
+		"num": 9846,
+		"name": "Зиск із торгівлі",
+		"fmt": "%d грн",
+		"step": 0,
+		"glory": 0
+	},
+	"dice_streak": {
+		"num": 9847,
+		"name": "Серія перемог у кості",
+		"fmt": "%d поспіль",
+		"step": 0,
+		"glory": 0
+	}
+}

@@ -68,7 +68,7 @@ var trip_buffs := {}  # підсилення на час бою: {"strength": с
 var bag_bonus := 0  # від складу на хуторі (не зберігається — рахується з будівель)
 var potion_bonus := 0  # від зілляварні
 var xp_boost := 1.0  # ×2 за рекламу (виставляє Game, поки діє)
-var festive := {}  # надбавки сезонного свята (ключі — Acts.HOLIDAY_PLAYER_KEYS; виставляє Game, у збереження не йде)
+var festive := {}  # надбавки сезонного свята (ключі — HolidayService.PLAYER_KEYS; виставляє Game, у збереження не йде)
 var klein := {}  # надбавки клейнодів роду: {"xp", "dmg", "hp", "crit", "cd"} (виставляє KleinodService, у збереження не йде)
 var plague_immune := false
 var plague_resist := 0.0  # частка шкоди від зарази, яку козак не отримує (наслідок вибору; не зберігається)
@@ -1675,7 +1675,7 @@ func add_status(id: String, dur: float, dps: float = 0.0) -> void:
 	var shorter: float = minf(0.6, float(festive.get("status", 0.0)) + float(art.get("status", 0.0)) + float(art.get("st_" + id, 0.0)) + float(soul_fx.get("status_res", 0.0)))
 	Status.apply(self, id, dur * (1.0 - shorter), dps)
 	if fresh and _in_combat():
-		combat.float_text(global_position + Vector2(0, -95), Status.INFO[id]["name"] + "!", Status.INFO[id]["color"])
+		combat.float_text(global_position + Vector2(0, -95), Status.name_of(id) + "!", Status.color_of(id))
 
 
 ## Чи стани зараз не чіпляються до героя (Очищення).

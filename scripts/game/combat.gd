@@ -81,7 +81,7 @@ var companion_nodes: Array = []
 
 var active := false
 var plague := 0  # рівень зарази поточної місцевості
-var festive := {}  # святкові надбавки до здобичі (ключі — Acts.HOLIDAY_COMBAT_KEYS; виставляє Game)
+var festive := {}  # святкові надбавки до здобичі (ключі — HolidayService.COMBAT_KEYS; виставляє Game)
 var boss_revives := 0
 var defense_loc := {}
 var custom_loc := {}
@@ -320,7 +320,7 @@ func _update_trail() -> void:
 func _trail_found() -> void:
 	var pos: Vector2 = trail.points[-1]
 	var lvl := int(loc.get("level", 1))
-	var info: Dictionary = Acts.TRAIL_KINDS[trail.kind]
+	var info: Dictionary = Acts.trail_kind(trail.kind)
 	match str(trail.kind):
 		"cache":
 			Events.banner.emit(info["text"], Color(1.0, 0.85, 0.35))
@@ -514,7 +514,7 @@ func enter_duel(dl: Dictionary, companions: Array = []) -> void:
 		return
 	spawn_enemy("rival", int(dl["level"]), false, Vector2(0, arena.position.y + 190))
 	var e = _last_enemy()
-	e.make_rival(Acts.RIVALS[dl["rival"]], float(dl["rival_hp"]), float(dl["rival_dmg"]), float(dl.get("rival_cap", 0.0)))
+	e.make_rival(Acts.rival(dl["rival"]), float(dl["rival_hp"]), float(dl["rival_dmg"]), float(dl.get("rival_cap", 0.0)))
 	_duel_hp = e.hp
 	_spawn_spectators()
 	if dl.get("free", false):
@@ -779,7 +779,7 @@ func enter_defense(dl: Dictionary, companions: Array) -> void:
 	gate.position = Vector2(0, arena.end.y - 170)
 	if gate.variant == "escort":
 		# Супровід: замість брами — мандрівник; він менший за мур, його можна лікувати
-		var w: Dictionary = Acts.ESCORT_WHO[dl["who"]]
+		var w: Dictionary = Acts.escort(dl["who"])
 		gate.sheet = w["sheet"]
 		gate.who_name = w["name"]
 		gate.radius = 22.0
@@ -1428,7 +1428,7 @@ func _res_amount(n: int) -> int:
 func _roll_resource() -> String:
 	if randf() < 0.7:
 		return Camp.biome_resource(str(loc.get("biome", "steppe")))
-	return Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
+	return Camp.resources()[randi() % Camp.resources().size()]
 
 
 ## Рівень здобичі цього місця. У Башті й Глибинах він не росте вище 99-го, хоч нечисть росте далі.
@@ -1932,7 +1932,7 @@ func take_loot(kind: String, value: int, item: Dictionary, pos: Vector2) -> bool
 			return pick_item(item)
 		"res":
 			add_resource(item["res"], value)
-			float_text(pos + Vector2(0, -30), "+%d %s" % [value, Camp.res_name(item["res"])], Camp.RESOURCE_COLORS[item["res"]].lightened(0.3))
+			float_text(pos + Vector2(0, -30), "+%d %s" % [value, Camp.res_name(item["res"])], Camp.res_color(item["res"]).lightened(0.3))
 		"potion":
 			if not player.add_potion():
 				return false

@@ -1,6 +1,6 @@
 extends Control
 ## Мініігра «Рибалка»: закинь вудку, дочекайся клювання, підсічи й тягни — тримай натяг у зеленій смузі.
-## Фази: idle → wait → bite → reel → (idle). Правила й числа — в OutdoorService та Acts.FISH.
+## Фази: idle → wait → bite → reel → (idle). Правила й числа — в OutdoorService і data/fish.json.
 
 const Acts := preload("res://scripts/data/activities.gd")
 const OutdoorService := preload("res://scripts/game/outdoor_service.gd")
@@ -96,7 +96,7 @@ func press() -> void:
 			tension = 0.5
 			progress = 0.0
 			wave_t = 0.0
-			_say("%s на гачку! Тягни" % Acts.FISH[fish]["name"], UI.GOLD)
+			_say("%s на гачку! Тягни" % Acts.fish(fish)["name"], UI.GOLD)
 			Audio.play("splash", 0.1, 0.0)
 	_update_info()
 
@@ -127,7 +127,7 @@ func _catch() -> void:
 	show_fish = fish
 	show_t = 1.6
 	phase = "idle"
-	_say("%s! +%d риби" % [Acts.FISH[fish]["name"], int(Acts.FISH[fish]["ryba"])], UI.GOOD)
+	_say("%s! +%d риби" % [Acts.fish(fish)["name"], int(Acts.fish(fish)["ryba"])], UI.GOOD)
 	Audio.play("splash", 0.1, 0.0)
 	Audio.play("quest", 0.05, -4.0)
 	_update_info()
@@ -153,7 +153,7 @@ func step(delta: float) -> void:
 			timer -= delta
 			if timer <= 0.0:
 				phase = "bite"
-				timer = float(Acts.FISH[fish]["window"])
+				timer = float(Acts.fish(fish)["window"])
 				_say("Клює!", UI.GOLD)
 				Audio.play("splash", 0.3, -5.0)
 				_update_info()
@@ -163,7 +163,7 @@ func step(delta: float) -> void:
 				_fail("Зірвалась...")
 		"reel":
 			wave_t += delta
-			var pull: float = Acts.FISH[fish]["pull"]
+			var pull: float = Acts.fish(fish)["pull"]
 			var wave := sin(wave_t * 2.3) * 0.6 + sin(wave_t * 5.1 + 1.0) * 0.4
 			tension = OutdoorService.step_tension(tension, holding, pull, wave, delta)
 			if OutdoorService.in_zone(tension):
@@ -172,7 +172,7 @@ func step(delta: float) -> void:
 				_fail("Волосінь порвалась!")
 			elif tension <= 0.0:
 				_fail("Риба зійшла з гачка")
-			elif progress >= float(Acts.FISH[fish]["reel"]):
+			elif progress >= float(Acts.fish(fish)["reel"]):
 				_catch()
 		"end":
 			timer -= delta
@@ -227,7 +227,7 @@ func _draw() -> void:
 	if phase in ["wait", "bite", "reel"]:
 		var fp := float_pos
 		if phase == "reel":
-			fp = float_pos.lerp(Vector2(size.x * 0.45, shore - 40.0), clampf(progress / float(Acts.FISH[fish]["reel"]), 0.0, 1.0)) + Vector2(sin(wave_t * 6.0) * 14.0, 0)
+			fp = float_pos.lerp(Vector2(size.x * 0.45, shore - 40.0), clampf(progress / float(Acts.fish(fish)["reel"]), 0.0, 1.0)) + Vector2(sin(wave_t * 6.0) * 14.0, 0)
 		elif phase == "wait":
 			fp.y += sin(t * 2.0) * 3.0
 		draw_line(rod_tip, fp, Color(0.9, 0.9, 0.9, 0.8), 1.5)
@@ -249,7 +249,7 @@ func _draw() -> void:
 		draw_rect(Rect2(mx - 5.0, bar.position.y - 8.0, 10.0, bar.size.y + 16.0), Color(1.0, 0.9, 0.4))
 		var pb := Rect2(bar.position.x, bar.position.y - 30.0, bar.size.x, 14.0)
 		draw_rect(pb, Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(pb.position, Vector2(pb.size.x * clampf(progress / float(Acts.FISH[fish]["reel"]), 0.0, 1.0), pb.size.y)), Color(0.4, 0.75, 1.0))
+		draw_rect(Rect2(pb.position, Vector2(pb.size.x * clampf(progress / float(Acts.fish(fish)["reel"]), 0.0, 1.0), pb.size.y)), Color(0.4, 0.75, 1.0))
 		var font2 := ThemeDB.fallback_font
 		draw_string(font2, bar.position + Vector2(0, bar.size.y + 26.0), "слабко", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.8))
 		draw_string(font2, bar.position + Vector2(bar.size.x - 70.0, bar.size.y + 26.0), "порветься", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.8))

@@ -8,12 +8,29 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 
-const TIER_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна"]
-const TIER_KUZNIA := [1, 1, 2, 3]  # потрібний рівень кузні для якості
-const TIER_MULT := [0.6, 1.0, 2.5, 6.0]
-const TIER_TROPHY := [0, 0, 2, 6]
+const GameDB := preload("res://scripts/core/game_db.gd")
+## Якість кування — рідкість речі (data/rarities.json): «forge» рідкості каже, з якого рівня кузні її кують,
+## множник ціни й трофеї; «renew» — множник ціни оновлення. Якості йдуть підряд від звичайної.
 ## Що кувати: [слот, тип зброї]
 const RECIPES := [["weapon", "sabre"], ["weapon", "mace"], ["weapon", "pike"], ["head", ""], ["body", ""], ["belt", ""], ["boots", ""], ["amulet", ""]]
+
+
+## Скільки якостей кують (рідкості з «forge» підряд від звичайної).
+static func tier_count() -> int:
+	var n := 0
+	while n < Data.rarity_count() and GameDB.ladder("rarities", "rank")[n].has("forge"):
+		n += 1
+	return n
+
+
+## Кування якості tier: {"kuznia", "mult", "trophy"}.
+static func forge_tier(t: int) -> Dictionary:
+	return GameDB.ladder("rarities", "rank")[t]["forge"]
+
+
+## Назва якості: назва рідкості («Рідкісна»).
+static func tier_name(t: int) -> String:
+	return Data.rarity_name(t)
 
 
 static func recipe_name(slot: String, type: String) -> String:
@@ -22,8 +39,9 @@ static func recipe_name(slot: String, type: String) -> String:
 
 ## Ціна кування: {"gold", "iron", "wood", "herbs", "trophy"}.
 static func forge_cost(slot: String, tier: int, lvl: int) -> Dictionary:
-	var m: float = TIER_MULT[tier]
-	var cost := {"gold": int((30 + 15 * lvl) * m), "iron": int((4 + lvl / 2) * m), "wood": 0, "herbs": 0, "trophy": TIER_TROPHY[tier]}
+	var T := forge_tier(tier)
+	var m: float = T["mult"]
+	var cost := {"gold": int((30 + 15 * lvl) * m), "iron": int((4 + lvl / 2) * m), "wood": 0, "herbs": 0, "trophy": T["trophy"]}
 	if slot == "amulet":
 		cost["herbs"] = int((3 + lvl / 3) * m)
 	else:
@@ -47,7 +65,7 @@ static func _pay(player, cost: Dictionary) -> void:
 
 
 static func tier_open(world, tier: int) -> bool:
-	return CampService.level(world, "kuznia") >= TIER_KUZNIA[tier]
+	return CampService.level(world, "kuznia") >= int(forge_tier(tier)["kuznia"])
 
 
 ## Викувати річ. Повертає її або {} (не вистачає / кузня мала / торба повна).
@@ -101,16 +119,29 @@ static func reforge(world, player, uid: int, affix: String) -> String:
 
 ## Кожен рівень речі коштує окремо й щораз дорожче: гривні ростуть як квадрат рівня, від першого ж рівня.
 ## Так підняти річ із 98-го на 99-й рівень відчутно б'є по кишені, а з 4-го на 5-й ще ні.
-## RENEW_RARITY — множник за якість: звичайна, добротна, рідкісна, легендарна, золота.
+## Множник за якість — «renew» рідкості: звичайна, добротна, рідкісна, легендарна, золота (вище — як найвища з ним).
 const RENEW_BASE := 20
 const RENEW_GOLD := 4.0
-const RENEW_RARITY := [0.4, 0.6, 0.8, 1.0, 1.5]
+
+
+## Множник ціни оновлення для рідкості r (renew_mult); вища за останню з «renew» — як остання.
+static func renew_mult(r: int) -> float:
+	return float(GameDB.ladder("rarities", "rank")[clampi(r, 0, _renew_top())]["renew"])
+
+
+## Найвища рідкість, що має «renew» (вони йдуть підряд від звичайної).
+static func _renew_top() -> int:
+	var lad := GameDB.ladder("rarities", "rank")
+	var top := 0
+	while top + 1 < lad.size() and lad[top + 1].has("renew"):
+		top += 1
+	return top
 
 
 ## Ціна підняти річ на один рівень, до рівня level з попереднього.
 static func renew_step(item: Dictionary, level: int) -> Dictionary:
-	var r: int = clampi(int(item["rarity"]), 0, RENEW_RARITY.size() - 1)
-	return {"gold": roundi((RENEW_BASE + RENEW_GOLD * level * level) * float(RENEW_RARITY[r])),
+	var r: int = clampi(int(item["rarity"]), 0, _renew_top())
+	return {"gold": roundi((RENEW_BASE + RENEW_GOLD * level * level) * renew_mult(r)),
 		"iron": 2 + level / 5, "trophy": 1 + level / 40 + r / 3}
 
 

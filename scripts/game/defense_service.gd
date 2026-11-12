@@ -38,7 +38,7 @@ static func trips_left(world, target: String) -> int:
 
 static func name_of(target: String) -> String:
 	if target == Camp.CAMP_ID:
-		return Camp.CAMP["name"]
+		return Camp.camp()["name"]
 	return Data.city(target)["name"]
 
 
@@ -120,7 +120,7 @@ static func win(world, player, target: String) -> String:
 	player.gold += g
 	player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 2
 	if target == Camp.CAMP_ID:
-		for r in Camp.RESOURCES:
+		for r in Camp.resources():
 			player.resources[r] = int(player.resources.get(r, 0)) + 3 + player.level / 3
 		return "Хутір відстояно! +%d грн і трофейні ресурси" % g
 	world.add_loyalty(target, 80)
@@ -134,7 +134,7 @@ static func lose(world, player, target: String, late: bool = false) -> String:
 	s["lost"] = int(s["lost"]) + 1
 	var why := "Не встиг на поміч" if late else "Браму зламано"
 	if target == Camp.CAMP_ID:
-		for r in Camp.RESOURCES:
+		for r in Camp.resources():
 			player.resources[r] = int(int(player.resources.get(r, 0)) * 0.7)
 		return "%s — хутір пограбовано, втрачено третину запасів." % why
 	s["ruined"][target] = RUIN_TRIPS

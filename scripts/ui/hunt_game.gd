@@ -81,7 +81,7 @@ func field() -> Rect2:
 func speed_now() -> float:
 	if animal == "":
 		return 0.0
-	return float(Acts.HUNT_ANIMALS[animal]["speed"]) * boost * (0.6 if h["wounded"] else 1.0)
+	return float(Acts.animal(animal)["speed"]) * boost * (0.6 if h["wounded"] else 1.0)
 
 
 func _update_info() -> void:

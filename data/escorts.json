@@ -1,0 +1,31 @@
+{
+	"kobzar": {
+		"num": 9871,
+		"name": "Кобзар",
+		"acc": "кобзаря",
+		"sheet": "trav_kobzar",
+		"thanks": "Складу про тебе думу, козаче."
+	},
+	"chumak": {
+		"num": 9872,
+		"name": "Чумак",
+		"acc": "чумака",
+		"sheet": "trav_chumak",
+		"thanks": "І сіль ціла, і голова на плечах. Спасибі!"
+	},
+	"honets": {
+		"num": 9873,
+		"name": "Гонець",
+		"acc": "гінця",
+		"sheet": "trav_honets",
+		"thanks": "Лист дійде до кошового. Слава!"
+	},
+	"znakharka": {
+		"num": 9874,
+		"name": "Знахарка",
+		"acc": "знахарку",
+		"sheet": "trav_znakharka",
+		"she": true,
+		"thanks": "Зілля донесла. Хай тебе куля минає."
+	}
+}

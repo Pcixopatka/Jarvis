@@ -5,9 +5,13 @@ extends RefCounted
 ## sync() звіряє поточного героя з рекордами: новий рекорд записується, за віхи (step) дається слава,
 ## а якщо рекорд відібрано в іншого персонажа — про це кажемо окремо.
 
-const Acts := preload("res://scripts/data/activities.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
+
+## Що рахує hero_values: рекорди data/records.json мусять бути серед цих ключів (перевіряє GameDB.problems()).
+const KEYS := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "ring_titles", "muster_titles",
+	"peril_bosses", "valor", "boss_day", "boss_week", "bounties", "trade_profit", "dice_streak"]
 
 
 ## Що зараз має цей герой за кожним рекордом.
@@ -36,7 +40,7 @@ static func hero_values(world, player) -> Dictionary:
 static func value_text(key: String, value: int) -> String:
 	if value <= 0:
 		return "—"
-	var f: String = Acts.RECORDS[key]["fmt"]
+	var f: String = GameDB.row("records", key)["fmt"]
 	if f == "time":
 		return "%d:%02d" % [value / 60, value % 60]
 	return f % value
@@ -56,13 +60,13 @@ static func who(player) -> String:
 static func sync(world, player, slot: int = 0) -> Array:
 	var msgs := []
 	var vals := hero_values(world, player)
-	for key in Acts.RECORD_ORDER:
+	for key in GameDB.ids("records"):
 		var v := int(vals[key])
 		var cur: Dictionary = record(world, key)
 		var old := int(cur.get("value", 0))
 		if v <= old:
 			continue
-		var R: Dictionary = Acts.RECORDS[key]
+		var R: Dictionary = GameDB.row("records", key)
 		var took: bool = old > 0 and int(cur.get("slot", slot)) != slot
 		world.records[key] = {"value": v, "slot": slot, "who": who(player), "day": ChallengeService.day_key(ChallengeService._now())}
 		if took:
@@ -82,12 +86,12 @@ static func sync(world, player, slot: int = 0) -> Array:
 static func rows(world, player, slot: int = 0) -> Array:
 	var out := []
 	var vals := hero_values(world, player)
-	for key in Acts.RECORD_ORDER:
+	for key in GameDB.ids("records"):
 		var cur: Dictionary = record(world, key)
 		var best := int(cur.get("value", 0))
 		out.append({
 			"key": key,
-			"name": Acts.RECORDS[key]["name"],
+			"name": GameDB.row("records", key)["name"],
 			"mine": value_text(key, int(vals[key])),
 			"best": value_text(key, best),
 			"who": str(cur.get("who", "")),

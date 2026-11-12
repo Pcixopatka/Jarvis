@@ -1,0 +1,29 @@
+{
+	"karas": {
+		"num": 9721,
+		"name": "Карась",
+		"ryba": 1,
+		"window": 1.0,
+		"reel": 3.0,
+		"pull": 0.25,
+		"weight": 5
+	},
+	"shchuka": {
+		"num": 9722,
+		"name": "Щука",
+		"ryba": 2,
+		"window": 0.8,
+		"reel": 5.0,
+		"pull": 0.45,
+		"weight": 3
+	},
+	"som": {
+		"num": 9723,
+		"name": "Сом",
+		"ryba": 4,
+		"window": 0.65,
+		"reel": 8.0,
+		"pull": 0.7,
+		"weight": 1
+	}
+}

@@ -38,14 +38,14 @@ static func state(world) -> Dictionary:
 
 
 static func unlocked(player) -> bool:
-	return not player.is_peasant() and player.level >= int(Acts.SPOTS[SPOT_ID]["level"])
+	return not player.is_peasant() and player.level >= int(Acts.spot(SPOT_ID)["level"])
 
 
 ## Три чудовиська цього тижня, від легшого кола до найтяжчого.
 static func lineup(week_key: String = "") -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("ring:" + (week_key if week_key != "" else week()))
-	var ids: Array = Acts.RING_POOL.duplicate()
+	var ids: Array = Acts.ring_pool().duplicate()
 	for i in range(ids.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var t = ids[i]
@@ -58,9 +58,10 @@ static func lineup(week_key: String = "") -> Array:
 ## здоров'я воно щонайбільше втрачає за секунду (щоб сильний герой не клав його одним вмінням).
 static func boss_stats(player, stage: int) -> Dictionary:
 	var i := clampi(stage, 0, int(Acts.RING_STAGES) - 1)
-	return {"hp": Power.ref_dps(int(player.level)) * float(Acts.RING_SECONDS[i]),
-		"dmg": Power.ref_hit(int(player.level), float(Acts.RING_HIT[i]) * DuelService.hit_scale(player.level)),
-		"cap": 1.0 / (float(Acts.RING_CAP) * float(Acts.RING_SECONDS[i]))}
+	var R := Acts.ring_round(i)
+	return {"hp": Power.ref_dps(int(player.level)) * float(R["seconds"]),
+		"dmg": Power.ref_hit(int(player.level), float(R["hit"]) * DuelService.hit_scale(player.level)),
+		"cap": 1.0 / (float(Acts.RING_CAP) * float(R["seconds"]))}
 
 
 ## Опис бою (для combat.enter через defense_loc).
@@ -72,7 +73,7 @@ static func battle_loc(player) -> Dictionary:
 
 
 static func stage_gold(level: int, stage: int) -> int:
-	return int(Acts.RING_GOLD[clampi(stage, 0, int(Acts.RING_STAGES) - 1)]) * level
+	return int(Acts.ring_round(clampi(stage, 0, int(Acts.RING_STAGES) - 1))["gold"]) * level
 
 
 static func time_text(t: float) -> String:
@@ -88,7 +89,7 @@ static func on_stage(world, player, stage: int) -> Dictionary:
 		s["paid"] = stage
 		out["weekly"] = true
 		out["gold"] = stage_gold(player.level, stage - 1)
-		out["glory"] = int(Acts.RING_GLORY[stage - 1])
+		out["glory"] = int(Acts.ring_round(stage - 1)["glory"])
 		out["msgs"] = GloryService.add(world, player, int(out["glory"]))
 	elif int(s["day_paid"]) < int(Acts.RING_REPEAT_PAID):
 		s["day_paid"] = int(s["day_paid"]) + 1

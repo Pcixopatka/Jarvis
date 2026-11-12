@@ -1,27 +1,59 @@
 extends RefCounted
-## Козацький хутір: ресурси, будівлі, ціни і що дає кожен рівень.
+## Козацький хутір. Записи — у таблицях data/*.json (docs/data.md, «Хутір»): сам хутір (camps.json), ресурси
+## героя з кольорами (resources.json), будівлі з ціною й тим, що дає кожен рівень (buildings.json), культури
+## городу (crops.json), зілля (brews.json), клейноди роду (kleinody.json) і ціни їхніх ступенів
+## (kleinod_tiers.json). Тут — зручні виклики над ними й числа-правила.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 const CAMP_ID := "hutir"
-const CAMP := {"name": "Козацький хутір", "pos": Vector2(35.9, 47.45),
-	"desc": "Твій власний хутір під Січчю. Тут відпочивають і будуються."}
-
-const RESOURCES := {"wood": "Дерево", "iron": "Залізо", "herbs": "Трави"}
-const RESOURCE_COLORS := {"wood": Color(0.6, 0.4, 0.2), "iron": Color(0.65, 0.68, 0.72), "herbs": Color(0.35, 0.75, 0.3), "trophy": Color(0.95, 0.75, 0.25),
-	"meat": Color(0.85, 0.45, 0.35), "ryba": Color(0.55, 0.7, 0.85), "veg": Color(0.75, 0.3, 0.45)}
 ## Трофеї — рідкісний матеріал для кування (з еліт, босів, облог); не випадає зі звичайної нечисті
 const TROPHY := "trophy"
-const TROPHY_NAME := "Трофеї"
 
 
-## Провіант теж лежить серед ресурсів героя (див. activities.gd: FOOD).
-const FOOD_NAMES := {"meat": "М'ясо", "ryba": "Риба", "veg": "Городина"}
+static var _by_kind := {}  # вид ресурсу (res, trophy, food) → id у порядку файлу
 
 
+## Хутір на мапі: {"name", "pos", "desc"}.
+static func camp() -> Dictionary:
+	return GameDB.row("camps", CAMP_ID)
+
+
+## Будівельні ресурси (дерево, залізо, трави) у порядку файлу.
+static func resources() -> Array:
+	return _kind("res")
+
+
+## Провіант (м'ясо, риба, городина) у порядку файлу.
+static func food_ids() -> Array:
+	return _kind("food")
+
+
+static func _kind(kind: String) -> Array:
+	if _by_kind.is_empty():
+		for id in GameDB.ids("resources"):
+			var k := str(GameDB.row("resources", id)["kind"])
+			if not _by_kind.has(k):
+				_by_kind[k] = []
+			_by_kind[k].append(id)
+		for k in _by_kind:
+			_by_kind[k].make_read_only()
+	return _by_kind.get(kind, [])
+
+
+## Чи це будівельний ресурс.
+static func is_resource(r: String) -> bool:
+	return str(GameDB.row("resources", r).get("kind", "")) == "res"
+
+
+## Назва ресурсу, трофеїв чи провіанту; невідоме — як є.
 static func res_name(r: String) -> String:
-	if r == TROPHY:
-		return TROPHY_NAME
-	return RESOURCES.get(r, FOOD_NAMES.get(r, r))
+	return str(GameDB.row("resources", r).get("name", r))
+
+
+## Колір ресурсу (підбирачка, значок); невідомого — білий.
+static func res_color(r: String) -> Color:
+	return GameDB.row("resources", r).get("color", Color.WHITE)
+
 
 ## Який ресурс найчастіше дає краєвид («resource» у data/biomes.json; без нього — дерево).
 static func biome_resource(biome: String) -> String:
@@ -46,101 +78,70 @@ static func bundle_amount(level: int) -> int:
 static func boss_trophies(level: int) -> int:
 	return TROPHY_BOSS_BASE + level / TROPHY_BOSS_LEVEL_STEP
 
-# Будівлі: назва, опис, ціни рівнів (гривні + ресурси) і що дає кожен рівень
-const BUILDINGS := {
-	"kurin": {"name": "Курінь", "desc": "Тут живе й тренується твій загін.",
-		"levels": [
-			{"gold": 200, "wood": 15, "iron": 0, "herbs": 0, "text": "Загін до 3 супутників"},
-			{"gold": 600, "wood": 30, "iron": 10, "herbs": 0, "text": "Тренування: +50% досвіду супутникам"},
-			{"gold": 1500, "wood": 50, "iron": 25, "herbs": 0, "text": "Загін до 4 супутників"},
-		]},
-	"kuznia": {"name": "Кузня", "desc": "Власний коваль: заточка й переплавка.",
-		"levels": [
-			{"gold": 250, "wood": 10, "iron": 10, "herbs": 0, "text": "Заточка на хуторі на 20% дешевше"},
-			{"gold": 700, "wood": 15, "iron": 25, "herbs": 0, "text": "Переплавка непотрібних речей на залізо"},
-			{"gold": 1800, "wood": 25, "iron": 50, "herbs": 0, "text": "+10% до шансу заточки"},
-		]},
-	"zillia": {"name": "Зілляварня", "desc": "Варіння зілля з трав.",
-		"levels": [
-			{"gold": 200, "wood": 10, "iron": 0, "herbs": 10, "text": "Варити зілля здоров'я з трав"},
-			{"gold": 650, "wood": 15, "iron": 5, "herbs": 25, "text": "Зілля з собою +2, «Зілля сили» на 15 хв бою"},
-			{"gold": 1600, "wood": 25, "iron": 10, "herbs": 50, "text": "«Зілля проти зарази» на 15 хв бою"},
-		]},
-	"sklad": {"name": "Склад", "desc": "Більше місця для здобичі.",
-		"levels": [
-			{"gold": 150, "wood": 20, "iron": 0, "herbs": 0, "text": "Торба +8 місць"},
-			{"gold": 500, "wood": 40, "iron": 10, "herbs": 0, "text": "Торба +16 місць"},
-		]},
-	"pasika": {"name": "Пасіка", "desc": "Мед продається сам, поки ти в поході.",
-		"levels": [
-			{"gold": 300, "wood": 20, "iron": 0, "herbs": 5, "text": "Дохід 20 грн/год (росте з рівнем козака)"},
-			{"gold": 800, "wood": 35, "iron": 5, "herbs": 15, "text": "Дохід 40 грн/год"},
-			{"gold": 2000, "wood": 60, "iron": 15, "herbs": 30, "text": "Дохід 60 грн/год"},
-		]},
-	"horod": {"name": "Город", "desc": "Грядки ростуть самі, поки ти в поході: зілля, городина на борщ і хміль на продаж.",
-		"levels": [
-			{"gold": 250, "wood": 15, "iron": 0, "herbs": 5, "text": "Дві грядки"},
-			{"gold": 700, "wood": 30, "iron": 5, "herbs": 15, "text": "Три грядки"},
-			{"gold": 1800, "wood": 50, "iron": 10, "herbs": 30, "text": "Чотири грядки, усе росте на чверть швидше"},
-		]},
-}
-const BUILD_ORDER := ["kurin", "kuznia", "zillia", "sklad", "pasika", "horod"]
+# ======================= Будівлі =======================
 
-# Город: скільки грядок на кожному рівні й що можна садити
-const GARDEN_BEDS := [0, 2, 3, 4]
-const GARDEN_FAST := 0.75  # на 3-му рівні час росту множиться на це
-## Культури: скільки годин росте, що дає (ресурс або "gold"), скільки, ціна насіння.
-## Хміль продається за гривні, які ростуть із рівнем героя (як мед із пасіки).
-const CROPS := {
-	"herbs": {"name": "Зілля", "hours": 2.0, "gives": "herbs", "amount": 6, "seed": 10, "desc": "+6 трав для зілляварні й казана"},
-	"veg": {"name": "Городина", "hours": 4.0, "gives": "veg", "amount": 4, "seed": 20, "desc": "+4 городини: буряк і капуста на борщ"},
-	"khmil": {"name": "Хміль", "hours": 8.0, "gives": "gold", "amount": 200, "seed": 30, "desc": "шинкарі заберуть за гривні"},
-}
-const CROP_ORDER := ["herbs", "veg", "khmil"]
+## Будівля ({} — нема) і будівлі в порядку показу.
+static func building(id: String) -> Dictionary:
+	return GameDB.row("buildings", id)
 
-# Варіння (Зілляварня)
-const BREW := {
-	"heal": {"name": "Зілля здоров'я", "herbs": 3, "iron": 0, "level": 1, "desc": "+1 зілля в торбу"},
-	"mana": {"name": "Зілля наснаги", "herbs": 4, "iron": 0, "level": 1, "desc": "+1 зілля наснаги в торбу: повертає 70% наснаги в бою"},
-	"strength": {"name": "Зілля сили", "herbs": 6, "iron": 1, "level": 2, "desc": "+30% шкоди"},
-	"antiplague": {"name": "Зілля проти зарази", "herbs": 8, "iron": 2, "level": 3, "desc": "Хмари зарази не шкодять, -20% шкоди від ворогів"},
-}
 
-const PASIKA_RATE := [0, 20, 40, 60]  # грн/год на рівнях пасіки
+static func building_ids() -> Array:
+	return GameDB.ids("buildings")
+
+
+## Число рівня будівлі (bag, rate, beds); рівень 0 — нічого, вище найвищого — як найвищий.
+static func level_value(id: String, field: String, level: int) -> int:
+	var lv: Array = building(id).get("levels", [])
+	if level <= 0 or lv.is_empty():
+		return 0
+	return int(lv[mini(level, lv.size()) - 1].get(field, 0))
+
+
+const GARDEN_FAST := 0.75  # на 3-му рівні городу час росту множиться на це
 const PASIKA_CAP_HOURS := 12.0
 
 # ======================= Клейноди роду =======================
 ## Довгі цілі для зароблених гривень, трофеїв і ресурсів (див. KleinodService).
 ## Сім козацьких клейнодів, у кожного п'ять ступенів. Кожен ступінь додає свій бонус усім персонажам роду.
-## stat — що росте (ключі як у свят: xp, dmg, hp, crit, cd для героя; glory й loyalty для служб), per — приріст за ступінь,
-## res — який ресурс, окрім гривень і трофеїв, іде на оздобу.
-const KLEINOD_ORDER := ["lytavry", "korohva", "pernach", "bunchuk", "bulava", "pechatka", "surmy"]
-const KLEINODY := {
-	"lytavry": {"name": "Литаври", "stat": "xp", "per": 0.04, "res": "iron", "text": "+%d%% досвіду",
-		"desc": "Б'ють на раду й до бою. Під їхній грім наука йде швидше."},
-	"korohva": {"name": "Корогва", "stat": "glory", "per": 0.05, "res": "wood", "text": "+%d%% слави",
-		"desc": "Малинове полотнище з Покровою. Під своєю корогвою рід видно здалеку."},
-	"pernach": {"name": "Пернач", "stat": "crit", "per": 0.02, "res": "iron", "text": "+%d%% до шансу критичного удару",
-		"desc": "Полковницький знак із шістьма перами. Б'є рідко, зате напевно."},
-	"bunchuk": {"name": "Бунчук", "stat": "hp", "per": 0.03, "res": "wood", "text": "+%d%% здоров'я",
-		"desc": "Кінський хвіст на держаку із золотим яблуком. Де стоїть бунчук, там військо не падає."},
-	"bulava": {"name": "Булава", "stat": "dmg", "per": 0.03, "res": "iron", "text": "+%d%% шкоди",
-		"desc": "Гетьманська булава. Хто її тримає, за тим іде вся сила."},
-	"pechatka": {"name": "Печатка", "stat": "loyalty", "per": 0.1, "res": "herbs", "text": "+%d%% лояльності міст",
-		"desc": "Військова печатка з козаком і мушкетом. Листу з нею вірять у кожному місті."},
-	"surmy": {"name": "Сурми", "stat": "cd", "per": 0.02, "res": "iron", "text": "вміння відновлюються на %d%% швидше",
-		"desc": "Срібні сурми скликають товариство. Хто чує сурму, той не бариться."},
-}
-## Ціна кожного ступеня: гривні, трофеї й ресурс клейнода.
 ## Головна ціна — гривні (465 000 за клейнод, 3 255 000 за всі сім): саме їх у пізній грі нема куди подіти.
 ## Трофеїв і ресурсів треба стільки, щоб вони не стримували покупку сильніше за гривні:
 ## 300 трофеїв і 2 670 ресурсу на клейнод. Заліза (його дає переплавка) просять чотири клейноди з семи.
-const KLEINOD_GOLD := [10000, 25000, 60000, 120000, 250000]
-const KLEINOD_TROPHY := [10, 20, 40, 80, 150]
-const KLEINOD_RES := [50, 120, 300, 700, 1500]
-## Скарбник продає й камені долі: вони рідко падають із босів, а за гривні доступні завжди
-const STONE_PRICES := {"zabuttia": 40000, "alatyr": 120000}
-const STONE_TEXT := {
-	"zabuttia": "Повертає всі очки характеристик, Загартування й вмінь: розклади їх наново.",
-	"alatyr": "Дає перейти на сусідню дорогу того самого ступеня. Майстерність лишається.",
-}
+
+## Ціна ступеня, який купують на рівні level (0 — перший): {"gold", "trophy", "res"}; {} — вище нема.
+static func kleinod_tier(level: int) -> Dictionary:
+	var lad := GameDB.ladder("kleinod_tiers", "tier")
+	return lad[level + 1] if level + 1 < lad.size() else {}
+
+
+## Скільки ступенів у клейнода.
+static func kleinod_tiers() -> int:
+	return GameDB.ladder("kleinod_tiers", "tier").size() - 1
+
+
+# ======================= Город, зілляварня, клейноди: записи =======================
+
+## Культура городу ({} — нема) і культури в порядку показу.
+static func crop(id: String) -> Dictionary:
+	return GameDB.row("crops", id)
+
+
+static func crop_ids() -> Array:
+	return GameDB.ids("crops")
+
+
+## Зілля із Зілляварні ({} — нема) і всі зілля в порядку показу.
+static func brew(id: String) -> Dictionary:
+	return GameDB.row("brews", id)
+
+
+static func brew_ids() -> Array:
+	return GameDB.ids("brews")
+
+
+## Клейнод ({} — нема) і клейноди в порядку показу.
+static func kleinod(id: String) -> Dictionary:
+	return GameDB.row("kleinody", id)
+
+
+static func kleinod_ids() -> Array:
+	return GameDB.ids("kleinody")

@@ -9,9 +9,19 @@ extends RefCounted
 const Classes := preload("res://scripts/data/classes.gd")
 const Data := preload("res://scripts/data/data.gd")
 
-const NAMES := {"zabuttia": "Камінь забуття", "alatyr": "Алатир-камінь"}
-const CHANCE := {"zabuttia": 0.12, "alatyr": 0.06}
 const GameDB := preload("res://scripts/core/game_db.gd")
+## Камені, дію яких пише цей код (reset_points, change_path): у data/stones.json мусять бути саме вони.
+const KINDS := ["zabuttia", "alatyr"]
+
+
+## Назва каменя (data/stones.json: назва, шанс із боса, ціна в скарбника, опис); невідомий — його id.
+static func name_of(id: String) -> String:
+	return str(GameDB.row("stones", id).get("name", id))
+
+
+## Чи є такий камінь.
+static func has(id: String) -> bool:
+	return GameDB.table("stones").has(id)
 
 
 ## Камені, які гарантовано дає перша перемога над цим босом («boss.stones»; порожньо — жодного).
@@ -33,13 +43,13 @@ static func on_boss(player, kind: String, first: bool) -> Array:
 	if first and not first_kill(kind).is_empty():
 		got.append_array(first_kill(kind))
 	else:
-		for id in CHANCE:
-			if randf() < CHANCE[id] * (1.0 + float(player.art.get("stone", 0.0))):
+		for id in GameDB.ids("stones"):
+			if randf() < float(GameDB.row("stones", id)["chance"]) * (1.0 + float(player.art.get("stone", 0.0))):
 				got.append(id)
 	var msgs := []
 	for id in got:
 		grant(player, id)
-		msgs.append("Знайдено: %s!" % NAMES[id])
+		msgs.append("Знайдено: %s!" % name_of(id))
 	return msgs
 
 

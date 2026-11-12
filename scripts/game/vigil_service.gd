@@ -25,7 +25,7 @@ static func state(world) -> Dictionary:
 
 
 static func unlocked(player) -> bool:
-	return not player.is_peasant() and player.level >= int(Acts.SPOTS[SPOT_ID]["level"])
+	return not player.is_peasant() and player.level >= int(Acts.spot(SPOT_ID)["level"])
 
 
 ## Сила нечисті на конкретній хвилині варти (0 — перша): частка звичайної мірки рівня героя.

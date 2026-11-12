@@ -18,12 +18,13 @@ const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 const CHANCE := 0.3  # шанс нової бойової події після походу (коли спокійно)
 const CALM := 2
+## Бойові події, які вміє цей код (start, win, lose). Назва, значок, строк, хвилі, вигляд оборони й
+## здоров'я того, що боронять, — запис події в data/events.json («battle»; перевіряє GameDB.problems()).
 const BATTLE_KINDS := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
-const DEADLINE := {"village_raid": 2, "caravan": 3, "sich_siege": 4, "captives": 4, "wounded": 2}
-const WAVES := {"village_raid": 3, "caravan": 4, "sich_siege": 6, "captives": 3, "wounded": 3}
 const BURN_TRIPS := 4
 const NIGHT_CHANCE := 0.2
 const NIGHT_TRIPS := 2
@@ -35,9 +36,11 @@ const THEFT_CHANCE := 0.35
 const THEFT_CHANCE_KURIN := 0.1
 const THEFT_PART := 0.3
 const KREMLIN_LL := Vector2(37.62, 55.75)
-const NAMES := {"village_raid": "Набіг на село", "caravan": "Чумацька валка", "sich_siege": "Облога Січі",
-	"captives": "Полон", "wounded": "Поранений побратим"}
-const ICONS := {"village_raid": "raid", "caravan": "wagon", "sich_siege": "castle", "captives": "chains", "wounded": "wounded"}
+
+
+## Бойова частина запису події: {"deadline", "waves", "variant", "gate_hp"}.
+static func battle_of(kind: String) -> Dictionary:
+	return GameDB.row("events", kind).get("battle", {})
 
 
 static func state(world) -> Dictionary:
@@ -59,7 +62,7 @@ static func battle_at(world, id: String) -> Dictionary:
 
 
 static func name_of(kind: String) -> String:
-	return NAMES.get(kind, kind)
+	return str(GameDB.row("events", kind).get("name", kind)) if kind in BATTLE_KINDS else kind
 
 
 static func place(id: String) -> String:
@@ -157,7 +160,7 @@ static func pick_kind(world, player) -> String:
 ## Почати подію (повертає повідомлення; "" — не вийшло).
 static func start(world, player, kind: String, target: String = "") -> String:
 	var s := state(world)
-	var ev := {"kind": kind, "left": DEADLINE[kind]}
+	var ev := {"kind": kind, "left": int(battle_of(kind)["deadline"])}
 	match kind:
 		"village_raid", "wounded", "captives":
 			if target == "":
@@ -214,17 +217,14 @@ static func battle_loc(world, ev: Dictionary, player) -> Dictionary:
 		biome = Data.place(target)["biome"]
 		if biome in ["cave", "plague"]:
 			biome = "steppe"
-	var variant: String = {"village_raid": "village", "caravan": "caravan", "sich_siege": "city", "captives": "captives", "wounded": "wounded"}[kind]
-	var hp := 500.0 + 100.0 * lvl
-	if kind == "sich_siege":
-		hp = 900.0 + 150.0 * lvl
-	elif kind == "wounded":
-		hp = 250.0 + 40.0 * lvl
+	var B := battle_of(kind)
+	var variant: String = B["variant"]
+	var hp := float(B["gate_hp"][0]) + float(B["gate_hp"][1]) * lvl
 	# нечисть не слабша за мірку для рівня героя; те, що він боронить, міцнішає разом із нею
 	var Far = load("res://scripts/game/far_service.gd")
 	var lift: Dictionary = Far.event_mods(player)
 	var out := {"name": name_of(kind) + (": " + place(target) if kind != "sich_siege" else ""), "type": "defense", "biome": biome,
-		"level": lvl, "enemies": enemies, "waves": WAVES[kind], "target": target, "camp": false, "variant": variant,
+		"level": lvl, "enemies": enemies, "waves": int(B["waves"]), "target": target, "camp": false, "variant": variant,
 		"event": kind, "gate_hp": hp * Far.guard_mult(lvl, lift), "desc": ""}
 	out.merge(lift)
 	return out
@@ -239,7 +239,7 @@ static func win(world, player, ev: Dictionary, gate_part: float = 1.0) -> String
 	match kind:
 		"village_raid":
 			player.gold += g
-			for r in Camp.RESOURCES:
+			for r in Camp.resources():
 				player.resources[r] = int(player.resources.get(r, 0)) + 4 + player.level / 3
 			player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 2
 			return "Село врятовано! Селяни дякують: +%d грн, дерево, залізо й трави, 2 трофеї." % g
@@ -298,7 +298,7 @@ static func lose(world, player, ev: Dictionary, late: bool = false) -> String:
 ## Частка пройденого шляху для конвою з бранцями (значок рухається до Кремля).
 static func captives_ll(ev: Dictionary) -> Vector2:
 	var from_ll: Vector2 = Data.place(ev["from"])["pos"]
-	var t := 1.0 - float(ev["left"]) / float(DEADLINE["captives"] + 1)
+	var t := 1.0 - float(ev["left"]) / float(int(battle_of("captives")["deadline"]) + 1)
 	return from_ll.lerp(KREMLIN_LL, t * 0.8)
 
 
@@ -313,7 +313,7 @@ static func map_marks(world) -> Array:
 			ll = captives_ll(a)
 		else:
 			ll = Data.city(a["target"])["pos"] if Data.is_city(a["target"]) else Data.place(a["target"])["pos"]
-		out.append({"id": a["target"], "ll": ll, "icon": ICONS[a["kind"]], "label": "%s (%d)" % [name_of(a["kind"]), int(a["left"])], "kind": a["kind"]})
+		out.append({"id": a["target"], "ll": ll, "icon": str(GameDB.row("events", a["kind"])["icon"]), "label": "%s (%d)" % [name_of(a["kind"]), int(a["left"])], "kind": a["kind"]})
 	if not s["fair"].is_empty():
 		out.append({"id": s["fair"]["city"], "ll": Data.city(s["fair"]["city"])["pos"], "icon": "tent", "label": "Ярмарок (%d)" % int(s["fair"]["left"]), "kind": "fair"})
 	for loc in s["night"]:

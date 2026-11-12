@@ -9,9 +9,10 @@ const Data := preload("res://scripts/data/data.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 
 
-## Хто йде (запис з Acts.ESCORT_WHO).
+## Хто йде (запис data/escorts.json; невідомий — перший мандрівник).
 static func who(q: Dictionary) -> Dictionary:
-	return Acts.ESCORT_WHO.get(str(q.get("target", "")), Acts.ESCORT_WHO[Acts.ESCORT_ORDER[0]])
+	var w := Acts.escort(str(q.get("target", "")))
+	return w if not w.is_empty() else Acts.escort(Acts.escort_ids()[0])
 
 
 ## Чи це невиконане завдання на супровід.
@@ -29,12 +30,12 @@ static func at(world, loc_id: String) -> Dictionary:
 
 ## Нове завдання для дошки міста: доповнює заготовку q (id, city, loc, progress, lvl).
 static func fill(q: Dictionary, roll: float) -> void:
-	var order: Array = Acts.ESCORT_ORDER
+	var order: Array = Acts.escort_ids()
 	var id: String = order[clampi(int(roll * order.size()), 0, order.size() - 1)]
 	q["type"] = "escort"
 	q["target"] = id
 	q["count"] = 1
-	q["text"] = "Проведи %s (%s)" % [Acts.ESCORT_WHO[id]["acc"], Data.place(q["loc"])["name"]]
+	q["text"] = "Проведи %s (%s)" % [Acts.escort(id)["acc"], Data.place(q["loc"])["name"]]
 
 
 static func hp(level: int) -> float:

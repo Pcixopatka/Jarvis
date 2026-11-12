@@ -6,7 +6,10 @@ extends RefCounted
 ## Бонуси до показників героя йдуть через player.klein (див. player.recalc), слава й лояльність — через служби.
 
 const Camp := preload("res://scripts/data/camp_data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
+## Показники героя, які вміє клейнод (player.klein → Player.recalc); решту («glory», «loyalty») читають служби.
 const HERO_STATS := ["xp", "dmg", "hp", "crit", "cd"]
+const SERVICE_STATS := ["glory", "loyalty"]
 
 
 ## Куплені ступені. Читання нічого не створює: порожній хутір має лишатись порожнім, доки CampService його не заповнить.
@@ -15,7 +18,7 @@ static func levels(world) -> Dictionary:
 
 
 static func max_level() -> int:
-	return Camp.KLEINOD_GOLD.size()
+	return Camp.kleinod_tiers()
 
 
 static func level(world, id: String) -> int:
@@ -25,7 +28,7 @@ static func level(world, id: String) -> int:
 ## Скільки ступенів куплено разом.
 static func total(world) -> int:
 	var n := 0
-	for id in Camp.KLEINOD_ORDER:
+	for id in GameDB.ids("kleinody"):
 		n += level(world, id)
 	return n
 
@@ -35,7 +38,8 @@ static func cost(world, id: String) -> Dictionary:
 	var l := level(world, id)
 	if l >= max_level():
 		return {}
-	return {"gold": int(Camp.KLEINOD_GOLD[l]), Camp.TROPHY: int(Camp.KLEINOD_TROPHY[l]), str(Camp.KLEINODY[id]["res"]): int(Camp.KLEINOD_RES[l])}
+	var T := Camp.kleinod_tier(l)
+	return {"gold": int(T["gold"]), Camp.TROPHY: int(T["trophy"]), str(GameDB.row("kleinody", id)["res"]): int(T["res"])}
 
 
 static func can_buy(world, player, id: String) -> bool:
@@ -67,9 +71,10 @@ static func buy(world, player, id: String) -> bool:
 ## Сума бонусів за показником (частка): усі клейноди з таким stat.
 static func bonus(world, stat: String) -> float:
 	var v := 0.0
-	for id in Camp.KLEINOD_ORDER:
-		if Camp.KLEINODY[id]["stat"] == stat:
-			v += float(Camp.KLEINODY[id]["per"]) * level(world, id)
+	for id in GameDB.ids("kleinody"):
+		var K: Dictionary = GameDB.row("kleinody", id)
+		if K["stat"] == stat:
+			v += float(K["per"]) * level(world, id)
 	return v
 
 
@@ -95,7 +100,7 @@ static func apply(world, player) -> void:
 
 ## Бонус словами для ступеня lvl: «+12% досвіду».
 static func bonus_text(id: String, lvl: int) -> String:
-	var K: Dictionary = Camp.KLEINODY[id]
+	var K: Dictionary = GameDB.row("kleinody", id)
 	return str(K["text"]) % roundi(float(K["per"]) * lvl * 100.0)
 
 
@@ -111,7 +116,7 @@ static func cost_text(c: Dictionary) -> String:
 # ---------- Камені долі за гривні ----------
 
 static func stone_price(id: String) -> int:
-	return int(Camp.STONE_PRICES.get(id, 0))
+	return int(GameDB.row("stones", id).get("price", 0))
 
 
 static func buy_stone(player, id: String) -> bool:

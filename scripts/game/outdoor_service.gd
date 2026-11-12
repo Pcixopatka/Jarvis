@@ -73,7 +73,7 @@ static func new_hunt(player, seed_value: int = -1, rich_day: bool = false) -> Di
 		rng.randomize()
 	var queue := []
 	for i in Acts.HUNT_PASSES:
-		queue.append(_weighted(Acts.HUNT_ANIMALS, rng, {"hare": 0} if rich_day else {}))
+		queue.append(_weighted(Acts.hunt_animals(), rng, {"hare": 0} if rich_day else {}))
 	return {"arrows": arrows_for(player), "shots": 0, "queue": queue, "index": 0, "meat": 0, "hits": 0, "bull": 0, "wounded": false, "bag": [], "rich": rich_day}
 
 
@@ -95,14 +95,14 @@ static func shoot(h: Dictionary, dist: float) -> String:
 	if int(h["arrows"]) <= 0 or int(h["index"]) >= h["queue"].size():
 		return "none"
 	var id: String = h["queue"][int(h["index"])]
-	var a: Dictionary = Acts.HUNT_ANIMALS[id]
+	var a: Dictionary = Acts.animal(id)
 	h["arrows"] = int(h["arrows"]) - 1
 	h["shots"] = int(h["shots"]) + 1
 	var r := float(a["radius"])
 	if dist > r:
 		return "miss"
 	var bull := dist <= r * Acts.HUNT_BULLSEYE
-	if a["tough"] and not bull and not h["wounded"]:
+	if a.get("tough", false) and not bull and not h["wounded"]:
 		h["wounded"] = true  # вепра простим влучанням не взяти — поранений, біжить повільніше
 		h["hits"] = int(h["hits"]) + 1
 		return "wound"
@@ -140,7 +140,7 @@ static func finish_hunt(world, player, h: Dictionary) -> Array:
 		return msgs
 	var names := []
 	for id in h["bag"]:
-		names.append(str(Acts.HUNT_ANIMALS[id]["name"]).to_lower())
+		names.append(str(Acts.animal(id)["name"]).to_lower())
 	msgs.append("Здобич: %s. +%d м'яса" % [", ".join(names), meat])
 	if int(h["shots"]) > 0 and int(h["hits"]) == int(h["shots"]) and int(h["shots"]) >= Acts.HUNT_ARROWS:
 		msgs[0] += "\nЖодної стріли намарно! +3 слави"
@@ -160,7 +160,7 @@ static func new_fishing(seed_value: int = -1, rich_day: bool = false) -> Diction
 
 
 static func roll_fish(f: Dictionary) -> String:
-	return _weighted(Acts.FISH, f["rng"], {"som": 4, "shchuka": 2} if f.get("rich", false) else {})
+	return _weighted(Acts.fishes(), f["rng"], {"som": 4, "shchuka": 2} if f.get("rich", false) else {})
 
 
 ## Скільки чекати клювання (секунд).
@@ -184,7 +184,7 @@ static func use_bait(f: Dictionary) -> void:
 
 
 static func catch_fish(f: Dictionary, id: String) -> void:
-	f["ryba"] = int(f["ryba"]) + int(Acts.FISH[id]["ryba"])
+	f["ryba"] = int(f["ryba"]) + int(Acts.fish(id)["ryba"])
 	f["caught"].append(id)
 
 
@@ -207,7 +207,7 @@ static func finish_fishing(world, player, f: Dictionary) -> Array:
 		return msgs
 	var names := []
 	for id in f["caught"]:
-		names.append(str(Acts.FISH[id]["name"]).to_lower())
+		names.append(str(Acts.fish(id)["name"]).to_lower())
 	msgs.append("Улов: %s. +%d риби" % [", ".join(names), n])
 	if "som" in f["caught"]:
 		s["som"] = int(s["som"]) + 1
@@ -219,7 +219,7 @@ static func finish_fishing(world, player, f: Dictionary) -> Array:
 # ======================= Казан =======================
 
 static func can_cook(player, recipe: String) -> bool:
-	var need: Dictionary = Acts.RECIPES[recipe]["need"]
+	var need: Dictionary = Acts.recipe(recipe)["need"]
 	for r in need:
 		if food(player, r) < int(need[r]):
 			return false
@@ -231,7 +231,7 @@ static func can_cook(player, recipe: String) -> bool:
 static func cook(player, recipe: String) -> bool:
 	if not can_cook(player, recipe):
 		return false
-	var need: Dictionary = Acts.RECIPES[recipe]["need"]
+	var need: Dictionary = Acts.recipe(recipe)["need"]
 	for r in need:
 		player.resources[r] = food(player, r) - int(need[r])
 	player.eat(recipe, Data.MEAL_TIME)

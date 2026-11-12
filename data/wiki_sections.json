@@ -1,0 +1,50 @@
+{
+	"basics": {
+		"num": 10401,
+		"title": "Як грати"
+	},
+	"events": {
+		"num": 10402,
+		"title": "Події"
+	},
+	"classes": {
+		"num": 10403,
+		"title": "Класи"
+	},
+	"skills": {
+		"num": 10404,
+		"title": "Вміння"
+	},
+	"enemies": {
+		"num": 10405,
+		"title": "Нечисть"
+	},
+	"bosses": {
+		"num": 10406,
+		"title": "Боси"
+	},
+	"map": {
+		"num": 10407,
+		"title": "Мапа"
+	},
+	"holidays": {
+		"num": 10408,
+		"title": "Свята"
+	},
+	"camp": {
+		"num": 10409,
+		"title": "Хутір"
+	},
+	"items": {
+		"num": 10410,
+		"title": "Речі"
+	},
+	"souls": {
+		"num": 10411,
+		"title": "Душі"
+	},
+	"rules": {
+		"num": 10412,
+		"title": "Правила"
+	}
+}

@@ -38,8 +38,8 @@ static func _svc(name: String):
 ## Усі розділи (збираються раз за запуск: таблиці гри не змінюються).
 static func sections() -> Array:
 	if _cache.is_empty():
-		for pair in Wiki.SECTIONS:
-			_cache.append({"id": pair[0], "title": pair[1], "entries": _entries(pair[0])})
+		for id in Wiki.section_ids():
+			_cache.append({"id": id, "title": Wiki.section_title(id), "entries": _entries(id)})
 	return _cache
 
 
@@ -49,6 +49,10 @@ static func index_of(id: String) -> int:
 		if list[i]["id"] == id:
 			return i
 	return 0
+
+
+## Вкладки, вміст яких уміє складати _entries: у data/wiki_sections.json мусять бути саме вони.
+const SECTION_IDS := ["basics", "events", "classes", "skills", "enemies", "bosses", "map", "holidays", "camp", "items", "souls", "rules"]
 
 
 static func _entries(id: String) -> Array:
@@ -150,7 +154,7 @@ static func _loot_entry() -> Dictionary:
 
 static func _basics() -> Array:
 	var out := []
-	for b in Wiki.BASICS:
+	for b in Wiki.basics():
 		out.append(_e(b["title"], "", b["text"]))
 	out.append(_e("Екран героя й журнал", "", "Кнопка «Персонаж» відкриває екран героя. На вкладці «Герой» усе одразу: зведення сили, вдягнене шістьма клітинками, очки характеристик із кнопками «+», докладні показники й торба сіткою. Колір клітинки показує рідкість, число в кутку — заточку, зірка — золоту річ, ромб — гніздо для душі. Зелена стрілка в кутку клітинки означає, що річ сильніша за вдягнену, а кнопка «Вдягнути найкраще» сама вдягає найсильніше в кожну клітинку. Сильніша та річ, з якою герой загалом міцніший: рахуються шкода за секунду й запас живучості, а сила золотої речі додає ще %d%%. Торкнись клітинки, щоб побачити картку речі й рядок «Сила героя з цією річчю». Дії стоять над карткою: «Вдягнути» чи «Зняти», «Викинути на землю» і «Знищити». На вкладці «Журнал» зібрано все, що зараз треба зробити: історія, завдання побратимів, завдання міст із нагородами, розшук і події. Угорі вся гілка історії розділами: пройдені з галочкою, нинішній із зіркою, решта попереду. Гілка лишається там і після фіналу. Зелена рамка означає, що завдання вже можна здати. Торкнись завдання в журналі чи події на вкладці «Події», і мапа покаже це місце: мету, а для виконаного завдання місто, де його здати. У бою мапа не відкриється, гра лише назве місце. На вкладці «Вміння» дерево показано значками: число під значком — ранг, лінії ведуть від вміння, яке треба вивчити спершу. Торкнись значка, щоб побачити картку й вивчити. Праворуч кнопки бою: вибери вивчене активне вміння, і кнопки, куди його можна поставити, засвітяться зеленим." % roundi(load("res://scripts/game/power.gd").UNIQUE_WORTH * 100.0)))
 	out.append(_e("Порадник: що робити далі", "кнопка «Далі» на мапі", "Не знаєш, куди йти? Унизу мапи стоїть кнопка «Далі» з головною порадою. Торкнись її, і мапа покаже потрібне місце або відкриється потрібна вкладка. Усі поради зібрано на вкладці «Журнал», у розділі «Що робити зараз»: до %d порад від найважливішої. Порядок такий: здати виконане, облоги й події з лічильником походів, історія, вільні очки, кращі речі в торбі, порада зміцнити спорядження (коли нечисть твого рівня тобі смертельна), нагороди за виклики, розшук, завдання міст, справи тижня й дня. Якщо нічого з цього нема, порадник пошле в місцевість твого рівня й до дошки завдань. Кнопка «?» біля масштабу пояснює позначки на мапі. Коли героєві відкривається нове заняття, гра каже про це на мапі." % load("res://scripts/game/guide_service.gd").MAX))
@@ -222,8 +226,9 @@ static func _basics() -> Array:
 		Ench.STRONG_LEVEL, "півтора раза", Ench.GOLD_PER_LEVEL, Ench.RES_PER_LEVEL, Ench.TROPHY_BASE, _num(Ench.TROPHY_PER_LEVEL), "\n• ".join(ench_lines)]))
 	var Fair = _svc("fair_service")
 	var good_lines := []
-	for gid in Fair.GOODS_ORDER:
-		good_lines.append("%s: %d трофеїв і %s грн, на тиждень %d" % [Fair.GOODS[gid]["name"], int(Fair.GOODS[gid]["trophy"]), _big(int(Fair.GOODS[gid]["gold"])), int(Fair.GOODS[gid]["limit"])])
+	for gid in GameDB.ids("fair_goods"):
+		var G: Dictionary = GameDB.row("fair_goods", gid)
+		good_lines.append("%s: %d трофеїв і %s грн, на тиждень %d" % [G["name"], int(G["trophy"]), _big(int(G["gold"])), int(G["limit"])])
 	out.append(_e("Трофейний ярмарок", "рідкісне за трофеї", "З %d-го рівня героя на хуторі є вкладка «Ярмарок». Раз на тиждень скупник привозить рідкісне й міняє на трофеї та гривні. У понеділок товар новий, а кожну річ герой бере раз на тиждень. Товари стоять сіткою значків, як торба героя: під значком ціна в трофеях, дотик показує картку праворуч із кнопкою «Виміняти», галочка означає, що цього тижня це вже взято.\n• Три золоті речі під твій клас: свого ступеня й на один нижчого. Ціна від %d трофеїв і %s грн за першу ступінь до %d трофеїв і %s грн за п'яту. Шостого ступеня тут нема: він лишається надважким печерам.\n• Один артефакт звичайного боса: %d трофеїв і %s грн.\n• %s" % [
 		Fair.MIN_LEVEL, int(Uniques.tier_fair(1)["trophy"]), _big(int(Uniques.tier_fair(1)["gold"])), int(Uniques.tier_fair(5)["trophy"]), _big(int(Uniques.tier_fair(5)["gold"])), Fair.ARTIFACT_TROPHY, _big(Fair.ARTIFACT_GOLD), "\n• ".join(good_lines)]))
 	var PetD = load("res://scripts/data/pets.gd")
@@ -311,10 +316,10 @@ static func _events() -> Array:
 	var out := []
 	var Far = load("res://scripts/game/far_service.gd")
 	out.append(_e("Сила нечисті в подіях", "рівень героя", "У подіях нечисть підтягується до героя: її рівень не нижчий за твій, а сила не менша за %d%% звичайної сили нечисті твого рівня. Так у набігах, облогах, на валках, у полоні, біля пораненого, у супроводі й у сутичці з розшукуваною нечистю, сторожем скарбу чи лігвом на стежці. Уночі нечисть на %d%% лютіша, а в полі її рівень, досвід і здобич підтягуються до твого рівня. Те, що ти борониш, міцнішає разом із нечистю. Новачкам події не важчають: правило вмикається з %d-го рівня героя й набирає повну силу на %d-му. Від спорядження сила нечисті не залежить, тож краще вдягненому героєві легше." % [roundi(Far.EVENT_FLOOR * 100.0), roundi((Far.NIGHT_MULT - 1.0) * 100.0), Far.EVENT_FROM, Far.EVENT_FULL], {}, "Правило"))
-	for k in Wiki.EVENT_KINDS:
-		var head: String = k[1]
-		for e in Wiki.EVENTS:
-			if e["kind"] != k[0]:
+	for k in Wiki.event_kinds():
+		var head: String = Wiki.event_kind_title(k)
+		for e in Wiki.events():
+			if e["kind"] != k:
 				continue
 			out.append(_e(e["name"], "%s • %s" % [e["where"], _level_text(int(e["level"]))], "%s\nНагорода: %s" % [e["text"], e["reward"]], {"map": e["icon"]}, head))
 			head = ""
@@ -404,7 +409,7 @@ static func _probe(kind: String, boss: bool) -> Dictionary:
 
 static func _enemies() -> Array:
 	var out := []
-	for kind in Wiki.ENEMY_ORDER:
+	for kind in Wiki.enemy_order():
 		var W: Dictionary = GameDB.mob_wiki(kind)
 		var pr := _probe(kind, false)
 		var traits := []
@@ -414,7 +419,7 @@ static func _enemies() -> Array:
 			traits.append("б'є здалеку")
 		var st: String = GameDB.hit_status(kind)
 		if st != "":
-			traits.append("удар: " + str(Status.INFO[st]["name"]).to_lower())
+			traits.append("удар: " + Status.name_of(st).to_lower())
 		var homes := _homes(kind)
 		var where := ", ".join(homes.slice(0, 5)) + (" та інші" if homes.size() > 5 else "")
 		var text: String = W["text"] + "\n" + _cap(", ".join(traits)) + ".\nПорада: " + W["tip"]
@@ -430,7 +435,7 @@ static func _boss_where(kind: String) -> Array:
 			out.append(str(L["name"]))
 	if kind in _svc("tower_service").super_bosses():
 		out.append("Башта Кощія (супербос)")
-	if kind in Acts.RING_POOL:
+	if kind in Acts.ring_pool():
 		out.append("Коло Кожум'яки")
 	if kind in _svc("depth_service").bosses():
 		out.append("Глибини зарази")
@@ -441,17 +446,17 @@ static func _bosses() -> Array:
 	var out := []
 	var BS = _svc("boss_service")
 	var mod_lines := []
-	for m in BS.MOD_ORDER:
-		mod_lines.append("%s: %s" % [BS.MODS[m]["name"], BS.MODS[m]["desc"]])
+	for m in GameDB.ids("boss_mods"):
+		mod_lines.append("%s: %s" % [BS.mod(m)["name"], BS.mod(m)["desc"]])
 	var pool := []
-	for b in BS.POOL:
+	for b in BS.pool():
 		pool.append(GameDB.boss_name(b))
 	out.append(_e("Бос дня й бос тижня", "раз на день і раз на тиждень", "На мапі внизу панелі є кнопка «Боси дня й тижня». Щодня й щотижня виходить один із відомих босів, той самий для всіх гравців. Бос тижня той самий увесь тиждень; якщо бос дня з ним збігся, поступається бос дня. Це не господар лігва: кроки історії, перекази й досягнення за босів лігв на нього не зважають. Рівнем він дорівнює героєві, тож не буває ні заслабким, ні задужим. Бос дня відкривається з %d-го рівня героя, бос тижня з %d-го. Перемогти кожного можна раз на період, а герой рахує своїх окремо. Поразка спроби не забирає, але ціна смерті звичайна.\nБос дня має у %s більше здоров'я за звичайного боса свого рівня й одну властивість. Бос тижня має у %s більше здоров'я, б'є на %d%% сильніше й має дві властивості. Властивості щоразу інші:\n• %s\nНагорода боса дня: %d грн за кожен рівень героя, %d трофеїв, %d%% досвіду рівня й легендарна річ. Бос тижня дає %d грн за рівень, %d трофеїв, %d%% досвіду рівня, %d легендарні речі й золоту річ напевно. Крім того, бос кидає звичайну здобич: шанс на золоту річ, трофей-артефакт і душу. Найкращий час на кожного боса запам'ятовується, а перемоги йдуть у «Літопис слави».\nХто може вийти: %s. Надважких босів серед них нема." % [
-		int(BS.MIN_LEVEL["day"]), int(BS.MIN_LEVEL["week"]), _num(BS.HP_MULT["day"]) + " раза", _num(BS.HP_MULT["week"]) + " раза", roundi((float(BS.DMG_MULT["week"]) - 1.0) * 100.0),
-		"\n• ".join(mod_lines), int(BS.GOLD_PER_LEVEL["day"]), int(BS.TROPHIES["day"]), roundi(float(BS.XP_PART["day"]) * 100.0),
-		int(BS.GOLD_PER_LEVEL["week"]), int(BS.TROPHIES["week"]), roundi(float(BS.XP_PART["week"]) * 100.0), int(BS.WEEK_ITEMS), ", ".join(pool)], {}))
+		int(BS.hunt("day")["min_level"]), int(BS.hunt("week")["min_level"]), _num(BS.hunt("day")["hp_mult"]) + " раза", _num(BS.hunt("week")["hp_mult"]) + " раза", roundi((float(BS.hunt("week")["dmg_mult"]) - 1.0) * 100.0),
+		"\n• ".join(mod_lines), int(BS.hunt("day")["gold"]), int(BS.hunt("day")["trophies"]), roundi(float(BS.hunt("day")["xp_part"]) * 100.0),
+		int(BS.hunt("week")["gold"]), int(BS.hunt("week")["trophies"]), roundi(float(BS.hunt("week")["xp_part"]) * 100.0), int(BS.WEEK_ITEMS), ", ".join(pool)], {}))
 	var phase2 := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani", "pushkar", "lisovyi_did", "idolyshche", "karachun"]
-	for kind in Wiki.BOSS_ORDER:
+	for kind in Wiki.boss_order():
 		var W: Dictionary = GameDB.boss_wiki(kind)
 		var text: String = W["text"]
 		if kind in phase2:
@@ -460,7 +465,7 @@ static func _bosses() -> Array:
 		if not stone.is_empty():
 			var names := []
 			for sid in stone:
-				names.append(_svc("stone_service").NAMES[sid])
+				names.append(_svc("stone_service").name_of(sid))
 			text += "\nПерша перемога: " + ", ".join(names) + "."
 		text += "\nПорада: " + W["tip"]
 		# Змія малюємо кодом (у нього нема листа спрайтів), тож у довіднику — його значок із мапи
@@ -506,7 +511,7 @@ static func _map_icon(L: Dictionary) -> String:
 static func _city_entry(id: String, head: String) -> Dictionary:
 	var C: Dictionary = Data.city(id)
 	var parts := ["Місто", "завдання %d-го рівня" % int(C["level"])]
-	if Acts.TRADE_CITIES.has(id):
+	if Acts.has_trade(id):
 		parts.append("торг")
 	if id == "sich":
 		parts.append("майдан")
@@ -536,11 +541,11 @@ static func _map() -> Array:
 	for id in cities:
 		out.append(_city_entry(id, head))
 		head = ""
-	out.append(_e(Camp.CAMP["name"], "Твій хутір біля Січі", "Будівлі, скриня, город і клейноди роду, спільні для всіх твоїх героїв.", {"map": "camp"}))
+	out.append(_e(Camp.camp()["name"], "Твій хутір біля Січі", "Будівлі, скриня, город і клейноди роду, спільні для всіх твоїх героїв.", {"map": "camp"}))
 	for id in locs:
 		out.append(_loc_entry(id, ""))
-	for sid in Acts.SPOTS:
-		var S: Dictionary = Acts.SPOTS[sid]
+	for sid in Acts.spot_ids():
+		var S: Dictionary = Acts.spot(sid)
 		out.append(_e(S["name"], "Місце заняття • з %d-го рівня" % int(S["level"]), S["desc"], {"map": S["icon"]}))
 	# Далекі краї
 	for r in Data.region_ids():
@@ -570,8 +575,8 @@ static func _holidays() -> Array:
 	var dates := {}
 	for row in HS.calendar():
 		dates[row["id"]] = row["dates"]
-	for id in Acts.HOLIDAY_ORDER:
-		var H: Dictionary = Acts.HOLIDAYS[id]
+	for id in Acts.holiday_ids():
+		var H: Dictionary = Acts.holiday(id)
 		var great: bool = HS.rank(id) == "great"
 		out.append(_e(("★ " if great else "") + str(H["name"]), "%s • %s свято" % [dates.get(id, ""), "велике" if great else "мале"],
 			"%s\nБонус: %s.\nЖетони: %s." % [H["desc"], H["bonus_text"], H["tokens"]], {"loot": "tok_" + id}))
@@ -580,17 +585,17 @@ static func _holidays() -> Array:
 
 static func _cost_text(c: Dictionary) -> String:
 	var parts := ["%d грн" % int(c.get("gold", 0))]
-	for r in Camp.RESOURCES:
+	for r in Camp.resources():
 		if int(c.get(r, 0)) > 0:
-			parts.append("%s %d" % [str(Camp.RESOURCES[r]).to_lower(), int(c[r])])
+			parts.append("%s %d" % [Camp.res_name(r).to_lower(), int(c[r])])
 	return ", ".join(parts)
 
 
 static func _camp() -> Array:
 	var out := []
 	var head := "Будівлі"
-	for id in Camp.BUILD_ORDER:
-		var B: Dictionary = Camp.BUILDINGS[id]
+	for id in Camp.building_ids():
+		var B: Dictionary = Camp.building(id)
 		var lines := []
 		for i in B["levels"].size():
 			var L: Dictionary = B["levels"][i]
@@ -598,41 +603,44 @@ static func _camp() -> Array:
 		out.append(_e(B["name"], "рівнів: %d" % B["levels"].size(), "%s\n%s" % [B["desc"], "\n".join(lines)], {"map": "hut"}, head))
 		head = ""
 	head = "Город"
-	for id in Camp.CROP_ORDER:
-		var C: Dictionary = Camp.CROPS[id]
+	for id in Camp.crop_ids():
+		var C: Dictionary = Camp.crop(id)
 		out.append(_e(C["name"], "росте %s год • насіння %d грн" % [_num(C["hours"]), int(C["seed"])], _cap(str(C["desc"])) + ".", {"loot": "herbs" if id == "herbs" else ("veg" if id == "veg" else "khmil")}, head))
 		head = ""
 	head = "Зілляварня"
-	for id in Camp.BREW:
-		var Bw: Dictionary = Camp.BREW[id]
+	for id in Camp.brew_ids():
+		var Bw: Dictionary = Camp.brew(id)
 		var timed: bool = id in ["strength", "antiplague"]
 		var need := "трави %d" % int(Bw["herbs"]) + ((", залізо %d" % int(Bw["iron"])) if int(Bw["iron"]) > 0 else "")
 		out.append(_e(Bw["name"], "зілляварня %d-го рівня • %s" % [int(Bw["level"]), need], str(Bw["desc"]) + ((". Діє %d хвилин бою." % int(Data.BREW_TIME / 60.0)) if timed else "."), {"loot": "mana" if id == "mana" else "potion"}, head))
 		head = ""
 	head = "Казан"
-	for id in Acts.RECIPE_ORDER:
-		var R: Dictionary = Acts.RECIPES[id]
+	for id in Acts.recipe_ids():
+		var R: Dictionary = Acts.recipe(id)
 		var need := []
 		for k in R["need"]:
 			need.append("%s %d" % [str(Camp.res_name(k)).to_lower(), int(R["need"][k])])
 		out.append(_e(R["name"], ", ".join(need), "%s на %d хвилин бою. Та сама страва додає час, інша замінює попередню." % [R["desc"], int(Data.MEAL_TIME / 60.0)], {"loot": "meat"}, head))
 		head = ""
-	out.append(_e("Пасіка", "мед накопичується до %d годин" % int(Camp.PASIKA_CAP_HOURS), "Мед продається сам: %s грн на годину за рівнями пасіки, більше з рівнем героя. Накопичується, навіть коли гра закрита." % " / ".join(PackedStringArray(Camp.PASIKA_RATE.slice(1).map(func(x): return str(x))))))
+	out.append(_e("Пасіка", "мед накопичується до %d годин" % int(Camp.PASIKA_CAP_HOURS), "Мед продається сам: %s грн на годину за рівнями пасіки, більше з рівнем героя. Накопичується, навіть коли гра закрита." % " / ".join(PackedStringArray(Camp.building("pasika")["levels"].map(func(x): return str(x["rate"]))))))
 	out.append(_e("Скриня", "спільна для всіх героїв", "Сюди кладуть гривні, речі й камені долі, щоб забрати іншим персонажем. Місць %d, кожен рівень складу додає ще %d. Скриня й торба показані двома сітками значків, як торба на екрані героя. Торкнись речі, і праворуч з'явиться її картка з кнопкою «%s» або «%s». Другий дотик по тій самій клітинці переносить річ одразу." % [int(_svc("account").CHEST_SIZE), int(_svc("account").CHEST_PER_SKLAD), load("res://scripts/ui/ui_camp.gd").CHEST_TAKE, load("res://scripts/ui/ui_camp.gd").CHEST_PUT], {"map": "chest"}))
 	head = "Клейноди роду"
 	var KS = _svc("kleinod_service")
 	var total := 0
-	for g in Camp.KLEINOD_GOLD:
-		total += int(g)
-	for id in Camp.KLEINOD_ORDER:
-		var K: Dictionary = Camp.KLEINODY[id]
+	var golds := []
+	for t in Camp.kleinod_tiers():
+		golds.append(int(Camp.kleinod_tier(t)["gold"]))
+		total += int(golds[t])
+	for id in Camp.kleinod_ids():
+		var K: Dictionary = Camp.kleinod(id)
 		out.append(_e(K["name"], "п'ять ступенів • ресурс: %s" % str(Camp.res_name(K["res"])).to_lower(),
 			"%s\nКожен ступінь: %s, на п'ятому %s. Ступені коштують %s грн, разом %d грн." % [K["desc"], KS.bonus_text(id, 1), KS.bonus_text(id, 5),
-				", ".join(PackedStringArray(Camp.KLEINOD_GOLD.map(func(x): return str(x)))), total], {"loot": "kl_" + id}, head))
+				", ".join(PackedStringArray(golds.map(func(x): return str(x)))), total], {"loot": "kl_" + id}, head))
 		head = ""
 	var SS = _svc("stone_service")
-	for sid in Camp.STONE_PRICES:
-		out.append(_e(SS.NAMES[sid], "у скарбника за %d грн" % int(Camp.STONE_PRICES[sid]), Camp.STONE_TEXT[sid], {"loot": "stone_" + sid}, "Скарбник" if sid == Camp.STONE_PRICES.keys()[0] else ""))
+	for sid in GameDB.ids("stones"):
+		var St: Dictionary = GameDB.row("stones", sid)
+		out.append(_e(St["name"], "у скарбника за %d грн" % int(St["price"]), St["text"], {"loot": "stone_" + sid}, "Скарбник" if sid == GameDB.ids("stones")[0] else ""))
 	return out
 
 
@@ -669,17 +677,18 @@ static func _items() -> Array:
 	out.append(_e("Заточка", "коваль у місті й кузня на хуторі", "Кожен рівень заточки дає +%d%% до всіх бонусів речі, найвища заточка +%d. Шанс успіху: %s. З +%d невдача знижує заточку на 1, якщо в тебе нема безпечної заточки. Можна точити й без ризику за потрійну ціну." % [roundi(Data.UPGRADE_BONUS * 100), Data.MAX_UPGRADE, ", ".join(ch), Data.SHARPEN_RISK_FROM], {}, "Коваль і кузня"))
 	var CrS = _svc("craft_service")
 	var tiers := []
-	for i in CrS.TIER_NAMES.size():
-		tiers.append("%s (кузня %d%s)" % [CrS.TIER_NAMES[i], int(CrS.TIER_KUZNIA[i]), (", трофеїв %d" % int(CrS.TIER_TROPHY[i])) if int(CrS.TIER_TROPHY[i]) > 0 else ""])
+	for i in CrS.tier_count():
+		var T: Dictionary = CrS.forge_tier(i)
+		tiers.append("%s (кузня %d%s)" % [CrS.tier_name(i), int(T["kuznia"]), (", трофеїв %d" % int(T["trophy"])) if int(T["trophy"]) > 0 else ""])
 	out.append(_e("Кування", "кузня на хуторі", "Можна викувати будь-яку зброю чи одяг свого рівня: " + ", ".join(tiers) + ". Перекування міняє одну властивість будь-якої речі, золотої й наборної теж. Наборна річ лишається в наборі, а золота при оновленні зберігає перекований бонус. Переплавка (кузня 2) дає залізо. Цінну річ (заточену, рідкісну й кращу, золоту, наборну, зачаровану чи з душею) переплавляють лише другим дотиком: перший тільки питає підтвердження."))
 	var CR = load("res://scripts/game/craft_service.gd")
 	var probe := {"ilvl": 0, "rarity": 3}
 	out.append(_e("Оновлення речі", "кузня третього рівня", "Улюблену річ можна підняти до свого рівня: властивості ті самі, сила як у речі вищого рівня, заточка, гніздо й душа лишаються. Жодна властивість від оновлення не стає нижчою, ніж була. Кожен рівень речі коштує окремо й щораз дорожче: ціна росте як квадрат рівня, від першого ж рівня. Для легендарної речі рівень 5 коштує %s грн, рівень 20 — %s, рівень 50 — %s, рівень 75 — %s, а рівень 99 — %s грн. До гривень ідуть залізо й трофеї, їх теж треба більше на вищих рівнях. Дешевша якість коштує менше: звичайна %d%% цієї ціни, добротна %d%%, рідкісна %d%%. Золота річ дорожча в півтора раза. Можна підняти річ на один рівень або одразу до свого: тоді ціни всіх рівнів складаються." % [
 		_num(CR.renew_step(probe, 5)["gold"]), _num(CR.renew_step(probe, 20)["gold"]), _num(CR.renew_step(probe, 50)["gold"]), _num(CR.renew_step(probe, 75)["gold"]), _num(CR.renew_step(probe, 99)["gold"]),
-		roundi(float(CR.RENEW_RARITY[0]) * 100.0), roundi(float(CR.RENEW_RARITY[1]) * 100.0), roundi(float(CR.RENEW_RARITY[2]) * 100.0)]))
+		roundi(CR.renew_mult(0) * 100.0), roundi(CR.renew_mult(1) * 100.0), roundi(CR.renew_mult(2) * 100.0)]))
 	var SS = _svc("stone_service")
-	out.append(_e(SS.NAMES["zabuttia"], "камінь долі", Camp.STONE_TEXT["zabuttia"] + " Подарунки сюжету лишаються.", {"loot": "stone_zabuttia"}, "Камені долі"))
-	out.append(_e(SS.NAMES["alatyr"], "камінь долі", Camp.STONE_TEXT["alatyr"] + " Козак може стати Волхвом і навпаки, спеціалізація — іншою спеціалізацією своєї гілки.", {"loot": "stone_alatyr"}))
+	out.append(_e(SS.name_of("zabuttia"), "камінь долі", GameDB.row("stones", "zabuttia")["text"] + " Подарунки сюжету лишаються.", {"loot": "stone_zabuttia"}, "Камені долі"))
+	out.append(_e(SS.name_of("alatyr"), "камінь долі", GameDB.row("stones", "alatyr")["text"] + " Козак може стати Волхвом і навпаки, спеціалізація — іншою спеціалізацією своєї гілки.", {"loot": "stone_alatyr"}))
 	out.append(_e("Де взяти камені", "", "Рідко падають із босів, перша перемога над сюжетним босом дає камінь напевно. Ще — нагороди рангів слави, великих свят і Башти, а в скарбника на хуторі — за гривні."))
 	out.append(_e("Продаж", "крамниця в місті", "Речі продаються в крамниці, кілька разом — кнопками «Продати звичайні» й далі. Під час ярмарку продаж удвічі дорожчий. Можна ввімкнути автопродаж звичайних речей, коли торба повна."))
 	return out + _uniques() + _artifacts()
@@ -768,7 +777,7 @@ static func _party() -> Array:
 	for id in GameDB.companion_ids():
 		var C: Dictionary = GameDB.companion(id)
 		var icon := {"sprite": "comp_" + id} if Gfx.has("comp_" + id) else {}
-		out.append(_e(str(C["name"]), "найманець • %d грн • лояльність від «%s»" % [int(C["hire"]["cost"]), Data.LOYALTY_NAMES[int(C["hire"]["loyalty"])]], _line(C["desc"]) + " Наймають у корчмі міста. Ціна росте з рівнем героя, знижка міста діє. Одного виду можна мати лише одного.", icon, "Найманці" if first else ""))
+		out.append(_e(str(C["name"]), "найманець • %d грн • лояльність від «%s»" % [int(C["hire"]["cost"]), Data.loyalty_name(int(C["hire"]["loyalty"]))], _line(C["desc"]) + " Наймають у корчмі міста. Ціна росте з рівнем героя, знижка міста діє. Одного виду можна мати лише одного.", icon, "Найманці" if first else ""))
 		first = false
 	first = true
 	for id in GameDB.hero_ids():
@@ -863,8 +872,8 @@ static func _uniques() -> Array:
 static func _rules() -> Array:
 	var out := []
 	var head := "Стани"
-	for id in Status.INFO:
-		out.append(_e(Status.INFO[id]["name"], "стан", _cap(str(Wiki.STATUS_TEXT.get(id, ""))) + ".", {}, head))
+	for id in Status.ids():
+		out.append(_e(Status.name_of(id), "стан", _cap(str(Status.info(id).get("desc", ""))) + ".", {}, head))
 		head = ""
 	head = "Еліти"
 	out.append(_e("Хто такі еліти", "золоте коло довкола ворога", "Сильніші за звичайну нечисть, мають ім'я й одну-три властивості, зате щедріші на здобич і трофеї.", {}, head))
@@ -877,20 +886,20 @@ static func _rules() -> Array:
 		out.append(_e("Зараза: %s" % PS.NAMES[lvl], "рівень %d" % lvl, "Нечисть має +%d%% здоров'я й +%d%% шкоди, нагорода на %d%% більша.%s" % [roundi((float(m["hp"]) - 1.0) * 100), roundi((float(m["dmg"]) - 1.0) * 100), roundi((float(m["reward"]) - 1.0) * 100), " З-під землі підіймаються отруйні хмари." if lvl >= 2 else ""], {}, head))
 		head = ""
 	head = "Лояльність міст"
-	for i in Data.LOYALTY_NAMES.size():
-		out.append(_e(Data.LOYALTY_NAMES[i], "від %d очок" % int(Data.LOYALTY_THRESHOLDS[i]), "Знижка в місті %d%%." % roundi(float(Data.LOYALTY_DISCOUNT[i]) * 100), {}, head))
+	for i in Data.loyalty_levels().size():
+		out.append(_e(Data.loyalty_name(i), "від %d очок" % Data.loyalty_from(i), "Знижка в місті %d%%." % roundi(Data.loyalty_discount(i) * 100), {}, head))
 		head = ""
 	head = "Слава"
-	for r in Acts.GLORY_RANKS:
+	for r in Acts.glory_ranks():
 		var SS = _svc("stone_service")
-		var extra := (" і %s" % SS.NAMES[r[3]]) if str(r[3]) != "" else ""
-		out.append(_e(r[1], "від %d слави" % int(r[0]), ("Нагорода за ранг: %d грн%s." % [int(r[2]), extra]) if int(r[2]) > 0 else "Перший ранг.", {"loot": "glory"}, head))
+		var extra := (" і %s" % SS.name_of(r["stone"])) if str(r.get("stone", "")) != "" else ""
+		out.append(_e(r["name"], "від %d слави" % int(r["from"]), ("Нагорода за ранг: %d грн%s." % [int(r["gold"]), extra]) if int(r["gold"]) > 0 else "Перший ранг.", {"loot": "glory"}, head))
 		head = ""
-	var src := "Звідки слава: " + "; ".join(Acts.GLORY_SOURCES) + "."
+	var src := "Звідки слава: " + "; ".join(Acts.glory_sources()) + "."
 	out.append(_e("Джерела слави", "", src, {"loot": "glory"}))
 	var recs := []
-	for k in Acts.RECORD_ORDER:
-		recs.append(str(Acts.RECORDS[k]["name"]))
+	for k in GameDB.ids("records"):
+		recs.append(str(GameDB.row("records", k)["name"]))
 	out.append(_e("Літопис слави", "рекорди роду", "Найкраще серед усіх твоїх персонажів: " + ", ".join(recs) + ". За віхи рекордів дають славу.", {}, "Рекорди й виклики"))
 	var A = load("res://scripts/data/achievements.gd")
 	out.append(_e("Виклики", "екран героя, вкладка «Виклики»", "Щодня %d виклики, щотижня %d, по %d з них про події й заняття. Нагорода дня — гривні й ресурси, тижня — гривні, рідкісна річ і безпечна заточка." % [int(A.DAILY_COUNT), int(A.WEEKLY_COUNT), int(A.DAILY_EVENTS)]))

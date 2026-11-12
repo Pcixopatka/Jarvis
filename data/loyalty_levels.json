@@ -1,0 +1,30 @@
+{
+	"chuzhynets": {
+		"num": 10171,
+		"level": 0,
+		"from": 0,
+		"name": "Чужинець",
+		"discount": 0.0
+	},
+	"znaiomyi": {
+		"num": 10172,
+		"level": 1,
+		"from": 100,
+		"name": "Знайомий",
+		"discount": 0.05
+	},
+	"shanovanyi": {
+		"num": 10173,
+		"level": 2,
+		"from": 250,
+		"name": "Шанований",
+		"discount": 0.1
+	},
+	"pobratym": {
+		"num": 10174,
+		"level": 3,
+		"from": 500,
+		"name": "Побратим",
+		"discount": 0.2
+	}
+}

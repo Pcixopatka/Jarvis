@@ -1,25 +1,37 @@
 extends RefCounted
 ## Звукова мапа гри: гучність кожного звуку, голоси нечисті, фон за ландшафтом.
 ## Голос смерті кожного виду записаний у data/mobs.json (sounds.death), фоновий шум краєвиду — у
-## data/biomes.json (ambient).
+## data/biomes.json (ambient), гучність кожного звуку — у data/sounds.json, фонового шуму — у data/ambients.json.
 ## Самі файли — assets/audio (збирає tools/audio/build_audio.py), перелік — sound_index.gd.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-## Базова гучність звуку в дБ: додається до гучності, вказаної в місці виклику.
-## Усі файли вирівняні за гучністю, тож тут задано, наскільки помітним має бути кожен звук у грі.
-const VOLUME := {
-	"step": -15.0, "click": -7.0, "page": -3.0, "door": -5.0, "rustle": -5.0, "pot": -6.0, "dice": -1.0,
-	"swing": -6.0, "shoot": -7.0, "hit": -2.0, "crit": 0.0, "slash": -1.0, "clash": -1.0, "unsheathe": -6.0,
-	"whirl": -4.0, "dodge": -5.0, "hurt": -1.0, "musket": 0.0, "boom": 0.0, "lightning": -2.0,
-	"fire": -3.0, "spell": -5.0, "zap": -8.0, "heal": -4.0, "portal": -4.0,
-	"coin": -4.0, "coins": -3.0, "item": -3.0, "quest": 0.0, "levelup": -2.0,
-	"sharpen_ok": -3.0, "sharpen_fail": -3.0, "roar": -1.0, "splash": -2.0,
-	"enemy_die": -5.0, "die_beast": -5.0, "die_undead": -6.0, "die_slime": -5.0, "die_human": -6.0, "die_spirit": -6.0,
-}
+static var _volume := {}
+static var _ambient := {}
 
-## Гучність фонових шумів у дБ (щоб вітер не перекрикував бій, а юрба було чути).
-const AMBIENT_VOLUME := {"forest": -2.0, "wind": 0.0, "night": -4.0, "cave": 0.0, "river": -3.0, "fire": -3.0, "crowd": -6.0}
+
+## Базова гучність звуку в дБ: {звук: дБ}, додається до гучності, вказаної в місці виклику. Усі файли
+## вирівняні за гучністю, тож тут задано, наскільки помітним має бути кожен звук у грі. Складається раз
+## із data/sounds.json; Audio тримає цей словник у себе, тож гучність звуку — одне читання словника.
+static func volumes() -> Dictionary:
+	if _volume.is_empty():
+		_volume = _flat("sounds")
+	return _volume
+
+
+## Гучність фонових шумів у дБ (щоб вітер не перекрикував бій, а юрбу було чути): data/ambients.json.
+static func ambient_volumes() -> Dictionary:
+	if _ambient.is_empty():
+		_ambient = _flat("ambients")
+	return _ambient
+
+
+static func _flat(table: String) -> Dictionary:
+	var out := {}
+	for id in GameDB.ids(table):
+		out[id] = float(GameDB.row(table, id)["volume"])
+	out.make_read_only()
+	return out
 
 
 ## Голос смерті нечисті: свій із data/mobs.json (sounds.death), решта — загальний «enemy_die».

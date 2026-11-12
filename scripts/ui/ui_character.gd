@@ -474,7 +474,7 @@ static func _holidays(game) -> Control:
 	v.add_theme_constant_override("separation", 8)
 	var id: String = HS.active()
 	if id != "":
-		var H: Dictionary = Acts.HOLIDAYS[id]
+		var H: Dictionary = Acts.holiday(id)
 		v.add_child(UI.label("Сьогодні свято: %s" % H["name"], 28, UI.GOLD, false))
 		var d := UI.label(H["desc"], 17, UI.TEXT, false)
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -500,7 +500,7 @@ static func _holidays(game) -> Control:
 		var nx: Dictionary = HS.upcoming()
 		v.add_child(UI.label("Сьогодні будень", 26, UI.GOLD, false))
 		if not nx.is_empty():
-			v.add_child(UI.label("Найближче свято: %s — за %d дн." % [Acts.HOLIDAYS[nx["id"]]["name"], int(nx["in_days"])], 20, UI.TEXT, false))
+			v.add_child(UI.label("Найближче свято: %s — за %d дн." % [Acts.holiday(nx["id"])["name"], int(nx["in_days"])], 20, UI.TEXT, false))
 		var hint := UI.label("У свята діє особливий бонус, а з нечисті падають жетони. За жетони дають три нагороди: гривні з ресурсами, річ і славу, а на великі свята ще й Алатир-камінь.", 16, UI.MUTED, false)
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(hint)
@@ -546,13 +546,13 @@ static func _events(game) -> Control:
 	var hint := UI.label("Торкнись події, щоб побачити її місце на мапі.", 15, UI.MUTED, false)
 	v.add_child(hint)
 	var rows: Array = EB.rows(w, p, game.map_here)
-	for k in EB.Wiki.EVENT_KINDS:
-		v.add_child(UI.label(k[1], 24, UI.GOLD, false))
+	for k in EB.Wiki.event_kinds():
+		v.add_child(UI.label(EB.Wiki.event_kind_title(k), 24, UI.GOLD, false))
 		var grid := UI.grid(2)
 		grid.add_theme_constant_override("h_separation", 12)
 		grid.add_theme_constant_override("v_separation", 8)
 		for r in rows:
-			if r["kind"] == k[0]:
+			if r["kind"] == k:
 				grid.add_child(_event_card(r, game))
 		v.add_child(grid)
 	v.add_child(UI.button("Докладно про кожну подію — у довіднику", func(): game.open_wiki(game._build_character, "events"), Vector2(620, 60), 20))
@@ -624,15 +624,15 @@ static func _glory(game) -> Control:
 	var cur: int = GS.rank_index(gl)
 	var ranks := UI.grid(2)
 	ranks.add_theme_constant_override("h_separation", 40)
-	for i in range(1, Acts.GLORY_RANKS.size()):
-		var R: Array = Acts.GLORY_RANKS[i]
-		var reward := "%d грн" % int(R[2])
-		if str(R[3]) != "":
-			reward += " і %s" % game.StoneService.NAMES[R[3]]
-		ranks.add_child(UI.label("%s %s — %d слави: %s" % ["✓" if i <= cur else "•", R[1], int(R[0]), reward], 16, UI.GOOD if i <= cur else UI.MUTED, false))
+	for i in range(1, Acts.glory_ranks().size()):
+		var R: Dictionary = Acts.glory_ranks()[i]
+		var reward := "%d грн" % int(R["gold"])
+		if str(R.get("stone", "")) != "":
+			reward += " і %s" % game.StoneService.name_of(R["stone"])
+		ranks.add_child(UI.label("%s %s — %d слави: %s" % ["✓" if i <= cur else "•", R["name"], int(R["from"]), reward], 16, UI.GOOD if i <= cur else UI.MUTED, false))
 	v.add_child(ranks)
 	v.add_child(UI.label("Звідки береться слава", 20, UI.GOLD, false))
-	for line in Acts.GLORY_SOURCES:
+	for line in Acts.glory_sources():
 		var sl := UI.label("•  " + line, 15, UI.MUTED, false)
 		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(sl)

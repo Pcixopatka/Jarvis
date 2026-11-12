@@ -17,6 +17,7 @@ const PetService := preload("res://scripts/game/pet_service.gd")
 const Enchants := preload("res://scripts/data/enchants.gd")
 const EnchantService := preload("res://scripts/game/enchant_service.gd")
 const FairService := preload("res://scripts/game/fair_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 
 static func _do(game, action: String, arg = null) -> Callable:
@@ -54,9 +55,9 @@ static func build(game) -> Control:
 
 static func _cost_text(cost: Dictionary) -> String:
 	var parts := ["%d грн" % cost["gold"]]
-	for r in Camp.RESOURCES:
+	for r in Camp.resources():
 		if int(cost.get(r, 0)) > 0:
-			parts.append("%s %d" % [Camp.RESOURCES[r], cost[r]])
+			parts.append("%s %d" % [Camp.res_name(r), cost[r]])
 	return ", ".join(parts)
 
 
@@ -67,8 +68,8 @@ static func _buildings(game) -> Control:
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(UI.label("Козак і загін відпочили. Ресурси (дерево, залізо, трави) падають з ворогів у місцевостях.", 17, UI.MUTED, false))
 	_ad_row(game, v)
-	for id in Camp.BUILD_ORDER:
-		var b: Dictionary = Camp.BUILDINGS[id]
+	for id in Camp.building_ids():
+		var b: Dictionary = Camp.building(id)
 		var lvl := CampService.level(w, id)
 		var mx := CampService.max_level(id)
 		var row := HBoxContainer.new()
@@ -121,9 +122,9 @@ static func _kleinody(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	v.add_child(UI.label("Клейноди роду: козацькі регалії. Кожен ступінь назавжди додає бонус усім твоїм героям.", 17, UI.MUTED, false))
-	v.add_child(UI.label("Майстри беруть гривні, трофеї й ресурси. Оздоблено ступенів: %d із %d." % [KleinodService.total(w), Camp.KLEINOD_ORDER.size() * mx], 17, UI.GOLD, false))
-	for id in Camp.KLEINOD_ORDER:
-		var K: Dictionary = Camp.KLEINODY[id]
+	v.add_child(UI.label("Майстри беруть гривні, трофеї й ресурси. Оздоблено ступенів: %d із %d." % [KleinodService.total(w), Camp.kleinod_ids().size() * mx], 17, UI.GOLD, false))
+	for id in Camp.kleinod_ids():
+		var K: Dictionary = Camp.kleinod(id)
 		var lvl := KleinodService.level(w, id)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 14)
@@ -147,14 +148,14 @@ static func _kleinody(game) -> Control:
 	# Скарбник: камені долі за гривні
 	v.add_child(UI.label("Скарбник", 22, UI.GOLD, false))
 	v.add_child(UI.label("Камені долі рідко падають із босів. Скарбник дістане їх за гривні будь-коли.", 15, UI.MUTED, false))
-	for id in Camp.STONE_PRICES:
+	for id in GameDB.ids("stones"):
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 14)
 		row.add_child(UI.icon("stone_" + id, 64))
 		var info := VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(UI.label("%s — у тебе %d" % [StoneService.NAMES[id], StoneService.count(p, id)], 22, UI.TEXT, false))
-		info.add_child(UI.label(Camp.STONE_TEXT[id], 15, UI.MUTED, false))
+		info.add_child(UI.label("%s — у тебе %d" % [StoneService.name_of(id), StoneService.count(p, id)], 22, UI.TEXT, false))
+		info.add_child(UI.label(GameDB.row("stones", id)["text"], 15, UI.MUTED, false))
 		row.add_child(info)
 		var price := KleinodService.stone_price(id)
 		row.add_child(UI.button("Купити\n%s грн" % UI.num(price), _do(game, "buy_stone", id), Vector2(330, 72), 16, p.gold >= price))
@@ -195,10 +196,10 @@ static func _chest(game) -> Control:
 	var SS = game.StoneService
 	var srow := HBoxContainer.new()
 	srow.add_theme_constant_override("separation", 8)
-	for id in ["zabuttia", "alatyr"]:
+	for id in GameDB.ids("stones"):
 		var mine: int = SS.count(p, id)
 		var there: int = int(acc.chest["stones"].get(id, 0))
-		srow.add_child(UI.label("%s: у скрині %d, у тебе %d" % [SS.NAMES[id], there, mine], 15, UI.TEXT, false))
+		srow.add_child(UI.label("%s: у скрині %d, у тебе %d" % [SS.name_of(id), there, mine], 15, UI.TEXT, false))
 		srow.add_child(UI.button("↓", _do(game, "chest_put_stone", id), Vector2(44, 40), 16, mine > 0))
 		srow.add_child(UI.button("↑", _do(game, "chest_take_stone", id), Vector2(44, 40), 16, there > 0))
 	v.add_child(srow)
@@ -375,7 +376,7 @@ static func _crafting(game) -> Control:
 	tiers.add_theme_constant_override("separation", 10)
 	for t in range(1, 4):
 		var open := CraftService.tier_open(w, t)
-		var label: String = ("▸ " if t == tier else "") + CraftService.TIER_NAMES[t] + ("" if open else "\n(кузня %d)" % CraftService.TIER_KUZNIA[t])
+		var label: String = ("▸ " if t == tier else "") + CraftService.tier_name(t) + ("" if open else "\n(кузня %d)" % int(CraftService.forge_tier(t)["kuznia"]))
 		var b := UI.button(label, _do(game, "craft_tier", t), Vector2(220, 60), 17, open)
 		if t == tier:
 			b.modulate = Data.rarity_color(t).lightened(0.3)
@@ -385,7 +386,7 @@ static func _crafting(game) -> Control:
 	for r in CraftService.RECIPES:
 		var cost := CraftService.forge_cost(r[0], tier, p.level)
 		var ok: bool = CraftService.tier_open(w, tier) and CraftService.can_pay(p, cost) and p.inventory.size() < p.bag_size()
-		var txt := "%s — %s\n%s" % [CraftService.recipe_name(r[0], r[1]), CraftService.TIER_NAMES[tier].to_lower(), _craft_cost_text(cost)]
+		var txt := "%s — %s\n%s" % [CraftService.recipe_name(r[0], r[1]), CraftService.tier_name(tier).to_lower(), _craft_cost_text(cost)]
 		var b := UI.button(txt, _do(game, "craft", r), Vector2(520, 66), 15, ok)
 		grid.add_child(b)
 	v.add_child(grid)
@@ -405,8 +406,8 @@ static func _brewery(game) -> Control:
 	v.add_theme_constant_override("separation", 12)
 	v.add_child(UI.label("Трави: %d  •  Залізо: %d  •  Зілля здоров'я: %d/%d  •  Зілля наснаги: %d/%d" % [p.resources.get("herbs", 0), p.resources.get("iron", 0), p.potions, p.potion_max(), p.mana_potions, p.mana_potion_max()], 20, UI.TEXT, false))
 	v.add_child(UI.label("Зілля сили й проти зарази випивається одразу й діє %d хвилин бою. Час іде лише в бою. Ще одна порція додає час, запас до години." % int(Data.BREW_TIME / 60.0), 16, UI.MUTED, false))
-	for id in Camp.BREW:
-		var r: Dictionary = Camp.BREW[id]
+	for id in Camp.brew_ids():
+		var r: Dictionary = Camp.brew(id)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 14)
 		var info := VBoxContainer.new()
@@ -450,12 +451,12 @@ static func _garden(game) -> Control:
 		if b.is_empty():
 			info.add_child(UI.label("Грядка %d: порожня" % (i + 1), 21, UI.TEXT, false))
 			info.add_child(UI.label("Обери, що посадити. Насіння коштує кілька гривень.", 15, UI.MUTED, false))
-			for crop in Camp.CROP_ORDER:
-				var c: Dictionary = Camp.CROPS[crop]
+			for crop in Camp.crop_ids():
+				var c: Dictionary = Camp.crop(crop)
 				var txt := "%s\n%s, %d грн" % [c["name"], GardenService.time_text(int(GardenService.grow_time(w, crop))), int(c["seed"])]
 				row.add_child(UI.button(txt, _do(game, "plant", [i, crop]), Vector2(200, 70), 15, GardenService.can_plant(w, p, i, crop)))
 		else:
-			var c2: Dictionary = Camp.CROPS[b["crop"]]
+			var c2: Dictionary = Camp.crop(b["crop"])
 			var ripe2 := GardenService.ready(w, i)
 			var gives: String = ("+%d грн" % GardenService.yield_of(b["crop"], p.level)) if c2["gives"] == "gold" else str(c2["desc"])
 			info.add_child(UI.icon_text("khmil" if b["crop"] == "khmil" else str(b["crop"]), "Грядка %d: %s%s" % [i + 1, c2["name"], "  — достигло!" if ripe2 else ""], 21, UI.GOOD if ripe2 else UI.TEXT))
@@ -484,8 +485,8 @@ static func _garden(game) -> Control:
 ## Запас провіанту значками: м'ясо, риба, городина, трави.
 static func food_row(p, extra: Array = []) -> Control:
 	var items := []
-	for id in Acts.FOOD:
-		items.append([id, "%s: %d" % [Acts.FOOD[id], OutdoorService.food(p, id)]])
+	for id in Camp.food_ids():
+		items.append([id, "%s: %d" % [Camp.res_name(id), OutdoorService.food(p, id)]])
 	items.append(["herbs", "Трави: %d" % int(p.resources.get("herbs", 0))])
 	items.append_array(extra)
 	return UI.icon_row(items, 19)
@@ -493,8 +494,8 @@ static func food_row(p, extra: Array = []) -> Control:
 
 static func food_text(p) -> String:
 	var parts := []
-	for id in Acts.FOOD:
-		parts.append("%s: %d" % [Acts.FOOD[id], OutdoorService.food(p, id)])
+	for id in Camp.food_ids():
+		parts.append("%s: %d" % [Camp.res_name(id), OutdoorService.food(p, id)])
 	parts.append("Трави: %d" % int(p.resources.get("herbs", 0)))
 	return "  •  ".join(parts)
 
@@ -502,7 +503,7 @@ static func food_text(p) -> String:
 static func _need_text(need: Dictionary) -> String:
 	var parts := []
 	for r in need:
-		var nm: String = str(Acts.FOOD[r]).to_lower() if Acts.FOOD.has(r) else str(Camp.RESOURCES.get(r, r)).to_lower()
+		var nm: String = Camp.res_name(r).to_lower()
 		parts.append("%s %d" % [nm, int(need[r])])
 	return ", ".join(parts)
 
@@ -516,8 +517,8 @@ static func _kazan(game) -> Control:
 	about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(about)
 	var now := OutdoorService.eaten(p)
-	for id in Acts.RECIPE_ORDER:
-		var r: Dictionary = Acts.RECIPES[id]
+	for id in GameDB.ids("recipes"):
+		var r: Dictionary = GameDB.row("recipes", id)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 14)
 		var info := VBoxContainer.new()

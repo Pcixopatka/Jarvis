@@ -100,9 +100,9 @@ static func is_stat(key: String) -> bool:
 		"boss":
 			return GameDB.has_boss(parts[1])
 		"trail":
-			return Acts.TRAIL_KINDS.has(parts[1])
+			return Acts.trail_kinds().has(parts[1])
 		"cook":
-			return Acts.RECIPES.has(parts[1])
+			return Acts.is_recipe(parts[1])
 		"event":
 			return parts[1] in load("res://scripts/game/event_service.gd").BATTLE_KINDS
 	return false
@@ -117,13 +117,13 @@ static func available(need: String, world, player = null) -> bool:
 	var chosen: bool = (not player.is_peasant()) if player != null else lvl >= 3
 	match need:
 		"vigil":
-			return chosen and lvl >= int(Acts.SPOTS["varta"]["level"])
+			return chosen and lvl >= int(Acts.spot("varta")["level"])
 		"duel":
 			return chosen and lvl >= int(load("res://scripts/game/duel_service.gd").MIN_LEVEL)
 		"bounty":
 			return lvl >= int(load("res://scripts/game/bounty_service.gd").MIN_LEVEL)
 		"ring":
-			return chosen and lvl >= int(Acts.SPOTS["kolo"]["level"])
+			return chosen and lvl >= int(Acts.spot("kolo")["level"])
 		"muster":
 			return chosen and lvl >= int(Acts.MUSTER_MIN_LEVEL)
 		"tower":
@@ -131,9 +131,9 @@ static func available(need: String, world, player = null) -> bool:
 		"depth":
 			return load("res://scripts/game/depth_service.gd").unlocked(world)
 		"hunt":
-			return chosen and lvl >= int(Acts.SPOTS["hunt"]["level"])
+			return chosen and lvl >= int(Acts.spot("hunt")["level"])
 		"fish":
-			return chosen and lvl >= int(Acts.SPOTS["fish"]["level"])
+			return chosen and lvl >= int(Acts.spot("fish")["level"])
 		"tavern", "escort", "trail":
 			return chosen
 		"event":
@@ -255,7 +255,7 @@ static func claim(world, player, weekly: bool, index: int) -> String:
 		world.boosts["safe_sharpen"] = int(world.boosts.get("safe_sharpen", 0)) + 1
 		return "Нагорода тижня: %d грн, %s, жетон безпечної заточки" % [150 + 60 * lvl, it["name"]]
 	player.gold += 40 + 20 * lvl
-	for r in Camp.RESOURCES:
+	for r in Camp.resources():
 		player.resources[r] = int(player.resources.get(r, 0)) + 2
 	return "Нагорода дня: %d грн і ресурси" % (40 + 20 * lvl)
 

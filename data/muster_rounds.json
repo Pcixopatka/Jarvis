@@ -1,0 +1,35 @@
+{
+	"first": {
+		"num": 9591,
+		"round": 0,
+		"size": 3,
+		"seconds": 7.0,
+		"hit": 0.065,
+		"ally_hit": 0.09,
+		"gold": 40,
+		"glory": 5,
+		"loyalty": 20
+	},
+	"second": {
+		"num": 9592,
+		"round": 1,
+		"size": 4,
+		"seconds": 8.0,
+		"hit": 0.08,
+		"ally_hit": 0.11,
+		"gold": 80,
+		"glory": 10,
+		"loyalty": 30
+	},
+	"third": {
+		"num": 9593,
+		"round": 2,
+		"size": 5,
+		"seconds": 9.0,
+		"hit": 0.1,
+		"ally_hit": 0.13,
+		"gold": 160,
+		"glory": 25,
+		"loyalty": 50
+	}
+}

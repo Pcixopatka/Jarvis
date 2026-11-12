@@ -5,6 +5,8 @@ extends RefCounted
 ## або поранений вепр (м'ясо для казана). Пластун бачить усю стежку одразу й натрапляє на сліди частіше.
 
 const Acts := preload("res://scripts/data/activities.gd")
+## Знахідки, які вміє Combat._trail_found: у data/trail_kinds.json мусять бути саме вони.
+const KINDS := ["cache", "den", "beast"]
 
 
 static func chance(player) -> float:
@@ -19,14 +21,14 @@ static func should_spawn(player, roll: float) -> bool:
 ## Яка знахідка чекає наприкінці (roll — випадкове 0..1).
 static func roll_kind(roll: float) -> String:
 	var total := 0
-	for k in Acts.TRAIL_KINDS:
-		total += int(Acts.TRAIL_KINDS[k]["weight"])
+	for k in Acts.trail_kinds():
+		total += int(Acts.trail_kind(k)["weight"])
 	var left := roll * total
-	for k in Acts.TRAIL_KINDS:
-		left -= float(Acts.TRAIL_KINDS[k]["weight"])
+	for k in Acts.trail_kinds():
+		left -= float(Acts.trail_kind(k)["weight"])
 		if left < 0.0:
 			return k
-	return Acts.TRAIL_KINDS.keys()[0]
+	return Acts.trail_kinds().keys()[0]
 
 
 ## Точки стежки в межах арени: перша — початок слідів, остання — знахідка.

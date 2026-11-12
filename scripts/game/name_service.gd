@@ -4,7 +4,7 @@ extends RefCounted
 ## пробіли по краях зрізаються, кілька поспіль стискаються в один; хоч одна літера обов'язкова.
 ## Лайку й імена служби гри шукаємо в нормалізованому рядку: обхідні написання (латинка замість
 ## кирилиці, цифри замість літер, повтори, пробіли й дефіси всередині) не допомагають.
-## Без стану: дані в scripts/data/names_data.gd.
+## Без стану: слова — у data/name_pools.json (NamesData.words).
 
 const Names := preload("res://scripts/data/names_data.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
@@ -121,15 +121,16 @@ static func _has_root(s: String, roots: Array) -> bool:
 static func is_rude(text: String) -> bool:
 	var cyr := skeleton_cyr(text)
 	var lat := skeleton_lat(text)
-	if cyr in Names.BAD_WHOLE or lat in Names.BAD_WHOLE:
+	var whole := Names.words("bad_whole")
+	if cyr in whole or lat in whole:
 		return true
-	return _has_root(cyr, Names.BAD_CYR) or _has_root(lat, Names.BAD_LAT)
+	return _has_root(cyr, Names.words("bad_cyr")) or _has_root(lat, Names.words("bad_lat"))
 
 
 ## Ім'я служби гри: ціле ім'я чи його початок («Адмін», «Admin_Taras», «Модератор Петро»).
 static func is_reserved(text: String) -> bool:
 	var lat := skeleton_lat(clean(text))
-	for r in Names.RESERVED:
+	for r in Names.words("reserved"):
 		if lat.begins_with(squeeze(r)):
 			return true
 	# коротке («GM») лише окремим словом на початку: «GM Тарас», «GM1», але не «Гмиря»
@@ -138,7 +139,7 @@ static func is_reserved(text: String) -> bool:
 		if not (UA_LETTERS.contains(ch) or LAT_LETTERS.contains(ch)):
 			break
 		first += ch
-	return skeleton_lat(first) in Names.RESERVED_WORD
+	return skeleton_lat(first) in Names.words("reserved_word")
 
 
 # ---------- Жереб ----------
@@ -152,12 +153,15 @@ static func roll(rng: RandomNumberGenerator = null) -> String:
 	for _try in 20:
 		var n: String
 		if rng.randf() < 0.25:
-			n = Names.READY[rng.randi_range(0, Names.READY.size() - 1)]
+			var ready := Names.words("ready")
+			n = ready[rng.randi_range(0, ready.size() - 1)]
 		else:
-			n = Names.VERBS[rng.randi_range(0, Names.VERBS.size() - 1)] + Names.NOUNS[rng.randi_range(0, Names.NOUNS.size() - 1)]
+			var verbs := Names.words("verbs")
+			var nouns := Names.words("nouns")
+			n = verbs[rng.randi_range(0, verbs.size() - 1)] + nouns[rng.randi_range(0, nouns.size() - 1)]
 		if check(n) == "":
 			return n
-	return Names.READY[0]
+	return Names.words("ready")[0]
 
 
 # ---------- Збереження ----------

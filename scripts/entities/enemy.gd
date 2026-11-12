@@ -10,6 +10,7 @@ const Elites := preload("res://scripts/data/elites.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 const Mechanic := preload("res://scripts/mechanics/mechanic.gd")
+const Activities := preload("res://scripts/data/activities.gd")
 const HIT_STATUS_CHANCE := 0.3
 
 var combat: Combat
@@ -57,7 +58,8 @@ var phase2 := false  # бос лютішає на половині здоров'
 var anim_moving := false  # для спрайтів: чи рухався цього кадру
 var treasure_guard := false  # подія «Знахідка»: після смерті лишає скриню
 var bounty_id := 0  # ціль із дошки розшуку (див. BountyService)
-var style := ""  # суперник у герці: rubaka | spysnyk | strilets | kharakternyk | bulavnyk (див. Activities.RIVALS)
+var style := ""  # суперник у герці: rubaka | spysnyk | strilets | kharakternyk | bulavnyk (data/rivals.json; як б'ється — механіка scripts/mechanics/rival/<стиль>.gd)
+var rush := false  # суперник ближнього бою: здалеку рветься до цілі (ставить механіка стилю)
 var sprite := ""  # лист спрайтів, якщо він не збігається з kind
 var cast_time := 0.0  # стоїть і заносить удар (серія рубаки, удар булави)
 var illusion := false  # мара відьми: зникає від першого ж удару й нічого не лишає
@@ -262,7 +264,7 @@ func _process(delta: float) -> void:
 
 	cast_time = maxf(0.0, cast_time - delta)
 	var spd := speed * (0.4 if slow_timer > 0.0 else 1.0) * (0.15 if windup > 0.0 else 1.0) * (0.05 if cast_time > 0.0 else 1.0) * Status.speed_mult(self)
-	if style in ["rubaka", "kharakternyk", "bulavnyk"] and dist > 280.0:
+	if rush and dist > 280.0:
 		spd *= 1.7  # суперник ближнього бою рветься до стрільця
 	var vel := desired * spd + sep * speed * 1.5 + knockback
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
@@ -506,7 +508,8 @@ func vanish() -> void:
 # --- Герць: суперники-козаки ---
 
 ## Перетворює ворога на суперника: стиль бою, лист спрайтів, ім'я; здоров'я й удар задає турнір
-## (їхня сила — від рівня героя, див. DuelService.loc_for).
+## (їхня сила — від рівня героя, див. DuelService.loc_for). Як він б'ється — механіка стилю: «mechanic»
+## запису суперника (data/rivals.json), а в бійця сотні огляду — суперника того самого стилю.
 func make_rival(info: Dictionary, hp_abs: float, dmg_abs: float, cap: float = 0.0) -> void:
 	dmg_cap = cap
 	style = info["style"]
@@ -515,165 +518,23 @@ func make_rival(info: Dictionary, hp_abs: float, dmg_abs: float, cap: float = 0.
 	max_hp = hp_abs
 	damage = dmg_abs
 	ability_timer = 2.2
-	match style:
-		"rubaka":
-			speed *= 1.1
-			windup_max = 0.3
-		"spysnyk":
-			keep_distance = 170.0
-		"strilets":
-			ranged = true
-			keep_distance = 330.0
-			shoot_cd = 1.7
-			shoot_timer = 1.2
-			speed *= 0.9
-		"kharakternyk":
-			windup_max = 0.3
-		"bulavnyk":
-			speed *= 0.75
-			max_hp *= 1.25
-			damage *= 1.15
-			windup_max = 0.5
+	var ref := str(info.get("mechanic", Activities.style_rival(style).get("mechanic", "")))
+	var m = Mechanic.create(ref, self) if ref != "" else null
+	if m != null:
+		mechanic = m
+		_mh = Mechanic.hooks_of(m.get_script())
+		_mech_boss = false
+		_trick = false
+		if _mh & Mechanic.SETUP:
+			mechanic.setup()
 	hp = max_hp
 
 
+## Черговий прийом суперника: усе обертання пише механіка його стилю (scripts/mechanics/rival/<стиль>.gd).
 func _rival_ability(target) -> void:
-	var to_t: Vector2 = (target.global_position - global_position).normalized()
-	var dist: float = global_position.distance_to(target.global_position)
 	ability_step += 1
-	match style:
-		"rubaka":
-			if ability_step % 3 == 0:
-				# Ривок по прямій
-				ability_timer = 3.0
-				var t = _telegraph("line", global_position, 0.6, damage * 1.4)
-				t.dir = to_t
-				t.length = 420.0
-				t.width = 80.0
-				cast_time = 0.6
-				t.on_fire = func():
-					if not dead:
-						knockback = to_t * 1700.0
-			else:
-				# Серія з трьох рубких ударів віялом: стоїть на місці й рубає
-				ability_timer = 2.8
-				cast_time = 1.1
-				for i in 3:
-					var t = _telegraph("cone", global_position, 0.5 + 0.28 * i, damage * 0.9)
-					t.dir = to_t.rotated((i - 1) * 0.55)
-					t.length = 160.0
-					t.half_angle = 0.6
-					t.color = Color(1.0, 0.85, 0.5)
-		"spysnyk":
-			ability_timer = 2.1
-			if ability_step % 2 == 1:
-				# Укол по прямій із випадом уперед
-				var t = _telegraph("line", global_position, 0.55, damage * 1.3)
-				t.dir = to_t
-				t.length = 310.0
-				t.width = 56.0
-				cast_time = 0.55
-				t.on_fire = func():
-					if not dead:
-						knockback = to_t * 700.0
-			else:
-				# Широкий замах древком і відскок назад
-				var t = _telegraph("cone", global_position, 0.7, damage * 1.0)
-				t.dir = to_t
-				t.length = 220.0
-				t.half_angle = 1.0
-				t.color = Color(0.9, 0.8, 0.6)
-				cast_time = 0.7
-				t.on_fire = func():
-					if not dead:
-						knockback = -to_t * 900.0
-		"strilets":
-			ability_timer = 3.6
-			match ability_step % 3:
-				1:
-					# Картеч: конус перед собою
-					var t = _telegraph("cone", global_position, 0.8, damage * 1.2)
-					t.dir = to_t
-					t.length = 390.0
-					t.half_angle = 0.45
-					t.color = Color(1.0, 0.75, 0.3)
-					cast_time = 0.8
-					t.on_fire = func():
-						Audio.play("musket", 0.05, 0.0)
-				2:
-					# Порохова бочка туди, де стоїть ціль
-					var t = _telegraph("circle", target.global_position, 1.3, damage * 1.5)
-					t.radius = 125.0
-					t.color = Color(1.0, 0.5, 0.15)
-				0:
-					# Відскок від ворога, що підійшов надто близько
-					if dist < 230.0:
-						knockback = -to_t * 1300.0
-					shoot_timer = minf(shoot_timer, 0.4)
-		"kharakternyk":
-			ability_timer = 3.3
-			match ability_step % 3:
-				1:
-					# Зникає в диму й вигулькує за спиною
-					combat.spawn_fx("smoke", global_position - Vector2(0, 10), 1.4)
-					var behind: Vector2 = target.global_position + to_t * 80.0
-					global_position = behind.clamp(combat.arena.position + Vector2(40, 40), combat.arena.end - Vector2(40, 40))
-					combat.spawn_fx("smoke", global_position - Vector2(0, 10), 1.4, 0.0, Color(0.7, 0.6, 1.0))
-					windup = windup_max * 1.6  # мить, щоб обернутись і ухилитись
-				2:
-					# Три блискавки: одна в ціль, дві поруч, одна за одною
-					Audio.play("lightning", 0.1, -6.0)
-					for i in 3:
-						var pos: Vector2 = target.global_position + (Vector2.ZERO if i == 0 else Vector2.from_angle(randf() * TAU) * 140.0)
-						var t = _telegraph("circle", pos, 0.8 + 0.3 * i, damage * 1.0)
-						t.radius = 82.0
-						t.color = Color(0.6, 0.8, 1.0)
-						t.on_fire = func():
-							combat.spawn_bolt(PackedVector2Array([pos + Vector2(12, -420), pos + Vector2(-16, -180), pos]))
-				0:
-					# Відвід очей: перестрибує вбік і б'є ривком
-					combat.spawn_fx("smoke", global_position - Vector2(0, 10), 1.2, 0.0, Color(0.7, 0.6, 1.0))
-					var side_pos: Vector2 = target.global_position + to_t.orthogonal() * (220.0 if randf() < 0.5 else -220.0)
-					global_position = side_pos.clamp(combat.arena.position + Vector2(40, 40), combat.arena.end - Vector2(40, 40))
-					var d2: Vector2 = (target.global_position - global_position).normalized()
-					var t = _telegraph("line", global_position, 0.6, damage * 1.3)
-					t.dir = d2
-					t.length = 380.0
-					t.width = 70.0
-					t.color = Color(0.7, 0.6, 1.0)
-					cast_time = 0.6
-					t.on_fire = func():
-						if not dead:
-							knockback = d2 * 1500.0
-		"bulavnyk":
-			ability_timer = 3.6
-			match ability_step % 3:
-				1:
-					# Удар булавою об землю довкола себе
-					var t = _telegraph("circle", global_position, 1.1, damage * 1.6)
-					t.radius = 195.0
-					cast_time = 1.1
-					t.on_fire = func():
-						if is_instance_valid(target) and "push" in target and target.global_position.distance_to(global_position) < 240.0:
-							target.push = (target.global_position - global_position).normalized() * 900.0
-				2:
-					# Стрибок із ударом у місце, де стоїть ціль
-					var t = _telegraph("circle", target.global_position, 1.0, damage * 1.5)
-					t.radius = 130.0
-					cast_time = 1.0
-					t.on_fire = func():
-						if not dead:
-							global_position = t.global_position
-				0:
-					# Розгін по прямій
-					var t = _telegraph("line", global_position, 0.8, damage * 1.4)
-					t.dir = to_t
-					t.length = 470.0
-					t.width = 110.0
-					cast_time = 0.8
-					t.on_fire = func():
-						if not dead:
-							knockback = to_t * 1800.0
+	if _mh & Mechanic.ABILITY:
+		mechanic.ability(target, global_position.distance_to(target.global_position))
 
 
 ## Бос лютішає на половині здоров'я (у записі «boss.phase2»): швидший, частіше стріляє, одразу

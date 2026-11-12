@@ -1,0 +1,41 @@
+{
+	"hunt": {
+		"num": 10321,
+		"bosses": [
+			"zmii",
+			"upyr",
+			"vovkulaka",
+			"chaklun",
+			"koshchii",
+			"putinoid",
+			"baba_yaha",
+			"solovei",
+			"lykho",
+			"oprychnyk",
+			"vidma",
+			"vii",
+			"morskyi_tsar",
+			"shubin",
+			"bila_pani",
+			"pushkar",
+			"lisovyi_did",
+			"idolyshche"
+		]
+	},
+	"ring": {
+		"num": 10322,
+		"bosses": [
+			"zmii",
+			"upyr",
+			"vovkulaka",
+			"chaklun",
+			"koshchii",
+			"baba_yaha",
+			"solovei",
+			"lykho",
+			"oprychnyk",
+			"vidma",
+			"vii"
+		]
+	}
+}

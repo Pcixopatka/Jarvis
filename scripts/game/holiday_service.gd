@@ -1,5 +1,5 @@
 extends RefCounted
-## Сезонні свята за справжнім календарем: двадцять вісім свят від Маланки до Різдва (перелік — Acts.HOLIDAYS).
+## Сезонні свята за справжнім календарем: двадцять вісім свят від Маланки до Різдва (перелік — data/holidays.json).
 ## Дев'ять великих (Різдво, Великдень, Зелені свята, Купала, Спас, День Незалежності, Покрова, Андрія, Миколая)
 ## і дев'ятнадцять малих. Коли два свята припадають на один день, велике перебиває мале, а серед рівних
 ## коротше перебиває довше.
@@ -12,6 +12,15 @@ extends RefCounted
 
 const Acts := preload("res://scripts/data/activities.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
+
+## Ключі святкового бонусу, які вміє гра (data/holidays.json, «bonus»; перевіряє GameDB.problems()):
+## що йде в показники героя (player.festive; див. Player.recalc), що в здобич бою (combat.festive),
+## а що читають служби напряму через bonus(): слава, урожай, кості, чутки, лояльність, полювання й рибалка,
+## заточка, найм.
+const PLAYER_KEYS := ["gold", "xp", "hp", "dmg", "armor", "crit", "regen", "mana", "skill", "cd", "potion", "status"]
+const COMBAT_KEYS := ["loot", "rare", "res", "varenyk", "trophy", "boss"]
+const SERVICE_KEYS := ["glory", "harvest", "dice", "rumor", "loyalty", "outdoor", "sharpen", "hire"]
 
 static var forced := ""
 static var _memo := {}  # свято дня рахується один раз: current() кличуть на кожного вбитого ворога
@@ -58,7 +67,7 @@ static func nth_weekday(year: int, month: int, n: int, wd: int) -> int:
 
 
 static func rank(id: String) -> String:
-	return str(Acts.HOLIDAYS[id].get("rank", "great"))
+	return str(Acts.holiday(id).get("rank", "great"))
 
 
 ## Скільки днів триває свято.
@@ -69,7 +78,7 @@ static func length(id: String) -> int:
 
 ## Проміжок свята, що починається в цьому році: [перший день, останній день] (номери днів).
 static func window(id: String, year: int) -> Array:
-	var H: Dictionary = Acts.HOLIDAYS[id]
+	var H: Dictionary = Acts.holiday(id)
 	if H.has("easter"):
 		var e := easter_day(year)
 		return [e + int(H["easter"][0]), e + int(H["easter"][1])]
@@ -87,7 +96,7 @@ static func current(t: int = -1) -> Dictionary:
 		t = _now()
 	if forced == "none":
 		return {}
-	if forced != "" and Acts.HOLIDAYS.has(forced):
+	if forced != "" and GameDB.table("holidays").has(forced):
 		return {"id": forced, "year": _year(t)}
 	var today := _day(t)
 	if int(_memo.get("day", -1)) == today:
@@ -95,7 +104,7 @@ static func current(t: int = -1) -> Dictionary:
 	var y := _year(t)
 	var best := {}
 	var best_score := -1
-	for id in Acts.HOLIDAY_ORDER:
+	for id in Acts.holiday_ids():
 		for yy in [y - 1, y]:
 			var w := window(id, yy)
 			if today >= int(w[0]) and today <= int(w[1]):
@@ -136,7 +145,7 @@ static func upcoming(t: int = -1) -> Dictionary:
 	var today := _day(t)
 	var y := _year(t)
 	var best := {}
-	for id in Acts.HOLIDAY_ORDER:
+	for id in Acts.holiday_ids():
 		for yy in [y, y + 1]:
 			var start := int(window(id, yy)[0])
 			if start > today and (best.is_empty() or start - today < int(best["in_days"])):
@@ -149,13 +158,13 @@ static func bonus(key: String, t: int = -1) -> float:
 	var id := active(t)
 	if id == "":
 		return 0.0
-	return float(Acts.HOLIDAYS[id]["bonus"].get(key, 0.0))
+	return float(Acts.holiday(id)["bonus"].get(key, 0.0))
 
 
 ## Надбавки до показників героя (див. player.recalc: festive).
 static func player_mods(t: int = -1) -> Dictionary:
 	var out := {}
-	for k in Acts.HOLIDAY_PLAYER_KEYS:
+	for k in PLAYER_KEYS:
 		var v := bonus(k, t)
 		if v != 0.0:
 			out[k] = v
@@ -165,7 +174,7 @@ static func player_mods(t: int = -1) -> Dictionary:
 ## Надбавки до здобичі в бою (див. combat.festive).
 static func combat_mods(t: int = -1) -> Dictionary:
 	var out := {}
-	for k in Acts.HOLIDAY_COMBAT_KEYS:
+	for k in COMBAT_KEYS:
 		var v := bonus(k, t)
 		if v != 0.0:
 			out[k] = v
@@ -174,7 +183,7 @@ static func combat_mods(t: int = -1) -> Dictionary:
 
 static func _date_text(day_num: int) -> String:
 	var d := Time.get_date_dict_from_unix_time(day_num * 86400)
-	return "%d %s" % [int(d["day"]), Acts.MONTHS_GEN[int(d["month"]) - 1]]
+	return "%d %s" % [int(d["day"]), Acts.month_gen(int(d["month"]))]
 
 
 ## Коли свято цього разу: «24 грудня – 14 січня».
@@ -191,8 +200,8 @@ static func calendar(t: int = -1) -> Array:
 	var y := _year(t)
 	var cur := current(t)
 	var out := []
-	for id in Acts.HOLIDAY_ORDER:
-		var H: Dictionary = Acts.HOLIDAYS[id]
+	for id in Acts.holiday_ids():
+		var H: Dictionary = Acts.holiday(id)
 		var yy := y - 1
 		# перша поява, що ще не скінчилась
 		while int(window(id, yy)[1]) < today:
@@ -211,8 +220,8 @@ static func calendar(t: int = -1) -> Array:
 static func tiers(id: String) -> Array:
 	var long := length(id) > 3
 	if rank(id) == "great":
-		return Acts.TOKEN_TIERS if long else Acts.TOKEN_TIERS_SHORT
-	return Acts.TOKEN_TIERS_SHORT if long else Acts.TOKEN_TIERS_TINY
+		return Acts.token_need("great" if long else "short")
+	return Acts.token_need("short" if long else "tiny")
 
 
 ## Запис цього свята в акаунті ({} — свята нема).
@@ -284,12 +293,12 @@ static func claim(world, player, i: int, t: int = -1) -> Array:
 	var id := active(t)
 	var great := rank(id) == "great"
 	progress(world, t)["claimed"][i] = true
-	var name: String = Acts.HOLIDAYS[id]["name"]
+	var name: String = Acts.holiday(id)["name"]
 	var msgs := []
 	match i:
 		0:
 			player.gold += reward_gold(0, player.level, great)
-			for r in Camp.RESOURCES:
+			for r in Camp.resources():
 				player.resources[r] = int(player.resources.get(r, 0)) + (5 if great else 3)
 			msgs.append("%s: %s" % [name, reward_text(0, player.level, id)])
 		1:
@@ -322,7 +331,7 @@ static func greeting(world, t: int = -1) -> String:
 	if key == "" or str(world.holidays.get("seen", "")) == key:
 		return ""
 	world.holidays["seen"] = key
-	var H: Dictionary = Acts.HOLIDAYS[active(t)]
+	var H: Dictionary = Acts.holiday(active(t))
 	return "Свято: %s!\n%s. З нечисті падають жетони: %s." % [H["name"], _cap(H["bonus_text"]), str(H["token"]).to_lower()]
 
 

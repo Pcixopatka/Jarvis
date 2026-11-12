@@ -49,7 +49,7 @@ static func unlocked(player) -> bool:
 static func lineup(week_key: String = "") -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(week_key if week_key != "" else week())
-	var ids: Array = Acts.RIVAL_ORDER.duplicate()
+	var ids: Array = Acts.rival_ids().duplicate()
 	for i in range(ids.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var t = ids[i]
@@ -73,24 +73,25 @@ static func next_rival(world) -> Dictionary:
 	if int(s["round"]) >= ROUNDS:
 		return {}
 	var id: String = lineup()[int(s["round"])]
-	var info: Dictionary = Acts.RIVALS[id].duplicate()
+	var info: Dictionary = Acts.rival(id).duplicate()
 	info["id"] = id
 	return info
 
 
 static func gold_for(round_i: int, level: int) -> int:
-	return int(Acts.DUEL_GOLD[round_i]) * level
+	return int(Acts.duel_round(round_i)["gold"]) * level
 
 
 ## Опис бою з конкретним суперником у конкретному колі. Сила суперника — від рівня героя:
 ## здоров'я — від шкоди еталонного героя цього рівня, удар — від його запасу живучості.
 ## Від спорядження не залежить, тож краще вдягненому героєві легше.
 static func loc_for(player, rival_id: String, round_i: int) -> Dictionary:
-	return {"name": "Герць: " + str(Acts.RIVALS[rival_id]["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
+	var R := Acts.duel_round(round_i)
+	return {"name": "Герць: " + str(Acts.rival(rival_id)["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
 		"rival": rival_id, "round": round_i,
-		"rival_hp": Power.ref_dps(int(player.level)) * float(Acts.DUEL_SECONDS[round_i]),
-		"rival_cap": 1.0 / (0.6 * float(Acts.DUEL_SECONDS[round_i])),  # найшвидший герць — 60% від розрахункового часу
-		"rival_dmg": Power.ref_hit(int(player.level), float(Acts.DUEL_HIT[round_i]) * hit_scale(player.level)), "desc": ""}
+		"rival_hp": Power.ref_dps(int(player.level)) * float(R["seconds"]),
+		"rival_cap": 1.0 / (0.6 * float(R["seconds"])),  # найшвидший герць — 60% від розрахункового часу
+		"rival_dmg": Power.ref_hit(int(player.level), float(R["hit"]) * hit_scale(player.level)), "desc": ""}
 
 
 ## Досвідчений герой краще лікується в бою (вампіризм, вміння), тож суперник б'є трохи сильніше.
@@ -113,10 +114,10 @@ static func win(world, player) -> Array:
 	s["round"] = r + 1
 	s["wins"] = int(s["wins"]) + 1
 	if r + 1 < ROUNDS:
-		msgs.append("Коло %d за тобою! +%d грн, +%d слави" % [r + 1, g, Acts.DUEL_GLORY[r]])
+		msgs.append("Коло %d за тобою! +%d грн, +%d слави" % [r + 1, g, Acts.duel_round(r)["glory"]])
 	else:
 		s["titles"] = int(s["titles"]) + 1
-		var text := "Ти — чемпіон майдану! +%d грн, +%d слави" % [g, Acts.DUEL_GLORY[r]]
+		var text := "Ти — чемпіон майдану! +%d грн, +%d слави" % [g, Acts.duel_round(r)["glory"]]
 		if not s["belt"]:
 			s["belt"] = true
 			var belt := champion_belt(player.level)
@@ -127,7 +128,7 @@ static func win(world, player) -> Array:
 			player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 3
 			text += " і 3 трофеї"
 		msgs.append(text)
-	msgs.append_array(GloryService.add(world, player, int(Acts.DUEL_GLORY[r])))
+	msgs.append_array(GloryService.add(world, player, int(Acts.duel_round(r)["glory"])))
 	return msgs
 
 
@@ -145,9 +146,9 @@ static func lose(world) -> String:
 ## Хто вийде наступним: суперники міняються щодня й ідуть колом, поки триває серія.
 static func free_rival(world) -> Dictionary:
 	var s := state(world)
-	var order: Array = Acts.RIVAL_ORDER
+	var order: Array = Acts.rival_ids()
 	var id: String = order[(absi(hash(str(s["free_day"]))) + int(s["streak"])) % order.size()]
-	var info: Dictionary = Acts.RIVALS[id].duplicate()
+	var info: Dictionary = Acts.rival(id).duplicate()
 	info["id"] = id
 	return info
 

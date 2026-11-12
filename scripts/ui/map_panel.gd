@@ -72,10 +72,10 @@ static func build_bosses(world, player, on_back: Callable, on_go: Callable) -> C
 		var box := VBoxContainer.new()
 		box.add_theme_constant_override("separation", 4)
 		panel.add_child(box)
-		box.add_child(UI.label(BS.NAMES[kind], 16, UI.MUTED, false))
+		box.add_child(UI.label(BS.hunt(kind)["name"], 16, UI.MUTED, false))
 		box.add_child(_wrapped(str(GameDB.boss_name(boss)), 21, UI.GOLD))
 		for m in BS.mods(kind):
-			box.add_child(_wrapped("%s: %s" % [BS.MODS[m]["name"], BS.MODS[m]["desc"]], 15, UI.BAD))
+			box.add_child(_wrapped("%s: %s" % [BS.mod(m)["name"], BS.mod(m)["desc"]], 15, UI.BAD))
 		box.add_child(_wrapped("Нагорода: " + "; ".join(BS.reward_lines(player, kind)) + ".", 14, UI.TEXT))
 		var best: int = BS.best_time(world, boss)
 		if best > 0:
@@ -124,7 +124,7 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 ## Панель місця занять: варта, полювання, рибалка.
 static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 	var Acts = load("res://scripts/data/activities.gd")
-	var S: Dictionary = Acts.SPOTS[sel]
+	var S: Dictionary = Acts.spot(sel)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	v.add_child(_wrapped(S["name"], 28, UI.GOLD))
@@ -164,7 +164,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 			var paid := int(rs["paid"])
 			for i in ids.size():
 				var mark := "✓ " if i < paid else "• "
-				var prize := "нагороду взято" if i < paid else "+%s грн, +%d слави" % [UI.num(RS.stage_gold(player.level, i)), int(Acts.RING_GLORY[i])]
+				var prize := "нагороду взято" if i < paid else "+%s грн, +%d слави" % [UI.num(RS.stage_gold(player.level, i)), int(Acts.ring_round(i)["glory"])]
 				v.add_child(_wrapped("%sКоло %d: %s (%s)" % [mark, i + 1, GameDB.boss_name(ids[i], ids[i]), prize], 16, UI.GOOD if i < paid else UI.TEXT))
 			if paid >= stages:
 				v.add_child(_wrapped("Тижневу нагороду взято. Ходи на час і на рекорд: перші %d чудовиська дня ще приносять малий гаманець. Новий склад за %d дн." % [int(Acts.RING_REPEAT_PAID), RS.days_to_reset()], 16, UI.MUTED))
@@ -178,13 +178,13 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 			var hunt: bool = str(S["kind"]) == "hunt"
 			if hunt:
 				v.add_child(_wrapped("Звірі перебігають галявину. Торкнись звіра, щоб пустити стрілу. Стріл: %d, тож бий напевно." % OS.arrows_for(player), 17, UI.TEXT))
-				for id in Acts.HUNT_ANIMALS:
-					var a: Dictionary = Acts.HUNT_ANIMALS[id]
-					v.add_child(_wrapped("• %s: %d м'яса%s" % [a["name"], int(a["meat"]), " (лише в серцевину або з двох стріл)" if a["tough"] else ""], 16, UI.MUTED))
+				for id in Acts.hunt_animals():
+					var a: Dictionary = Acts.animal(id)
+					v.add_child(_wrapped("• %s: %d м'яса%s" % [a["name"], int(a["meat"]), " (лише в серцевину або з двох стріл)" if a.get("tough", false) else ""], 16, UI.MUTED))
 			else:
 				v.add_child(_wrapped("Закинь вудку, дочекайся клювання й підсічи. Далі тримай натяг у зеленій смузі. Закидів: %d." % Acts.FISH_BAIT, 17, UI.TEXT))
-				for id in Acts.FISH:
-					var fi: Dictionary = Acts.FISH[id]
+				for id in Acts.fishes():
+					var fi: Dictionary = Acts.fish(id)
 					v.add_child(_wrapped("• %s: %d риби" % [fi["name"], int(fi["ryba"])], 16, UI.MUTED))
 			if OS.rich(world, str(S["kind"])):
 				v.add_child(_wrapped("Чутка з шинку: сьогодні тут повно великого звіра." if hunt else "Чутка з шинку: сом вийшов на плесо, клює велика риба.", 17, UI.GOOD))
@@ -277,12 +277,12 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return v
 	if sel == Camp.CAMP_ID:
-		v.add_child(_wrapped(Camp.CAMP["name"], 28, UI.GOLD))
-		v.add_child(_wrapped(Camp.CAMP["desc"], 18, UI.TEXT))
+		v.add_child(_wrapped(Camp.camp()["name"], 28, UI.GOLD))
+		v.add_child(_wrapped(Camp.camp()["desc"], 18, UI.TEXT))
 		var built := []
-		for id in Camp.BUILD_ORDER:
+		for id in Camp.building_ids():
 			if CampService.level(world, id) > 0:
-				built.append("%s %d" % [Camp.BUILDINGS[id]["name"], CampService.level(world, id)])
+				built.append("%s %d" % [Camp.building(id)["name"], CampService.level(world, id)])
 		v.add_child(_wrapped("Будівлі: " + (", ".join(built) if not built.is_empty() else "ще нічого не збудовано"), 16, UI.MUTED))
 		var honey := CampService.pasika_ready(world, player.level)
 		if honey > 0:
@@ -302,7 +302,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		v.add_child(_wrapped(C["name"], 28, UI.GOLD))
 		v.add_child(UI.label("Місто", 18, UI.MUTED, false))
 		v.add_child(_wrapped(C["desc"], 18, UI.TEXT))
-		v.add_child(_wrapped("Лояльність: %s (%d)" % [Data.LOYALTY_NAMES[world.loyalty_level(sel)], world.loyalty_points(sel)], 18, UI.TEXT))
+		v.add_child(_wrapped("Лояльність: %s (%d)" % [Data.loyalty_name(world.loyalty_level(sel)), world.loyalty_points(sel)], 18, UI.TEXT))
 		var done := 0
 		for q in world.quests:
 			if q["city"] == sel and world.is_done(q):

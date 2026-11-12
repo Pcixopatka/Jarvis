@@ -23,7 +23,7 @@ static func state(world) -> Dictionary:
 
 
 static func has_market(city: String) -> bool:
-	return Acts.TRADE_CITIES.has(city)
+	return Acts.has_trade(city)
 
 
 static func period(world) -> int:
@@ -88,7 +88,7 @@ static func _net(world, city: String, good: String) -> int:
 
 ## Ціна купівлі одиниці краму в місті зараз.
 static func price(world, city: String, good: String, level: int) -> int:
-	var base: float = float(Acts.TRADE_GOODS[good]["base"]) * wealth(level) * float(Acts.TRADE_CITIES[city][good]) * fluct(world, city, good)
+	var base: float = float(Acts.trade_good(good)["base"]) * wealth(level) * float(Acts.trade_mult(city, good)) * fluct(world, city, good)
 	var move := clampf(1.0 - Acts.TRADE_STEP * _net(world, city, good), 0.55, 1.6)
 	return maxi(1, roundi(base * move))
 
@@ -124,7 +124,7 @@ static func stock_left(world, city: String, good: String) -> int:
 
 ## «cheap» — тут цей крам роблять, «dear» — тут він у ціні, "" — звичайна ціна.
 static func tag(city: String, good: String) -> String:
-	var m: float = Acts.TRADE_CITIES[city][good]
+	var m: float = Acts.trade_mult(city, good)
 	if m <= 0.8:
 		return "cheap"
 	return "dear" if m >= 1.4 else ""
@@ -134,9 +134,9 @@ static func tag(city: String, good: String) -> String:
 static func best_city(good: String, exclude: String = "") -> String:
 	var best := ""
 	var best_m := 0.0
-	for c in Acts.TRADE_CITIES:
-		if c != exclude and float(Acts.TRADE_CITIES[c][good]) > best_m:
-			best_m = Acts.TRADE_CITIES[c][good]
+	for c in Acts.trade_city_ids():
+		if c != exclude and float(Acts.trade_mult(c, good)) > best_m:
+			best_m = Acts.trade_mult(c, good)
 			best = c
 	return best
 

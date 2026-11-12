@@ -767,21 +767,40 @@ static func loc_level(L: Dictionary, hero_level: int) -> int:
 
 ## Імена, множини й трофеї нечисті — у data/mobs.json (див. GameDB).
 
-const LOYALTY_THRESHOLDS := [0, 100, 250, 500]
-const LOYALTY_NAMES := ["Чужинець", "Знайомий", "Шанований", "Побратим"]
-const LOYALTY_DISCOUNT := [0.0, 0.05, 0.1, 0.2]
 const MAX_ACTIVE_QUESTS := 5
 const MAX_COMPANIONS := 2
 
 ## Найманці (ім'я, ціна, сила, механіка бою) — у data/companions.json (див. GameDB).
 
 
+## Рівні лояльності міста — драбина data/loyalty_levels.json за «level» (0 — Чужинець):
+## з якої кількості очок, назва й знижка в місті.
+static func loyalty_levels() -> Array:
+	return GameDB.ladder("loyalty_levels", "level")
+
+
 static func loyalty_level(points: int) -> int:
 	var lvl := 0
-	for i in LOYALTY_THRESHOLDS.size():
-		if points >= LOYALTY_THRESHOLDS[i]:
+	var lad := loyalty_levels()
+	for i in lad.size():
+		if points >= int(lad[i]["from"]):
 			lvl = i
 	return lvl
+
+
+## Назва рівня лояльності («Шанований»).
+static func loyalty_name(level: int) -> String:
+	return str(loyalty_levels()[level]["name"])
+
+
+## З якої кількості очок починається рівень.
+static func loyalty_from(level: int) -> int:
+	return int(loyalty_levels()[level]["from"])
+
+
+## Знижка в місті на цьому рівні лояльності.
+static func loyalty_discount(level: int) -> float:
+	return float(loyalty_levels()[level]["discount"])
 
 
 static func place_name(id: String) -> String:
@@ -789,9 +808,9 @@ static func place_name(id: String) -> String:
 		return city(id)["name"]
 	if is_place(id):
 		return place(id)["name"]
-	if id == "hutir":
-		return "Козацький хутір"
-	var spots: Dictionary = load("res://scripts/data/activities.gd").SPOTS
-	if spots.has(id):
-		return spots[id]["name"]
+	var Camp = load("res://scripts/data/camp_data.gd")
+	if id == Camp.CAMP_ID:
+		return Camp.camp()["name"]
+	if GameDB.table("spots").has(id):
+		return GameDB.row("spots", id)["name"]
 	return id

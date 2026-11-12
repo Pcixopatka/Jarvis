@@ -1,6 +1,6 @@
 extends RefCounted
 ## Список подій і занять із живим станом — як календар свят, тільки для всього, чим можна зайнятися.
-## Описи — у WikiData.EVENTS; тут лише те, що змінюється: чи відкрито, що вже взято цього тижня й сьогодні,
+## Описи — у data/events.json (WikiData.events); тут лише те, що змінюється: чи відкрито, що вже взято цього тижня й сьогодні,
 ## що діє на мапі просто зараз. Вкладка «Події» на екрані героя (UiCharacter) і довідник беруть дані звідси.
 
 const Wiki := preload("res://scripts/data/wiki_data.gd")
@@ -14,10 +14,7 @@ static func _svc(name: String):
 
 
 static func info(id: String) -> Dictionary:
-	for e in Wiki.EVENTS:
-		if e["id"] == id:
-			return e
-	return {}
+	return Wiki.event(id)
 
 
 static func _chapter(world) -> int:
@@ -38,12 +35,12 @@ static func locked_reason(id: String, world, player) -> String:
 				return "Відкриється з %d-го рівня, після вибору дороги" % int(Acts.MUSTER_MIN_LEVEL)
 		"ring":
 			if not _svc("ring_service").unlocked(player):
-				return "Відкриється з %d-го рівня, після вибору дороги" % int(Acts.SPOTS["kolo"]["level"])
+				return "Відкриється з %d-го рівня, після вибору дороги" % int(Acts.spot("kolo")["level"])
 		"vigil":
 			if not _svc("vigil_service").unlocked(player):
-				return "Відкриється з %d-го рівня, після вибору дороги" % int(Acts.SPOTS["varta"]["level"])
+				return "Відкриється з %d-го рівня, після вибору дороги" % int(Acts.spot("varta")["level"])
 		"hunt", "fish":
-			var need := int(Acts.SPOTS[id]["level"])
+			var need := int(Acts.spot(id)["level"])
 			if lvl < need:
 				return "Відкриється з %d-го рівня" % need
 		"bounty":
@@ -236,10 +233,10 @@ static func status(id: String, world, player) -> Dictionary:
 			var HS = _svc("holiday_service")
 			var hid: String = HS.active()
 			if hid != "":
-				return _st("сьогодні %s, %s" % [Acts.HOLIDAYS[hid]["name"], Acts.HOLIDAYS[hid]["bonus_text"]], true)
+				return _st("сьогодні %s, %s" % [Acts.holiday(hid)["name"], Acts.holiday(hid)["bonus_text"]], true)
 			var nx: Dictionary = HS.upcoming()
 			if not nx.is_empty():
-				return _st("Найближче: %s, за %d дн." % [Acts.HOLIDAYS[nx["id"]]["name"], int(nx["in_days"])], false)
+				return _st("Найближче: %s, за %d дн." % [Acts.holiday(nx["id"])["name"], int(nx["in_days"])], false)
 	return _st("", false)
 
 
@@ -250,7 +247,7 @@ static func _st(text: String, ready: bool) -> Dictionary:
 ## Усі події з описом і станом: [{"id", "name", "kind", "icon", "where", "level", "text", "reward", "status", "ready", "locked"}].
 static func rows(world, player, here: String = "") -> Array:
 	var out := []
-	for e in Wiki.EVENTS:
+	for e in Wiki.events():
 		var r: Dictionary = e.duplicate()
 		var st := status(e["id"], world, player)
 		r["status"] = st["text"]
@@ -266,9 +263,9 @@ static func _ll(id: String) -> Vector2:
 		return Data.city(id)["pos"]
 	if Data.is_place(id):
 		return Data.place(id)["pos"]
-	if Acts.SPOTS.has(id):
-		return Acts.SPOTS[id]["pos"]
-	return Camp.CAMP["pos"] if id == Camp.CAMP_ID else Data.city("sich")["pos"]
+	if Acts.is_spot(id):
+		return Acts.spot(id)["pos"]
+	return Camp.camp()["pos"] if id == Camp.CAMP_ID else Data.city("sich")["pos"]
 
 
 ## Найближче до героя місто (саме місто, якщо він у ньому).
@@ -336,8 +333,8 @@ static func place(id: String, world, here: String = "") -> String:
 						best_d = d
 						best = loc
 			return best
-	for sid in Acts.SPOTS:
-		if str(Acts.SPOTS[sid]["kind"]) == id:
+	for sid in Acts.spot_ids():
+		if str(Acts.spot(sid)["kind"]) == id:
 			return sid
 	return ""
 
@@ -345,7 +342,7 @@ static func place(id: String, world, here: String = "") -> String:
 ## Скільки занять можна взяти просто зараз (для позначки на вкладці).
 static func ready_count(world, player) -> int:
 	var n := 0
-	for e in Wiki.EVENTS:
+	for e in Wiki.events():
 		if e["kind"] in ["weekly", "world"] and status(e["id"], world, player)["ready"]:
 			n += 1
 	return n
@@ -354,7 +351,7 @@ static func ready_count(world, player) -> int:
 ## Що діє на мапі просто зараз: [{"id", "text", "place"}] (place — де це на мапі, "" — ніде).
 static func now_items(world, player, here: String = "") -> Array:
 	var out := []
-	for e in Wiki.EVENTS:
+	for e in Wiki.events():
 		if e["kind"] != "world":
 			continue
 		var st := status(e["id"], world, player)

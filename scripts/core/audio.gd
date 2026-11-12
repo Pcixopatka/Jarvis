@@ -42,6 +42,7 @@ var _wanted_music := ""
 var _thread: Thread
 var _last_play := {}  # щоб один звук не «тріщав» десятки разів за кадр
 var _last_variant := {}
+var _volume := {}  # звук → базова гучність, дБ (Sounds.volumes: data/sounds.json); play() читає її щоразу
 var _music_tween: Tween
 var _ambient_tween: Tween
 var _duck_tween: Tween
@@ -49,6 +50,7 @@ var _duck_tween: Tween
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_volume = Sounds.volumes()
 	for bus in BUS_VOLUME:
 		if AudioServer.get_bus_index(bus) < 0:
 			AudioServer.add_bus()
@@ -144,7 +146,7 @@ func play(name: String, pitch_var: float = 0.08, volume_db: float = 0.0) -> void
 	_next = (_next + 1) % _players.size()
 	p.stream = stream
 	p.pitch_scale = 1.0 + randf_range(-pitch_var, pitch_var)
-	p.volume_db = volume_db + float(Sounds.VOLUME.get(name, 0.0))
+	p.volume_db = volume_db + float(_volume.get(name, 0.0))
 	p.play()
 
 
@@ -252,7 +254,7 @@ func play_ambient(name: String) -> void:
 		_ambient_live.stream = _ambient[name]
 		_ambient_live.volume_db = -60.0
 		_ambient_live.play()
-		_ambient_tween.tween_method(_set_gain.bind(_ambient_live), 0.0, db_to_linear(float(Sounds.AMBIENT_VOLUME.get(name, 0.0))), FADE)
+		_ambient_tween.tween_method(_set_gain.bind(_ambient_live), 0.0, db_to_linear(float(Sounds.ambient_volumes().get(name, 0.0))), FADE)
 	_ambient_tween.chain().tween_callback(old.stop)
 
 

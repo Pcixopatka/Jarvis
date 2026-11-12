@@ -8,10 +8,17 @@ extends RefCounted
 
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 const CHANCE := 0.3
 const COOLDOWN := 2  # стільки походів без пригод після кожної
-const EVENTS := ["chumaky", "gonets", "zasidka", "kobzar", "viz", "koval", "bizhentsi", "shynok", "vovky"]
+## Пригоди, які вміє prepare(), і варіанти вибору кожної: у data/road_events.json мусять бути саме вони, з
+## саме такими «choices» (перевіряє GameDB.problems()). Котра пригода трапиться — кидок за порядком файлу таблиці.
+const CHOICES := {
+	"chumaky": ["potions_two", "potions_one", "wood", "bye"], "gonets": ["potion", "carry", "pass"],
+	"zasidka": ["fight", "sneak_ok", "sneak_fail"], "kobzar": ["listen", "hurry"], "viz": ["search_ok", "search_trap", "leave"],
+	"koval": ["sharpen", "no"], "bizhentsi": ["bread", "road", "pass"], "shynok": ["supper", "ride"], "vovky": ["fire", "fight"],
+}
 
 
 static func state(world) -> Dictionary:
@@ -31,7 +38,8 @@ static func roll(world, player) -> Dictionary:
 	if randf() >= CHANCE:
 		return {}
 	s["cooldown"] = COOLDOWN
-	var id: String = EVENTS[randi() % EVENTS.size()]
+	var kinds := GameDB.ids("road_events")
+	var id: String = kinds[randi() % kinds.size()]
 	s["seen"][id] = int(s["seen"].get(id, 0)) + 1
 	return prepare(world, player, id)
 
@@ -48,7 +56,8 @@ static func _random_city(player) -> String:
 	return ids[randi() % ids.size()]
 
 
-## Готує подію: текст, варіанти (лише ті, на які вистачає) та їхні наслідки.
+## Готує подію: текст, варіанти (лише ті, на які вистачає) та їхні наслідки. Тексти й мовець — запис
+## data/road_events.json; які варіанти є, їхні ціни й наслідки — тут (CHOICES).
 static func prepare(world, player, id: String) -> Dictionary:
 	var lvl: int = player.level
 	var ev := {"id": id, "lines": [], "choices": []}
@@ -58,82 +67,80 @@ static func prepare(world, player, id: String) -> Dictionary:
 			# зілля стільки, скільки влазить у запас (до двох), і плата за стільки ж
 			var fit: int = clampi(player.potion_max() - player.potions, 0, 2)
 			var price := int(Data.potion_price(lvl) * 1.5 * maxi(fit, 1) / 2.0)
-			ev["lines"] = [["chumak", "Гей, козаче! Везем сіль із Криму, а в возі — дещо й для вашого брата. Купуй, поки дешево!"]]
+			ev["lines"] = [_line(id)]
 			if player.gold >= price and player.potions < player.potion_max():
-				ch.append({"text": ("Два зілля за %d грн" if fit >= 2 else "Одне зілля за %d грн (більше не влазить)") % price, "reply": "Бери, бери. На здоров'я, щоб не знадобились!",
-					"outcome": {"gold": -price, "potions": fit}})
+				ch.append(_choice(id, "potions_two" if fit >= 2 else "potions_one", {"gold": -price, "potions": fit}, [price]))
 			var wood := int(player.resources.get("wood", 0))
 			if wood >= 3:
 				var g := wood * (3 + lvl)
-				ch.append({"text": "Продати дерево (%d) за %d грн" % [wood, g], "reply": "Дерево в степу на вагу золота. Тримай гривні!",
-					"outcome": {"gold": g, "res": {"wood": -wood}}})
-			ch.append({"text": "Щасливої дороги!", "reply": "І тобі, козаче. Хай воли не стають!", "outcome": {}})
+				ch.append(_choice(id, "wood", {"gold": g, "res": {"wood": -wood}}, [wood, g]))
+			ch.append(_choice(id, "bye", {}))
 		"gonets":
 			var city := _random_city(player)
-			ev["lines"] = [["gonets", "Козаче... На мене напали заражені. Лист до %s... не довезу..." % _city_name(city)]]
+			ev["lines"] = [_line(id, [_city_name(city)])]
 			if player.potions > 0:
-				ch.append({"text": "Віддати йому зілля", "reply": "Дякую... Я довезу. %s не забуде, хто врятував гонця." % _city_name(city),
-					"outcome": {"potions": -1, "loyalty": {city: 60}, "xp": 30 * lvl}})
-			ch.append({"text": "Довезу лист сам", "reply": "Ось він. Там обіцяли винагороду гінцеві...",
-				"outcome": {"gold": 20 + 12 * lvl, "loyalty": {city: 20}}})
-			ch.append({"text": "Проїхати мимо", "reply": "...", "outcome": {}})
+				ch.append(_choice(id, "potion", {"potions": -1, "loyalty": {city: 60}, "xp": 30 * lvl}, null, [_city_name(city)]))
+			ch.append(_choice(id, "carry", {"gold": 20 + 12 * lvl, "loyalty": {city: 20}}))
+			ch.append(_choice(id, "pass", {}))
 		"zasidka":
-			ev["lines"] = [["doroha", "Із придорожніх кущів вискакують заражені! Їх небагато, але бій буде лютий."]]
-			ch.append({"text": "Прийняти бій!", "reply": "Покотилися голови! Ти поранений, та трофеї того варті.",
-				"outcome": {"hp_pct": -0.25, "xp": 60 * lvl, "gold": 15 * lvl}})
+			ev["lines"] = [_line(id)]
+			ch.append(_choice(id, "fight", {"hp_pct": -0.25, "xp": 60 * lvl, "gold": 15 * lvl}))
 			if randf() < 0.5:
-				ch.append({"text": "Обійти манівцями", "reply": "Тихо, як миша, ти проскочив повз. Ніхто й не помітив.", "outcome": {}})
+				ch.append(_choice(id, "sneak_ok", {}))
 			else:
-				ch.append({"text": "Обійти манівцями", "reply": "Не вдалося — наздогнали біля броду! Ледве відбився.",
-					"outcome": {"hp_pct": -0.15}})
+				ch.append(_choice(id, "sneak_fail", {"hp_pct": -0.15}))
 		"kobzar":
-			ev["lines"] = [["kobzar", "Сідай до вогню, козаче. Заграю тобі думу про тих, хто йшов цим шляхом до тебе."]]
-			ch.append({"text": "Послухати думу", "reply": "Струни дзвенять — і серце горить. У цьому поході рука буде твердою!",
-				"outcome": {"trip": "inspired", "heal_full": true}})
-			ch.append({"text": "Ніколи, поспішаю", "reply": "Іди, іди. Пісня почекає.", "outcome": {}})
+			ev["lines"] = [_line(id)]
+			ch.append(_choice(id, "listen", {"trip": "inspired", "heal_full": true}))
+			ch.append(_choice(id, "hurry", {}))
 		"viz":
-			ev["lines"] = [["doroha", "Серед степу стоїть покинутий віз. Під рогожею щось є... або хтось."]]
+			ev["lines"] = [_line(id)]
 			if randf() < 0.7:
-				var r: String = Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
+				var r: String = Camp.resources()[randi() % Camp.resources().size()]
 				var n := 3 + lvl / 3
-				ch.append({"text": "Обшукати віз", "reply": "Добра знахідка: %s і трохи гривень!" % Camp.RESOURCES[r].to_lower(),
-					"outcome": {"res": {r: n}, "gold": 10 + 5 * lvl}})
+				ch.append(_choice(id, "search_ok", {"res": {r: n}, "gold": 10 + 5 * lvl}, null, [Camp.res_name(r).to_lower()]))
 			else:
-				ch.append({"text": "Обшукати віз", "reply": "Пастка! Із-під рогожі вилетіла хмара зарази.",
-					"outcome": {"hp_pct": -0.2}})
-			ch.append({"text": "Не чіпати", "reply": "Береженого Бог береже.", "outcome": {}})
+				ch.append(_choice(id, "search_trap", {"hp_pct": -0.2}))
+			ch.append(_choice(id, "leave", {}))
 		"koval":
-			ev["lines"] = [["koval", "Мандрівний коваль, до послуг! Твоя шабля просить точила — чую аж звідси."]]
+			ev["lines"] = [_line(id)]
 			var w: Dictionary = player.equipment.get("weapon", {})
 			var cost := Data.sharpen_cost(w) if not w.is_empty() else 0
 			if not w.is_empty() and int(w["up"]) < Data.MAX_UPGRADE and player.gold >= cost:
-				ch.append({"text": "Нагострити (+1) за %d грн" % cost, "reply": "Ось! Тепер вона й волосину на льоту розітне.",
-					"outcome": {"gold": -cost, "sharpen": true}})
-			ch.append({"text": "Дякую, не треба", "reply": "Як знаєш. Тупа шабля — півбіди, а от тупа голова...", "outcome": {}})
+				ch.append(_choice(id, "sharpen", {"gold": -cost, "sharpen": true}, [cost]))
+			ch.append(_choice(id, "no", {}))
 		"bizhentsi":
 			var city := _random_city(player)
-			ev["lines"] = [["bizhenka", "Козаче, ми з-під %s тікаємо. Зараза спалила хату, діти голодні..." % _city_name(city)]]
+			ev["lines"] = [_line(id, [_city_name(city)])]
 			if player.gold >= 30:
-				ch.append({"text": "Дати 30 грн на хліб", "reply": "Хай тобі Бог помагає! Усім розкажемо, який ти.",
-					"outcome": {"gold": -30, "loyalty": {city: 50}, "xp": 20 * lvl}})
-			ch.append({"text": "Показати дорогу на Січ", "reply": "На Січ? Там нас приймуть? Дякуємо, козаче!",
-				"outcome": {"loyalty": {"sich": 25}}})
-			ch.append({"text": "Проїхати мимо", "reply": "...", "outcome": {}})
+				ch.append(_choice(id, "bread", {"gold": -30, "loyalty": {city: 50}, "xp": 20 * lvl}))
+			ch.append(_choice(id, "road", {"loyalty": {"sich": 25}}))
+			ch.append(_choice(id, "pass", {}))
 		"shynok":
 			var price := 10 + 6 * lvl
-			ev["lines"] = [["chumak", "Заходь до шинку, козаче! Вареники з сиром, юшка гаряча — все для тебе."]]
+			ev["lines"] = [_line(id)]
 			if player.gold >= price:
-				ch.append({"text": "Повечеряти (%d грн)" % price, "reply": "Ох і вареники! Сили — хоч гори вертай. І зілля в дорогу дали.",
-					"outcome": {"gold": -price, "heal_full": true, "potions": 1}})
-			ch.append({"text": "Їхати далі", "reply": "Ну, як знаєш. Голодний козак — злий козак!", "outcome": {}})
+				ch.append(_choice(id, "supper", {"gold": -price, "heal_full": true, "potions": 1}, [price]))
+			ch.append(_choice(id, "ride", {}))
 		"vovky":
-			ev["lines"] = [["doroha", "Ніч. До табору підкрадається вовча зграя — очі світяться в темряві."]]
+			ev["lines"] = [_line(id)]
 			if int(player.resources.get("wood", 0)) >= 2:
-				ch.append({"text": "Розпалити вогонь вище (2 дерева)", "reply": "Вовки покрутились біля вогню й пішли. Ніч минула спокійно.",
-					"outcome": {"res": {"wood": -2}}})
-			ch.append({"text": "Відбиватися шаблею", "reply": "До світанку рубався з вовками. Покусаний, та живий — і досвіду набрався.",
-				"outcome": {"hp_pct": -0.2, "xp": 40 * lvl}})
+				ch.append(_choice(id, "fire", {"res": {"wood": -2}}))
+			ch.append(_choice(id, "fight", {"hp_pct": -0.2, "xp": 40 * lvl}))
 	return ev
+
+
+## Репліка пригоди: [мовець, текст]; args — що підставити в текст (%s, %d).
+static func _line(id: String, args = null) -> Array:
+	var R: Dictionary = GameDB.row("road_events", id)
+	return [R["speaker"], R["text"] % args if args != null else R["text"]]
+
+
+## Варіант вибору: текст і відповідь із запису (choices.<key>), наслідок — від коду.
+static func _choice(id: String, key: String, outcome: Dictionary, text_args = null, reply_args = null) -> Dictionary:
+	var C: Dictionary = GameDB.row("road_events", id)["choices"][key]
+	return {"text": C["text"] % text_args if text_args != null else C["text"], "reply": C["reply"] % reply_args if reply_args != null else C["reply"],
+		"outcome": outcome}
 
 
 ## Застосовує наслідок вибору. Повертає короткий підсумок для банера ("" якщо нічого).
@@ -152,7 +159,7 @@ static func apply(world, player, outcome: Dictionary) -> String:
 	if outcome.has("res"):
 		for r in outcome["res"]:
 			player.resources[r] = maxi(0, int(player.resources.get(r, 0)) + int(outcome["res"][r]))
-			parts.append("%+d %s" % [int(outcome["res"][r]), Camp.RESOURCES[r].to_lower()])
+			parts.append("%+d %s" % [int(outcome["res"][r]), Camp.res_name(r).to_lower()])
 	if outcome.has("loyalty"):
 		for city in outcome["loyalty"]:
 			world.add_loyalty(city, int(outcome["loyalty"][city]))

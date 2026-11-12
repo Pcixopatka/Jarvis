@@ -1,0 +1,30 @@
+{
+	"forest": {
+		"num": 10601,
+		"volume": -2.0
+	},
+	"wind": {
+		"num": 10602,
+		"volume": 0.0
+	},
+	"night": {
+		"num": 10603,
+		"volume": -4.0
+	},
+	"cave": {
+		"num": 10604,
+		"volume": 0.0
+	},
+	"river": {
+		"num": 10605,
+		"volume": -3.0
+	},
+	"fire": {
+		"num": 10606,
+		"volume": -3.0
+	},
+	"crowd": {
+		"num": 10607,
+		"volume": -6.0
+	}
+}

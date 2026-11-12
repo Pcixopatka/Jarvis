@@ -48,6 +48,8 @@ func _run() -> void:
 	_suite_world_db()
 	_suite_class_db()
 	_suite_quest_db()
+	_suite_life_db()
+	await _suite_rival_mechanics()
 	_suite_player()
 	_suite_save()
 	_suite_city()
@@ -977,7 +979,7 @@ func _suite_travel() -> void:
 			last_hit = i
 	check(got > 15 and got < 90, "пригоди трапляються іноді (%d зі 200)" % got)
 	check(streak_ok, "між пригодами — перерва")
-	for id in TS.EVENTS:
+	for id in GameDB.ids("road_events"):
 		var ev = TS.prepare(w, p, id)
 		check(not ev["lines"].is_empty() and ev["choices"].size() >= 2, "%s: текст і щонайменше два варіанти" % id)
 		for c in ev["choices"]:
@@ -988,7 +990,7 @@ func _suite_travel() -> void:
 	poor.gold = 0
 	poor.potions = 0
 	poor.resources = {}
-	for id in TS.EVENTS:
+	for id in GameDB.ids("road_events"):
 		var ev = TS.prepare(w, poor, id)
 		var ok := true
 		for c in ev["choices"]:
@@ -1362,7 +1364,7 @@ func _suite_craft() -> void:
 	var gold0: int = p.gold
 	var tr0: int = p.resources["trophy"]
 	var leg = CR.forge(w, p, "amulet", "", 3)
-	check(leg["rarity"] == 3 and leg["affixes"].size() == 3 and p.gold < gold0 and p.resources["trophy"] == tr0 - CR.TIER_TROPHY[3], "легендарний оберіг за трофеї")
+	check(leg["rarity"] == 3 and leg["affixes"].size() == 3 and p.gold < gold0 and p.resources["trophy"] == tr0 - int(CR.forge_tier(3)["trophy"]), "легендарний оберіг за трофеї")
 	check(CR.forge_cost("weapon", 3, 8)["gold"] > CR.forge_cost("weapon", 1, 8)["gold"], "краща якість — дорожче")
 	var poor = _new_player()
 	poor.gold = 0
@@ -2442,15 +2444,15 @@ func _suite_trade() -> void:
 	suite("Чумацький шлях: торгівля")
 	var TS = load("res://scripts/game/trade_service.gd")
 	var Acts = load("res://scripts/data/activities.gd")
-	for g in Acts.TRADE_ORDER:
+	for g in Acts.trade_good_ids():
 		var lo := 9.0
 		var hi := 0.0
-		for c in Acts.TRADE_CITIES:
-			check(Acts.TRADE_CITIES[c].has(g), "%s: у місті %s є ціна" % [g, c])
-			lo = minf(lo, Acts.TRADE_CITIES[c][g])
-			hi = maxf(hi, Acts.TRADE_CITIES[c][g])
-		check(Acts.TRADE_GOODS.has(g) and lo <= 0.7 and hi >= 1.5, "%s: є де купити дешево й продати дорого" % g)
-	for c in Acts.TRADE_CITIES:
+		for c in Acts.trade_city_ids():
+			check(Acts.trade_city_prices(c).has(g), "%s: у місті %s є ціна" % [g, c])
+			lo = minf(lo, Acts.trade_mult(c, g))
+			hi = maxf(hi, Acts.trade_mult(c, g))
+		check(Acts.trade_good(g).size() > 0 and lo <= 0.7 and hi >= 1.5, "%s: є де купити дешево й продати дорого" % g)
+	for c in Acts.trade_city_ids():
 		check(Data.is_city(c) and TS.has_market(c), "%s — торгове місто" % c)
 	check(not TS.has_market("kapyshche"), "на Капищі крамом не торгують")
 	var w = WorldState.new()
@@ -2619,14 +2621,14 @@ func _suite_outdoor() -> void:
 	var h: Dictionary = OS2.new_hunt(p, 7)
 	var ok: bool = h["queue"].size() == Acts.HUNT_PASSES
 	for id in h["queue"]:
-		ok = ok and Acts.HUNT_ANIMALS.has(id)
+		ok = ok and Acts.hunt_animals().has(id)
 	check(ok and OS2.new_hunt(p, 7)["queue"] == h["queue"], "черга звірів: шість проходів, однакова для одного зерна")
 	# Постріли по відомій черзі
 	h["queue"] = ["hare", "deer", "boar", "boar", "hare", "hare"]
 	h["arrows"] = 10
 	check(OS2.current(h) == "hare", "перший звір — заєць")
 	check(OS2.shoot(h, 200.0) == "miss" and int(h["arrows"]) == 9 and int(h["index"]) == 0 and int(h["meat"]) == 0, "мимо: стріла пропала, звір той самий")
-	check(OS2.shoot(h, float(Acts.HUNT_ANIMALS["hare"]["radius"]) - 1.0) == "hit" and int(h["meat"]) == 1 and int(h["index"]) == 1, "влучив у зайця: 1 м'яса, наступний звір")
+	check(OS2.shoot(h, float(Acts.animal("hare")["radius"]) - 1.0) == "hit" and int(h["meat"]) == 1 and int(h["index"]) == 1, "влучив у зайця: 1 м'яса, наступний звір")
 	check(OS2.shoot(h, 2.0) == "bullseye" and int(h["meat"]) == 1 + 5 and int(h["bull"]) == 1, "олень у яблучко: 3 + 2 м'яса")
 	check(OS2.shoot(h, 40.0) == "wound" and h["wounded"] and int(h["index"]) == 2 and int(h["meat"]) == 6, "вепр від простого влучання лише поранений")
 	check(OS2.shoot(h, 40.0) == "hit" and not h["wounded"] and int(h["meat"]) == 10 and int(h["index"]) == 3, "друга стріла добиває вепра")
@@ -2660,7 +2662,7 @@ func _suite_outdoor() -> void:
 	check("без здобичі" in OS2.finish_hunt(w, p, h4)[0], "порожнє полювання — так і кажемо")
 	# Рибалка
 	var f: Dictionary = OS2.new_fishing(11)
-	check(int(f["bait"]) == Acts.FISH_BAIT and Acts.FISH.has(OS2.roll_fish(f)), "п'ять закидів, риба з таблиці")
+	check(int(f["bait"]) == Acts.FISH_BAIT and Acts.fishes().has(OS2.roll_fish(f)), "п'ять закидів, риба з таблиці")
 	var d: float = OS2.bite_delay(f)
 	check(d >= 1.5 and d <= 4.5, "клювання чекати 1.5–4.5 с")
 	check(OS2.step_tension(0.5, true, 0.0, 0.0, 0.5) > 0.5 and OS2.step_tension(0.5, false, 0.0, 0.0, 0.5) < 0.5, "тримаєш — натяг росте, відпустив — падає")
@@ -3050,7 +3052,7 @@ func _suite_trail() -> void:
 	var seen := {}
 	for i in 200:
 		seen[TS.roll_kind(randf())] = true
-	check(seen.size() == Acts.TRAIL_KINDS.size(), "трапляються всі знахідки")
+	check(seen.size() == Acts.trail_kinds().size(), "трапляються всі знахідки")
 	var arena := Rect2(-1400, -1400, 2800, 2800)
 	var ok := true
 	var min_seg := 1.0e9
@@ -3186,7 +3188,7 @@ func _suite_garden() -> void:
 	check(GS.beds_count(w) == 0 and not GS.plant(w, p, 0, "veg"), "без городу грядок нема")
 	check(CampService.build(w, p, "horod") and GS.beds_count(w) == 2, "город 1 рівня: дві грядки")
 	var gold0: int = p.gold
-	check(GS.plant(w, p, 0, "veg") and p.gold == gold0 - int(Camp.CROPS["veg"]["seed"]) and not GS.bed(w, 0).is_empty(), "посадив городину: насіння оплачено")
+	check(GS.plant(w, p, 0, "veg") and p.gold == gold0 - int(Camp.crop("veg")["seed"]) and not GS.bed(w, 0).is_empty(), "посадив городину: насіння оплачено")
 	check(not GS.plant(w, p, 0, "herbs") and not GS.can_plant(w, p, 5, "herbs"), "зайняту чи неіснуючу грядку не засадиш")
 	check(GS.progress(w, 0) == 0.0 and not GS.ready(w, 0) and GS.time_left(w, 0) == 4 * 3600 and GS.harvest(w, p, 0) == "", "щойно посаджене не зібрати")
 	CS.now_override = T0 + 2 * 3600
@@ -3322,7 +3324,7 @@ func _suite_expedition() -> void:
 	var rng := RandomNumberGenerator.new()
 	var c: Dictionary = Party.new_member("dzhura", 12)
 	var sums := {}
-	for kind in Acts.EXPEDITION_ORDER:
+	for kind in Acts.expedition_ids():
 		var total := 0
 		for i in 200:
 			total += int(ES.reward(c, kind, rng)["gold"])
@@ -3482,8 +3484,8 @@ func _suite_records() -> void:
 	var Account = load("res://scripts/game/account.gd")
 	var CS = load("res://scripts/game/challenge_service.gd")
 	CS.now_override = 1762700000
-	for key in Acts.RECORD_ORDER:
-		check(Acts.RECORDS.has(key) and Acts.RECORDS[key]["name"] != "", "%s: рекорд описано" % key)
+	for key in GameDB.ids("records"):
+		check(GameDB.table("records").has(key) and GameDB.row("records", key)["name"] != "", "%s: рекорд описано" % key)
 	var acc = Account.new()
 	# Перший герой (слот 1)
 	var w1 = WorldState.new()
@@ -3597,16 +3599,16 @@ func _suite_holidays() -> void:
 	var CS = load("res://scripts/game/challenge_service.gd")
 	HS.forced = ""
 	var GfxH = load("res://scripts/world/gfx.gd")
-	var known_keys: Array = Acts.HOLIDAY_PLAYER_KEYS + Acts.HOLIDAY_COMBAT_KEYS + ["glory", "harvest", "dice", "rumor", "loyalty", "outdoor", "sharpen", "hire"]
+	var known_keys: Array = HS.PLAYER_KEYS + HS.COMBAT_KEYS + HS.SERVICE_KEYS
 	var great_n := 0
-	for id in Acts.HOLIDAY_ORDER:
-		var H: Dictionary = Acts.HOLIDAYS[id]
+	for id in Acts.holiday_ids():
+		var H: Dictionary = Acts.holiday(id)
 		check(H["name"] != "" and H["desc"] != "" and H["token"] != "" and H["tokens"] != "" and H["bonus_text"] != "" and not H["bonus"].is_empty() and (H.has("from") or H.has("easter") or H.has("nth")), "%s: свято описано" % id)
 		check(H["rank"] in ["great", "small"] and GfxH.ICON_ORDER.has("tok_" + id), "%s: має ранг і значок жетона" % id)
 		for k in H["bonus"]:
 			check(k in known_keys, "%s: бонус «%s» гра вміє застосувати" % [id, k])
 		great_n += 1 if H["rank"] == "great" else 0
-	check(Acts.HOLIDAYS.size() == Acts.HOLIDAY_ORDER.size() and Acts.HOLIDAY_ORDER.size() == 28 and great_n == 9, "двадцять вісім свят, із них дев'ять великих")
+	check(GameDB.table("holidays").size() == 28 and Acts.holiday_ids().size() == 28 and great_n == 9, "двадцять вісім свят, із них дев'ять великих")
 	# Великдень за східним обрядом
 	var e25: Dictionary = Time.get_date_dict_from_unix_time(HS.easter_day(2025) * 86400)
 	var e26: Dictionary = Time.get_date_dict_from_unix_time(HS.easter_day(2026) * 86400)
@@ -3626,7 +3628,7 @@ func _suite_holidays() -> void:
 	check(HS.upcoming(_ts(2026, 12, 20))["id"] == "rizdvo" and HS.upcoming(_ts(2026, 12, 30))["id"] == "malanka", "черга свят переходить через Новий рік")
 	check(HS.dates_text("rizdvo", 2026) == "24 грудня – 7 січня" and HS.dates_text("velykden", 2026) == "11 квітня – 19 квітня", "дати словами")
 	var cal: Array = HS.calendar(_ts(2026, 11, 18))
-	check(cal.size() == Acts.HOLIDAY_ORDER.size() and cal[0]["id"] == "kateryny" and cal[1]["id"] == "andrii" and not cal[0]["active"] and cal[1]["great"] and not cal[0]["great"], "календар від найближчого свята")
+	check(cal.size() == Acts.holiday_ids().size() and cal[0]["id"] == "kateryny" and cal[1]["id"] == "andrii" and not cal[0]["active"] and cal[1]["great"] and not cal[0]["great"], "календар від найближчого свята")
 	# Свята нових видів: рухомі від Великодня й «третій четвер травня»
 	check(HS.active(_ts(2026, 2, 16)) == "masnytsia" and HS.active(_ts(2026, 2, 22)) == "masnytsia" and HS.active(_ts(2026, 2, 23)) == "", "Масниця 2026: тиждень за сім тижнів до Великодня")
 	check(HS.active(_ts(2026, 4, 5)) == "verbna" and HS.active(_ts(2026, 5, 31)) == "zeleni" and HS.active(_ts(2026, 6, 6)) == "zeleni" and HS.active(_ts(2026, 6, 7)) == "", "Вербна неділя й Зелені свята 2026")
@@ -3643,7 +3645,7 @@ func _suite_holidays() -> void:
 		var d0: int = _ts(year, 1, 1)
 		for i in 366:
 			seen[HS.active(d0 + i * 86400)] = true
-		for id in Acts.HOLIDAY_ORDER:
+		for id in Acts.holiday_ids():
 			if not seen.has(id):
 				shadowed.append("%d:%s" % [year, id])
 	check(shadowed.is_empty(), "кожне свято щороку має хоч один свій день: %s" % str(shadowed))
@@ -3773,8 +3775,8 @@ func _suite_holidays() -> void:
 		check(HS.active() == id and cm.size() == 1 and absf(float(cm[loot_days[id][1]]) - float(loot_days[id][2])) < 0.001 and HS.player_mods().is_empty(), "%s: бонус до здобичі «%s»" % [id, loot_days[id][1]])
 	# Жетони й нагороди (спільні для акаунта)
 	check(HS.token_roll(true, false, 0.9) == Acts.TOKEN_BOSS and HS.token_roll(false, true, 0.9) == Acts.TOKEN_ELITE and HS.token_roll(false, false, 0.01) == 1 and HS.token_roll(false, false, 0.5) == 0, "жетони: бос, еліта, інколи звичайна нечисть")
-	check(HS.tiers("nezalezhnist") == Acts.TOKEN_TIERS_SHORT and HS.tiers("rizdvo") == Acts.TOKEN_TIERS and HS.tiers("velykden") == Acts.TOKEN_TIERS, "коротке свято має нижчі пороги")
-	check(HS.tiers("mykhaila") == Acts.TOKEN_TIERS_TINY and HS.tiers("malanka") == Acts.TOKEN_TIERS_SHORT and HS.tiers("andrii") == Acts.TOKEN_TIERS and HS.length("mykhaila") == 3 and HS.length("rizdvo") == 15, "мале свято: пороги нижчі, найкоротші — найнижчі")
+	check(HS.tiers("nezalezhnist") == Acts.token_need("short") and HS.tiers("rizdvo") == Acts.token_need("great") and HS.tiers("velykden") == Acts.token_need("great"), "коротке свято має нижчі пороги")
+	check(HS.tiers("mykhaila") == Acts.token_need("tiny") and HS.tiers("malanka") == Acts.token_need("short") and HS.tiers("andrii") == Acts.token_need("great") and HS.length("mykhaila") == 3 and HS.length("rizdvo") == 15, "мале свято: пороги нижчі, найкоротші — найнижчі")
 	check("Алатир" in HS.reward_text(2, 10, "pokrova") and "Алатир" not in HS.reward_text(2, 10, "mykhaila") and "рідкісна" in HS.reward_text(2, 10, "mykhaila") and "добротна" in HS.reward_text(1, 10, "mykhaila"), "нагороди малого свята скромніші")
 	var acc = Account.new()
 	var w1 = WorldState.new()
@@ -3992,10 +3994,10 @@ func _suite_audio() -> void:
 	check(missing.is_empty() and Index.MUSIC.size() >= 8 and Index.AMBIENT.size() >= 6, "музика й фонові шуми на місці: %d і %d" % [Index.MUSIC.size(), Index.AMBIENT.size()])
 	var no_volume := []
 	for name in Index.SFX:
-		if not Sounds.VOLUME.has(name):
+		if not Sounds.volumes().has(name):
 			no_volume.append(name)
 	var no_file := []
-	for name in Sounds.VOLUME:
+	for name in Sounds.volumes():
 		if not Index.SFX.has(name):
 			no_file.append(name)
 	check(no_volume.is_empty() and no_file.is_empty(), "кожен звук має гучність, кожна гучність — звук%s%s" % [(" без гучності: " + str(no_volume)) if not no_volume.is_empty() else "", (" без файлів: " + str(no_file)) if not no_file.is_empty() else ""])
@@ -4175,7 +4177,7 @@ func _suite_mana_potion() -> void:
 	check(not CampService.can_brew(w, p, "mana"), "без зілляварні не звариш")
 	CampService.build(w, p, "zillia")
 	var herbs0: int = int(p.resources["herbs"])
-	check(CampService.brew(w, p, "mana") and p.mana_potions == 1 and int(p.resources["herbs"]) == herbs0 - int(Camp.BREW["mana"]["herbs"]) and not p.trip_buffs.has("mana"), "зварив зілля наснаги з трав")
+	check(CampService.brew(w, p, "mana") and p.mana_potions == 1 and int(p.resources["herbs"]) == herbs0 - int(Camp.brew("mana")["herbs"]) and not p.trip_buffs.has("mana"), "зварив зілля наснаги з трав")
 	p.mana_potions = p.mana_potion_max()
 	check(not CampService.can_brew(w, p, "mana"), "повний запас — варити нема куди")
 	# Збереження
@@ -4183,7 +4185,7 @@ func _suite_mana_potion() -> void:
 	var p2 = _new_player()
 	p2.from_dict(p.to_dict())
 	check(p2.mana_potions == 2, "запас зілля наснаги зберігається")
-	check(Camp.res_name("meat") == "М'ясо" and Camp.res_name("wood") == "Дерево" and Camp.res_name("trophy") == Camp.TROPHY_NAME and Camp.RESOURCE_COLORS.has("ryba"), "провіант має назви й кольори для написів здобичі")
+	check(Camp.res_name("meat") == "М'ясо" and Camp.res_name("wood") == "Дерево" and Camp.res_name("trophy") == Camp.res_name(Camp.TROPHY) and Camp.res_color("ryba") != Color.WHITE, "провіант має назви й кольори для написів здобичі")
 	for id in ["mana", "meat", "ryba", "veg", "glory", "tok_rizdvo", "tok_velykden", "tok_kupala", "tok_spas", "tok_nezalezhnist", "tok_pokrova", "tok_andrii"]:
 		check(load("res://scripts/world/gfx.gd").ICON_ORDER.has(id), "значок %s є на листі" % id)
 	var GfxS = load("res://scripts/world/gfx.gd")
@@ -4467,9 +4469,9 @@ func _suite_vigil() -> void:
 	var Acts = load("res://scripts/data/activities.gd")
 	var CS = load("res://scripts/game/challenge_service.gd")
 	CS.now_override = 1762700000
-	check(Acts.SPOTS.has("varta") and Acts.SPOTS["varta"]["kind"] == "vigil" and Data.place_name("varta") == "Сторожова могила", "Сторожова могила — місце на мапі")
-	for sid in Acts.SPOTS:
-		var S: Dictionary = Acts.SPOTS[sid]
+	check(Acts.is_spot("varta") and Acts.spot("varta")["kind"] == "vigil" and Data.place_name("varta") == "Сторожова могила", "Сторожова могила — місце на мапі")
+	for sid in Acts.spot_ids():
+		var S: Dictionary = Acts.spot(sid)
 		var clash := false
 		for c in Data.city_ids():
 			if Data.city(c)["pos"].distance_to(S["pos"]) < 0.5:
@@ -4558,7 +4560,7 @@ func _suite_vigil_battle() -> void:
 	check(game.hud.map_view._markers.has("varta") or true, "мапа відкрита")
 	game._on_map_select("varta")
 	await _frames(2)
-	check(game.hud.map_view._place_ll("varta") == game.Acts.SPOTS["varta"]["pos"], "варта має місце на мапі")
+	check(game.hud.map_view._place_ll("varta") == game.Acts.spot("varta")["pos"], "варта має місце на мапі")
 	await _ride(game, "varta")
 	var c = game.combat
 	check(game.state == game.State.PLAYING and c.is_vigil() and c.arena == c.VIGIL_ARENA and game.map_here == "varta", "приїхав на могилу — варта почалась")
@@ -4774,8 +4776,8 @@ func _suite_duel() -> void:
 	for i in 12:
 		variety[str(DS.lineup("W%d" % (3000 + i)))] = true
 	check(variety.size() >= 4, "щотижня склад інший")
-	for id in Acts.RIVAL_ORDER:
-		check(Acts.RIVALS.has(id) and Acts.RIVALS[id]["bio"] != "" and Acts.RIVALS[id]["style"] in ["rubaka", "spysnyk", "strilets", "kharakternyk", "bulavnyk"], "суперник %s описаний" % id)
+	for id in Acts.rival_ids():
+		check(Acts.rival(id).size() > 0 and Acts.rival(id)["bio"] != "" and Acts.rival(id)["style"] in ["rubaka", "spysnyk", "strilets", "kharakternyk", "bulavnyk"], "суперник %s описаний" % id)
 	var l0: Dictionary = DS.loc_for(p, "ostap", 0)
 	var l2: Dictionary = DS.loc_for(p, "ostap", 2)
 	check(l0["type"] == "duel" and l0["rival_hp"] > 0.0 and l2["rival_hp"] > l0["rival_hp"] and l2["rival_dmg"] > l0["rival_dmg"], "фінал важчий за перше коло")
@@ -4792,7 +4794,7 @@ func _suite_duel() -> void:
 	# Перемоги
 	var g0: int = p.gold
 	var m1: Array = DS.win(w, p)
-	check(int(DS.state(w)["round"]) == 1 and p.gold == g0 + DS.gold_for(0, p.level) and GS.glory(w) == Acts.DUEL_GLORY[0] and "Коло 1" in m1[0], "перше коло: гривні й слава")
+	check(int(DS.state(w)["round"]) == 1 and p.gold == g0 + DS.gold_for(0, p.level) and GS.glory(w) == Acts.duel_round(0)["glory"] and "Коло 1" in m1[0], "перше коло: гривні й слава")
 	DS.win(w, p)
 	var bag0: int = p.inventory.size()
 	var m3: Array = DS.win(w, p)
@@ -4953,8 +4955,8 @@ func _suite_duel_battle() -> void:
 	check(harder, "кожен наступний суперник у серії здоровіший")
 	check(int(game.world.stats.get("duel", 0)) == duels0 + 4 and int(game.world.stats.get("duel_free", 0)) == 4 and game.GloryService.glory(game.world) == glory0 + Acts.FREE_DUEL_GLORY, "вільний герць іде в лічильник викликів, слава — за першу перемогу дня")
 	check(int(st["tries"]) == tries0 and int(st["round"]) == round0, "турнірні спроби й кола вільний герць не чіпає")
-	check(DS.free_rival(game.world)["id"] != first["id"] or Acts.RIVAL_ORDER.size() == 1, "суперники в серії міняються")
-	check(game.RecordService.hero_values(game.world, p)["duel_streak"] == 4 and Acts.RECORDS.has("duel_streak") and "duel_streak" in Acts.RECORD_ORDER, "серія потрапляє в Літопис слави")
+	check(DS.free_rival(game.world)["id"] != first["id"] or Acts.rival_ids().size() == 1, "суперники в серії міняються")
+	check(game.RecordService.hero_values(game.world, p)["duel_streak"] == 4 and GameDB.table("records").has("duel_streak") and "duel_streak" in GameDB.ids("records"), "серія потрапляє в Літопис слави")
 	# Поразка рве серію, рекорд лишається
 	game.city_do("duel_free", null)
 	await _frames(2)
@@ -5085,10 +5087,10 @@ func _suite_escort() -> void:
 	var ES = load("res://scripts/game/escort_service.gd")
 	var GfxS = load("res://scripts/world/gfx.gd")
 	var Ach = load("res://scripts/data/achievements.gd")
-	for id in Acts.ESCORT_ORDER:
-		var W: Dictionary = Acts.ESCORT_WHO[id]
+	for id in Acts.escort_ids():
+		var W: Dictionary = Acts.escort(id)
 		check(W["name"] != "" and W["acc"] != "" and W["thanks"] != "" and GfxS.has(W["sheet"]), "%s: назва, знахідний відмінок, подяка й спрайт" % id)
-	check(Acts.ESCORT_WHO.size() == Acts.ESCORT_ORDER.size(), "усі мандрівники в черзі")
+	check(Acts.escort_ids() == GameDB.table("escorts").keys() and Acts.escort_ids().size() == 4, "усі мандрівники в черзі")
 	# Дошка: супровід трапляється лише в дику місцевість, не в печеру
 	seed(20261110)
 	var w = WorldState.new()
@@ -5106,17 +5108,17 @@ func _suite_escort() -> void:
 			continue
 		escort_n += 1
 		kinds[q["target"]] = true
-		check(L["type"] != "dungeon" and int(q["count"]) == 1 and Acts.ESCORT_WHO.has(q["target"]), "супровід: дика місцевість, один мандрівник")
-		check(q["text"] == "Проведи %s (%s)" % [Acts.ESCORT_WHO[q["target"]]["acc"], L["name"]], "текст завдання: %s" % q["text"])
+		check(L["type"] != "dungeon" and int(q["count"]) == 1 and Acts.escort(q["target"]).size() > 0, "супровід: дика місцевість, один мандрівник")
+		check(q["text"] == "Проведи %s (%s)" % [Acts.escort(q["target"])["acc"], L["name"]], "текст завдання: %s" % q["text"])
 		check(int(q["gold"]) == int((40 + 25 * int(L["level"])) * Acts.ESCORT_MULT), "нагорода більша за звичайну")
 	var share := float(escort_n) / float(maxi(field_n, 1))
 	check(share > Acts.ESCORT_CHANCE - 0.08 and share < Acts.ESCORT_CHANCE + 0.08, "частка супроводів серед завдань у поле: %.2f" % share)
-	check(kinds.size() == Acts.ESCORT_ORDER.size(), "трапляються всі мандрівники")
+	check(kinds.size() == Acts.escort_ids().size(), "трапляються всі мандрівники")
 	check(types.has("kill") and types.has("fetch") and types.has("dungeon"), "решта типів завдань лишилась")
 	for r in [0.0, 0.26, 0.51, 0.76, 0.999, 1.0]:
 		var qq := {"id": 1, "city": "sich", "loc": "wild_field", "progress": 0, "lvl": 1}
 		ES.fill(qq, r)
-		check(qq["target"] == Acts.ESCORT_ORDER[mini(int(r * 4.0), 3)], "вибір мандрівника за кидком %.2f" % r)
+		check(qq["target"] == Acts.escort_ids()[mini(int(r * 4.0), 3)], "вибір мандрівника за кидком %.2f" % r)
 	# Узяте завдання: служба бачить його в місцевості
 	var w2 = WorldState.new()
 	var p = _new_player()
@@ -5143,7 +5145,7 @@ func _suite_escort() -> void:
 	p.gold = 0
 	var won: String = ES.win(w2, p, 77, 1.0)
 	check(w2.is_done(q1) and not ES.is_open(q1) and ES.at(w2, "rapids").is_empty(), "перемога: завдання виконано")
-	check(p.gold == Acts.ESCORT_TIP * 2 and "дійшов" in won and Data.city("sich")["name"] in won and str(Acts.ESCORT_WHO["kobzar"]["thanks"]) in won, "подяка й гривні на дорогу: %d" % p.gold)
+	check(p.gold == Acts.ESCORT_TIP * 2 and "дійшов" in won and Data.city("sich")["name"] in won and str(Acts.escort("kobzar")["thanks"]) in won, "подяка й гривні на дорогу: %d" % p.gold)
 	check(ES.win(w2, p, 77, 1.0) == "Мандрівник дійшов." and p.gold == Acts.ESCORT_TIP * 2, "двічі те саме завдання не зарахувати")
 	check(not w2.quest_targets().has("rapids"), "позначка з мапи зникла")
 	var g0: int = p.gold
@@ -5838,7 +5840,7 @@ func _suite_travel_ride() -> void:
 	game.world.story = {"chapter": StoryT.chapter_count(), "step": 0, "stage": "done", "progress": 0}
 	game.world.travel = {"cooldown": 99, "seen": {}}
 	var go_texts := ["Вирушити", "Увійти до міста", "Увійти на хутір", "Спуститися", "Піднятися", "Вирушити до табору", "Полювати", "Рибалити", "Стати на варту", "Стати в коло"]
-	var all_places: Array = Data.city_ids() + Data.place_ids() + ActsT.SPOTS.keys() + [CampT.CAMP_ID]
+	var all_places: Array = Data.city_ids() + Data.place_ids() + ActsT.spot_ids() + [CampT.CAMP_ID]
 	var rode := []
 	var jumped := []
 	for id in all_places:
@@ -5992,18 +5994,20 @@ func _suite_kleinody() -> void:
 	var w = WorldState.new()
 	var p = _new_player()
 	# Дані
-	check(Camp.KLEINOD_ORDER.size() == 7 and Camp.KLEINODY.size() == 7 and KS.max_level() == 5, "сім клейнодів по п'ять ступенів")
+	check(Camp.kleinod_ids().size() == 7 and GameDB.table("kleinody").size() == 7 and KS.max_level() == 5, "сім клейнодів по п'ять ступенів")
 	var data_ok := true
-	for id in Camp.KLEINOD_ORDER:
-		var K: Dictionary = Camp.KLEINODY.get(id, {})
+	for id in Camp.kleinod_ids():
+		var K: Dictionary = Camp.kleinod(id)
 		for key in ["name", "stat", "per", "res", "text", "desc"]:
 			data_ok = data_ok and K.has(key)
-		data_ok = data_ok and Camp.RESOURCES.has(K.get("res", "")) and Gfx.icon_tex("kl_" + id) != null and float(K.get("per", 0.0)) > 0.0
+		data_ok = data_ok and Camp.is_resource(str(K.get("res", ""))) and Gfx.icon_tex("kl_" + id) != null and float(K.get("per", 0.0)) > 0.0
 		data_ok = data_ok and (K.get("stat", "") in KS.HERO_STATS or K.get("stat", "") in ["glory", "loyalty"])
 	check(data_ok, "у кожного клейнода є назва, бонус, ресурс і значок")
-	var rising: bool = Camp.KLEINOD_GOLD.size() == 5 and Camp.KLEINOD_TROPHY.size() == 5 and Camp.KLEINOD_RES.size() == 5
+	var rising: bool = Camp.kleinod_tiers() == 5
 	for i in range(1, 5):
-		rising = rising and Camp.KLEINOD_GOLD[i] > Camp.KLEINOD_GOLD[i - 1] and Camp.KLEINOD_TROPHY[i] > Camp.KLEINOD_TROPHY[i - 1] and Camp.KLEINOD_RES[i] > Camp.KLEINOD_RES[i - 1]
+		var T0: Dictionary = Camp.kleinod_tier(i - 1)
+		var T1: Dictionary = Camp.kleinod_tier(i)
+		rising = rising and int(T1["gold"]) > int(T0["gold"]) and int(T1["trophy"]) > int(T0["trophy"]) and int(T1["res"]) > int(T0["res"])
 	check(rising, "кожен ступінь дорожчий за попередній")
 	check(UI.num(0) == "0" and UI.num(999) == "999" and UI.num(1000) == "1 000" and UI.num(1226262) == "1 226 262" and UI.num(-15000) == "-15 000", "великі суми пишуться з проміжками")
 	# Купівля
@@ -6028,13 +6032,13 @@ func _suite_kleinody() -> void:
 	var sum_trophy := 0
 	var sum_res := 0
 	for i in 5:
-		sum_gold += int(Camp.KLEINOD_GOLD[i])
-		sum_trophy += int(Camp.KLEINOD_TROPHY[i])
-		sum_res += int(Camp.KLEINOD_RES[i])
+		sum_gold += int(Camp.kleinod_tier(i)["gold"])
+		sum_trophy += int(Camp.kleinod_tier(i)["trophy"])
+		sum_res += int(Camp.kleinod_tier(i)["res"])
 	check(sum_gold == 465000 and sum_trophy == 300 and sum_res == 2670, "досконалий клейнод: 465 000 грн, 300 трофеїв, 2 670 ресурсу")
 	var by_res := {}
-	for id in Camp.KLEINOD_ORDER:
-		by_res[Camp.KLEINODY[id]["res"]] = int(by_res.get(Camp.KLEINODY[id]["res"], 0)) + 1
+	for id in Camp.kleinod_ids():
+		by_res[Camp.kleinod(id)["res"]] = int(by_res.get(Camp.kleinod(id)["res"], 0)) + 1
 	check(by_res == {"iron": 4, "wood": 2, "herbs": 1}, "заліза, якого найбільше, просять чотири клейноди: %s" % str(by_res))
 	check(is_equal_approx(p.xp_mult, xp0 + 0.2) and KS.total(w) == 5, "досконалі литаври: +20% досвіду")
 	# Бонуси до показників героя
@@ -6096,7 +6100,7 @@ func _suite_kleinody() -> void:
 	ps.gold = 160000
 	check(KS.buy_stone(ps, "zabuttia") and KS.buy_stone(ps, "alatyr") and ps.gold == 0 and StoneService.count(ps, "zabuttia") == 1 and StoneService.count(ps, "alatyr") == 1, "купив обидва камені")
 	check(not KS.buy_stone(ps, "nema"), "невідомого каменя скарбник не має")
-	check(Gfx.icon_tex("stone_zabuttia") != null and Gfx.icon_tex("stone_alatyr") != null and Camp.STONE_TEXT.has("zabuttia") and Camp.STONE_TEXT.has("alatyr"), "у каменів є значки й описи")
+	check(Gfx.icon_tex("stone_zabuttia") != null and Gfx.icon_tex("stone_alatyr") != null and GameDB.row("stones", "zabuttia").has("text") and GameDB.row("stones", "alatyr").has("text"), "у каменів є значки й описи")
 	# Заточка без ризику: утричі дорожча, зате рівень не падає
 	var it: Dictionary = Data.gen_item(20, 2, "boots")
 	it["up"] = 7
@@ -6307,7 +6311,7 @@ func _suite_ring_muster() -> void:
 	var uniq := {}
 	for k in line:
 		uniq[k] = true
-	check(line.size() == 3 and uniq.size() == 3 and line.all(func(k): return k in Acts.RING_POOL and GameDB.has_boss(k)), "у колі три різні чудовиська з іменами: %s" % str(line))
+	check(line.size() == 3 and uniq.size() == 3 and line.all(func(k): return k in Acts.ring_pool() and GameDB.has_boss(k)), "у колі три різні чудовиська з іменами: %s" % str(line))
 	check(RS.lineup() == line and RS.lineup(CS.week_key(T0)) == line, "склад тижня однаковий для всіх")
 	var variety := {}
 	for i in 12:
@@ -6319,15 +6323,15 @@ func _suite_ring_muster() -> void:
 	var peasant = _new_player()
 	peasant.job = "peasant"
 	peasant.level = 30
-	check(RS.unlocked(p) and not RS.unlocked(young) and not RS.unlocked(peasant) and Acts.SPOTS["kolo"]["kind"] == "ring", "коло відкрите з 10-го рівня тим, хто обрав дорогу")
+	check(RS.unlocked(p) and not RS.unlocked(young) and not RS.unlocked(peasant) and Acts.spot("kolo")["kind"] == "ring", "коло відкрите з 10-го рівня тим, хто обрав дорогу")
 	var s1: Dictionary = RS.boss_stats(p, 0)
 	var s3: Dictionary = RS.boss_stats(p, 2)
-	check(is_equal_approx(float(s1["hp"]), Data.ref_dps(int(p.level)) * Acts.RING_SECONDS[0]) and float(s3["hp"]) > float(s1["hp"]) and float(s3["dmg"]) > float(s1["dmg"]) and float(s1["cap"]) > 0.0, "чудовиська міряються з героєм, кожне коло тяжче")
+	check(is_equal_approx(float(s1["hp"]), Data.ref_dps(int(p.level)) * Acts.ring_round(0)["seconds"]) and float(s3["hp"]) > float(s1["hp"]) and float(s3["dmg"]) > float(s1["dmg"]) and float(s1["cap"]) > 0.0, "чудовиська міряються з героєм, кожне коло тяжче")
 	var L: Dictionary = RS.battle_loc(p)
 	check(L["type"] == "ring" and L["bosses"] == line and float(L["std_hp"]) > 0.0 and float(L["xp_mult"]) < 1.0, "опис бою кола")
 	var gold0: int = p.gold
 	var r1: Dictionary = RS.on_stage(w, p, 1)
-	check(r1["weekly"] and int(r1["gold"]) == Acts.RING_GOLD[0] * 30 and int(r1["glory"]) == Acts.RING_GLORY[0] and p.gold == gold0 + int(r1["gold"]) and int(RS.state(w)["paid"]) == 1, "перше коло тижня: гаманець і слава")
+	check(r1["weekly"] and int(r1["gold"]) == Acts.ring_round(0)["gold"] * 30 and int(r1["glory"]) == Acts.ring_round(0)["glory"] and p.gold == gold0 + int(r1["gold"]) and int(RS.state(w)["paid"]) == 1, "перше коло тижня: гаманець і слава")
 	RS.on_stage(w, p, 2)
 	var first_week: bool = int(RS.state(w)["paid"]) < Acts.RING_STAGES
 	RS.on_stage(w, p, 3)
@@ -6348,7 +6352,7 @@ func _suite_ring_muster() -> void:
 	check(int(RS.state(w)["day_paid"]) == 0, "наступного дня малі гаманці знову є")
 	CS.now_override = T0 + 8 * 86400
 	check(int(RS.state(w)["paid"]) == 0 and int(RS.state(w)["titles"]) == 3, "нового тижня тижневі нагороди знову чекають, рекорди лишились")
-	check(RecS.hero_values(w, p)["ring_titles"] == 3 and Acts.RECORDS.has("ring_titles") and Acts.RECORDS.has("muster_titles"), "Коло й огляд є в Літописі")
+	check(RecS.hero_values(w, p)["ring_titles"] == 3 and GameDB.table("records").has("ring_titles") and GameDB.table("records").has("muster_titles"), "Коло й огляд є в Літописі")
 	check(CS.available("ring", w, p) and not CS.available("ring", w, young) and CS.available("muster", w, p), "Коло й огляд потрапляють у виклики, коли відкриті")
 	# --- Огляд ---
 	CS.now_override = T0
@@ -6357,13 +6361,13 @@ func _suite_ring_muster() -> void:
 	var tu := {}
 	for t in teams:
 		tu[t] = true
-	check(teams.size() == 3 and tu.size() == 3 and teams.all(func(t): return Acts.MUSTER_TEAMS.has(t)), "на огляді три різні сотні: %s" % str(teams))
+	check(teams.size() == 3 and tu.size() == 3 and teams.all(func(t): return Acts.muster_team(t).size() > 0), "на огляді три різні сотні: %s" % str(teams))
 	var team_ok := true
-	for tid in Acts.MUSTER_ORDER:
-		var T: Dictionary = Acts.MUSTER_TEAMS[tid]
+	for tid in Acts.muster_team_ids():
+		var T: Dictionary = Acts.muster_team(tid)
 		team_ok = team_ok and T["styles"].size() >= 5 and str(T["name"]) != "" and str(T["bio"]) != ""
 		for st in T["styles"]:
-			team_ok = team_ok and Acts.MUSTER_NICK.has(st)
+			team_ok = team_ok and Acts.style_rival(st).has("nicks")
 	check(team_ok, "у кожної сотні п'ятеро бійців відомих стилів")
 	check(MS.team_size(0, 0) == 1 and MS.team_size(0, 1) == 2 and MS.team_size(0, 2) == 3 and MS.team_size(2, 0) == 3 and MS.team_size(2, 3) == 5, "проти самотнього героя сотня виставляє менше людей")
 	var fs: Array = MS.fighters("serdiuky", 5)
@@ -6376,11 +6380,11 @@ func _suite_ring_muster() -> void:
 	check(MS.allies(wm) == 1, "поранений і той, хто в поході, на огляд не стають")
 	wm.companions[1]["downed"] = false
 	var ML: Dictionary = MS.battle_loc(wm, p)
-	check(ML["type"] == "duel" and ML["muster"] and ML["team"].size() == MS.team_size(0, 2) and ML["back"] == "До Чигирина" and float(ML["ally_hit"]) > 0.0 and is_equal_approx(float(ML["rival_hp"]), Data.ref_dps(int(p.level)) * Acts.MUSTER_SECONDS[0]), "опис сутички: гурт на гурт")
+	check(ML["type"] == "duel" and ML["muster"] and ML["team"].size() == MS.team_size(0, 2) and ML["back"] == "До Чигирина" and float(ML["ally_hit"]) > 0.0 and is_equal_approx(float(ML["rival_hp"]), Data.ref_dps(int(p.level)) * Acts.muster_round(0)["seconds"]), "опис сутички: гурт на гурт")
 	var g1: int = p.gold
 	var loy0: int = wm.loyalty_points("chyhyryn")
 	var m1: Array = MS.win(wm, p)
-	check(p.gold == g1 + Acts.MUSTER_GOLD[0] * 30 and wm.loyalty_points("chyhyryn") == loy0 + Acts.MUSTER_LOYALTY[0] and int(MS.state(wm)["round"]) == 1 and not m1.is_empty(), "перша сутичка: гривні, лояльність Чигирина, поступ")
+	check(p.gold == g1 + Acts.muster_round(0)["gold"] * 30 and wm.loyalty_points("chyhyryn") == loy0 + Acts.muster_round(0)["loyalty"] and int(MS.state(wm)["round"]) == 1 and not m1.is_empty(), "перша сутичка: гривні, лояльність Чигирина, поступ")
 	check("Лишилось спроб: 2" in MS.lose(wm) and int(MS.state(wm)["tries"]) == 2 and int(MS.state(wm)["round"]) == 1, "поразка: мінус спроба, поступ лишається")
 	MS.win(wm, p)
 	var inv0: int = p.inventory.size()
@@ -6481,7 +6485,7 @@ func _suite_ring_muster_game() -> void:
 	check(ok_stage, "чудовиська виходять за складом тижня, міряні з героєм")
 	check(breaks_ok and c.ring_done and c.portal != null, "після кожного кола перепочинок, після третього — портал")
 	var st: Dictionary = RS.state(game.world)
-	var weekly_gold: int = (Acts.RING_GOLD[0] + Acts.RING_GOLD[1] + Acts.RING_GOLD[2]) * 30
+	var weekly_gold: int = (Acts.ring_round(0)["gold"] + Acts.ring_round(1)["gold"] + Acts.ring_round(2)["gold"]) * 30
 	check(int(st["paid"]) == 3 and int(st["titles"]) == 1 and float(st["best_time"]) > 0.0 and p.gold >= gold0 + weekly_gold, "тижневі гаманці взято, проходження й час записано")
 	check(int(game.world.stats.get("ring", 0)) == 3 and int(game.world.stats.get("ring_clear", 0)) == 1 and game.account.challenges["ach"].has("ring_1"), "лічильники викликів і досягнення")
 	check(int(game.world.stats.get("boss", 0)) == 0 and game.StoneService.count(p, "zabuttia") + game.StoneService.count(p, "alatyr") == stones0, "чудовиська кола не дають ні каменів долі, ні досягнень за босів")
@@ -6538,7 +6542,7 @@ func _suite_ring_muster_game() -> void:
 		await process_frame
 		tries += 1
 	await _frames(6)
-	check(c.duel_over and int(MS.state(game.world)["round"]) == 1 and p.gold >= gold1 + Acts.MUSTER_GOLD[0] * 30 + 400 and game.world.loyalty_points("chyhyryn") > loy0, "сотню покладено: гривні (з досягненням і, може, рангом слави), лояльність, поступ (кінець: %s, коло %d, гривень +%d, ударів %d)" % [str(c.duel_over), int(MS.state(game.world)["round"]), p.gold - gold1, tries])
+	check(c.duel_over and int(MS.state(game.world)["round"]) == 1 and p.gold >= gold1 + Acts.muster_round(0)["gold"] * 30 + 400 and game.world.loyalty_points("chyhyryn") > loy0, "сотню покладено: гривні (з досягненням і, може, рангом слави), лояльність, поступ (кінець: %s, коло %d, гривень +%d, ударів %d)" % [str(c.duel_over), int(MS.state(game.world)["round"]), p.gold - gold1, tries])
 	check(int(game.world.stats.get("muster", 0)) == 1 and game.account.challenges["ach"].has("muster_1") and not game.world.companions[0]["downed"], "лічильник і досягнення; покладений побратим не поранений")
 	p.global_position = c.portal.global_position
 	await _frames(6)
@@ -6604,8 +6608,8 @@ func _suite_far_lands() -> void:
 		check(not GameDB.bounty_names(kind).is_empty() and GameDB.bounty_names(kind).size() >= 3, "%s: імена для дошки розшуку" % kind)
 	check(Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).begins_with("Вогняна") and Elites.title("kamiana_baba", "Кам'яна баба", ["fiery"]).ends_with("Кам'яна баба") and Elites.is_feminine("mara"), "еліти жіночого роду мають правильні прикметники")
 	for city in ["baturyn", "ostroh", "izium", "khadzhybei"]:
-		var prices: Dictionary = Acts.TRADE_CITIES.get(city, {})
-		check(Data.is_region(str(Data.city(city).get("region", ""))) and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
+		var prices: Dictionary = Acts.trade_city_prices(city)
+		check(Data.is_region(str(Data.city(city).get("region", ""))) and prices.size() == Acts.trade_good_ids().size(), "%s: місто краю з торгом" % city)
 	check("sand" in Ground.TILED and GameDB.row("biomes", "sand").has("resource") and Sounds.ambient_for("sand") != "", "піски: тайли, ресурс і шум вітру")
 	# Ніщо не налазить одне на одне
 	var places := {}
@@ -6613,9 +6617,9 @@ func _suite_far_lands() -> void:
 		places[id] = Data.city(id)["pos"]
 	for id in Data.place_ids():
 		places[id] = Data.place(id)["pos"]
-	for id in Acts.SPOTS:
-		places[id] = Acts.SPOTS[id]["pos"]
-	places[Camp.CAMP_ID] = Camp.CAMP["pos"]
+	for id in Acts.spot_ids():
+		places[id] = Acts.spot(id)["pos"]
+	places[Camp.CAMP_ID] = Camp.camp()["pos"]
 	var ids: Array = places.keys()
 	var tight := []
 	for i in ids.size():
@@ -6857,8 +6861,8 @@ func _suite_muscovy() -> void:
 		bands[r] = [lv[0], lv[lv.size() - 1], lv.size()]
 	check(bands["oka"] == [14, 18, 6] and bands["tvershchyna"] == [19, 23, 5] and bands["zalissia"] == [24, 30, 7], "рівні країв без прогалин: %s" % str(bands))
 	for city in ["yelets", "tver", "cherkaskyi_stan"]:
-		var prices: Dictionary = Acts.TRADE_CITIES.get(city, {})
-		check(Data.is_city(city) and Data.city(city)["region"] in ["oka", "tvershchyna", "zalissia"] and prices.size() == Acts.TRADE_ORDER.size(), "%s: місто краю з торгом" % city)
+		var prices: Dictionary = Acts.trade_city_prices(city)
+		check(Data.is_city(city) and Data.city(city)["region"] in ["oka", "tvershchyna", "zalissia"] and prices.size() == Acts.trade_good_ids().size(), "%s: місто краю з торгом" % city)
 	for kind in MUSCOVY_MINIONS:
 		var ok: bool = (GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != ""
 		ok = ok and not GameDB.bounty_names(kind).is_empty() and GameDB.bounty_names(kind).size() >= 3 and not GameDB.mob_wiki(kind).is_empty() and str(GameDB.mob_wiki(kind)["tip"]) != ""
@@ -7073,7 +7077,7 @@ func _suite_muscovy_game() -> void:
 	var Camp2 = load("res://scripts/data/camp_data.gd")
 	var Acts2 = load("res://scripts/data/activities.gd")
 	var wide := []
-	for id in Data.city_ids() + Data.place_ids() + Acts2.SPOTS.keys() + [Camp2.CAMP_ID]:
+	for id in Data.city_ids() + Data.place_ids() + Acts2.spot_ids() + [Camp2.CAMP_ID]:
 		game._on_map_select(id)
 		await _frames(2)
 		if game.hud.map_panel.size.x > 380.0 or game.hud.map_panel.size.y > game.get_viewport().get_visible_rect().size.y - 100.0:
@@ -9319,7 +9323,7 @@ func _suite_way() -> void:
 		var pl: String = str(g["place"])
 		if pl == "" and int(g["tab"]) < 0:
 			lost.append(str(st["id"]) + ": нікуди")
-		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.is_spot(pl) or pl == "hutir"):
 			lost.append("%s→%s" % [st["id"], pl])
 	check(lost.is_empty(), "кожен крок кудись веде: %s" % ", ".join(lost))
 	# порадник показує нинішній крок
@@ -9500,7 +9504,7 @@ func _suite_guide() -> void:
 		var pl: String = str(it["place"])
 		if pl == "" and int(it["tab"]) < 0:
 			broken.append(str(it["kind"]) + ": нікуди")
-		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.is_spot(pl) or pl == "hutir"):
 			broken.append(str(it["kind"]) + "→" + pl)
 	check(broken.is_empty(), "кожна порада кудись веде: %s" % ", ".join(broken))
 	# Очки вмінь радимо вкладати, лише коли є куди
@@ -9994,13 +9998,13 @@ func _suite_events_wiki() -> void:
 	# Дані подій
 	var ids := {}
 	var kinds := {}
-	for k in Wiki.EVENT_KINDS:
-		kinds[k[0]] = true
+	for k in Wiki.event_kinds():
+		kinds[k] = true
 	var ev_ok := true
-	for e in Wiki.EVENTS:
+	for e in Wiki.events():
 		ev_ok = ev_ok and not ids.has(e["id"]) and kinds.has(e["kind"]) and WM.ICON_ORDER.has(e["icon"]) and str(e["name"]) != "" and str(e["text"]) != "" and str(e["reward"]) != "" and str(e["where"]) != ""
 		ids[e["id"]] = true
-	check(ev_ok and Wiki.EVENTS.size() >= 28, "%d подій: різні, з описом, нагородою, місцем і значком" % Wiki.EVENTS.size())
+	check(ev_ok and Wiki.events().size() >= 28, "%d подій: різні, з описом, нагородою, місцем і значком" % Wiki.events().size())
 	for need in ["duel", "duel_free", "muster", "ring", "vigil", "bounty", "escort", "trade", "hunt", "fish", "dice", "rumor", "trail", "garden", "expedition", "tower", "depths", "far", "village_raid", "caravan", "captives", "wounded", "sich_siege", "siege", "night", "treasure", "fair", "theft", "holidays", "challenges"]:
 		check(ids.has(need), "у списку подій є «%s»" % need)
 	# Стан для селянина й бувалого козака
@@ -10021,7 +10025,7 @@ func _suite_events_wiki() -> void:
 	var w = WorldState.new()
 	w.story = {"chapter": 3, "step": 0, "stage": "active", "progress": 0}
 	var all_text := true
-	for e in Wiki.EVENTS:
+	for e in Wiki.events():
 		all_text = all_text and str(EB.status(e["id"], w, hero)["text"]) != ""
 	check(all_text, "у кожної події є стан для бувалого козака")
 	check(EB.status("duel", w, hero)["ready"] and EB.status("muster", w, hero)["ready"] and EB.status("ring", w, hero)["ready"] and EB.status("vigil", w, hero)["ready"], "тижневі й варта чекають")
@@ -10044,11 +10048,11 @@ func _suite_events_wiki() -> void:
 	HS.forced = "none"
 	check(not EB.status("holidays", w, hero)["ready"], "без свята — лише найближче")
 	var rows: Array = EB.rows(w, hero)
-	check(rows.size() == Wiki.EVENTS.size() and rows.all(func(r): return r.has("status") and r.has("ready") and r.has("locked")), "рядки списку мають опис і стан")
+	check(rows.size() == Wiki.events().size() and rows.all(func(r): return r.has("status") and r.has("ready") and r.has("locked")), "рядки списку мають опис і стан")
 
 	# ---------------- Довідник ----------------
 	var secs: Array = WS.sections()
-	check(secs.size() == Wiki.SECTIONS.size() and secs.all(func(x): return not x["entries"].is_empty()), "%d розділів довідника, у кожному є статті" % secs.size())
+	check(secs.size() == Wiki.section_ids().size() and secs.all(func(x): return not x["entries"].is_empty()), "%d розділів довідника, у кожному є статті" % secs.size())
 	var total := 0
 	var titles := {}
 	var icons_ok := true
@@ -10072,45 +10076,45 @@ func _suite_events_wiki() -> void:
 			kinds_used[e] = true
 	var en_ok := true
 	for k in kinds_used:
-		en_ok = en_ok and not GameDB.mob_wiki(k).is_empty() and k in Wiki.ENEMY_ORDER
-	check(en_ok and Wiki.ENEMY_ORDER.size() == _mobs_with(func(k): return not GameDB.mob_wiki(k).is_empty()), "уся нечисть мапи описана в довіднику")
+		en_ok = en_ok and not GameDB.mob_wiki(k).is_empty() and k in Wiki.enemy_order()
+	check(en_ok and Wiki.enemy_order().size() == _mobs_with(func(k): return not GameDB.mob_wiki(k).is_empty()), "уся нечисть мапи описана в довіднику")
 	var bosses := {}
 	for id in Data.place_ids():
 		if Data.place(id).has("boss"):
 			bosses[Data.place(id)["boss"]] = true
-	for b in load("res://scripts/game/tower_service.gd").super_bosses() + Acts.RING_POOL + load("res://scripts/game/depth_service.gd").bosses():
+	for b in load("res://scripts/game/tower_service.gd").super_bosses() + Acts.ring_pool() + load("res://scripts/game/depth_service.gd").bosses():
 		bosses[b] = true
 	var b_ok := true
 	for b in bosses:
-		b_ok = b_ok and not GameDB.boss_wiki(b).is_empty() and b in Wiki.BOSS_ORDER and titles.has(GameDB.boss_name(b))
-	check(b_ok and Wiki.BOSS_ORDER.size() == _mobs_with(func(k): return not GameDB.boss_wiki(k).is_empty()), "усі боси описані: %d" % bosses.size())
+		b_ok = b_ok and not GameDB.boss_wiki(b).is_empty() and b in Wiki.boss_order() and titles.has(GameDB.boss_name(b))
+	check(b_ok and Wiki.boss_order().size() == _mobs_with(func(k): return not GameDB.boss_wiki(k).is_empty()), "усі боси описані: %d" % bosses.size())
 	var map_ok := true
 	for id in Data.city_ids():
 		map_ok = map_ok and titles.has(Data.city(id)["name"])
 	for id in Data.place_ids():
 		map_ok = map_ok and titles.has(Data.place(id)["name"])
-	for id in Acts.SPOTS:
-		map_ok = map_ok and titles.has(Acts.SPOTS[id]["name"])
+	for id in Acts.spot_ids():
+		map_ok = map_ok and titles.has(Acts.spot(id)["name"])
 	check(map_ok, "у розділі «Мапа» кожне місто, місцевість і місце занять")
 	var cls_ok := true
 	for c in Classes.ids():
 		cls_ok = cls_ok and titles.has(Classes.info(c)["name"])
 	check(cls_ok, "усі десять класів")
 	var hol_ok := true
-	for h in Acts.HOLIDAY_ORDER:
-		hol_ok = hol_ok and (titles.has(Acts.HOLIDAYS[h]["name"]) or titles.has("★ " + str(Acts.HOLIDAYS[h]["name"])))
+	for h in Acts.holiday_ids():
+		hol_ok = hol_ok and (titles.has(Acts.holiday(h)["name"]) or titles.has("★ " + str(Acts.holiday(h)["name"])))
 	check(hol_ok, "усі двадцять вісім свят")
 	var camp_ok := true
-	for b in Camp.BUILD_ORDER:
-		camp_ok = camp_ok and titles.has(Camp.BUILDINGS[b]["name"])
-	for k in Camp.KLEINOD_ORDER:
-		camp_ok = camp_ok and titles.has(Camp.KLEINODY[k]["name"])
-	for r in Acts.RECIPE_ORDER:
-		camp_ok = camp_ok and titles.has(Acts.RECIPES[r]["name"])
+	for b in Camp.building_ids():
+		camp_ok = camp_ok and titles.has(Camp.building(b)["name"])
+	for k in Camp.kleinod_ids():
+		camp_ok = camp_ok and titles.has(Camp.kleinod(k)["name"])
+	for r in Acts.recipe_ids():
+		camp_ok = camp_ok and titles.has(Acts.recipe(r)["name"])
 	check(camp_ok, "будівлі, клейноди й страви хутора")
 	var rules_ok := true
-	for st in Status.INFO:
-		rules_ok = rules_ok and Wiki.STATUS_TEXT.has(st) and titles.has(Status.INFO[st]["name"])
+	for st in Status.ids():
+		rules_ok = rules_ok and Status.info(st).has("desc") and titles.has(Status.name_of(st))
 	for a in Elites.affix_ids():
 		rules_ok = rules_ok and titles.has(Elites.affix(a)["name"]["m"])
 	for k in Data.affix_pool():
@@ -10149,7 +10153,7 @@ func _suite_events_wiki() -> void:
 			lost.append(a["name"])
 	check(lost.is_empty() and titles.has("Дерева вмінь") and titles.has("Загартування") and titles.has("Запас сил"), "кожне вміння, очко Загартування, найманець, побратим і досягнення є в довіднику: %s" % str(lost))
 	check(WS.sections()[WS.index_of("skills")]["title"] == "Вміння" and WS.sections()[WS.index_of("skills")]["entries"].size() >= 100, "окремий розділ «Вміння»: %d статей" % WS.sections()[WS.index_of("skills")]["entries"].size())
-	for e in Wiki.EVENTS:
+	for e in Wiki.events():
 		if not titles.has(e["name"]):
 			check(false, "подія «%s» є в довіднику" % e["name"])
 	# Пошук
@@ -10260,9 +10264,9 @@ func _suite_events_wiki_game() -> void:
 	# кожна подія або має місце, або чесно його не має: жодна не веде в неіснуюче місце
 	var bad_places := []
 	var ActsD = load("res://scripts/data/activities.gd")
-	for e in EBs.Wiki.EVENTS:
+	for e in EBs.Wiki.events():
 		var pl: String = EBs.place(e["id"], game.world, "sich")
-		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.SPOTS.has(pl) or pl == "hutir"):
+		if pl != "" and not (Data.is_city(pl) or Data.is_place(pl) or ActsD.is_spot(pl) or pl == "hutir"):
 			bad_places.append("%s→%s" % [e["id"], pl])
 	check(bad_places.is_empty(), "місця всіх подій є на мапі: %s" % ", ".join(bad_places))
 	var cue_n := 0
@@ -10451,7 +10455,7 @@ func _suite_camp() -> void:
 	check(not CampService.build(w, p, "kurin"), "без ресурсів не збудувати")
 	p.gold = 100000
 	p.resources = {"wood": 1000, "iron": 1000, "herbs": 1000}
-	for id in Camp.BUILD_ORDER:
+	for id in Camp.building_ids():
 		for i in 5:
 			CampService.build(w, p, id)
 		check(CampService.level(w, id) == CampService.max_level(id), "%s до максимуму" % id)
@@ -11151,10 +11155,10 @@ func _suite_peril() -> void:
 	for i in range(1, ids.size()):
 		PS.on_clear(w, p, ids[i], 400.0, 0)
 	check(PS.bosses_down(w) == 5 and PS.title(w) == str(Peril.boss_title(boss_kinds[4])) and PS.title_fx(w).size() == 5, "п'ять босів: показуємо звання за найдальшого, діють усі п'ять бонусів")
-	check("peril_bosses" in Acts.RECORD_ORDER and "valor" in Acts.RECORD_ORDER and int(Rec.hero_values(w, p)["peril_bosses"]) == 5, "надважкі боси й звитяги є в літописі рекордів")
+	check("peril_bosses" in GameDB.ids("records") and "valor" in GameDB.ids("records") and int(Rec.hero_values(w, p)["peril_bosses"]) == 5, "надважкі боси й звитяги є в літописі рекордів")
 	var rec_ok := true
-	for key in Acts.RECORD_ORDER:
-		rec_ok = rec_ok and Rec.hero_values(w, p).has(key) and Acts.RECORDS.has(key)
+	for key in GameDB.ids("records"):
+		rec_ok = rec_ok and Rec.hero_values(w, p).has(key) and GameDB.table("records").has(key)
 	check(rec_ok, "кожен рекорд літопису має значення героя")
 	var ach := {}
 	for a in Ach.achievements():
@@ -11893,7 +11897,7 @@ func _suite_skill_trees() -> void:
 					for k in A.get("fx", {}):
 						good = good and Classes.has_fx(k)
 					if A.has("status"):
-						good = good and Status.INFO.has(str(A["status"][0]))
+						good = good and Status.is_status(str(A["status"][0]))
 					good = good and load("res://scripts/data/sound_index.gd").SFX.has(str(A.get("sound", "boom")))
 				if not good:
 					bad.append(id)
@@ -12268,15 +12272,15 @@ func _suite_strilets() -> void:
 	check(Data.soft_agi_aspd(40.0) == 40.0 and is_equal_approx(Data.soft_agi_aspd(Data.AGI_ASPD_SOFT + 50.0), Data.AGI_ASPD_SOFT + 50.0 * Data.AGI_ASPD_LATE), "м'яка межа Спритності для швидкості пострілу")
 	check(load("res://scripts/game/outdoor_service.gd").arrows_for(v) == load("res://scripts/data/activities.gd").HUNT_ARROWS + 1, "стрільці беруть на полювання зайву стрілу")
 	var shooter_art := ""
-	for a in load("res://scripts/data/wiki_data.gd").BASICS:
+	for a in load("res://scripts/data/wiki_data.gd").basics():
 		if str(a["title"]).begins_with("Стрільці"):
 			shooter_art = str(a["text"])
 	var potion_art := ""
-	for a in load("res://scripts/data/wiki_data.gd").BASICS:
+	for a in load("res://scripts/data/wiki_data.gd").basics():
 		if str(a["title"]) == "Зілля й вареники":
 			potion_art = str(a["text"])
 	check("%d%% здоров'я, вареник" % roundi(Data.VARENYK_HEAL * 100.0) in potion_art and "шансом %d%%, з еліти" % roundi(Data.POTION_DROP_CHANCE * 100.0) in potion_art and "шансом %d%% і одразу" % roundi(Data.VARENYK_DROP_CHANCE * 100.0) in potion_art and ("%.1f%%" % (Data.MANA_POTION_DROP_CHANCE * 100.0)).replace(".", ",") in potion_art, "довідник називає справжні шанси зілля й вареників")
-	check("перші %d очок" % int(Data.AGI_ASPD_SOFT) in shooter_art and "Батурині" in str(load("res://scripts/data/wiki_data.gd").BASICS), "довідник розповідає про стрільців і третю дорогу")
+	check("перші %d очок" % int(Data.AGI_ASPD_SOFT) in shooter_art and "Батурині" in str(load("res://scripts/data/wiki_data.gd").basics()), "довідник розповідає про стрільців і третю дорогу")
 	# ---- Камінь долі: сусідні дороги ----
 	check("samopalnyk" in Stones.siblings(v) and "opryshok" in Stones.siblings(v) and not "plastun" in Stones.siblings(v), "Алатир-камінь міняє спеціалізацію в межах гілки стрільців")
 	# ---- Переїзд Самопальника ----
@@ -12555,17 +12559,17 @@ func _suite_boss_hunt() -> void:
 	CS.now_override = day0
 	# ---- Дані ----
 	var pool_ok := true
-	for b in BS.POOL:
+	for b in BS.pool():
 		pool_ok = pool_ok and GameDB.has_boss(b) and not BS.home_of(b).is_empty() and str(BS.home_of(b)["boss"]) == b
-	check(pool_ok and BS.POOL.size() >= 12, "кожен бос зі списку має ім'я й рідне лігво (%d босів)" % BS.POOL.size())
+	check(pool_ok and BS.pool().size() >= 12, "кожен бос зі списку має ім'я й рідне лігво (%d босів)" % BS.pool().size())
 	var mods_ok := true
-	for m in BS.MOD_ORDER:
-		mods_ok = mods_ok and BS.MODS.has(m) and str(BS.MODS[m]["name"]) != "" and str(BS.MODS[m]["desc"]) != ""
-	check(mods_ok and BS.MOD_ORDER.size() == BS.MODS.size(), "властивості босів описано")
+	for m in GameDB.ids("boss_mods"):
+		mods_ok = mods_ok and GameDB.table("boss_mods").has(m) and str(BS.mod(m)["name"]) != "" and str(BS.mod(m)["desc"]) != ""
+	check(mods_ok and GameDB.ids("boss_mods").size() == 6, "властивості босів описано")
 	# ---- Вибір за датою ----
 	var d1: String = BS.boss_id("day")
 	var w1: String = BS.boss_id("week")
-	check(d1 in BS.POOL and w1 in BS.POOL and d1 != w1 and BS.boss_id("day") == d1, "бос дня й бос тижня різні й сталі протягом періоду: %s, %s" % [d1, w1])
+	check(d1 in BS.pool() and w1 in BS.pool() and d1 != w1 and BS.boss_id("day") == d1, "бос дня й бос тижня різні й сталі протягом періоду: %s, %s" % [d1, w1])
 	check(BS.mods("day").size() == 1 and BS.mods("week").size() == 2 and BS.mods("week") == BS.mods("week") and BS.mods("week")[0] != BS.mods("week")[1], "у боса дня одна властивість, у боса тижня дві різні")
 	var seen := {}
 	var seen_mods := {}
@@ -12573,32 +12577,32 @@ func _suite_boss_hunt() -> void:
 		CS.now_override = day0 + i * 86400
 		seen[BS.boss_id("day")] = true
 		seen_mods[BS.mods("day")[0]] = true
-	check(seen.size() >= 8 and seen_mods.size() == BS.MOD_ORDER.size(), "за сорок днів боси й властивості міняються (%d босів, %d властивостей)" % [seen.size(), seen_mods.size()])
+	check(seen.size() >= 8 and seen_mods.size() == GameDB.ids("boss_mods").size(), "за сорок днів боси й властивості міняються (%d босів, %d властивостей)" % [seen.size(), seen_mods.size()])
 	CS.now_override = day0
 	# ---- Правила ----
 	var w = WorldState.new()
 	var p = _new_player()
 	check(BS.block_reason(w, p, "day") != "" and BS.available(w, p) == 0, "селянин на боса не йде")
 	p.change_class("cossack")
-	p.level = int(BS.MIN_LEVEL["day"]) - 1
-	check("рівня" in BS.block_reason(w, p, "day"), "бос дня відкривається з %d-го рівня" % int(BS.MIN_LEVEL["day"]))
-	p.level = int(BS.MIN_LEVEL["day"])
+	p.level = int(BS.hunt("day")["min_level"]) - 1
+	check("рівня" in BS.block_reason(w, p, "day"), "бос дня відкривається з %d-го рівня" % int(BS.hunt("day")["min_level"]))
+	p.level = int(BS.hunt("day")["min_level"])
 	check(BS.block_reason(w, p, "day") == "" and BS.block_reason(w, p, "week") != "" and BS.available(w, p) == 1, "бос тижня відкривається пізніше")
 	p.level = 60
 	p.recalc()
 	var L: Dictionary = BS.loc_for(p, "week")
 	check(L["type"] == "dungeon" and int(L["rooms"]) == 1 and int(L["level"]) == 60 and L["boss"] == w1 and L["hunt"] == "week" and not L["enemies"].is_empty(), "бій: печера на одну кімнату, бос рівня героя")
-	var hp_want: float = float(BS.HP_MULT["week"])
-	var dmg_want: float = float(BS.DMG_MULT["week"])
+	var hp_want: float = float(BS.hunt("week")["hp_mult"])
+	var dmg_want: float = float(BS.hunt("week")["dmg_mult"])
 	for m in BS.mods("week"):
-		hp_want *= float(BS.MODS[m].get("boss_hp_mult", 1.0))
-		dmg_want *= float(BS.MODS[m].get("boss_dmg_mult", 1.0))
+		hp_want *= float(BS.mod(m).get("boss_hp_mult", 1.0))
+		dmg_want *= float(BS.mod(m).get("boss_dmg_mult", 1.0))
 	check(is_equal_approx(float(L["boss_hp_mult"]), hp_want) and is_equal_approx(float(L["boss_dmg_mult"]), dmg_want), "властивості множать силу боса (здоров'я ×%.2f, удар ×%.2f)" % [hp_want, dmg_want])
 	# ---- Перемога й період ----
 	var gold0: int = p.gold
 	var tr0: int = int(p.resources.get("trophy", 0))
 	var r: Dictionary = BS.on_win(w, p, "day", 83.4)
-	check(BS.done(w, "day") and p.gold == gold0 + BS.gold_for("day", 60) and int(p.resources["trophy"]) == tr0 + int(BS.TROPHIES["day"]) and r["items"].size() == 1 and int(r["items"][0]["rarity"]) == 3, "бос дня: гривні, трофеї й легендарна річ")
+	check(BS.done(w, "day") and p.gold == gold0 + BS.gold_for("day", 60) and int(p.resources["trophy"]) == tr0 + int(BS.hunt("day")["trophies"]) and r["items"].size() == 1 and int(r["items"][0]["rarity"]) == 3, "бос дня: гривні, трофеї й легендарна річ")
 	check(BS.best_time(w, d1) == 83 and BS.time_text(83) == "1:23" and "уже переможено" in BS.block_reason(w, p, "day") and BS.available(w, p) == 1, "переможеного сьогодні вдруге не викличеш; час запам'ятано")
 	var rw: Dictionary = BS.on_win(w, p, "week", 200.0)
 	var gold_item := false
@@ -12619,15 +12623,15 @@ func _suite_boss_hunt() -> void:
 	for a in Ach.achievements():
 		if str(a["stat"]) in ["boss_day", "boss_week"]:
 			ach += 1
-	check(ach >= 4 and Acts.RECORDS.has("boss_day") and "boss_week" in Acts.RECORD_ORDER and load("res://scripts/game/record_service.gd").hero_values(w, p)["boss_day"] == 1, "досягнення й рекорди за босів")
+	check(ach >= 4 and GameDB.table("records").has("boss_day") and "boss_week" in GameDB.ids("records") and load("res://scripts/game/record_service.gd").hero_values(w, p)["boss_day"] == 1, "досягнення й рекорди за босів")
 	var art := ""
 	for e in WS._entries("bosses"):
 		if str(e["title"]) == "Бос дня й бос тижня":
 			art = str(e["text"])
 	var art_ok := art != ""
-	for m in BS.MOD_ORDER:
-		art_ok = art_ok and str(BS.MODS[m]["name"]) in art
-	check(art_ok and str(int(BS.GOLD_PER_LEVEL["week"])) in art, "довідник описує босів і всі властивості")
+	for m in GameDB.ids("boss_mods"):
+		art_ok = art_ok and str(BS.mod(m)["name"]) in art
+	check(art_ok and str(int(BS.hunt("week")["gold"])) in art, "довідник описує босів і всі властивості")
 	# ---- У грі ----
 	CS.now_override = day0
 	var game = load("res://scenes/main.tscn").instantiate()
@@ -12842,7 +12846,7 @@ func _suite_pets() -> void:
 		stats[D["stat"]] = true
 		data_ok = data_ok and Pets.pet_name(id) != "" and "%d" in str(D["text"]) and Pets.value(id, Pets.MAX_LEVEL) > Pets.value(id, 1) and Pets.value(id, 1) > 0.0 and int(Pets.cost(id, 2)["gold"]) == 2 * int(Pets.cost(id, 1)["gold"])
 		for r in D["res"]:
-			data_ok = data_ok and (CampD.RESOURCES.has(r) or r == CampD.TROPHY)
+			data_ok = data_ok and (CampD.is_resource(r) or r == CampD.TROPHY)
 	check(data_ok and Pets.ids() == ["pes", "kit", "voron", "kin"] and stats.size() == 4, "чотири улюбленці з різним хистом, ціни ростуть зі ступенем")
 	var goal_ok := false
 	for a in Ach.achievements():
@@ -13028,7 +13032,7 @@ func _suite_enchant_fair() -> void:
 	for e in golds:
 		var D: Dictionary = Uniq.def(e["id"])
 		fits = fits and int(D["tier"]) <= top and int(D["tier"]) >= top - 1 and (D["slot"] != "weapon" or D["type"] in Classes.info("cossack")["weapons"]) and int(e["trophy"]) == int(Uniq.tier_fair(int(D["tier"]))["trophy"])
-	check(golds.size() == Fair.GOLD_ITEMS and fits and arts.size() == 1 and goods.size() == Fair.GOODS_ORDER.size(), "товар тижня: три золоті речі під клас і рівень, артефакт і дрібний товар")
+	check(golds.size() == Fair.GOLD_ITEMS and fits and arts.size() == 1 and goods.size() == GameDB.ids("fair_goods").size(), "товар тижня: три золоті речі під клас і рівень, артефакт і дрібний товар")
 	check(Fair.stock(p) == stock, "протягом тижня товар той самий")
 	var seen := {}
 	for i in 12:
@@ -13053,10 +13057,10 @@ func _suite_enchant_fair() -> void:
 	var st0: int = load("res://scripts/game/stone_service.gd").count(p, "alatyr")
 	check(Fair.buy(w, p, "g:alatyr")["ok"] and load("res://scripts/game/stone_service.gd").count(p, "alatyr") == st0 + 1, "камінь долі виміняно")
 	var safe_n := 0
-	for i in int(Fair.GOODS["safe"]["limit"]) + 2:
+	for i in int(GameDB.row("fair_goods", "safe")["limit"]) + 2:
 		if Fair.buy(w, p, "g:safe")["ok"]:
 			safe_n += 1
-	check(safe_n == int(Fair.GOODS["safe"]["limit"]) and int(w.boosts.get("safe_sharpen", 0)) == safe_n, "жетонів безпечної заточки на тиждень %d" % safe_n)
+	check(safe_n == int(GameDB.row("fair_goods", "safe")["limit"]) and int(w.boosts.get("safe_sharpen", 0)) == safe_n, "жетонів безпечної заточки на тиждень %d" % safe_n)
 	var w2 = WorldState.new()
 	w2.from_dict(w.to_dict())
 	check(Fair.bought(w2, g["key"]) == 1, "взяте на ярмарку зберігається з героєм")
@@ -13589,15 +13593,15 @@ func _suite_divine() -> void:
 	Camp.apply_effects(wt, pt)
 	DS.buy(wt, pt, "mazha")
 	var got := 0
-	for g in Acts.TRADE_ORDER:
+	for g in Acts.trade_good_ids():
 		got += TS.buy(wt, pt, "sich", g, Acts.TRADE_STOCK - 1)
 	check(got > Acts.TRADE_CART and TS.cargo_count(wt) == got and got <= TS.capacity(wt), "з возом куплено %d одиниць краму, понад стару місткість %d" % [got, Acts.TRADE_CART])
 	DS.unequip(wt, pt, "cart")
-	var g_left: String = Acts.TRADE_ORDER[0]
+	var g_left: String = Acts.trade_good_ids()[0]
 	var gold_t: int = pt.gold
 	check(TS.capacity(wt) == Acts.TRADE_CART and TS.cargo_count(wt) == got and TS.free_space(wt) == 0, "дар зняли: вантаж цілий (%d), вільного місця 0, а не від'ємне" % TS.cargo_count(wt))
 	check(TS.stock_left(wt, "sich", g_left) > 0 and not TS.can_buy(wt, pt, "sich", g_left) and TS.buy(wt, pt, "sich", g_left, 1) == 0 and pt.gold == gold_t and TS.cargo_count(wt) == got, "поки вантаж більший за віз, докупити не можна")
-	for g in Acts.TRADE_ORDER:
+	for g in Acts.trade_good_ids():
 		TS.sell(wt, pt, "sich", g, 99)
 	check(TS.cargo_count(wt) == 0 and TS.free_space(wt) == Acts.TRADE_CART and TS.buy(wt, pt, "sich", g_left, 1) == 1, "продав, і купувати знову можна")
 	# ---- Рід і збереження ----
@@ -14286,10 +14290,10 @@ func _suite_legends() -> void:
 		land_ok = land_ok and L.get("scale", false) and L["region"] == "semyhorod" and int(L["level"]) >= 30 and str(L["desc"]) != ""
 	var brashov: Dictionary = Data.city("brashov")
 	check(land_ok and Data.place("zamok_drakuly")["boss"] == "drakula" and Data.place("zamok_drakuly")["type"] == "dungeon", "Семигород на мапі: три місцевості й Замок Дракули")
-	check(str(brashov.get("region", "")) == "semyhorod" and Acts.TRADE_CITIES.get("brashov", {}).size() == Acts.TRADE_ORDER.size() and Data.region_ids()[-1] == "semyhorod", "Брашов: місто Семигороду з торгом, край стоїть у списку останнім")
+	check(str(brashov.get("region", "")) == "semyhorod" and Acts.trade_city_prices("brashov").size() == Acts.trade_good_ids().size() and Data.region_ids()[-1] == "semyhorod", "Брашов: місто Семигороду з торгом, край стоїть у списку останнім")
 	for kind in ["strygoi", "moroi"]:
-		check((GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "" and not GameDB.mob_wiki(kind).is_empty() and kind in Wiki.ENEMY_ORDER and Souls.has(kind) and kind in Souls.ids() and GameDB.hit_status(kind) != "" and not GameDB.bounty_names(kind).is_empty(), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % GameDB.mob_name(kind, kind))
-	check(GameDB.has_boss("drakula") and (GameDB.mob_name("drakula") != "") and GfxS.has("drakula") and GameDB.death_sound("drakula") != "" and not GameDB.boss_wiki("drakula").is_empty() and "drakula" in Wiki.BOSS_ORDER and Souls.has("b_drakula") and Arts.by_boss("drakula") != "" and GameDB.boss_tier("drakula") == Uniq.TOP_COMMON_TIER and GameDB.is_phase2_boss("drakula"), "Дракула: ім'я, спрайт, голос, душа, артефакт, довідник, другий етап бою")
+		check((GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "" and not GameDB.mob_wiki(kind).is_empty() and kind in Wiki.enemy_order() and Souls.has(kind) and kind in Souls.ids() and GameDB.hit_status(kind) != "" and not GameDB.bounty_names(kind).is_empty(), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % GameDB.mob_name(kind, kind))
+	check(GameDB.has_boss("drakula") and (GameDB.mob_name("drakula") != "") and GfxS.has("drakula") and GameDB.death_sound("drakula") != "" and not GameDB.boss_wiki("drakula").is_empty() and "drakula" in Wiki.boss_order() and Souls.has("b_drakula") and Arts.by_boss("drakula") != "" and GameDB.boss_tier("drakula") == Uniq.TOP_COMMON_TIER and GameDB.is_phase2_boss("drakula"), "Дракула: ім'я, спрайт, голос, душа, артефакт, довідник, другий етап бою")
 	check("Влад" in str(GameDB.boss_wiki("drakula")["text"]) and "украв" in str(GameDB.boss_wiki("drakula")["text"]), "довідник відділяє упиря від справжнього воєводи Влада")
 	# ---- Дані лінійок ----
 	var data_ok := true
@@ -14608,8 +14612,8 @@ func _suite_audit() -> void:
 	tp.change_class("cossack")
 	tp.level = 30
 	tp.gold = 10000000
-	var tcity: String = Acts.TRADE_CITIES.keys()[0]
-	var tgood: String = Acts.TRADE_GOODS.keys()[0]
+	var tcity: String = Acts.trade_city_ids()[0]
+	var tgood: String = Acts.trade_good_ids()[0]
 	ES.state(tw)["fair"] = {"city": tcity, "left": 3}
 	check(is_equal_approx(TR.sell_bonus(tw, tcity, tgood), 1.25), "на ярмарку привезений крам беруть на чверть дорожче")
 	var gold_t: int = tp.gold
@@ -14693,12 +14697,12 @@ func _suite_audit() -> void:
 			bond = a
 	check(int(bond.get("goal", 0)) == 2 and "двох" in str(bond.get("desc", "")), "«Побратими навіки» досяжне: дві історії")
 	var wk: String = BS.boss_id("week")
-	var raw_i: int = absi(hash("week:" + BS.key("week"))) % BS.POOL.size()
-	check(wk == BS.POOL[raw_i] and BS.boss_id("day") != wk, "бос тижня не міняється серед тижня: поступається бос дня")
+	var raw_i: int = absi(hash("week:" + BS.key("week"))) % BS.pool().size()
+	check(wk == BS.pool()[raw_i] and BS.boss_id("day") != wk, "бос тижня не міняється серед тижня: поступається бос дня")
 	var bw = WorldState.new()
 	var bp = _new_player()
 	bp.level = 40
-	var other_boss: String = BS.POOL[(BS.POOL.find(BS.boss_id("day")) + 2) % BS.POOL.size()]
+	var other_boss: String = BS.pool()[(BS.pool().find(BS.boss_id("day")) + 2) % BS.pool().size()]
 	BS.on_win(bw, bp, "day", 95.0, other_boss)
 	check(BS.best_time(bw, other_boss) == 95 and BS.best_time(bw, BS.boss_id("day")) == (95 if other_boss == BS.boss_id("day") else 0), "рекорд часу пишеться тому босові, з яким бились")
 
@@ -15286,16 +15290,16 @@ func _suite_hero_names() -> void:
 		if NS.check(s) != "":
 			plain_ok = false
 			print("    звичайне ім'я «%s» не пройшло: %s" % [s, NS.check(s)])
-	for s in Names.READY:
+	for s in Names.words("ready"):
 		if NS.check(s) != "":
 			plain_ok = false
 			print("    готове прізвисько «%s» не пройшло: %s" % [s, NS.check(s)])
-	for v in Names.VERBS:
-		for n in Names.NOUNS:
+	for v in Names.words("verbs"):
+		for n in Names.words("nouns"):
 			if NS.check(v + n) != "":
 				plain_ok = false
 				print("    складене «%s» не пройшло: %s" % [v + n, NS.check(v + n)])
-	check(plain_ok, "звичайні імена й усі прізвиська генератора (%d) проходять" % (Names.READY.size() + Names.VERBS.size() * Names.NOUNS.size()))
+	check(plain_ok, "звичайні імена й усі прізвиська генератора (%d) проходять" % (Names.words("ready").size() + Names.words("verbs").size() * Names.words("nouns").size()))
 	check(NS.from_save(42) == "" and NS.from_save("хуй") == "" and NS.from_save(" Сірко ") == "Сірко", "ім'я зі збереження: не рядок чи недопустиме стає порожнім")
 
 	# ---- 2. Жереб ----
@@ -16111,7 +16115,7 @@ func _suite_scroll_keep() -> void:
 	await _frames(2)
 	check(open_tab.call("Будівлі"), "на хуторі є будівлі")
 	var bid := ""
-	for id in game.Camp.BUILD_ORDER:
+	for id in game.Camp.building_ids():
 		if bid == "" and game.CampService.level(gw, id) < 1:
 			bid = str(id)
 	await keeps.call("будівлі після будівництва", func(): game.camp_do("build", bid))
@@ -19214,3 +19218,244 @@ func _suite_quest_db() -> void:
 			bad.append("spec/" + spec)
 	sp.free()
 	check(shown_ok, "кожну розмову, мету й нагороду кроку можна показати: %s" % str(bad.slice(0, 8)))
+
+
+# ---------------- Заняття, свята, хутір, події, довідник, звуки й імена в таблицях ----------------
+
+func _suite_life_db() -> void:
+	suite("База занять, свят, хутора й подій")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var St = load("res://scripts/game/status.gd")
+	var Wiki = load("res://scripts/data/wiki_data.gd")
+	var Snd = load("res://scripts/data/sounds.gd")
+	var Names = load("res://scripts/data/names_data.gd")
+	var HS = load("res://scripts/game/holiday_service.gd")
+	var CR = load("res://scripts/game/craft_service.gd")
+	var probs := GameDB.problems()
+	check(probs.is_empty(), "у базі нема проблем%s" % ("" if probs.is_empty() else ": " + "; ".join(probs.slice(0, 5))))
+	# ---- Скільки записів (стільки, скільки було в коді) ----
+	var expect := {"glory_ranks": 6, "glory_sources": 5, "rivals": 5, "duel_rounds": 3, "muster_teams": 5, "muster_rounds": 3, "ring_rounds": 3, "spots": 4,
+		"trade_goods": 7, "trade_cities": 16, "hunt_animals": 3, "fish": 3, "recipes": 4, "dice_rivals": 3, "trail_kinds": 3, "expeditions": 3, "records": 17,
+		"escorts": 4, "holidays": 28, "months": 12, "token_scales": 3, "camps": 1, "resources": 7, "buildings": 6, "crops": 3, "brews": 4, "kleinody": 7,
+		"kleinod_tiers": 5, "stones": 2, "fair_goods": 3, "loyalty_levels": 4, "road_events": 9, "events": 30, "event_kinds": 5, "boss_hunts": 2,
+		"boss_pools": 2, "boss_mods": 6, "statuses": 6, "wiki_sections": 12, "wiki_basics": 19, "wiki_orders": 2, "sounds": 40, "ambients": 7, "name_pools": 9}
+	var count_bad := []
+	for t in expect:
+		if GameDB.ids(t).size() != int(expect[t]):
+			count_bad.append("%s %d" % [t, GameDB.ids(t).size()])
+	check(count_bad.is_empty() and expect.size() == GameDB.LIFE_TABLES.size(), "у таблицях стільки записів, скільки було в коді: %s" % str(count_bad))
+	# ---- Номери сталі й у своїх проміжках ----
+	var nums := {"glory_ranks": ["novak", 9501], "rivals": ["ostap", 9541], "duel_rounds": ["final", 9563], "muster_teams": ["serdiuky", 9575], "spots": ["kolo", 9611],
+		"trade_cities": ["brashov", 9666], "holidays": ["malanka", 9901], "months": ["december", 9962], "camps": ["hutir", 10001], "resources": ["veg", 10017],
+		"buildings": ["horod", 10046], "kleinod_tiers": ["tier_5", 10135], "stones": ["alatyr", 10142], "loyalty_levels": ["pobratym", 10174],
+		"road_events": ["vovky", 10209], "events": ["duel", 10251], "statuses": ["curse", 10356], "sounds": ["step", 10501], "name_pools": ["muster_first", 10709]}
+	var num_bad := []
+	for t in nums:
+		if int(GameDB.row(t, nums[t][0]).get("num", 0)) != int(nums[t][1]) or GameDB.by_num(t, int(nums[t][1])) != nums[t][0]:
+			num_bad.append(t)
+	var range_bad := []
+	for t in GameDB.LIFE_TABLES:
+		var span: Array = GameDB.NUM_RANGES[t]
+		for id in GameDB.ids(t):
+			var n := int(GameDB.row(t, id)["num"])
+			if n < int(span[0]) or n > int(span[1]):
+				range_bad.append("%s/%s" % [t, id])
+	check(num_bad.is_empty() and range_bad.is_empty(), "номери ті самі, що їм дали, шукаються й лежать у проміжках таблиць: %s %s" % [str(num_bad), str(range_bad)])
+	var spans := []
+	for t in GameDB.NUM_RANGES:
+		spans.append([int(GameDB.NUM_RANGES[t][0]), int(GameDB.NUM_RANGES[t][1]), t])
+	spans.sort_custom(func(a, b): return a[0] < b[0])
+	var overlap := []
+	for i in range(1, spans.size()):
+		if spans[i][0] <= spans[i - 1][1]:
+			overlap.append("%s/%s" % [spans[i - 1][2], spans[i][2]])
+	check(overlap.is_empty() and int(GameDB.NUM_RANGES["glory_ranks"][0]) == 9501, "проміжки номерів таблиць не перетинаються: %s" % str(overlap))
+	# ---- Типи ----
+	var H: Dictionary = Acts.holiday("obzhynky")
+	check(typeof(H["bonus"]["trophy"]) == TYPE_INT and typeof(Acts.holiday("andrii")["bonus"]["dice"]) == TYPE_INT and typeof(Acts.holiday("masnytsia")["bonus"]["varenyk"]) == TYPE_FLOAT
+		and typeof(Acts.holiday("pokrova")["bonus"]["glory"]) == TYPE_FLOAT and typeof(H["from"][0]) == TYPE_INT and typeof(H["num"]) == TYPE_INT, "бонус свята: трофеї й партії — цілі, решта — дробові (як було в коді)")
+	check(Acts.spot("kolo")["pos"] is Vector2 and Acts.spot("kolo")["pos"] == Vector2(30.15, 49.2) and Camp.camp()["pos"] == Vector2(35.9, 47.45)
+		and Camp.res_color("wood") == Color(0.6, 0.4, 0.2) and St.color_of("bleed") == Color(0.9, 0.12, 0.12), "місця й хутір — Vector2, кольори ресурсів і станів — Color, ті самі числа")
+	check(typeof(Acts.trade_mult("sich", "salt")) == TYPE_FLOAT and typeof(Acts.animal("hare")["meat"]) == TYPE_INT and typeof(Acts.animal("hare")["speed"]) == TYPE_FLOAT
+		and typeof(Acts.duel_round(0)["gold"]) == TYPE_INT and typeof(Acts.duel_round(0)["seconds"]) == TYPE_FLOAT and typeof(Camp.building("kurin")["levels"][0]["iron"]) == TYPE_INT
+		and typeof(Snd.volumes()["step"]) == TYPE_FLOAT and typeof(Data.loyalty_discount(1)) == TYPE_FLOAT, "цілі числа — цілі, дробові — дробові")
+	# ---- Лише для читання й без копій ----
+	check(Acts.rival("ostap").is_read_only() and Acts.rival("ostap")["nicks"].is_read_only() and Acts.holiday("rizdvo")["bonus"].is_read_only() and Camp.building("kurin")["levels"][0].is_read_only()
+		and GameDB.row("road_events", "chumaky")["choices"]["bye"].is_read_only() and Acts.glory_ranks().is_read_only() and Acts.glory_sources().is_read_only() and Camp.resources().is_read_only()
+		and Snd.volumes().is_read_only() and Wiki.events().is_read_only() and Wiki.events()[0].is_read_only() and Names.words("verbs").is_read_only() and St.info("burn").is_read_only(), "записи заморожені")
+	check(is_same(Snd.volumes(), Snd.volumes()) and is_same(Acts.rival("ostap"), GameDB.row("rivals", "ostap")) and is_same(Wiki.events(), Wiki.events()) and is_same(Camp.resources(), Camp.resources())
+		and is_same(Acts.style_rival("rubaka"), Acts.rival("ostap")), "записи й покажчики віддаються без копій")
+	# ---- Те, що лежало в коді окремо, тепер у записах ----
+	check(Camp.level_value("pasika", "rate", 0) == 0 and Camp.level_value("pasika", "rate", 3) == 60 and Camp.level_value("horod", "beds", 1) == 2 and Camp.level_value("horod", "beds", 9) == 4
+		and Camp.level_value("sklad", "bag", 2) == 16 and Camp.kleinod_tier(0)["gold"] == 10000 and Camp.kleinod_tier(5).is_empty() and Camp.kleinod_tiers() == 5, "що дає рівень будівлі й ціна ступеня клейнода — у записах")
+	check(CR.tier_count() == 4 and CR.tier_name(2) == "Рідкісна" and int(CR.forge_tier(3)["kuznia"]) == 3 and is_equal_approx(CR.renew_mult(4), 1.5) and is_equal_approx(CR.renew_mult(9), 1.5), "кування й оновлення — у записах рідкостей")
+	check(Acts.rival("hnat")["mechanic"] == "rival/strilets" and Acts.rival("marko")["nicks"] == ["Химородник", "Сивий", "Ворон"] and Acts.muster_names().size() == 14 and Acts.ring_pool().size() == 11
+		and GameDB.row("boss_pools", "hunt")["bosses"].size() == 18 and GameDB.row("stones", "zabuttia")["price"] == 40000 and is_equal_approx(float(GameDB.row("stones", "alatyr")["chance"]), 0.06), "суперники, боси, камені — у таблицях")
+	check(Data.loyalty_name(2) == "Шанований" and Data.loyalty_from(3) == 500 and Data.loyalty_level(249) == 1 and Data.loyalty_level(250) == 2 and Acts.month_gen(1) == "січня" and Acts.month_gen(12) == "грудня"
+		and Acts.token_need("tiny") == [6, 15, 30] and HS.tiers("rizdvo") == Acts.token_need("great"), "лояльність, місяці й пороги жетонів — драбини й записи")
+	check(Wiki.section_ids()[0] == "basics" and Wiki.section_title("rules") == "Правила" and Wiki.basics()[0]["title"] == "Рух і удар" and Wiki.enemy_order()[0] == "mavka" and Wiki.boss_order()[-1] == "chornoboh"
+		and Wiki.event("duel")["name"] == "Герць на майдані" and Wiki.event("caravan")["battle"]["waves"] == 4 and St.info("chill")["desc"] == "рухаєшся на 40% повільніше", "тексти довідника й описи станів — у таблицях")
+	check(Names.words("ready")[0] == "Перебийніс" and Names.words("verbs").size() == 40 and Names.words("nouns").size() == 44 and "гитлер" in Names.words("bad_cyr") and Names.words("reserved_word") == ["gm"], "слова імен — у таблиці (40 × 44 складених прізвиськ)")
+	check("Різдво й Коляда" in FileAccess.get_file_as_string(GameDB.path_of("holidays")) and "«Борітеся — поборете!» Кобзареве слово додає снаги й науки." == Acts.holiday("shevchenko")["desc"]
+		and GameDB.row("road_events", "gonets")["text"] == "Козаче... На мене напали заражені. Лист до %s... не довезу..." and Acts.recipe("yushka")["desc"] == "+30% відновлення наснаги й +1 здоров'я/с", "довгі тексти з лапками, апострофами й тире — літера в літеру")
+	# ---- Файли в єдиному вигляді й проходять перевірку ----
+	var raws := {}
+	var fmt_ok := true
+	for t in GameDB.LIFE_TABLES + ["rarities"]:
+		var text := FileAccess.get_file_as_string(GameDB.path_of(t))
+		raws[t] = JSON.parse_string(text)
+		fmt_ok = fmt_ok and load("res://tools/data_format.gd").format_table(t, raws[t]) == text and not "\\u0" in text and GameDB.validate(t, raws[t]).is_empty()
+	check(fmt_ok, "файли в єдиному вигляді й проходять перевірку")
+	# ---- Перевірка ловить зламаний запис у кожній таблиці ----
+	var miss_tables := []
+	for t in GameDB.LIFE_TABLES:
+		var b: Dictionary = raws[t].duplicate(true)
+		var first: String = b.keys()[0]
+		b["zlamanyi"] = b[first].duplicate(true)  # той самий номер двічі
+		b[first]["zaive"] = 1  # невідоме поле
+		var pr := GameDB.validate(t, b)
+		if not (_has_problem(pr, ["%s/zlamanyi" % t, "уже має «%s»" % first]) and _has_problem(pr, ["%s/%s" % [t, first], "невідоме поле «zaive»"])):
+			miss_tables.append(t)
+	check(miss_tables.is_empty(), "повтор номера й описку в полі ловить кожна таблиця: %s" % str(miss_tables))
+	var bad := {}
+	bad["rivals"] = raws["rivals"].duplicate(true)
+	bad["rivals"]["ostap"]["mechanic"] = "rival/kozak"
+	bad["rivals"]["danylo"]["sprite"] = "nema_spraita"
+	bad["rivals"]["hnat"]["nicks"] = []
+	var pr := GameDB.validate("rivals", bad["rivals"])
+	check(_has_problem(pr, ["rivals/ostap", "\"rival/rubaka\""]) and _has_problem(pr, ["rivals/ostap", "kozak.gd, а такого файлу нема"]) and _has_problem(pr, ["rival/rubaka.gd нікому не потрібна"])
+		and _has_problem(pr, ["rivals/danylo", "nema_spraita"]) and _has_problem(pr, ["rivals/hnat", "«nicks» порожні"]), "зламаний суперник: %s" % str(pr))
+	var hb: Dictionary = raws["holidays"].duplicate(true)
+	hb["malanka"]["bonus"]["fly"] = 1.0
+	hb["vodokhreshche"]["easter"] = [1, 2]
+	hb["kupala"]["to"] = [13, 2]
+	hb["spas"]["bonus"]["xp"] = -0.1
+	pr = GameDB.validate("holidays", hb)
+	check(_has_problem(pr, ["holidays/malanka", "невідоме поле «fly»"]) and _has_problem(pr, ["holidays/vodokhreshche", "рівно одне з"]) and _has_problem(pr, ["holidays/kupala", "«to»"]) and _has_problem(pr, ["holidays/spas", "«bonus.xp»"]), "зламане свято: %s" % str(pr))
+	var tb: Dictionary = raws["trade_cities"].duplicate(true)
+	tb["sich"]["prices"].erase("salt")
+	tb["sich"]["prices"]["gems"] = 1.0
+	tb["atlantyda"] = tb["kyiv"].duplicate(true)
+	tb["atlantyda"]["num"] = 9699
+	pr = GameDB.validate("trade_cities", tb)
+	check(_has_problem(pr, ["trade_cities/sich", "нема ціни краму «salt»"]) and _has_problem(pr, ["trade_cities/sich", "«prices.gems»"]) and _has_problem(pr, ["trade_cities/atlantyda", "нема такого міста"]), "зламаний торг: %s" % str(pr))
+	var sb: Dictionary = raws["spots"].duplicate(true)
+	sb["kolo"]["pos"] = [100.0, 10.0]
+	sb["varta"]["kind"] = "hunt"
+	sb["fish"]["icon"] = "nema"
+	pr = GameDB.validate("spots", sb)
+	check(_has_problem(pr, ["spots/kolo", "поза мапою"]) and _has_problem(pr, ["нема місця «varta» з «kind» «vigil»"]) and _has_problem(pr, ["spots/fish", "«icon»"]), "зламане місце занять: %s" % str(pr))
+	var rb: Dictionary = raws["road_events"].duplicate(true)
+	rb["chumaky"]["choices"].erase("bye")
+	rb["gonets"]["speaker"] = "nikhto"
+	rb["vovky"]["choices"]["run"] = {"text": "x", "reply": "y"}
+	pr = GameDB.validate("road_events", rb)
+	check(_has_problem(pr, ["road_events/chumaky", "нема варіанта «bye»"]) and _has_problem(pr, ["road_events/gonets", "nikhto"]) and _has_problem(pr, ["road_events/vovky", "«run»"]), "зламана пригода: %s" % str(pr))
+	var cb: Dictionary = raws["buildings"].duplicate(true)
+	cb["kurin"]["levels"][0]["beds"] = 2
+	cb["pasika"]["levels"][1].erase("rate")
+	cb.erase("sklad")
+	pr = GameDB.validate("buildings", cb)
+	check(_has_problem(pr, ["buildings/kurin", "«beds»"]) and _has_problem(pr, ["buildings/pasika", "«rate»"]) and _has_problem(pr, ["нема будівлі «sklad»"]), "зламана будівля: %s" % str(pr))
+	var ob := {}
+	for t in ["recipes", "kleinody", "events", "statuses", "sounds", "wiki_orders", "boss_pools", "stones", "glory_ranks", "loyalty_levels", "name_pools"]:
+		ob[t] = raws[t].duplicate(true)
+	ob["recipes"]["kulish"]["need"]["gems"] = 1
+	ob["kleinody"]["bulava"]["stat"] = "speed"
+	ob["events"]["caravan"].erase("battle")
+	ob["statuses"].erase("curse")
+	ob["sounds"].erase("step")
+	ob["wiki_orders"]["enemies"]["ids"].erase("mavka")
+	ob["boss_pools"]["ring"]["bosses"].append("mavka")
+	ob["stones"]["nova"] = {"num": 10149, "name": "x", "chance": 0.1, "price": 1, "text": "x"}
+	ob["glory_ranks"]["otaman"]["from"] = 100
+	ob["loyalty_levels"]["znaiomyi"]["discount"] = 1.5
+	ob["name_pools"].erase("bad_lat")
+	var want := {"recipes": ["recipes/kulish", "«need.gems»"], "kleinody": ["kleinody/bulava", "«stat»"], "events": ["events/caravan", "«battle»"], "statuses": ["нема «curse»", "Status.TINT_ORDER"],
+		"sounds": ["нема «step»", "SoundIndex.SFX"], "wiki_orders": ["wiki_orders/enemies", "«mavka»"], "boss_pools": ["boss_pools/ring", "«mavka»"], "stones": ["stones/nova", "StoneService.KINDS"],
+		"glory_ranks": ["glory_ranks", "пороги"], "loyalty_levels": ["loyalty_levels/znaiomyi", "«discount»"], "name_pools": ["нема переліку «bad_lat»"]}
+	var other_bad := []
+	for t in want:
+		if not _has_problem(GameDB.validate(t, ob[t]), want[t]):
+			other_bad.append(t)
+	check(other_bad.is_empty(), "зламані страва, клейнод, подія, стан, звук, довідник, боси, камені, слава, лояльність, імена — помічено: %s" % str(other_bad))
+	var rr: Dictionary = raws["rarities"].duplicate(true)
+	rr["fine"].erase("forge")
+	rr["rare"]["renew"] = -1.0
+	pr = GameDB.validate("rarities", rr)
+	check(_has_problem(pr, ["rarities/rare", "«forge»", "пропуск"]) and _has_problem(pr, ["rarities/rare", "«renew»"]), "зламане кування рідкості: %s" % str(pr))
+
+
+## Суперники в герці: кожен стиль — своя механіка (scripts/mechanics/rival/), і вона справді б'ється.
+func _suite_rival_mechanics() -> void:
+	suite("Механіки суперників")
+	var Acts = load("res://scripts/data/activities.gd")
+	var M = load("res://scripts/mechanics/mechanic.gd")
+	var files: Array = GameDB.mechanic_files("rival")
+	check(files.size() == 5 and Acts.rival_ids().size() == 5, "п'ять стилів — п'ять файлів механік: %s" % str(files))
+	var hooks_ok := true
+	for id in Acts.rival_ids():
+		var ref := str(Acts.rival(id)["mechanic"])
+		var s: Script = M.script_of(ref)
+		hooks_ok = hooks_ok and s != null and M.hooks_of(s) & M.SETUP != 0 and M.hooks_of(s) & M.ABILITY != 0 and M.hooks_of(s) & M.VOLLEY != 0 and ref in files
+	check(hooks_ok, "механіка кожного суперника вантажиться, походить від основи нечисті й пише setup, ability (постріл — від mob/rival)")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "status"]:
+		game.world.hints[k] = true
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	var c = game.combat
+	var p = game.player
+	p.max_hp = 1.0e9
+	p.hp = p.max_hp
+	var fight_ok := true
+	var bad := []
+	var want := {"rubaka": {"rush": true, "kd": 0.0, "ranged": false}, "spysnyk": {"rush": false, "kd": 170.0, "ranged": false}, "strilets": {"rush": false, "kd": 330.0, "ranged": true},
+		"kharakternyk": {"rush": true, "kd": 0.0, "ranged": false}, "bulavnyk": {"rush": true, "kd": 0.0, "ranged": false}}
+	for id in Acts.rival_ids():
+		c.spawn_enemy("rival", 20, false, p.global_position + Vector2(0, -260))
+		var e = c._last_enemy()
+		e.make_rival(Acts.rival(id), 3000.0, 10.0)
+		var st := str(e.style)
+		var W: Dictionary = want.get(st, {})
+		var ok: bool = (e.mechanic != null and str(e.mechanic.get_script().resource_path).ends_with("rival/%s.gd" % st) and e.rush == W.get("rush", false)
+			and is_equal_approx(e.keep_distance, W.get("kd", -1.0)) and e.ranged == W.get("ranged", false) and is_equal_approx(e.hp, e.max_hp))
+		if st == "bulavnyk":
+			ok = ok and is_equal_approx(e.max_hp, 3000.0 * 1.25) and is_equal_approx(e.damage, 10.0 * 1.15)
+		var tele0: int = c.effects.get_child_count()
+		for i in 6:
+			e.cast_time = 0.0
+			e._rival_ability(p)
+		ok = ok and e.ability_step == 6 and e.ability_timer > 0.0 and c.effects.get_child_count() > tele0
+		for f in 120:
+			await process_frame
+		ok = ok and is_instance_valid(e)
+		if not ok:
+			bad.append(id)
+		fight_ok = fight_ok and ok
+		if is_instance_valid(e):
+			e.take_damage(1.0e9, Vector2.ZERO)
+		await _frames(2)
+	check(fight_ok, "кожен суперник у справжньому бою: стиль від механіки, прийоми обертаються, попередження з'являються: %s" % str(bad))
+	# Боєць сотні огляду бере механіку суперника свого стилю
+	var MS = load("res://scripts/game/muster_service.gd")
+	var fs: Array = MS.fighters("serdiuky", 5, "w-test")
+	c.spawn_enemy("rival", 20, false, p.global_position + Vector2(0, -260))
+	var f0 = c._last_enemy()
+	f0.make_rival(fs[0], 1000.0, 10.0)
+	check(not fs[0].has("mechanic") and f0.style == "kharakternyk" and f0.mechanic != null and str(f0.mechanic.get_script().resource_path).ends_with("rival/kharakternyk.gd") and f0.title.begins_with("Сотник "), "сотник огляду б'ється механікою свого стилю")
+	f0.take_damage(1.0e9, Vector2.ZERO)
+	await _frames(2)
+	game.queue_free()
+	await _frames(2)

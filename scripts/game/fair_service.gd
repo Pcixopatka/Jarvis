@@ -11,6 +11,7 @@ const Classes := preload("res://scripts/data/classes.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const StoneService := preload("res://scripts/game/stone_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 const MIN_LEVEL := 20
 const GOLD_ITEMS := 3  # золотих речей на тиждень
@@ -18,13 +19,9 @@ const GOLD_ITEMS := 3  # золотих речей на тиждень
 ## лишається надважким печерам, у нього ярмаркової ціни нема.
 const ARTIFACT_TROPHY := 400
 const ARTIFACT_GOLD := 80000
-## Дрібний товар: ключ -> {"name", "trophy", "gold", "limit" на тиждень}.
-const GOODS := {
-	"zabuttia": {"name": "Камінь забуття", "trophy": 150, "gold": 15000, "limit": 1},
-	"alatyr": {"name": "Алатир-камінь", "trophy": 300, "gold": 40000, "limit": 1},
-	"safe": {"name": "Жетон безпечної заточки", "trophy": 15, "gold": 2000, "limit": 5},
-}
-const GOODS_ORDER := ["safe", "zabuttia", "alatyr"]
+## Дрібний товар — data/fair_goods.json: камені долі (ключ — камінь із stones.json) і жетон безпечної
+## заточки («safe»): назва, трофеї, гривні, скільки на тиждень. Порядок файлу — порядок на прилавку.
+const SAFE := "safe"
 
 
 static func week() -> String:
@@ -89,8 +86,8 @@ static func stock(player) -> Array:
 		var aid: String = _shuffled(arts, "art")[0]
 		out.append({"key": "a:" + aid, "kind": "artifact", "id": aid, "name": str(Artifacts.def(aid)["name"]), "tier": 0,
 			"trophy": ARTIFACT_TROPHY, "gold": ARTIFACT_GOLD, "limit": 1})
-	for gid in GOODS_ORDER:
-		var G: Dictionary = GOODS[gid]
+	for gid in GameDB.ids("fair_goods"):
+		var G: Dictionary = GameDB.row("fair_goods", gid)
 		out.append({"key": "g:" + gid, "kind": "good", "id": gid, "name": str(G["name"]), "tier": 0,
 			"trophy": int(G["trophy"]), "gold": int(G["gold"]), "limit": int(G["limit"])})
 	return out
@@ -142,7 +139,7 @@ static func buy(world, player, key: String) -> Dictionary:
 		"artifact":
 			player.add_item(Artifacts.make(str(e["id"])))
 		"good":
-			if str(e["id"]) == "safe":
+			if str(e["id"]) == SAFE:
 				world.boosts["safe_sharpen"] = int(world.boosts.get("safe_sharpen", 0)) + 1
 			else:
 				StoneService.grant(player, str(e["id"]))

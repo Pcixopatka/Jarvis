@@ -39,7 +39,7 @@ func card(A: Dictionary, r: int) -> Array:
 	if A.has("stun"):
 		out.append(["Приголомшення", "%s с" % sec_text(Classes.val(A["stun"], r))])
 	if A.has("status"):
-		out.append(["Стан", "%s на %s с" % [str(Status.INFO.get(str(A["status"][0]), {}).get("name", "")).to_lower(), sec_text(float(A["status"][1]))]])
+		out.append(["Стан", "%s на %s с" % [Status.name_of(str(A["status"][0])).to_lower(), sec_text(float(A["status"][1]))]])
 	if A.has("dur"):
 		out.append(["Тривалість", "%s с" % sec_text(Classes.val(A["dur"], r))])
 	if A.has("heal"):

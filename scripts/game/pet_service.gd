@@ -45,9 +45,9 @@ static func can_pay(player, cost: Dictionary) -> bool:
 
 static func cost_text(cost: Dictionary) -> String:
 	var parts := ["%d грн" % int(cost["gold"])]
-	for r in Camp.RESOURCES:
+	for r in Camp.resources():
 		if int(cost.get(r, 0)) > 0:
-			parts.append("%s %d" % [Camp.RESOURCES[r], int(cost[r])])
+			parts.append("%s %d" % [Camp.res_name(r), int(cost[r])])
 	if int(cost.get(Camp.TROPHY, 0)) > 0:
 		parts.append("Трофеї %d" % int(cost[Camp.TROPHY]))
 	return ", ".join(parts)

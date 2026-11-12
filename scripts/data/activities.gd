@@ -1,40 +1,19 @@
 extends RefCounted
-## Дані активностей поза сюжетом: герць, розшук, варта, торгівля, полювання, шинок, город, слава, свята.
-## Логіка — у службах scripts/game/*_service.gd; тут лише таблиці.
+## Заняття поза сюжетом: герць, огляд, Коло Кожум'яки, розшук, варта, торгівля, полювання, шинок, сліди,
+## походи побратимів, слава й рекорди, свята, супровід. Записи — у таблицях data/*.json (docs/data.md,
+## «Заняття»), логіка — у службах scripts/game/*_service.gd. Тут — зручні виклики над таблицями й
+## числа-правила, які збере етап загальних налаштувань.
+
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 # ======================= Слава =======================
 ## Слава — мірило козацької честі героя (world.glory). Дають її герць, розшук, варта, полювання.
-## Ранг: [поріг, назва, гривні за досягнення, камінь долі ("" — без каменя)].
-const GLORY_RANKS := [
-	[0, "Новак", 0, ""],
-	[40, "Знаний козак", 300, ""],
-	[120, "Бувалець", 800, ""],
-	[300, "Славний лицар", 2000, "zabuttia"],
-	[700, "Отаман", 5000, "alatyr"],
-	[1500, "Легенда Січі", 12000, "alatyr"],
-]
+## Ранги — data/glory_ranks.json, звідки береться — data/glory_sources.json.
 
 # ======================= Герць на майдані =======================
-## Суперники: стиль бою (див. enemy.gd: _rival_ability), лист спрайтів, порада гравцеві.
-const RIVALS := {
-	"ostap": {"name": "Остап Рубай", "style": "rubaka", "sprite": "rival_ostap",
-		"bio": "Рубака з Низу: сипле ударами без упину, а тоді кидається ривком. Перечекай серію — і бий у відповідь."},
-	"danylo": {"name": "Данило Довгий Спис", "style": "spysnyk", "sprite": "rival_danylo",
-		"bio": "Тримає на відстані списа й коле по прямій. Заходь збоку й не стій на лінії удару."},
-	"hnat": {"name": "Гнат Влучний", "style": "strilets", "sprite": "rival_hnat",
-		"bio": "Стрілець із пищаллю: б'є здалеку, сипле картеччю й кидає порохові бочки. Скорочуй відстань."},
-	"marko": {"name": "Марко Проклятий", "style": "kharakternyk", "sprite": "rival_marko",
-		"bio": "Характерник: зникає з очей, вигулькує за спиною й кличе блискавки. Не стій на місці."},
-	"taras": {"name": "Тарас Важка Рука", "style": "bulavnyk", "sprite": "rival_taras",
-		"bio": "Булава його валить із ніг. Повільний, зате б'є колами по землі — виходь із них."},
-}
-const RIVAL_ORDER := ["ostap", "danylo", "hnat", "marko", "taras"]
-## Суперник рівня з героєм: здоров'я — скільки секунд чистої шкоди еталонного героя цього рівня він тримає,
-## удар — частка здоров'я героя вже після його захисту (за колами: перше, друге, фінал).
-const DUEL_SECONDS := [18.0, 28.0, 42.0]
-const DUEL_HIT := [0.11, 0.15, 0.20]
-const DUEL_GOLD := [30, 60, 120]  # × рівень героя
-const DUEL_GLORY := [5, 10, 25]
+## Суперники — data/rivals.json (ім'я, стиль і механіка бою scripts/mechanics/rival/<стиль>.gd, лист спрайтів,
+## порада); кола турніру — data/duel_rounds.json: здоров'я суперника рівня з героєм — скільки секунд чистої шкоди
+## еталонного героя цього рівня він тримає, удар — частка здоров'я героя вже після його захисту.
 ## Вільний герць: поза турніром, до першої поразки. Кожен наступний суперник у серії міцніший.
 const FREE_DUEL_SECONDS := 20.0  # скільки секунд шкоди еталонного героя тримає перший суперник
 const FREE_DUEL_HIT := 0.11  # частка здоров'я героя за удар першого суперника
@@ -43,7 +22,7 @@ const FREE_DUEL_HIT_STEP := 0.05  # і на стільки сильніше б'�
 const FREE_DUEL_GOLD := 15  # × рівень героя; за серію більше (див. DuelService.free_gold)
 const FREE_DUEL_PAID := 3  # скільки перемог на день оплачується
 const FREE_DUEL_GLORY := 2  # слава за першу оплачену перемогу дня
-## Глядачі на майдані (листи спрайтів)
+## Глядачі на майдані (листи спрайтів; це вигляд, а не дані гри)
 const SPECTATORS := ["comp_dzhura", "comp_strilets", "comp_petro", "cossack_sabre", "cossack_pike", "peasant_pike", "comp_znakhar", "comp_oksana", "zaporozhets_sabre", "plastun_pike"]
 
 # ======================= Дошка розшуку =======================
@@ -55,66 +34,30 @@ const BOUNTY_REFRESH := 6  # через стільки походів дошка
 
 # ======================= Гетьманський огляд (Чигирин) =======================
 ## Тижневі сутички ватаг: герой із побратимами проти сотні. Три сутички, три спроби, смерті нема.
-## styles — хто в сотні (стилі суперників із герцю); перший у списку — сотник, він виходить у кожній сутичці.
+## Сотні — data/muster_teams.json (styles — стилі суперників із герцю; перший — сотник, він виходить у кожній
+## сутичці), сутички — data/muster_rounds.json, імена бійців — пул «muster_first» у data/name_pools.json, а
+## прізвиська — «nicks» суперника того самого стилю.
 const MUSTER_CITY := "chyhyryn"
 const MUSTER_MIN_LEVEL := 8
-const MUSTER_TEAMS := {
-	"cherkasy": {"name": "Черкаська сотня", "styles": ["rubaka", "rubaka", "spysnyk", "rubaka", "spysnyk"],
-		"bio": "Рубаки з-над Дніпра: лізуть гуртом і не дають продихнути. Не дай себе оточити."},
-	"korsun": {"name": "Корсунська сотня", "styles": ["spysnyk", "strilets", "spysnyk", "strilets", "spysnyk"],
-		"bio": "Списники тримають стрій, а з-за їхніх спин б'ють стрільці. Спершу дістань стрільців."},
-	"uman": {"name": "Уманська сотня", "styles": ["bulavnyk", "rubaka", "bulavnyk", "spysnyk", "rubaka"],
-		"bio": "Булави й важкі руки. Повільні, зате від їхніх ударів двигтить земля."},
-	"kompaniitsi": {"name": "Компанійці", "styles": ["strilets", "rubaka", "strilets", "kharakternyk", "rubaka"],
-		"bio": "Охочекомонний полк: стрільці, що не стоять на місці. Не ганяйся за всіма одразу."},
-	"serdiuky": {"name": "Гетьманські сердюки", "styles": ["kharakternyk", "bulavnyk", "strilets", "rubaka", "spysnyk"],
-		"bio": "Гвардія гетьмана: кожен уміє своє. Їхній сотник — характерник, тож пильнуй спину."},
-}
-const MUSTER_ORDER := ["cherkasy", "korsun", "uman", "kompaniitsi", "serdiuky"]
-const MUSTER_SIZE := [3, 4, 5]  # суперників у сутичці, коли в героя двоє й більше побратимів; без них — на одного-двох менше
-const MUSTER_SECONDS := [7.0, 8.0, 9.0]  # скільки секунд шкоди еталонного героя тримає один суперник
 const MUSTER_CAPTAIN := 1.5  # сотник у стільки разів здоровіший
-const MUSTER_HIT := [0.065, 0.08, 0.1]  # частка здоров'я героя за удар
-const MUSTER_ALLY_HIT := [0.09, 0.11, 0.13]  # частка здоров'я побратима за удар по ньому
-const MUSTER_GOLD := [40, 80, 160]  # × рівень героя
-const MUSTER_GLORY := [5, 10, 25]
-const MUSTER_LOYALTY := [20, 30, 50]  # лояльність Чигирина
-const MUSTER_FIRST := ["Іван", "Семен", "Грицько", "Микита", "Панас", "Левко", "Юрко", "Кіндрат", "Сава", "Тиміш", "Хома", "Яким", "Назар", "Прокіп"]
-const MUSTER_NICK := {"rubaka": ["Рубай", "Вихор", "Шабля"], "spysnyk": ["Ратище", "Жердина", "Довгий"], "strilets": ["Порох", "Куля", "Мушкет"],
-	"kharakternyk": ["Химородник", "Сивий", "Ворон"], "bulavnyk": ["Гупало", "Товкач", "Довбня"]}
 
 # ======================= Коло Кожум'яки =======================
-## Три чудовиська поспіль на Змієвих валах (місце "kolo" на мапі); склад міняється щотижня.
+## Три чудовиська поспіль на Змієвих валах (місце "kolo" на мапі); склад міняється щотижня. Хто буває в
+## колі — пул «ring» у data/boss_pools.json, кола — data/ring_rounds.json.
 ## Сила чудовиськ — від рівня героя: здоров'я — секунди чистої шкоди еталонного героя, удар — частка його живучості
 ## вже після захисту (за колами: перше, друге, третє). Посіпаки чудовиськ — у пропорції до «звичайного зараженого».
-const RING_POOL := ["zmii", "upyr", "vovkulaka", "chaklun", "koshchii", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii"]
-const RING_STAGES := 3
-const RING_SECONDS := [22.0, 31.0, 44.0]
-const RING_HIT := [0.11, 0.15, 0.20]
+const RING_STAGES := 3  # кіл (стільки ж записів у data/ring_rounds.json)
 const RING_CAP := 0.7  # чудовисько не впаде швидше, ніж за цю частку розрахункового часу
 const RING_STD_TTK := 1.1
 const RING_STD_HIT := 0.035
 const RING_XP := 0.3  # досвіду з кола менше: нагорода тут — гаманець і слава
 const RING_BREAK := 5.0  # перепочинок між чудовиськами, с
-const RING_GOLD := [50, 100, 200]  # × рівень героя, раз на тиждень за кожне коло
-const RING_GLORY := [5, 10, 20]
 const RING_REPEAT_GOLD := 10  # × рівень: за чудовисько, коли тижневе вже взято
 const RING_REPEAT_PAID := 3  # скільки таких на день оплачується
 const RING_FAST := 90.0  # швидше за стільки секунд бою — досягнення
 
 # ======================= Місця на мапі (не міста й не місцевості) =======================
-## kind: vigil — Козацька варта; hunt — полювання; fish — рибалка; ring — Коло Кожум'яки.
-## level — з якого рівня героя відкрито.
-const SPOTS := {
-	"kolo": {"name": "Змієві вали", "pos": Vector2(30.15, 49.2), "icon": "serpent", "kind": "ring", "level": 10,
-		"desc": "Прадавні вали, які, кажуть, проорав Кожум'яка, запрігши змія в плуг. Тут сміливці міряються силою з чудовиськами."},
-	"varta": {"name": "Сторожова могила", "pos": Vector2(37.0, 47.45), "icon": "mound", "kind": "vigil", "level": 6,
-		"desc": "Курган із козацькою вежею серед степу. Звідси першими бачать нечисть, що суне на Січ."},
-	"hunt": {"name": "Мисливські угіддя", "pos": Vector2(32.6, 51.75), "icon": "bow", "kind": "hunt", "level": 3,
-		"desc": "Тихий бір над Десною, куди зараза ще не дійшла. Олені, вепри й зайці."},
-	"fish": {"name": "Рибальська тоня", "pos": Vector2(31.3, 49.85), "icon": "fish", "kind": "fish", "level": 3,
-		"desc": "Затока на Дніпрі під Каневом. Карасі, щуки, а в ямах — соми."},
-}
+## data/spots.json: варта, полювання, рибалка, Коло Кожум'яки; level — з якого рівня героя відкрито.
 
 # ======================= Козацька варта =======================
 const VIGIL_GOAL := 300.0  # секунд, які треба вистояти
@@ -131,37 +74,8 @@ const VIGIL_HIT_STEP := 0.12
 const VIGIL_XP := 0.3  # множник досвіду й гривень із ворогів на варті
 
 # ======================= Чумацький шлях (торгівля крамом) =======================
-## Крам: назва й базова ціна одиниці (множиться на «заможність» рівня героя).
-const TRADE_GOODS := {
-	"salt": {"name": "Сіль", "base": 12},
-	"fish": {"name": "В'ялена риба", "base": 18},
-	"honey": {"name": "Мед", "base": 28},
-	"fur": {"name": "Хутро", "base": 45},
-	"cloth": {"name": "Сукно", "base": 60},
-	"wine": {"name": "Вино", "base": 80},
-	"powder": {"name": "Порох", "base": 100},
-}
-const TRADE_ORDER := ["salt", "fish", "honey", "fur", "cloth", "wine", "powder"]
-## Ціна краму в місті відносно базової: менше 1 — тут його роблять (дешево), більше — тут він у ціні.
-const TRADE_CITIES := {
-	"sich": {"salt": 0.6, "fish": 0.7, "honey": 1.0, "fur": 1.5, "cloth": 1.5, "wine": 1.3, "powder": 1.6},
-	"chyhyryn": {"salt": 0.85, "fish": 0.6, "honey": 0.7, "fur": 1.3, "cloth": 1.3, "wine": 1.2, "powder": 1.3},
-	"poltava": {"salt": 0.9, "fish": 0.9, "honey": 0.6, "fur": 1.4, "cloth": 1.4, "wine": 1.4, "powder": 1.2},
-	"kyiv": {"salt": 1.3, "fish": 1.2, "honey": 1.1, "fur": 1.1, "cloth": 1.0, "wine": 1.3, "powder": 0.6},
-	"chernihiv": {"salt": 1.5, "fish": 1.3, "honey": 0.8, "fur": 0.6, "cloth": 1.2, "wine": 1.6, "powder": 0.9},
-	"kamianets": {"salt": 1.5, "fish": 1.5, "honey": 1.3, "fur": 1.0, "cloth": 0.8, "wine": 0.6, "powder": 1.4},
-	"lviv": {"salt": 1.7, "fish": 1.6, "honey": 1.5, "fur": 0.9, "cloth": 0.6, "wine": 0.8, "powder": 1.0},
-	"verkhovyna": {"salt": 1.9, "fish": 1.8, "honey": 1.2, "fur": 0.6, "cloth": 1.1, "wine": 1.0, "powder": 1.5},
-	# далекі краї
-	"baturyn": {"salt": 1.4, "fish": 1.1, "honey": 0.7, "fur": 0.8, "cloth": 1.2, "wine": 1.5, "powder": 0.7},
-	"ostroh": {"salt": 1.6, "fish": 1.5, "honey": 0.9, "fur": 1.0, "cloth": 0.7, "wine": 0.9, "powder": 1.2},
-	"izium": {"salt": 0.5, "fish": 1.0, "honey": 0.9, "fur": 1.2, "cloth": 1.6, "wine": 1.6, "powder": 1.1},
-	"khadzhybei": {"salt": 0.5, "fish": 0.5, "honey": 1.4, "fur": 1.7, "cloth": 1.3, "wine": 0.7, "powder": 1.5},
-	"yelets": {"salt": 1.4, "fish": 1.0, "honey": 0.7, "fur": 1.0, "cloth": 1.4, "wine": 1.6, "powder": 0.6},
-	"tver": {"salt": 1.4, "fish": 0.6, "honey": 1.1, "fur": 0.7, "cloth": 0.6, "wine": 1.5, "powder": 1.3},
-	"cherkaskyi_stan": {"salt": 1.6, "fish": 0.7, "honey": 1.2, "fur": 0.5, "cloth": 1.4, "wine": 1.3, "powder": 0.7},
-	"brashov": {"salt": 1.2, "fish": 1.7, "honey": 1.0, "fur": 0.8, "cloth": 0.5, "wine": 0.6, "powder": 0.9},
-}
+## Крам — data/trade_goods.json (назва й базова ціна одиниці, множиться на «заможність» рівня героя),
+## торг у містах — data/trade_cities.json (ціна краму відносно базової: менше 1 — тут його роблять).
 const TRADE_WEALTH := 0.15  # ціни ростуть із рівнем героя: +15% за рівень
 const TRADE_SPREAD := 0.9  # продаєш на 10% дешевше, ніж тут купують
 const TRADE_STEP := 0.06  # кожна продана одиниця збиває ціну на 6%, куплена — піднімає
@@ -174,53 +88,29 @@ const TRADE_AMBUSH_UNIT := 0.02  # і ще стільки за кожну оди
 const TRADE_AMBUSH_MAX := 0.4
 
 # ======================= Полювання, рибалка й казан =======================
-## Провіант (лежить у player.resources): м'ясо з полювання, риба з рибалки, городина з городу.
-const FOOD := {"meat": "М'ясо", "ryba": "Риба", "veg": "Городина"}
-## Звірі: швидкість (пікселів/с), радіус влучання, м'ясо, вага появи; tough — від простого влучання лише поранений.
-const HUNT_ANIMALS := {
-	"hare": {"name": "Заєць", "speed": 330.0, "radius": 44.0, "meat": 1, "weight": 4, "tough": false},
-	"deer": {"name": "Олень", "speed": 210.0, "radius": 58.0, "meat": 3, "weight": 4, "tough": false},
-	"boar": {"name": "Вепр", "speed": 150.0, "radius": 62.0, "meat": 4, "weight": 2, "tough": true},
-}
+## Провіант (м'ясо, риба, городина) — ресурси героя з data/resources.json («food»). Звірі —
+## data/hunt_animals.json, риба — data/fish.json, страви з казана — data/recipes.json (одна страва за раз;
+## діє Data.MEAL_TIME секунд бою).
 const HUNT_ARROWS := 3
 const HUNT_PASSES := 6  # скільки звірів пробіжить галявиною за одне полювання
 const HUNT_BULLSEYE := 0.45  # частка радіуса: влучив ближче — «в яблучко»
-## Риба: улов, вікно на підсікання (с), скільки тягнути (с), сила ривків, вага появи.
-const FISH := {
-	"karas": {"name": "Карась", "ryba": 1, "window": 1.0, "reel": 3.0, "pull": 0.25, "weight": 5},
-	"shchuka": {"name": "Щука", "ryba": 2, "window": 0.8, "reel": 5.0, "pull": 0.45, "weight": 3},
-	"som": {"name": "Сом", "ryba": 4, "window": 0.65, "reel": 8.0, "pull": 0.7, "weight": 1},
-}
 const FISH_BAIT := 5  # закидів за одну рибалку
 const FISH_ZONE := [0.3, 0.75]  # у цій смузі натягу риба йде до берега
-## Страви з казана: що треба й що дає (одна страва за раз; діє Data.MEAL_TIME секунд бою).
-const RECIPES := {
-	"kulish": {"name": "Куліш", "need": {"meat": 2, "herbs": 2}, "desc": "+15% здоров'я"},
-	"yushka": {"name": "Юшка", "need": {"ryba": 2, "herbs": 2}, "desc": "+30% відновлення наснаги й +1 здоров'я/с"},
-	"pechenia": {"name": "Печеня", "need": {"meat": 2, "ryba": 2}, "desc": "+10% шкоди"},
-	"borshch": {"name": "Борщ", "need": {"meat": 1, "veg": 3}, "desc": "+10% здоров'я й +10% досвіду"},
-}
-const RECIPE_ORDER := ["kulish", "yushka", "pechenia", "borshch"]
 
 # ======================= Шинок: кості й чутки =======================
-## Гра «дванадцять»: кидаєш по кості й додаєш очки; понад DICE_LIMIT — перебір.
+## Гра «дванадцять»: кидаєш по кості й додаєш очки; понад DICE_LIMIT — перебір. Суперники — data/dice_rivals.json
+## (style — як грає, див. TavernService.rival_goes; stake — множник ставки).
 const DICE_LIMIT := 12
 const DICE_GAMES := 8  # партій на день
 const DICE_TWELVE := 1.5  # рівно дванадцять — виграш у півтора раза
-## Суперники: stake — множник ставки, style — як грає (див. TavernService.rival_goes).
-const DICE_RIVALS := {
-	"shynkar": {"name": "Шинкар Панько", "style": "cautious", "stake": 1, "desc": "Грає обережно: на дев'яти завжди спиняється, хоч би що ти викинув."},
-	"chumak": {"name": "Чумак Савка", "style": "reckless", "stake": 3, "desc": "Гаряча голова: менш як на десяти не спиняється, тож часто перебирає."},
-	"sotnyk": {"name": "Сотник Вовгура", "style": "steady", "stake": 6, "desc": "Холодний розум: кидає рівно доти, доки не переб'є тебе. Перемога над ним додає слави."},
-}
-const DICE_ORDER := ["shynkar", "chumak", "sotnyk"]
 const DICE_GLORY := 1  # слава за першу за день перемогу над сотником
 ## Чутки: скільки походів живе торгова порада й наскільки вона піднімає ціну.
 const RUMOR_TIP_TRIPS := 3
 const RUMOR_TIP_BONUS := 1.15
 
 # ======================= Сліди на арені =======================
-## У місцевості трапляється стежка слідів: іди по ній від точки до точки — наприкінці знахідка.
+## У місцевості трапляється стежка слідів: іди по ній від точки до точки — наприкінці знахідка
+## (data/trail_kinds.json: вага появи й підпис; що вона дає — Combat).
 const TRAIL_MIN_LEVEL := 3  # новачкові в перших походах не до слідів (і лігво йому зарано)
 const TRAIL_CHANCE := 0.35  # шанс стежки в поході
 const TRAIL_CHANCE_SCOUT := 0.6  # пластун помічає сліди частіше (і бачить усю стежку одразу)
@@ -228,187 +118,30 @@ const TRAIL_START := 200.0  # як далеко від героя починаю
 const TRAIL_STEP := 380.0  # довжина відтинка між точками
 const TRAIL_POINTS := 4  # точок на стежці (остання — знахідка)
 const TRAIL_REACH := 70.0  # наскільки близько треба підійти до точки
-## Знахідки: вага появи й підпис.
-const TRAIL_KINDS := {
-	"cache": {"name": "Схованка", "weight": 4, "text": "Схованка! Хтось закопав тут добро"},
-	"den": {"name": "Лігво", "weight": 3, "text": "Лігво! Нечисть боронить свою здобич"},
-	"beast": {"name": "Поранений звір", "weight": 3, "text": "Поранений вепр!"},
-}
 const TRAIL_CACHE_ITEM := 0.45  # шанс речі в схованці
 
 # ======================= Походи побратимів =======================
-## Супутника можна відправити у власний похід: він іде сам і повертається зі здобиччю.
-## Поки він у поході, в бою його нема. gold — множник гривень, res — одиниць ресурсів,
-## xp — частка рівня досвіду самому супутникові, item — шанс речі, trophy — трофеї, risk — шанс повернутись пораненим.
-const EXPEDITIONS := {
-	"scout": {"name": "Розвідка", "back": "з розвідки", "hours": 1.0, "gold": 1.0, "res": 2, "xp": 0.25, "item": 0.0, "trophy": 0, "risk": 0.05,
-		"desc": "Година в степу: трохи гривень і ресурсів."},
-	"raid": {"name": "Далекий похід", "back": "із далекого походу", "hours": 4.0, "gold": 4.0, "res": 6, "xp": 0.8, "item": 0.35, "trophy": 1, "risk": 0.12,
-		"desc": "Чотири години: добра здобич, трофей, інколи річ."},
-	"venture": {"name": "Виправа", "back": "із виправи", "hours": 8.0, "gold": 7.5, "res": 10, "xp": 1.4, "item": 1.0, "trophy": 2, "risk": 0.2,
-		"desc": "Вісім годин: найбільша здобич і річ напевно."},
-}
-const EXPEDITION_ORDER := ["scout", "raid", "venture"]
+## Супутника можна відправити у власний похід: він іде сам і повертається зі здобиччю (data/expeditions.json).
+## Поки він у поході, в бою його нема.
 const EXPEDITION_GOLD := 25  # гривень за одиницю множника на 1-му рівні супутника
 const EXPEDITION_LEVEL := 0.15  # приріст здобичі за кожен рівень супутника
 const EXPEDITION_HERO := 1.25  # іменні побратими приносять більше
 
 # ======================= Літопис слави: рекорди роду =======================
-## Рекорди спільні для всіх персонажів (account.records). fmt — як показати значення ("time" — хвилини:секунди).
-## step/glory — за кожні step одиниць нового рекорду роду герой дістає glory слави (0 — без слави).
-const RECORDS := {
-	"level": {"name": "Найвищий рівень", "fmt": "%d рівень", "step": 0, "glory": 0},
-	"glory": {"name": "Слава", "fmt": "%d слави", "step": 0, "glory": 0},
-	"tower": {"name": "Башта Кощія", "fmt": "%d поверх", "step": 5, "glory": 5},
-	"depth": {"name": "Глибини зарази", "fmt": "глибина %d", "step": 5, "glory": 5},
-	"vigil": {"name": "Козацька варта", "fmt": "time", "step": 0, "glory": 0},
-	"vigil_kills": {"name": "Вбито за одну варту", "fmt": "%d ворогів", "step": 0, "glory": 0},
-	"duel_titles": {"name": "Чемпіон майдану", "fmt": "титулів: %d", "step": 1, "glory": 3},
-	"bounties": {"name": "Голови з дошки розшуку", "fmt": "%d голів", "step": 10, "glory": 5},
-	"trade_profit": {"name": "Зиск із торгівлі", "fmt": "%d грн", "step": 0, "glory": 0},
-	"dice_streak": {"name": "Серія перемог у кості", "fmt": "%d поспіль", "step": 0, "glory": 0},
-	"duel_streak": {"name": "Серія у вільному герці", "fmt": "%d поспіль", "step": 5, "glory": 4},
-	"ring_titles": {"name": "Коло Кожум'яки", "fmt": "пройдено: %d", "step": 5, "glory": 5},
-	"muster_titles": {"name": "Гетьманський огляд", "fmt": "перемог: %d", "step": 1, "glory": 3},
-	"peril_bosses": {"name": "Надважкі боси", "fmt": "здолано: %d", "step": 1, "glory": 10},
-	"valor": {"name": "Звитяги", "fmt": "звитяга %d", "step": 10, "glory": 5},
-	"boss_day": {"name": "Боси дня", "fmt": "переможено: %d", "step": 10, "glory": 4},
-	"boss_week": {"name": "Боси тижня", "fmt": "переможено: %d", "step": 4, "glory": 6},
-}
-const RECORD_ORDER := ["level", "glory", "tower", "depth", "vigil", "vigil_kills", "duel_titles", "duel_streak", "muster_titles", "ring_titles", "peril_bosses", "valor", "boss_day", "boss_week", "bounties", "trade_profit", "dice_streak"]
-## Звідки береться слава (підказка у вкладці «Слава»).
-const GLORY_SOURCES := [
-	"Герць на майдані: кожне вигране коло й титул чемпіона",
-	"Дошка розшуку: кожна здана голова",
-	"Козацька варта: кожна вистояна хвилина й новий рекорд часу",
-	"Полювання без жодного промаху, спійманий сом, перемога над сотником у кості",
-	"Рекорди роду: кожні п'ять поверхів Башти чи глибин, кожен титул, кожні десять голів",
-]
+## Рекорди спільні для всіх персонажів (account.records): data/records.json, порядок файлу — порядок показу.
 
 # ======================= Сезонні свята =======================
-## Свята йдуть за справжнім календарем. Коли саме:
-##   from/to — [місяць, день] початку й кінця (включно);
-##   easter  — зсув у днях від Великодня за східним обрядом [від, до];
-##   nth     — [місяць, котрий за ліком, день тижня (0 — неділя)] і days — скільки днів триває.
-## Дати беруть старий або новий стиль так, щоб свята не налазили одне на одне.
-## rank: great — велике свято (вищі пороги жетонів, найвища нагорода — Алатир-камінь), small — мале.
-## Поки свято триває, діє bonus, а з нечисті падають жетони. Ключі бонусів:
-##   показники героя: gold, xp, hp, dmg, mana, skill (частка до показника), armor і crit (додаток),
-##     regen (частка здоров'я за секунду), cd (на скільки швидше відновлюються вміння),
-##     potion (частка до лікування зіллям), status (на скільки коротші стани на героєві);
-##   здобич у бою: loot (частка до шансу речі), rare (шанс підняти рідкість речі), res (частка до ресурсів),
-##     varenyk (частка до шансу вареника), trophy (додаткові трофеї з еліти й боса), boss (частка до шкоди по босах);
-##   служби: glory, harvest, dice, rumor, loyalty, outdoor (щедрі полювання й рибалка), sharpen (до шансу заточки), hire (знижка найму).
-const HOLIDAYS := {
-	# ---------- зима ----------
-	"rizdvo": {"name": "Різдво й Коляда", "rank": "great", "from": [12, 24], "to": [1, 7], "token": "Зірка колядників", "tokens": "зірок",
-		"bonus": {"gold": 0.25}, "bonus_text": "+25% гривень із нечисті",
-		"desc": "Колядники ходять від хати до хати, і навіть на Січі світять різдвяну зірку. Господарі щедрі, як ніколи."},
-	"malanka": {"name": "Маланка й Щедрий вечір", "rank": "small", "from": [1, 8], "to": [1, 14], "token": "Маска Кози", "tokens": "масок",
-		"bonus": {"loot": 0.5}, "bonus_text": "речі з нечисті падають у півтора раза частіше",
-		"desc": "Щедрувальники водять Козу, Маланка жартує з господарями. Де коза ходить, там жито родить."},
-	"vodokhreshche": {"name": "Водохреще", "rank": "small", "from": [1, 15], "to": [1, 19], "token": "Глечик йорданської води", "tokens": "глечиків",
-		"bonus": {"potion": 0.3}, "bonus_text": "зілля лікує на 30% більше",
-		"desc": "На Йордан святять воду в ополонці. Кажуть, свячена вода гоїть рани й відганяє нечисть."},
-	"sobornist": {"name": "День Соборності", "rank": "small", "from": [1, 21], "to": [1, 23], "token": "Ланка єднання", "tokens": "ланок",
-		"bonus": {"loyalty": 0.5}, "bonus_text": "+50% лояльності міст",
-		"desc": "Схід і Захід разом. Міста пам'ятають, хто став за них пліч-о-пліч."},
-	"stritennia": {"name": "Стрітення", "rank": "small", "from": [2, 1], "to": [2, 4], "token": "Громнична свічка", "tokens": "свічок",
-		"bonus": {"armor": 0.1}, "bonus_text": "+10% захисту",
-		"desc": "Зима з весною стрічається. Громнична свічка береже хату від грому, а козака від лихого удару."},
-	# ---------- весна ----------
-	"masnytsia": {"name": "Масниця", "rank": "small", "easter": [-55, -49], "token": "Вареник із сиром", "tokens": "вареників",
-		"bonus": {"varenyk": 2.0}, "bonus_text": "вареники з нечисті падають утричі частіше",
-		"desc": "Тиждень перед постом: вареники з сиром, сметана й колодка тому, хто досі не одружився."},
-	"shevchenko": {"name": "Шевченківські дні", "rank": "small", "from": [3, 9], "to": [3, 10], "token": "Сторінка «Кобзаря»", "tokens": "сторінок",
-		"bonus": {"xp": 0.3}, "bonus_text": "+30% досвіду",
-		"desc": "«Борітеся — поборете!» Кобзареве слово додає снаги й науки."},
-	"blahovishchennia": {"name": "Благовіщення", "rank": "small", "from": [3, 25], "to": [3, 26], "token": "Жайворонок із тіста", "tokens": "жайворонків",
-		"bonus": {"mana": 0.3}, "bonus_text": "наснага відновлюється на 30% швидше",
-		"desc": "Птахи вертаються з вирію, а діти кличуть весну печеними жайворонками. Цього дня й пташка гнізда не в'є."},
-	"verbna": {"name": "Вербна неділя", "rank": "small", "easter": [-8, -6], "token": "Вербова гілка", "tokens": "гілок",
-		"bonus": {"crit": 0.1}, "bonus_text": "+10% до шансу критичного удару",
-		"desc": "«Не я б'ю, верба б'є, за тиждень Великдень!» Свячена верба б'є влучно."},
-	"velykden": {"name": "Великдень", "rank": "great", "easter": [-1, 7], "token": "Писанка", "tokens": "писанок",
-		"bonus": {"hp": 0.15}, "bonus_text": "+15% здоров'я",
-		"desc": "Дзвони над Дніпром, свячена паска й писанки. Після такого сніданку козак дужчий."},
-	"yurii": {"name": "Весняний Юрій", "rank": "small", "from": [4, 23], "to": [5, 6], "token": "Змієва луска", "tokens": "лусок",
-		"bonus": {"boss": 0.2}, "bonus_text": "+20% шкоди по босах",
-		"desc": "Від нового Юрія до старого. Юрій-змієборець відмикає землю й випускає росу: хто цими днями вийде на змія, тому святий допоможе."},
-	"vyshyvanka": {"name": "День вишиванки", "rank": "small", "nth": [5, 3, 4], "days": 3, "token": "Клапоть вишивки", "tokens": "клаптів",
-		"bonus": {"regen": 0.005}, "bonus_text": "рани гояться самі: 0,5% здоров'я за секунду",
-		"desc": "Третій четвер травня. Вишита сорочка здавна була оберегом: узір замикає тіло від лиха."},
-	"zeleni": {"name": "Зелені свята", "rank": "great", "easter": [48, 55], "token": "Русалчин вінок", "tokens": "вінків",
-		"bonus": {"res": 1.0}, "bonus_text": "ресурсів із нечисті вдвічі більше",
-		"desc": "Хати в клечанні, на воротях любисток і полин. Русалки виходять із води, тож без оберега в ліс ані кроку."},
-	# ---------- літо ----------
-	"kupala": {"name": "Івана Купала", "rank": "great", "from": [6, 21], "to": [7, 7], "token": "Цвіт папороті", "tokens": "квіток",
-		"bonus": {"xp": 0.25}, "bonus_text": "+25% досвіду",
-		"desc": "Найкоротша ніч року: вогнища над водою, вінки на хвилях і цвіт папороті, що відкриває таємниці."},
-	"petra": {"name": "Петра й Павла", "rank": "small", "from": [7, 8], "to": [7, 12], "token": "Мандрика", "tokens": "мандрик",
-		"bonus": {"outdoor": 1.0}, "bonus_text": "полювання й рибалка щодня щедрі",
-		"desc": "Пастуше свято й початок жнив. Печуть мандрики, а рибалки з мисливцями вертаються з повними торбами."},
-	"derzhavnist": {"name": "День Державності", "rank": "small", "from": [7, 15], "to": [7, 16], "token": "Володимирів срібник", "tokens": "срібників",
-		"bonus": {"hire": 0.5}, "bonus_text": "супутники наймаються за пів ціни",
-		"desc": "Тисяча років державі від Володимирового тризуба. Цими днями до війська пристають охочіше."},
-	"illi": {"name": "Іллі", "rank": "small", "from": [7, 20], "to": [7, 22], "token": "Громова стріла", "tokens": "стріл",
-		"bonus": {"skill": 0.2}, "bonus_text": "+20% сили вмінь",
-		"desc": "Ілля їде небом у вогняній колісниці й б'є блискавками в нечисту силу. Після Іллі в річці вже не купаються."},
-	"spas": {"name": "Спас", "rank": "great", "from": [8, 1], "to": [8, 19], "token": "Яблуко Спаса", "tokens": "яблук",
-		"bonus": {"harvest": 0.5}, "bonus_text": "+50% врожаю з городу й меду з пасіки",
-		"desc": "Святять мед, мак і яблука. Пасіки гудуть, грядки вгинаються від урожаю."},
-	"nezalezhnist": {"name": "День Незалежності", "rank": "great", "from": [8, 23], "to": [8, 25], "token": "Синьо-жовта стрічка", "tokens": "стрічок",
-		"bonus": {"xp": 0.24, "gold": 0.24}, "bonus_text": "+24% досвіду й гривень",
-		"desc": "Синьо-жовті прапори над кожним куренем. Воля варта того, щоб за неї стояти."},
-	# ---------- осінь ----------
-	"obzhynky": {"name": "Обжинки", "rank": "small", "from": [9, 1], "to": [9, 8], "token": "Обжинковий сніп", "tokens": "снопів",
-		"bonus": {"trophy": 1}, "bonus_text": "+1 трофей з кожної еліти й боса",
-		"desc": "Останній сніп несуть у село з піснями. Комори повні, тож є з чого й коваля нагородити."},
-	"zdvyzhennia": {"name": "Здвиження", "rank": "small", "from": [9, 14], "to": [9, 16], "token": "Зміїна корона", "tokens": "корон",
-		"bonus": {"status": 0.5}, "bonus_text": "стани на героєві тривають удвічі менше",
-		"desc": "Земля зачиняється на зиму, гадюки лізуть у вирій. До лісу цими днями не ходять, зате отрута й пристріт слабнуть."},
-	"pokrova": {"name": "Покрова, свято козацтва", "rank": "great", "from": [10, 1], "to": [10, 14], "token": "Козацький хрест", "tokens": "хрестів",
-		"bonus": {"glory": 1.0}, "bonus_text": "слава вдвічі",
-		"desc": "Покрова береже козаків. На Січі рада, герці й спогади про славних лицарів."},
-	"didy": {"name": "Осінні Діди", "rank": "small", "from": [10, 25], "to": [11, 2], "token": "Лампадка", "tokens": "лампадок",
-		"bonus": {"cd": 0.15}, "bonus_text": "вміння відновлюються на 15% швидше",
-		"desc": "Поминають рід: ставлять зайву миску на стіл і не гасять світла. Діди й прадіди стоять за плечем онука."},
-	"mykhaila": {"name": "Михайла", "rank": "small", "from": [11, 8], "to": [11, 10], "token": "Архангелове перо", "tokens": "пер",
-		"bonus": {"dmg": 0.15}, "bonus_text": "+15% шкоди",
-		"desc": "Архістратиг Михаїл, покровитель Києва й усього воїнства, топче змія. Цими днями рука б'є твердіше."},
-	"kuzma": {"name": "Кузьми й Дем'яна", "rank": "small", "from": [11, 12], "to": [11, 14], "token": "Ковальська підкова", "tokens": "підків",
-		"bonus": {"sharpen": 0.1}, "bonus_text": "+10% до шансу заточки",
-		"desc": "Свято ковалів. Кузьма й Дем'ян викували перший плуг і запрягли в нього змія, а нині кують зиму."},
-	"kateryny": {"name": "Катерини", "rank": "small", "from": [11, 24], "to": [11, 26], "token": "Вишнева гілочка", "tokens": "гілочок",
-		"bonus": {"rare": 0.25}, "bonus_text": "кожна четверта річ із нечисті на рідкість краща",
-		"desc": "Дівчата ставлять вишневу гілочку у воду: зацвіте до Маланки, отже доля всміхнеться."},
-	"andrii": {"name": "Андріївські вечорниці", "rank": "great", "from": [11, 29], "to": [12, 4], "token": "Калита", "tokens": "калит",
-		"bonus": {"dice": 4, "rumor": 0.5}, "bonus_text": "чотири зайві партії в кості на день, чутки за пів ціни",
-		"desc": "Молодь ворожить і кусає калиту, а в шинках не стихають кості й байки до ранку."},
-	"mykolai": {"name": "Святого Миколая", "rank": "great", "from": [12, 5], "to": [12, 19], "token": "Миколайчик", "tokens": "миколайчиків",
-		"bonus": {"xp": 0.15, "gold": 0.15}, "bonus_text": "+15% досвіду й гривень",
-		"desc": "Миколай кладе чемним подарунки під подушку, а нечемним різку. Козак цього року був чемний: бив нечисть."},
-}
-## Порядок за календарем (від січня). Коли два свята припадають на один день, велике перебиває мале,
-## а серед рівних коротше перебиває довше (див. HolidayService.current).
-const HOLIDAY_ORDER := ["malanka", "vodokhreshche", "sobornist", "stritennia", "masnytsia", "shevchenko", "blahovishchennia", "verbna", "velykden",
-	"yurii", "vyshyvanka", "zeleni", "kupala", "petra", "derzhavnist", "illi", "spas", "nezalezhnist", "obzhynky", "zdvyzhennia", "pokrova",
-	"didy", "mykhaila", "kuzma", "kateryny", "andrii", "mykolai", "rizdvo"]
-const MONTHS_GEN := ["січня", "лютого", "березня", "квітня", "травня", "червня", "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
-## Жетони: шанс із звичайної нечисті, скільки з еліти й боса; пороги нагород (короткі свята — нижчі).
+## Свята — data/holidays.json (порядок файлу — за календарем, від січня), назви місяців — data/months.json,
+## пороги жетонів — data/token_scales.json. Які ключі бонусу вміє гра — HolidayService.
+## Жетони: шанс із звичайної нечисті, скільки з еліти й боса.
 const TOKEN_CHANCE := 0.08
 const TOKEN_ELITE := 2
 const TOKEN_BOSS := 5
-const TOKEN_TIERS := [15, 40, 80]  # велике свято
-const TOKEN_TIERS_SHORT := [10, 25, 50]  # велике свято до трьох днів і мале від чотирьох
-const TOKEN_TIERS_TINY := [6, 15, 30]  # мале свято до трьох днів
 const TOKEN_GLORY := 15  # слава за найвищу нагороду великого свята
 const TOKEN_GLORY_SMALL := 8  # і малого
-## Що з бонусів свята йде в показники героя (player.festive), а що в здобич бою (combat.festive)
-const HOLIDAY_PLAYER_KEYS := ["gold", "xp", "hp", "dmg", "armor", "crit", "regen", "mana", "skill", "cd", "potion", "status"]
-const HOLIDAY_COMBAT_KEYS := ["loot", "rare", "res", "varenyk", "trophy", "boss"]
 
 # ---------- Супровід: завдання міста «проведи мандрівника» (див. EscortService) ----------
+## Мандрівники — data/escorts.json.
 const ESCORT_CHANCE := 0.22  # частка завдань у дику місцевість, що стають супроводом
 const ESCORT_MULT := 1.6  # нагорода проти звичайного завдання
 const ESCORT_WAVES := 3  # засідок на шляху
@@ -419,14 +152,206 @@ const ESCORT_FEAR := 250.0  # нечисть ближче — мандрівни
 const ESCORT_HP := 260.0  # здоров'я мандрівника: основа й приріст за рівень місцевості
 const ESCORT_HP_LVL := 45.0
 const ESCORT_TIP := 6  # гривень за рівень від вдячного мандрівника, якщо дійшов цілим
-const ESCORT_ORDER := ["kobzar", "chumak", "honets", "znakharka"]
-const ESCORT_WHO := {
-	"kobzar": {"name": "Кобзар", "acc": "кобзаря", "sheet": "trav_kobzar",
-		"thanks": "Складу про тебе думу, козаче."},
-	"chumak": {"name": "Чумак", "acc": "чумака", "sheet": "trav_chumak",
-		"thanks": "І сіль ціла, і голова на плечах. Спасибі!"},
-	"honets": {"name": "Гонець", "acc": "гінця", "sheet": "trav_honets",
-		"thanks": "Лист дійде до кошового. Слава!"},
-	"znakharka": {"name": "Знахарка", "acc": "знахарку", "sheet": "trav_znakharka", "she": true,
-		"thanks": "Зілля донесла. Хай тебе куля минає."},
-}
+
+
+# ======================= Зручні виклики над таблицями =======================
+# Записи заморожені й віддаються без копій: читати їх щокадру — звичайне читання словника.
+
+static var _sources: Array = []  # тексти «звідки слава» в порядку файлу
+static var _by_style := {}  # стиль бою → перший суперник із ним
+
+
+## Ранги слави за порядком (драбина за «rank»): [{"from", "name", "gold", "stone"?}, ...].
+static func glory_ranks() -> Array:
+	return GameDB.ladder("glory_ranks", "rank")
+
+
+## Звідки береться слава: рядки підказки в порядку файлу.
+static func glory_sources() -> Array:
+	if _sources.is_empty():
+		for id in GameDB.ids("glory_sources"):
+			_sources.append(str(GameDB.row("glory_sources", id)["text"]))
+		_sources.make_read_only()
+	return _sources
+
+
+## Суперник у герці ({} — нема).
+static func rival(id: String) -> Dictionary:
+	return GameDB.row("rivals", id)
+
+
+## Суперники в порядку файлу.
+static func rival_ids() -> Array:
+	return GameDB.ids("rivals")
+
+
+## Перший суперник із цим стилем бою ({} — нема): так бійці сотень огляду беруть вигляд, механіку й прізвиська.
+static func style_rival(style: String) -> Dictionary:
+	if _by_style.is_empty():
+		for id in rival_ids():
+			var st := str(rival(id)["style"])
+			if not _by_style.has(st):
+				_by_style[st] = rival(id)
+		_by_style.make_read_only()
+	return _by_style.get(style, {})
+
+
+## Коло герцю (0 — перше), сутичка огляду, коло Кожум'яки: записи драбин за «round».
+static func duel_round(i: int) -> Dictionary:
+	return GameDB.ladder("duel_rounds", "round")[i]
+
+
+static func muster_round(i: int) -> Dictionary:
+	return GameDB.ladder("muster_rounds", "round")[i]
+
+
+static func ring_round(i: int) -> Dictionary:
+	return GameDB.ladder("ring_rounds", "round")[i]
+
+
+## Сотня огляду ({} — нема) і сотні в порядку файлу.
+static func muster_team(id: String) -> Dictionary:
+	return GameDB.row("muster_teams", id)
+
+
+static func muster_team_ids() -> Array:
+	return GameDB.ids("muster_teams")
+
+
+## Імена бійців огляду (пул «muster_first»).
+static func muster_names() -> Array:
+	return GameDB.row("name_pools", "muster_first").get("words", [])
+
+
+## Хто буває в Колі Кожум'яки (пул «ring» у boss_pools.json).
+static func ring_pool() -> Array:
+	return GameDB.row("boss_pools", "ring").get("bosses", [])
+
+
+## Місце занять на мапі ({} — нема), усі такі місця в порядку файлу, чи це воно.
+static func spot(id: String) -> Dictionary:
+	return GameDB.row("spots", id)
+
+
+static func spot_ids() -> Array:
+	return GameDB.ids("spots")
+
+
+static func is_spot(id: String) -> bool:
+	return GameDB.table("spots").has(id)
+
+
+## Свято ({} — нема) і свята в порядку календаря.
+static func holiday(id: String) -> Dictionary:
+	return GameDB.row("holidays", id)
+
+
+static func holiday_ids() -> Array:
+	return GameDB.ids("holidays")
+
+
+## Назва місяця в родовому відмінку (1 — січня).
+static func month_gen(month: int) -> String:
+	return str(GameDB.row("months", GameDB.ids("months")[month - 1])["gen"])
+
+
+## Пороги жетонів свята: great, short чи tiny.
+static func token_need(scale: String) -> Array:
+	return GameDB.row("token_scales", scale)["need"]
+
+
+## Торг: чи є торг у місті, міста з торгом у порядку файлу, ціна краму в місті відносно базової.
+static func has_trade(city: String) -> bool:
+	return GameDB.table("trade_cities").has(city)
+
+
+static func trade_city_ids() -> Array:
+	return GameDB.ids("trade_cities")
+
+
+static func trade_mult(city: String, good: String) -> float:
+	return float(GameDB.row("trade_cities", city)["prices"][good])
+
+
+## Крам ({"name", "base"}) і весь крам у порядку показу.
+static func trade_good(id: String) -> Dictionary:
+	return GameDB.row("trade_goods", id)
+
+
+static func trade_good_ids() -> Array:
+	return GameDB.ids("trade_goods")
+
+
+## Звірі й риба: уся таблиця (для кидка за вагою) і один запис.
+static func hunt_animals() -> Dictionary:
+	return GameDB.table("hunt_animals")
+
+
+static func animal(id: String) -> Dictionary:
+	return GameDB.row("hunt_animals", id)
+
+
+static func fishes() -> Dictionary:
+	return GameDB.table("fish")
+
+
+static func fish(id: String) -> Dictionary:
+	return GameDB.row("fish", id)
+
+
+## Страва з казана ({} — нема), страви в порядку показу, чи є така.
+static func recipe(id: String) -> Dictionary:
+	return GameDB.row("recipes", id)
+
+
+static func recipe_ids() -> Array:
+	return GameDB.ids("recipes")
+
+
+static func is_recipe(id: String) -> bool:
+	return GameDB.table("recipes").has(id)
+
+
+## Суперник у кості ({} — нема) і суперники в порядку показу.
+static func dice_rival(id: String) -> Dictionary:
+	return GameDB.row("dice_rivals", id)
+
+
+static func dice_rival_ids() -> Array:
+	return GameDB.ids("dice_rivals")
+
+
+## Знахідки в кінці стежки: уся таблиця (для кидка за вагою) і одна знахідка.
+static func trail_kinds() -> Dictionary:
+	return GameDB.table("trail_kinds")
+
+
+static func trail_kind(id: String) -> Dictionary:
+	return GameDB.row("trail_kinds", id)
+
+
+## Похід побратима ({} — нема), походи в порядку показу, чи є такий.
+static func expedition(id: String) -> Dictionary:
+	return GameDB.row("expeditions", id)
+
+
+static func expedition_ids() -> Array:
+	return GameDB.ids("expeditions")
+
+
+static func is_expedition(id: String) -> bool:
+	return GameDB.table("expeditions").has(id)
+
+
+## Мандрівник для супроводу ({} — нема) і мандрівники в порядку кидка.
+static func escort(id: String) -> Dictionary:
+	return GameDB.row("escorts", id)
+
+
+static func escort_ids() -> Array:
+	return GameDB.ids("escorts")
+
+
+## Ціни краму в місті відносно базової: {крам: множник} ({} — у місті нема торгу).
+static func trade_city_prices(city: String) -> Dictionary:
+	return GameDB.row("trade_cities", city).get("prices", {})

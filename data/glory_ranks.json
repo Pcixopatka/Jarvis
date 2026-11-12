@@ -1,0 +1,47 @@
+{
+	"novak": {
+		"num": 9501,
+		"rank": 0,
+		"from": 0,
+		"name": "Новак",
+		"gold": 0
+	},
+	"znanyi": {
+		"num": 9502,
+		"rank": 1,
+		"from": 40,
+		"name": "Знаний козак",
+		"gold": 300
+	},
+	"buvalets": {
+		"num": 9503,
+		"rank": 2,
+		"from": 120,
+		"name": "Бувалець",
+		"gold": 800
+	},
+	"lytsar": {
+		"num": 9504,
+		"rank": 3,
+		"from": 300,
+		"name": "Славний лицар",
+		"gold": 2000,
+		"stone": "zabuttia"
+	},
+	"otaman": {
+		"num": 9505,
+		"rank": 4,
+		"from": 700,
+		"name": "Отаман",
+		"gold": 5000,
+		"stone": "alatyr"
+	},
+	"lehenda": {
+		"num": 9506,
+		"rank": 5,
+		"from": 1500,
+		"name": "Легенда Січі",
+		"gold": 12000,
+		"stone": "alatyr"
+	}
+}

@@ -7,6 +7,7 @@ const Clock := preload("res://scripts/core/clock.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 
 static func state(world) -> Dictionary:
@@ -31,7 +32,7 @@ static func built_count(world) -> int:
 
 
 static func max_level(id: String) -> int:
-	return Camp.BUILDINGS[id]["levels"].size()
+	return Camp.building(id)["levels"].size()
 
 
 ## Ціна наступного рівня або {} якщо вже максимум.
@@ -39,13 +40,13 @@ static func next_cost(world, id: String) -> Dictionary:
 	var l := level(world, id)
 	if l >= max_level(id):
 		return {}
-	return Camp.BUILDINGS[id]["levels"][l]
+	return Camp.building(id)["levels"][l]
 
 
 static func can_afford(player, cost: Dictionary) -> bool:
 	if cost.is_empty() or player.gold < int(cost["gold"]):
 		return false
-	for r in Camp.RESOURCES:
+	for r in Camp.resources():
 		if int(player.resources.get(r, 0)) < int(cost.get(r, 0)):
 			return false
 	return true
@@ -56,7 +57,7 @@ static func build(world, player, id: String) -> bool:
 	if not can_afford(player, cost):
 		return false
 	player.gold -= int(cost["gold"])
-	for r in Camp.RESOURCES:
+	for r in Camp.resources():
 		player.resources[r] = int(player.resources.get(r, 0)) - int(cost.get(r, 0))
 	state(world)["buildings"][id] = level(world, id) + 1
 	if id == "pasika" and level(world, id) == 1:
@@ -77,7 +78,7 @@ static func companion_xp_mult(world) -> float:
 
 
 static func bag_bonus(world) -> int:
-	return [0, 8, 16][level(world, "sklad")]
+	return Camp.level_value("sklad", "bag", level(world, "sklad"))
 
 
 static func potion_bonus(world) -> int:
@@ -118,7 +119,7 @@ static func apply_effects(world, player) -> void:
 
 static func pasika_rate(world, hero_level: int) -> float:
 	var feast: float = 1.0 + load("res://scripts/game/holiday_service.gd").bonus("harvest")  # на Спаса меду більше
-	return Camp.PASIKA_RATE[level(world, "pasika")] * (1.0 + 0.2 * (hero_level - 1)) * feast
+	return Camp.level_value("pasika", "rate", level(world, "pasika")) * (1.0 + 0.2 * (hero_level - 1)) * feast
 
 
 static func pasika_ready(world, hero_level: int, now: float = -1.0) -> int:
@@ -141,7 +142,7 @@ static func collect_pasika(world, player, now: float = -1.0) -> int:
 # ---------- Зілляварня ----------
 
 static func can_brew(world, player, recipe: String) -> bool:
-	var r: Dictionary = Camp.BREW[recipe]
+	var r: Dictionary = GameDB.row("brews", recipe)
 	if level(world, "zillia") < int(r["level"]):
 		return false
 	if int(player.resources.get("herbs", 0)) < int(r["herbs"]) or int(player.resources.get("iron", 0)) < int(r["iron"]):
@@ -156,7 +157,7 @@ static func can_brew(world, player, recipe: String) -> bool:
 static func brew(world, player, recipe: String) -> bool:
 	if not can_brew(world, player, recipe):
 		return false
-	var r: Dictionary = Camp.BREW[recipe]
+	var r: Dictionary = GameDB.row("brews", recipe)
 	player.resources["herbs"] -= int(r["herbs"])
 	player.resources["iron"] -= int(r["iron"])
 	if recipe == "heal":

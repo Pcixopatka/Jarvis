@@ -1,0 +1,27 @@
+{
+	"hare": {
+		"num": 9701,
+		"name": "Заєць",
+		"speed": 330.0,
+		"radius": 44.0,
+		"meat": 1,
+		"weight": 4
+	},
+	"deer": {
+		"num": 9702,
+		"name": "Олень",
+		"speed": 210.0,
+		"radius": 58.0,
+		"meat": 3,
+		"weight": 4
+	},
+	"boar": {
+		"num": 9703,
+		"name": "Вепр",
+		"speed": 150.0,
+		"radius": 62.0,
+		"meat": 4,
+		"weight": 2,
+		"tough": true
+	}
+}

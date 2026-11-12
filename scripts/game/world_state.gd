@@ -76,7 +76,7 @@ func add_loyalty(city: String, v: int) -> bool:
 
 func discount(city: String) -> float:
 	# Лояльність міста + наслідки сюжетних виборів (напр. вдячний Чигирин)
-	var d: float = Data.LOYALTY_DISCOUNT[loyalty_level(city)]
+	var d: float = Data.loyalty_discount(loyalty_level(city))
 	# Пограбоване після облоги місто — навпаки, дорожче
 	return clampf(d + StoryService.effect(self, "discount_" + city) - DefenseService.markup(self, city), -0.5, 0.6)
 

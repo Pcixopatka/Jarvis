@@ -1,0 +1,30 @@
+{
+	"day": {
+		"num": 10311,
+		"name": "Бос дня",
+		"period": "сьогодні",
+		"next": "завтра",
+		"min_level": 12,
+		"hp_mult": 1.6,
+		"dmg_mult": 1.0,
+		"mods": 1,
+		"gold": 300,
+		"trophies": 5,
+		"xp_part": 0.08,
+		"item_rarity": 3
+	},
+	"week": {
+		"num": 10312,
+		"name": "Бос тижня",
+		"period": "цього тижня",
+		"next": "наступного тижня",
+		"min_level": 30,
+		"hp_mult": 3.2,
+		"dmg_mult": 1.2,
+		"mods": 2,
+		"gold": 1500,
+		"trophies": 20,
+		"xp_part": 0.3,
+		"item_rarity": 3
+	}
+}

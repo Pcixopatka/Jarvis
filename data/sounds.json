@@ -1,0 +1,162 @@
+{
+	"step": {
+		"num": 10501,
+		"volume": -15.0
+	},
+	"click": {
+		"num": 10502,
+		"volume": -7.0
+	},
+	"page": {
+		"num": 10503,
+		"volume": -3.0
+	},
+	"door": {
+		"num": 10504,
+		"volume": -5.0
+	},
+	"rustle": {
+		"num": 10505,
+		"volume": -5.0
+	},
+	"pot": {
+		"num": 10506,
+		"volume": -6.0
+	},
+	"dice": {
+		"num": 10507,
+		"volume": -1.0
+	},
+	"swing": {
+		"num": 10508,
+		"volume": -6.0
+	},
+	"shoot": {
+		"num": 10509,
+		"volume": -7.0
+	},
+	"hit": {
+		"num": 10510,
+		"volume": -2.0
+	},
+	"crit": {
+		"num": 10511,
+		"volume": 0.0
+	},
+	"slash": {
+		"num": 10512,
+		"volume": -1.0
+	},
+	"clash": {
+		"num": 10513,
+		"volume": -1.0
+	},
+	"unsheathe": {
+		"num": 10514,
+		"volume": -6.0
+	},
+	"whirl": {
+		"num": 10515,
+		"volume": -4.0
+	},
+	"dodge": {
+		"num": 10516,
+		"volume": -5.0
+	},
+	"hurt": {
+		"num": 10517,
+		"volume": -1.0
+	},
+	"musket": {
+		"num": 10518,
+		"volume": 0.0
+	},
+	"boom": {
+		"num": 10519,
+		"volume": 0.0
+	},
+	"lightning": {
+		"num": 10520,
+		"volume": -2.0
+	},
+	"fire": {
+		"num": 10521,
+		"volume": -3.0
+	},
+	"spell": {
+		"num": 10522,
+		"volume": -5.0
+	},
+	"zap": {
+		"num": 10523,
+		"volume": -8.0
+	},
+	"heal": {
+		"num": 10524,
+		"volume": -4.0
+	},
+	"portal": {
+		"num": 10525,
+		"volume": -4.0
+	},
+	"coin": {
+		"num": 10526,
+		"volume": -4.0
+	},
+	"coins": {
+		"num": 10527,
+		"volume": -3.0
+	},
+	"item": {
+		"num": 10528,
+		"volume": -3.0
+	},
+	"quest": {
+		"num": 10529,
+		"volume": 0.0
+	},
+	"levelup": {
+		"num": 10530,
+		"volume": -2.0
+	},
+	"sharpen_ok": {
+		"num": 10531,
+		"volume": -3.0
+	},
+	"sharpen_fail": {
+		"num": 10532,
+		"volume": -3.0
+	},
+	"roar": {
+		"num": 10533,
+		"volume": -1.0
+	},
+	"splash": {
+		"num": 10534,
+		"volume": -2.0
+	},
+	"enemy_die": {
+		"num": 10535,
+		"volume": -5.0
+	},
+	"die_beast": {
+		"num": 10536,
+		"volume": -5.0
+	},
+	"die_undead": {
+		"num": 10537,
+		"volume": -6.0
+	},
+	"die_slime": {
+		"num": 10538,
+		"volume": -5.0
+	},
+	"die_human": {
+		"num": 10539,
+		"volume": -6.0
+	},
+	"die_spirit": {
+		"num": 10540,
+		"volume": -6.0
+	}
+}

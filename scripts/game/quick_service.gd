@@ -202,7 +202,7 @@ static func _res_amount(n: int, player, festive: Dictionary) -> int:
 static func _roll_resource(L: Dictionary) -> String:
 	if randf() < 0.7:
 		return Camp.biome_resource(str(L.get("biome", "steppe")))
-	return Camp.RESOURCES.keys()[randi() % Camp.RESOURCES.size()]
+	return Camp.resources()[randi() % Camp.resources().size()]
 
 
 static func _res(out: Dictionary, player, res: String, amount: int) -> void:

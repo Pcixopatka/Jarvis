@@ -44,7 +44,7 @@ static func unlocked(player) -> bool:
 static func lineup(week_key: String = "") -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("muster:" + (week_key if week_key != "" else week()))
-	var ids: Array = Acts.MUSTER_ORDER.duplicate()
+	var ids: Array = Acts.muster_team_ids().duplicate()
 	for i in range(ids.size() - 1, 0, -1):
 		var j := rng.randi_range(0, i)
 		var t = ids[i]
@@ -68,7 +68,7 @@ static func next_team(world) -> Dictionary:
 	if int(s["round"]) >= ROUNDS:
 		return {}
 	var id: String = lineup()[int(s["round"])]
-	var info: Dictionary = Acts.MUSTER_TEAMS[id].duplicate()
+	var info: Dictionary = Acts.muster_team(id).duplicate()
 	info["id"] = id
 	return info
 
@@ -84,31 +84,29 @@ static func allies(world) -> int:
 
 ## Скільки людей виставить сотня: проти самотнього героя — на двох менше, з одним побратимом — на одного.
 static func team_size(round_i: int, allies_n: int) -> int:
-	return maxi(1, int(Acts.MUSTER_SIZE[clampi(round_i, 0, ROUNDS - 1)]) - maxi(0, 2 - allies_n))
+	return maxi(1, int(Acts.muster_round(clampi(round_i, 0, ROUNDS - 1))["size"]) - maxi(0, 2 - allies_n))
 
 
 ## Бійці сотні для сутички: [{"style", "sprite", "name", "captain"}]. Перший — сотник.
 static func fighters(team_id: String, n: int, seed_text: String = "") -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("fighters:" + team_id + ":" + (seed_text if seed_text != "" else week()))
-	var styles: Array = Acts.MUSTER_TEAMS[team_id]["styles"]
-	var names: Array = Acts.MUSTER_FIRST.duplicate()
+	var styles: Array = Acts.muster_team(team_id)["styles"]
+	var names: Array = Acts.muster_names().duplicate()
 	var out := []
 	for i in mini(n, styles.size()):
 		var st: String = styles[i]
-		var sprite := ""
-		for rid in Acts.RIVAL_ORDER:
-			if Acts.RIVALS[rid]["style"] == st:
-				sprite = Acts.RIVALS[rid]["sprite"]
+		var R := Acts.style_rival(st)  # вигляд і прізвиська — від суперника герцю того самого стилю
+		var sprite := str(R.get("sprite", ""))
 		var first: String = names.pop_at(rng.randi_range(0, names.size() - 1))
-		var nicks: Array = Acts.MUSTER_NICK[st]
+		var nicks: Array = R["nicks"]
 		var name := "%s %s" % [first, nicks[rng.randi_range(0, nicks.size() - 1)]]
 		out.append({"style": st, "sprite": sprite, "name": ("Сотник " + name) if i == 0 else name, "captain": i == 0})
 	return out
 
 
 static func gold_for(round_i: int, level: int) -> int:
-	return int(Acts.MUSTER_GOLD[round_i]) * level
+	return int(Acts.muster_round(round_i)["gold"]) * level
 
 
 ## Опис бою наступної сутички (для combat.enter через defense_loc): герць, але гурт на гурт.
@@ -116,12 +114,13 @@ static func battle_loc(world, player) -> Dictionary:
 	var r := int(state(world)["round"])
 	var team := next_team(world)
 	var n := team_size(r, allies(world))
-	var secs: float = float(Acts.MUSTER_SECONDS[r])
+	var R := Acts.muster_round(r)
+	var secs: float = float(R["seconds"])
 	return {"name": "Огляд: " + str(team["name"]), "type": "duel", "biome": "maidan", "level": player.level, "enemies": [],
 		"round": r, "muster": true, "back": "До Чигирина", "team": fighters(str(team["id"]), n),
 		"rival_hp": Power.ref_dps(int(player.level)) * secs, "rival_cap": 1.0 / (0.5 * secs),
-		"rival_dmg": Power.ref_hit(int(player.level), float(Acts.MUSTER_HIT[r]) * DuelService.hit_scale(player.level)),
-		"captain_mult": float(Acts.MUSTER_CAPTAIN), "ally_hit": float(Acts.MUSTER_ALLY_HIT[r]), "desc": ""}
+		"rival_dmg": Power.ref_hit(int(player.level), float(R["hit"]) * DuelService.hit_scale(player.level)),
+		"captain_mult": float(Acts.MUSTER_CAPTAIN), "ally_hit": float(R["ally_hit"]), "desc": ""}
 
 
 ## Сутичку виграно: гривні, слава, лояльність Чигирина; після третьої — перемога в огляді й ладанка (уперше).
@@ -133,12 +132,12 @@ static func win(world, player) -> Array:
 	player.gold += g
 	s["round"] = r + 1
 	s["wins"] = int(s["wins"]) + 1
-	world.add_loyalty(str(Acts.MUSTER_CITY), int(Acts.MUSTER_LOYALTY[r]))
+	world.add_loyalty(str(Acts.MUSTER_CITY), int(Acts.muster_round(r)["loyalty"]))
 	if r + 1 < ROUNDS:
-		msgs.append("Сотню покладено! +%d грн, +%d слави" % [g, Acts.MUSTER_GLORY[r]])
+		msgs.append("Сотню покладено! +%d грн, +%d слави" % [g, Acts.muster_round(r)["glory"]])
 	else:
 		s["titles"] = int(s["titles"]) + 1
-		var text := "Огляд за твоєю ватагою! +%d грн, +%d слави" % [g, Acts.MUSTER_GLORY[r]]
+		var text := "Огляд за твоєю ватагою! +%d грн, +%d слави" % [g, Acts.muster_round(r)["glory"]]
 		if not s["prize"]:
 			s["prize"] = true
 			var it := prize(player.level)
@@ -149,7 +148,7 @@ static func win(world, player) -> Array:
 			player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 3
 			text += " і 3 трофеї"
 		msgs.append(text)
-	msgs.append_array(GloryService.add(world, player, int(Acts.MUSTER_GLORY[r])))
+	msgs.append_array(GloryService.add(world, player, int(Acts.muster_round(r)["glory"])))
 	return msgs
 
 

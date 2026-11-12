@@ -16,7 +16,7 @@ func _run() -> void:
 	var levels := []
 	for l in _env_list("SIM_LEVELS", ["10", "30", "66"]):
 		levels.append(int(l))
-	var bosses: Array = _env_list("SIM_BOSSES", Acts.RING_POOL)
+	var bosses: Array = _env_list("SIM_BOSSES", Acts.ring_pool())
 	for lvl in levels:
 		for kind in bosses:
 			var line := "рів. %2d  %-10s" % [lvl, kind]

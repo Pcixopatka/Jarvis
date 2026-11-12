@@ -15,8 +15,8 @@ func _run() -> void:
 	for l in _env_list("SIM_LEVELS", ["6", "12", "20", "35", "60"]):
 		levels.append(int(l))
 	for lvl in levels:
-		for rid in Acts.RIVAL_ORDER:
-			var line := "рів. %2d  %-22s" % [lvl, Acts.RIVALS[rid]["name"]]
+		for rid in Acts.rival_ids():
+			var line := "рів. %2d  %-22s" % [lvl, Acts.rival(rid)["name"]]
 			for r in 3:
 				_build_hero(lvl)
 				var p = game.player

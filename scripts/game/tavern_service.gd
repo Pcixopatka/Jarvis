@@ -44,7 +44,7 @@ static func state(world) -> Dictionary:
 # ======================= Кості =======================
 
 static func stake(rival: String, level: int) -> int:
-	return int(Acts.DICE_RIVALS[rival]["stake"]) * (20 + 10 * level)
+	return int(Acts.dice_rival(rival)["stake"]) * (20 + 10 * level)
 
 
 ## Скільки партій дозволено сьогодні (на Андрія шинки гуляють довше).
@@ -120,7 +120,7 @@ static func stand(world, player, forced: Array = []) -> String:
 		return ""
 	var g := game(world)
 	var mine := total(g["mine"])
-	var style: String = Acts.DICE_RIVALS[g["rival"]]["style"]
+	var style: String = Acts.dice_rival(g["rival"])["style"]
 	var i := 0
 	while rival_goes(style, total(g["theirs"]), mine):
 		g["theirs"].append(_die(int(forced[i]) if i < forced.size() else 0))
@@ -176,7 +176,7 @@ static func clear(world) -> void:
 
 
 static func result_text(g: Dictionary) -> String:
-	var name: String = Acts.DICE_RIVALS[g["rival"]]["name"]
+	var name: String = Acts.dice_rival(g["rival"])["name"]
 	match str(g["result"]):
 		"win":
 			if total(g["theirs"]) > Acts.DICE_LIMIT:
@@ -213,7 +213,7 @@ static func rumor_kinds(world, player, city: String) -> Array:
 	if not player.is_peasant() and TradeService.has_market(city) and tip(world).is_empty():
 		out.append("trade")
 	var os := OutdoorService.state(world)
-	if player.level >= int(Acts.SPOTS["hunt"]["level"]) and not os.get("rich_hunt", false):
+	if player.level >= int(Acts.spot("hunt")["level"]) and not os.get("rich_hunt", false):
 		out.append("outdoor")
 	return out
 
@@ -246,18 +246,18 @@ static func buy_rumor(world, player, city: String, forced_kind: String = "") -> 
 			var best_good := ""
 			var best_city := ""
 			var best_ratio := 0.0
-			for good in Acts.TRADE_ORDER:
+			for good in Acts.trade_good_ids():
 				var c := TradeService.best_city(good, city)
 				if c == "":
 					continue
-				var ratio: float = float(Acts.TRADE_CITIES[c][good]) / maxf(0.01, float(Acts.TRADE_CITIES[city][good]))
+				var ratio: float = float(Acts.trade_mult(c, good)) / maxf(0.01, float(Acts.trade_mult(city, good)))
 				if ratio > best_ratio:
 					best_ratio = ratio
 					best_good = good
 					best_city = c
 			s["tip"] = {"good": best_good, "city": best_city, "left": Acts.RUMOR_TIP_TRIPS}
 			text = "Купець за чаркою прохопився: у місті %s зараз добре платять за %s. Довезеш за %d походи — дадуть на %d%% більше." % [
-				Data.place_name(best_city), str(Acts.TRADE_GOODS[best_good]["name"]).to_lower(), Acts.RUMOR_TIP_TRIPS, roundi((Acts.RUMOR_TIP_BONUS - 1.0) * 100.0)]
+				Data.place_name(best_city), str(Acts.trade_good(best_good)["name"]).to_lower(), Acts.RUMOR_TIP_TRIPS, roundi((Acts.RUMOR_TIP_BONUS - 1.0) * 100.0)]
 		"outdoor":
 			var os := OutdoorService.state(world)
 			os["rich_hunt"] = true

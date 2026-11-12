@@ -300,9 +300,9 @@ func _place_ll(id: String) -> Vector2:
 	if Data.is_place(id):
 		return Data.place(id)["pos"]
 	if id == Camp.CAMP_ID:
-		return Camp.CAMP["pos"]
-	if Acts.SPOTS.has(id):
-		return Acts.SPOTS[id]["pos"]
+		return Camp.camp()["pos"]
+	if Acts.is_spot(id):
+		return Acts.spot(id)["pos"]
 	return Vector2(31, 49)
 
 
@@ -574,13 +574,13 @@ func _draw() -> void:
 		labels.append([70 if id == "sich" else 50, id, c + Vector2(0, 14 * k + city_fs), C["name"], city_fs, Color(0.45, 0.1, 0.06)])
 
 	# Хутір козака
-	var hc := _proj(Camp.CAMP["pos"])
+	var hc := _proj(Camp.camp()["pos"])
 	_markers[Camp.CAMP_ID] = hc
 	_icon("camp", hc, 40.0 * k)
-	labels.append([45, Camp.CAMP_ID, hc + Vector2(0, 14 * k + city_fs), Camp.CAMP["name"], city_fs, Color(0.2, 0.4, 0.15)])
+	labels.append([45, Camp.CAMP_ID, hc + Vector2(0, 14 * k + city_fs), Camp.camp()["name"], city_fs, Color(0.2, 0.4, 0.15)])
 	# Місця занять: варта, полювання, рибалка
-	for sid in Acts.SPOTS:
-		var S: Dictionary = Acts.SPOTS[sid]
+	for sid in Acts.spot_ids():
+		var S: Dictionary = Acts.spot(sid)
 		var sc := _proj(S["pos"])
 		_markers[sid] = sc
 		var locked: bool = hero_level < int(S["level"])

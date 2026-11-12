@@ -1,0 +1,26 @@
+{
+	"first": {
+		"num": 9601,
+		"round": 0,
+		"seconds": 22.0,
+		"hit": 0.11,
+		"gold": 50,
+		"glory": 5
+	},
+	"second": {
+		"num": 9602,
+		"round": 1,
+		"seconds": 31.0,
+		"hit": 0.15,
+		"gold": 100,
+		"glory": 10
+	},
+	"third": {
+		"num": 9603,
+		"round": 2,
+		"seconds": 44.0,
+		"hit": 0.2,
+		"gold": 200,
+		"glory": 20
+	}
+}

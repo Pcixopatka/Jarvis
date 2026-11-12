@@ -17,8 +17,8 @@ func _run() -> void:
 		levels.append(int(l))
 	for lvl in levels:
 		for al in _env_list("SIM_ALLIES", ["0", "3"]):
-			for tid in Acts.MUSTER_ORDER:
-				var line := "рів. %2d  побратимів %s  %-20s" % [lvl, al, Acts.MUSTER_TEAMS[tid]["name"]]
+			for tid in Acts.muster_team_ids():
+				var line := "рів. %2d  побратимів %s  %-20s" % [lvl, al, Acts.muster_team(tid)["name"]]
 				for r in 3:
 					_build_hero(lvl)
 					var p = game.player
@@ -31,11 +31,11 @@ func _run() -> void:
 					var n: int = MS.team_size(r, MS.allies(game.world))
 					L["team"] = MS.fighters(tid, n)
 					L["round"] = r
-					var secs: float = float(Acts.MUSTER_SECONDS[r])
+					var secs: float = float(Acts.muster_round(r)["seconds"])
 					L["rival_hp"] = load("res://scripts/game/power.gd").dps(p) * secs
 					L["rival_cap"] = 1.0 / (0.5 * secs)
-					L["rival_dmg"] = load("res://scripts/game/power.gd").hit(p, float(Acts.MUSTER_HIT[r]) * game.DuelService.hit_scale(p.level))
-					L["ally_hit"] = float(Acts.MUSTER_ALLY_HIT[r])
+					L["rival_dmg"] = load("res://scripts/game/power.gd").hit(p, float(Acts.muster_round(r)["hit"]) * game.DuelService.hit_scale(p.level))
+					L["ally_hit"] = float(Acts.muster_round(r)["ally_hit"])
 					game.combat.defense_loc = L
 					game.enter_location("duel")
 					var t := 0.0

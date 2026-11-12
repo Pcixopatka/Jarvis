@@ -1,0 +1,32 @@
+{
+	"cherkasy": {
+		"num": 9571,
+		"name": "Черкаська сотня",
+		"styles": ["rubaka", "rubaka", "spysnyk", "rubaka", "spysnyk"],
+		"bio": "Рубаки з-над Дніпра: лізуть гуртом і не дають продихнути. Не дай себе оточити."
+	},
+	"korsun": {
+		"num": 9572,
+		"name": "Корсунська сотня",
+		"styles": ["spysnyk", "strilets", "spysnyk", "strilets", "spysnyk"],
+		"bio": "Списники тримають стрій, а з-за їхніх спин б'ють стрільці. Спершу дістань стрільців."
+	},
+	"uman": {
+		"num": 9573,
+		"name": "Уманська сотня",
+		"styles": ["bulavnyk", "rubaka", "bulavnyk", "spysnyk", "rubaka"],
+		"bio": "Булави й важкі руки. Повільні, зате від їхніх ударів двигтить земля."
+	},
+	"kompaniitsi": {
+		"num": 9574,
+		"name": "Компанійці",
+		"styles": ["strilets", "rubaka", "strilets", "kharakternyk", "rubaka"],
+		"bio": "Охочекомонний полк: стрільці, що не стоять на місці. Не ганяйся за всіма одразу."
+	},
+	"serdiuky": {
+		"num": 9575,
+		"name": "Гетьманські сердюки",
+		"styles": ["kharakternyk", "bulavnyk", "strilets", "rubaka", "spysnyk"],
+		"bio": "Гвардія гетьмана: кожен уміє своє. Їхній сотник — характерник, тож пильнуй спину."
+	}
+}

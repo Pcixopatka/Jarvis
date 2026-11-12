@@ -278,7 +278,7 @@ func _process(delta: float) -> void:
 	if AdRewards.drop2_left(world) > 0.0:
 		top = "×2 здобичі: %s\n%s" % [AdRewards.format_time(AdRewards.drop2_left(world)), top]
 	if holiday_id != "":
-		top = "Свято: %s (%s)\n%s" % [Acts.HOLIDAYS[holiday_id]["name"], Acts.HOLIDAYS[holiday_id]["bonus_text"], top]
+		top = "Свято: %s (%s)\n%s" % [Acts.holiday(holiday_id)["name"], Acts.holiday(holiday_id)["bonus_text"], top]
 	hud.update(player, world, _combat_info(), delta, top.strip_edges())
 
 
@@ -290,7 +290,7 @@ func buffs_line() -> String:
 	var parts := []
 	var meal := OutdoorService.eaten(player)
 	if meal != "":
-		parts.append("%s %s" % [Acts.RECIPES[meal]["name"], UiCamp.buff_time(player.buff_left("food"))])
+		parts.append("%s %s" % [Acts.recipe(meal)["name"], UiCamp.buff_time(player.buff_left("food"))])
 	for key in BUFF_NAMES:
 		if player.trip_buffs.has(key):
 			parts.append("%s %s" % [BUFF_NAMES[key], UiCamp.buff_time(player.buff_left(key))])
@@ -301,7 +301,7 @@ func buffs_line() -> String:
 func _buff_gone(key: String) -> void:
 	var text := ""
 	if key.begins_with("food:"):
-		text = "%s: страва вже не діє" % Acts.RECIPES.get(key.substr(5), {}).get("name", "Страва")
+		text = "%s: страва вже не діє" % Acts.recipe(key.substr(5)).get("name", "Страва")
 	elif BUFF_NAMES.has(key):
 		text = "%s: дія скінчилась" % BUFF_NAMES[key]
 	if text != "" and combat.active:
@@ -568,7 +568,7 @@ func _restore_place() -> void:
 			var mv = hud.map_view
 			at_point = true
 			ll = Vector2(clampf(float(x), mv.LON0 + mv.EDGE, mv.LON1 - mv.EDGE), clampf(float(y), mv.LAT0 + mv.EDGE, mv.LAT1 - mv.EDGE))
-	var known: bool = Data.is_city(here) or Data.is_place(here) or Acts.SPOTS.has(here) or here == Camp.CAMP_ID
+	var known: bool = Data.is_city(here) or Data.is_place(here) or Acts.is_spot(here) or here == Camp.CAMP_ID
 	# після бою, що міг лишити героя чи загін пораненими, вхід у гру лікує, як раніше лікувало місто
 	player.revive()
 	world.revive_companions()
@@ -1438,7 +1438,7 @@ func _guide_go() -> void:
 func _announce_unlocks() -> void:
 	var first_time: bool = not world.hints.has("unlocks_seen")
 	world.hints["unlocks_seen"] = true
-	for e in EventsBoard.Wiki.EVENTS:
+	for e in EventsBoard.Wiki.events():
 		var key := "open:" + str(e["id"])
 		if e["kind"] == "world" or world.hints.has(key) or EventsBoard.locked_reason(str(e["id"]), world, player) != "":
 			continue
@@ -1485,7 +1485,7 @@ func _build_map_panel() -> void:
 			tower_sel = f
 			_go_to(TowerService.LOC_ID)), _sponsor_block(), "tower")
 		return
-	if Acts.SPOTS.has(map_sel):
+	if Acts.is_spot(map_sel):
 		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block(), "spot:" + map_sel)
 		return
 	if PerilService.is_peril(map_sel):
@@ -1552,7 +1552,7 @@ func _go_to(id: String, escort: bool = false) -> void:
 	travel_paused = false
 	# Пригода в дорозі — посеред шляху (не для селянина, не частіше ніж дозволяє TravelService)
 	travel_event_at = -1.0
-	if not Data.is_city(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not Acts.SPOTS.has(id) and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
+	if not Data.is_city(id) and id != Camp.CAMP_ID and id != DepthService.LOC_ID and id != TowerService.LOC_ID and not Acts.is_spot(id) and not DefenseService.is_besieged(world, id) and EventService.battle_at(world, id).is_empty():
 		pending_event = TravelService.roll(world, player)
 		if not pending_event.is_empty():
 			travel_event_at = randf_range(0.4, 0.65)
@@ -1618,7 +1618,7 @@ func _arrive_point() -> void:
 func _nearest_place(ll: Vector2) -> String:
 	var best := "sich"
 	var best_d := INF
-	for id in Data.city_ids() + Data.place_ids() + Acts.SPOTS.keys() + [Camp.CAMP_ID]:
+	for id in Data.city_ids() + Data.place_ids() + Acts.spot_ids() + [Camp.CAMP_ID]:
 		var d: float = hud.map_view._place_ll(id).distance_to(ll)
 		if d < best_d:
 			best_d = d
@@ -1647,7 +1647,7 @@ func _arrive(id: String) -> void:
 		start_depth(depth_sel)
 	elif id == TowerService.LOC_ID:
 		start_tower(tower_sel)
-	elif Acts.SPOTS.has(id):
+	elif Acts.is_spot(id):
 		enter_spot(id)
 	elif Data.is_city(id):
 		if id != world.last_city and TradeService.should_ambush(world):
@@ -1833,7 +1833,7 @@ func _on_tower_cleared(floor_: int) -> void:
 			var stone := "alatyr" if randf() < 0.4 else "zabuttia"
 			StoneService.grant(player, stone)
 			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl + 1, 3), true)
-			combat.float_text(pos + Vector2(0, -40), "Знайдено: %s!" % StoneService.NAMES[stone], Color(0.85, 0.7, 1.0))
+			combat.float_text(pos + Vector2(0, -40), "Знайдено: %s!" % StoneService.name_of(stone), Color(0.85, 0.7, 1.0))
 			msg += "\nЛегендарна річ і камінь долі!"
 		else:
 			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl, Data.roll_rarity(lvl, 1)))
@@ -1993,7 +1993,7 @@ func _on_holiday_token(amount: int, pos: Vector2) -> void:
 		return
 	var before := HolidayService.tokens(world)
 	var now_n := HolidayService.add_tokens(world, amount)
-	var H: Dictionary = Acts.HOLIDAYS[id]
+	var H: Dictionary = Acts.holiday(id)
 	combat.float_text(pos + Vector2(0, -70), "+%d %s" % [amount, H["token"]], Color(1.0, 0.85, 0.5))
 	_record("holiday_token", amount)
 	for tier in HolidayService.tiers(id):
@@ -2045,7 +2045,7 @@ func _dice_done() -> void:
 
 func enter_spot(id: String) -> void:
 	map_here = id
-	match str(Acts.SPOTS[id]["kind"]):
+	match str(Acts.spot(id)["kind"]):
 		"vigil":
 			start_vigil()
 		"ring":
@@ -2062,7 +2062,7 @@ func enter_spot(id: String) -> void:
 
 ## Чому зараз не можна полювати чи рибалити ("" — можна).
 func _outdoor_block(kind: String) -> String:
-	var S: Dictionary = Acts.SPOTS[kind]
+	var S: Dictionary = Acts.spot(kind)
 	if player.level < int(S["level"]):
 		return "%s: відкриється з %d-го рівня" % [S["name"], int(S["level"])]
 	if not OutdoorService.ready(world, kind):
@@ -2155,7 +2155,7 @@ func finish_fishing(f: Dictionary) -> void:
 
 func start_vigil() -> void:
 	if not VigilService.unlocked(player):
-		hud.show_banner("На варту беруть із %d-го рівня й лише тих, хто обрав дорогу" % int(Acts.SPOTS[VigilService.SPOT_ID]["level"]), UI.BAD)
+		hud.show_banner("На варту беруть із %d-го рівня й лише тих, хто обрав дорогу" % int(Acts.spot(VigilService.SPOT_ID)["level"]), UI.BAD)
 		return
 	combat.defense_loc = VigilService.battle_loc(player)
 	enter_location("vigil")
@@ -2167,7 +2167,7 @@ func start_vigil() -> void:
 
 func start_ring() -> void:
 	if not RingService.unlocked(player):
-		hud.show_banner("У коло стають із %d-го рівня й лише ті, хто обрав дорогу" % int(Acts.SPOTS[RingService.SPOT_ID]["level"]), UI.BAD)
+		hud.show_banner("У коло стають із %d-го рівня й лише ті, хто обрав дорогу" % int(Acts.spot(RingService.SPOT_ID)["level"]), UI.BAD)
 		return
 	combat.defense_loc = RingService.battle_loc(player)
 	enter_location("ring")
@@ -2373,7 +2373,7 @@ func city_do(action: String, arg) -> void:
 				var q: Dictionary = r["quest"]
 				Audio.play("quest", 0.0)
 				if r["loyalty_up"]:
-					hud.show_banner("Лояльність зросла!\n%s: %s" % [Data.place_name(q["city"]), Data.LOYALTY_NAMES[world.loyalty_level(q["city"])]], UI.GOOD)
+					hud.show_banner("Лояльність зросла!\n%s: %s" % [Data.place_name(q["city"]), Data.loyalty_name(world.loyalty_level(q["city"]))], UI.GOOD)
 				else:
 					hud.show_banner("Завдання виконано!\n+%d грн, +%d досвіду" % [q["gold"], q["xp"]], UI.GOLD)
 		"select":
@@ -2460,7 +2460,7 @@ func city_do(action: String, arg) -> void:
 		"exp_send":
 			if ExpeditionService.send(world, arg[0], arg[1]):
 				Audio.play("quest", 0.0)
-				hud.show_banner("%s вирушає: %s" % [HeroService.member_name(world.companions[arg[0]]), str(Acts.EXPEDITIONS[arg[1]]["name"]).to_lower()], UI.GOLD)
+				hud.show_banner("%s вирушає: %s" % [HeroService.member_name(world.companions[arg[0]]), str(Acts.expedition(arg[1])["name"]).to_lower()], UI.GOLD)
 				_record("expedition_sent")
 		"exp_recall":
 			ExpeditionService.recall(world, arg)
@@ -3391,7 +3391,7 @@ func go_back(from_system: bool) -> void:
 # ======================= Довідник =======================
 
 ## Відкрити довідник. back — що показати, коли його закриють (меню, паузу, привал чи екран героя);
-## section — з якої вкладки почати (id розділу з WikiData.SECTIONS).
+## section — з якої вкладки почати (id розділу з data/wiki_sections.json).
 func open_wiki(back: Callable, section: String = "") -> void:
 	_wiki_back = back
 	wiki_open = true
@@ -3605,7 +3605,7 @@ func enter_camp() -> void:
 		hud.show_banner("\n".join(back), UI.GOLD)
 	save_game()
 	# Гривень уже вистачає на перший клейнод, а рід їх іще не має: один раз підказуємо, куди їх подіти
-	if world.hints.has("camp") and KleinodService.total(world) == 0 and player.gold >= int(Camp.KLEINOD_GOLD[0]):
+	if world.hints.has("camp") and KleinodService.total(world) == 0 and player.gold >= int(Camp.kleinod_tier(0)["gold"]):
 		hint("kleinody", "Гривень назбиралось чимало. Зазирни на вкладку «Клейноди»: козацькі регалії назавжди додають бонуси всім твоїм героям.")
 	hint("camp", "Твій хутір! Тут козак і загін відпочивають. Будуй курінь, кузню, зілляварню, склад і пасіку за гривні та ресурси з походів.")
 
@@ -3635,7 +3635,7 @@ func camp_do(action: String, arg) -> void:
 		"build":
 			if CampService.build(world, player, arg):
 				Audio.play("quest", 0.0)
-				hud.show_banner("%s: рівень %d!" % [Camp.BUILDINGS[arg]["name"], CampService.level(world, arg)], UI.GOLD)
+				hud.show_banner("%s: рівень %d!" % [Camp.building(arg)["name"], CampService.level(world, arg)], UI.GOLD)
 		"select":
 			camp_sel_uid = arg
 			smith_msg = ""
@@ -3649,12 +3649,12 @@ func camp_do(action: String, arg) -> void:
 			if KleinodService.buy(world, player, arg):
 				var kl := KleinodService.level(world, arg)
 				Audio.play("quest", 0.0)
-				hud.show_banner("%s: ступінь %d!\n%s" % [Camp.KLEINODY[arg]["name"], kl, KleinodService.bonus_text(arg, kl)], UI.GOLD)
+				hud.show_banner("%s: ступінь %d!\n%s" % [Camp.kleinod(arg)["name"], kl, KleinodService.bonus_text(arg, kl)], UI.GOLD)
 				_record("kleinod")
 		"buy_stone":
 			if KleinodService.buy_stone(player, arg):
 				Audio.play("coin", 0.0)
-				hud.show_banner("Куплено: %s" % StoneService.NAMES[arg], UI.GOLD)
+				hud.show_banner("Куплено: %s" % StoneService.name_of(arg), UI.GOLD)
 		"salvage":
 			# цінна річ плавиться лише з другого дотику, як «Знищити» на екрані героя
 			var sv: Dictionary = player.find_item(arg)
@@ -3757,7 +3757,7 @@ func camp_do(action: String, arg) -> void:
 		"cook":
 			if OutdoorService.cook(player, arg):
 				Audio.play("pot", 0.05)
-				hud.show_banner("%s готовий! %s\nДіє ще %s бою" % [Acts.RECIPES[arg]["name"], Acts.RECIPES[arg]["desc"], UiCamp.buff_time(player.buff_left("food"))], UI.GOOD)
+				hud.show_banner("%s готовий! %s\nДіє ще %s бою" % [Acts.recipe(arg)["name"], Acts.recipe(arg)["desc"], UiCamp.buff_time(player.buff_left("food"))], UI.GOOD)
 				_record("cook")
 				_record("cook:" + str(arg))
 		"collect":

@@ -8,6 +8,7 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const HolidayService := preload("res://scripts/game/holiday_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 
 static func level(world) -> int:
@@ -15,7 +16,7 @@ static func level(world) -> int:
 
 
 static func beds_count(world) -> int:
-	return int(Camp.GARDEN_BEDS[clampi(level(world), 0, Camp.GARDEN_BEDS.size() - 1)])
+	return Camp.level_value("horod", "beds", level(world))
 
 
 static func state(world) -> Dictionary:
@@ -36,7 +37,7 @@ static func bed(world, i: int) -> Dictionary:
 
 ## Скільки секунд росте культура (на 3-му рівні городу — швидше).
 static func grow_time(world, crop: String) -> float:
-	return float(Camp.CROPS[crop]["hours"]) * 3600.0 * (Camp.GARDEN_FAST if level(world) >= 3 else 1.0)
+	return float(GameDB.row("crops", crop)["hours"]) * 3600.0 * (Camp.GARDEN_FAST if level(world) >= 3 else 1.0)
 
 
 ## Частка росту грядки 0..1 (порожня — 0).
@@ -67,20 +68,20 @@ static func ready_count(world) -> int:
 
 
 static func can_plant(world, player, i: int, crop: String) -> bool:
-	return i >= 0 and i < beds_count(world) and bed(world, i).is_empty() and Camp.CROPS.has(crop) and player.gold >= int(Camp.CROPS[crop]["seed"])
+	return i >= 0 and i < beds_count(world) and bed(world, i).is_empty() and GameDB.table("crops").has(crop) and player.gold >= int(GameDB.row("crops", crop)["seed"])
 
 
 static func plant(world, player, i: int, crop: String) -> bool:
 	if not can_plant(world, player, i, crop):
 		return false
-	player.gold -= int(Camp.CROPS[crop]["seed"])
+	player.gold -= int(GameDB.row("crops", crop)["seed"])
 	state(world)["beds"][i] = {"crop": crop, "ts": ChallengeService._now()}
 	return true
 
 
 ## Скільки дасть грядка цьому героєві (хміль росте в ціні з рівнем).
 static func yield_of(crop: String, hero_level: int) -> int:
-	var c: Dictionary = Camp.CROPS[crop]
+	var c: Dictionary = GameDB.row("crops", crop)
 	var feast := 1.0 + HolidayService.bonus("harvest")  # на Спаса врожай щедріший
 	if c["gives"] == "gold":
 		return int(int(c["amount"]) * (1.0 + 0.2 * (hero_level - 1)) * feast)
@@ -93,7 +94,7 @@ static func harvest(world, player, i: int) -> String:
 		return ""
 	var g := state(world)
 	var crop: String = g["beds"][i]["crop"]
-	var c: Dictionary = Camp.CROPS[crop]
+	var c: Dictionary = GameDB.row("crops", crop)
 	var n := yield_of(crop, player.level)
 	g["beds"][i] = {}
 	g["harvests"] = int(g["harvests"]) + 1

@@ -35,7 +35,7 @@ static func away_count(world) -> int:
 
 
 static func can_send(world, i: int, kind: String) -> bool:
-	if i < 0 or i >= world.companions.size() or not Acts.EXPEDITIONS.has(kind):
+	if i < 0 or i >= world.companions.size() or not Acts.is_expedition(kind):
 		return false
 	var c: Dictionary = world.companions[i]
 	return not away(c) and not c.get("downed", false)
@@ -45,7 +45,7 @@ static func send(world, i: int, kind: String) -> bool:
 	if not can_send(world, i, kind):
 		return false
 	var now := ChallengeService._now()
-	world.companions[i]["away"] = {"kind": kind, "start": now, "until": now + int(float(Acts.EXPEDITIONS[kind]["hours"]) * 3600.0)}
+	world.companions[i]["away"] = {"kind": kind, "start": now, "until": now + int(float(Acts.expedition(kind)["hours"]) * 3600.0)}
 	return true
 
 
@@ -59,11 +59,11 @@ static func recall(world, i: int) -> bool:
 
 ## Здобич походу для цього супутника (rng — для тестів).
 static func reward(c: Dictionary, kind: String, rng: RandomNumberGenerator) -> Dictionary:
-	var E: Dictionary = Acts.EXPEDITIONS[kind]
+	var E: Dictionary = Acts.expedition(kind)
 	var lvl := int(c.get("level", 1))
 	var k := (1.0 + Acts.EXPEDITION_LEVEL * (lvl - 1)) * (Acts.EXPEDITION_HERO if c.get("hero", "") != "" else 1.0)
 	var res := {}
-	var keys := Camp.RESOURCES.keys()
+	var keys := Camp.resources()
 	for n in int(round(int(E["res"]) * (Acts.EXPEDITION_HERO if c.get("hero", "") != "" else 1.0))):
 		var r: String = keys[rng.randi() % keys.size()]
 		res[r] = int(res.get(r, 0)) + 1
@@ -90,7 +90,7 @@ static func collect(world, player, seed_value: int = -1, healed: bool = false) -
 		if not back(c):
 			continue
 		var kind: String = c["away"]["kind"]
-		var E: Dictionary = Acts.EXPEDITIONS[kind]
+		var E: Dictionary = Acts.expedition(kind)
 		var r := reward(c, kind, rng)
 		c.erase("away")
 		if r["wounded"]:
@@ -99,7 +99,7 @@ static func collect(world, player, seed_value: int = -1, healed: bool = false) -
 		var parts := ["+%d грн" % int(r["gold"])]
 		for id in r["res"]:
 			player.resources[id] = int(player.resources.get(id, 0)) + int(r["res"][id])
-			parts.append("%s %d" % [str(Camp.RESOURCES[id]).to_lower(), int(r["res"][id])])
+			parts.append("%s %d" % [Camp.res_name(id).to_lower(), int(r["res"][id])])
 		if int(r["trophy"]) > 0:
 			player.resources[Camp.TROPHY] = int(player.resources.get(Camp.TROPHY, 0)) + int(r["trophy"])
 			parts.append("трофеї %d" % int(r["trophy"]))

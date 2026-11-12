@@ -81,7 +81,7 @@ func _draw() -> void:
 		draw_circle(Vector2(6, -10), 2.5, Color(1, 1, 0.9))
 		return
 	if kind == "res":
-		var col: Color = Camp.RESOURCE_COLORS[item["res"]]
+		var col: Color = Camp.res_color(item["res"])
 		match item["res"]:
 			"wood":
 				draw_rect(Rect2(-10, -4, 20, 8), col)

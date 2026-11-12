@@ -1,0 +1,37 @@
+{
+	"tier_1": {
+		"num": 10131,
+		"tier": 1,
+		"gold": 10000,
+		"trophy": 10,
+		"res": 50
+	},
+	"tier_2": {
+		"num": 10132,
+		"tier": 2,
+		"gold": 25000,
+		"trophy": 20,
+		"res": 120
+	},
+	"tier_3": {
+		"num": 10133,
+		"tier": 3,
+		"gold": 60000,
+		"trophy": 40,
+		"res": 300
+	},
+	"tier_4": {
+		"num": 10134,
+		"tier": 4,
+		"gold": 120000,
+		"trophy": 80,
+		"res": 700
+	},
+	"tier_5": {
+		"num": 10135,
+		"tier": 5,
+		"gold": 250000,
+		"trophy": 150,
+		"res": 1500
+	}
+}

@@ -17,9 +17,9 @@ static func build(game, city: String) -> Control:
 	var lvl: int = w.loyalty_level(city)
 	var pts: int = w.loyalty_points(city)
 	var next := ""
-	if lvl < Data.LOYALTY_THRESHOLDS.size() - 1:
-		next = " (%d/%d)" % [pts, Data.LOYALTY_THRESHOLDS[lvl + 1]]
-	var title := "%s  •  Лояльність: %s%s  •  Гривні: %s" % [C["name"], Data.LOYALTY_NAMES[lvl], next, UI.num(game.player.gold)]
+	if lvl < Data.loyalty_levels().size() - 1:
+		next = " (%d/%d)" % [pts, Data.loyalty_from(lvl + 1)]
+	var title := "%s  •  Лояльність: %s%s  •  Гривні: %s" % [C["name"], Data.loyalty_name(lvl), next, UI.num(game.player.gold)]
 	# Перша вкладка: ратуша. Тут чекають ті, хто має до героя справу; число в назві каже, скільки їх.
 	var waiting: Array = game.hall_rows(city)
 	var pages := [
@@ -484,8 +484,8 @@ static func _shynok(game, city: String) -> Control:
 	var g: Dictionary = TS.game(w)
 	if g.is_empty():
 		v.add_child(_wrap("Кидаєш по одній кості й додаєш очки. Понад %d — перебір і програш. Зупинишся — кидає суперник: у кого більше, того й ставка. Рівно %d — виграш у півтора раза." % [Acts.DICE_LIMIT, Acts.DICE_LIMIT], 16, UI.TEXT))
-		for id in Acts.DICE_ORDER:
-			var R: Dictionary = Acts.DICE_RIVALS[id]
+		for id in Acts.dice_rival_ids():
+			var R: Dictionary = Acts.dice_rival(id)
 			var st: int = TS.stake(id, p.level)
 			var row := HBoxContainer.new()
 			row.add_theme_constant_override("separation", 14)
@@ -499,7 +499,7 @@ static func _shynok(game, city: String) -> Control:
 		if TS.games_left(w) <= 0:
 			v.add_child(_wrap("На сьогодні досить: шинкар ховає кості до завтра.", 17, UI.BAD))
 	else:
-		var R2: Dictionary = Acts.DICE_RIVALS[g["rival"]]
+		var R2: Dictionary = Acts.dice_rival(g["rival"])
 		var mine: int = TS.total(g["mine"])
 		v.add_child(UI.label("Проти: %s  •  на кону %d грн" % [R2["name"], int(g["stake"]) * 2], 21, UI.TEXT, false))
 		var r1 := HBoxContainer.new()
@@ -574,7 +574,7 @@ static func _shynok(game, city: String) -> Control:
 		v.add_child(_wrap("Остання чутка: " + str(s["rumor_text"]), 17, UI.TEXT))
 	var tip: Dictionary = TS.tip(w)
 	if not tip.is_empty():
-		v.add_child(_wrap("Торгова порада ще свіжа: %s у місті %s, походів лишилось %d." % [Acts.TRADE_GOODS[tip["good"]]["name"], Data.place_name(tip["city"]), int(tip["left"])], 16, UI.GOOD))
+		v.add_child(_wrap("Торгова порада ще свіжа: %s у місті %s, походів лишилось %d." % [Acts.trade_good(tip["good"])["name"], Data.place_name(tip["city"]), int(tip["left"])], 16, UI.GOOD))
 	return v
 
 
@@ -639,7 +639,7 @@ static func _tavern(game, city: String) -> Control:
 		var erow := HBoxContainer.new()
 		erow.add_theme_constant_override("separation", 10)
 		if ES.away(c):
-			var E: Dictionary = game.Acts.EXPEDITIONS[c["away"]["kind"]]
+			var E: Dictionary = game.Acts.expedition(c["away"]["kind"])
 			var el := UI.label("У поході (%s): повернеться за %s. У бій зараз не піде." % [str(E["name"]).to_lower(), ES.time_text(ES.time_left(c))], 16, UI.GOLD, false)
 			el.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			erow.add_child(el)
@@ -647,8 +647,8 @@ static func _tavern(game, city: String) -> Control:
 		else:
 			var hl := UI.label("Відправити самого:", 16, UI.MUTED, false)
 			erow.add_child(hl)
-			for kind in game.Acts.EXPEDITION_ORDER:
-				var E2: Dictionary = game.Acts.EXPEDITIONS[kind]
+			for kind in game.Acts.expedition_ids():
+				var E2: Dictionary = game.Acts.expedition(kind)
 				erow.add_child(UI.button("%s, %d год" % [E2["name"], int(E2["hours"])], _do(game, "exp_send", [i, kind]), Vector2(230, 48), 16, ES.can_send(w, i, kind)))
 		v.add_child(erow)
 	var waiting: Array = game.HeroService.waiting(w)
@@ -681,7 +681,7 @@ static func _tavern(game, city: String) -> Control:
 		col.add_child(UI.label(info["desc"].replace("\n", " "), 16, UI.MUTED, false))
 		var need: int = info["hire"]["loyalty"]
 		if lvl < need:
-			col.add_child(UI.label("Потрібна лояльність міста: %s" % Data.LOYALTY_NAMES[need], 16, UI.BAD, false))
+			col.add_child(UI.label("Потрібна лояльність міста: %s" % Data.loyalty_name(need), 16, UI.BAD, false))
 		row.add_child(col)
 		var price: int = game.hire_price(city, type)
 		var ok: bool = lvl >= need and p.gold >= price and w.companions.size() < game.CityService.party_size(w) and not w.has_companion(type)
@@ -718,7 +718,7 @@ static func _maidan(game) -> Control:
 	row.add_theme_constant_override("separation", 10)
 	var ids: Array = DS.lineup()
 	for i in ids.size():
-		var info: Dictionary = game.Acts.RIVALS[ids[i]]
+		var info: Dictionary = game.Acts.rival(ids[i])
 		var card := PanelContainer.new()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var border := UI.GOOD if i < done else (UI.GOLD if i == done else UI.MUTED)
@@ -729,7 +729,7 @@ static func _maidan(game) -> Control:
 		col.add_child(UI.label("Коло %d%s  •  %s" % [i + 1, " (фінал)" if i == DS.ROUNDS - 1 else "", status], 15, border, false))
 		col.add_child(UI.label(info["name"], 22, UI.GOLD if i <= done else UI.TEXT, false))
 		col.add_child(_wrap(info["bio"], 15, UI.MUTED))
-		col.add_child(UI.label("+%s грн, +%d слави" % [UI.num(DS.gold_for(i, p.level)), game.Acts.DUEL_GLORY[i]], 15, UI.TEXT, false))
+		col.add_child(UI.label("+%s грн, +%d слави" % [UI.num(DS.gold_for(i, p.level)), game.Acts.duel_round(i)["glory"]], 15, UI.TEXT, false))
 		card.add_child(col)
 		row.add_child(card)
 	v.add_child(row)
@@ -775,7 +775,7 @@ static func _muster(game) -> Control:
 	row.add_theme_constant_override("separation", 10)
 	var ids: Array = MS.lineup()
 	for i in ids.size():
-		var info: Dictionary = Acts.MUSTER_TEAMS[ids[i]]
+		var info: Dictionary = Acts.muster_team(ids[i])
 		var card := PanelContainer.new()
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var border := UI.GOOD if i < done else (UI.GOLD if i == done else UI.MUTED)
@@ -787,7 +787,7 @@ static func _muster(game) -> Control:
 		col.add_child(UI.label(info["name"], 22, UI.GOLD if i <= done else UI.TEXT, false))
 		col.add_child(_wrap(info["bio"], 15, UI.MUTED))
 		col.add_child(UI.label("Вийде бійців: %d" % MS.team_size(i, allies), 15, UI.TEXT, false))
-		col.add_child(UI.label("+%s грн, +%d слави, +%d лояльності" % [UI.num(MS.gold_for(i, p.level)), Acts.MUSTER_GLORY[i], Acts.MUSTER_LOYALTY[i]], 15, UI.TEXT, false))
+		col.add_child(UI.label("+%s грн, +%d слави, +%d лояльності" % [UI.num(MS.gold_for(i, p.level)), Acts.muster_round(i)["glory"], Acts.muster_round(i)["loyalty"]], 15, UI.TEXT, false))
 		card.add_child(col)
 		row.add_child(card)
 	v.add_child(row)
@@ -873,8 +873,8 @@ static func _trade(game, city: String) -> Control:
 	v.add_child(UI.label(head, 19, UI.TEXT, false))
 	if game.EventService.fair_city(w) == city:
 		v.add_child(UI.label("Ярмарок: крам тут беруть на чверть дорожче!", 18, UI.GOOD, false))
-	for g in Acts.TRADE_ORDER:
-		var info: Dictionary = Acts.TRADE_GOODS[g]
+	for g in Acts.trade_good_ids():
+		var info: Dictionary = Acts.trade_good(g)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 8)
 		var col := VBoxContainer.new()

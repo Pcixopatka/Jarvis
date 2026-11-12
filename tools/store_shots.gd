@@ -185,7 +185,7 @@ func _run() -> void:
 	p = game.player
 	p.resources = {"wood": 46, "iron": 21, "herbs": 17, "trophy": 6}
 	var GS = load("res://scripts/game/garden_service.gd")
-	var crops: Array = load("res://scripts/data/camp_data.gd").CROPS.keys()
+	var crops: Array = load("res://scripts/data/camp_data.gd").crop_ids()
 	for i in GS.beds_count(game.world):
 		GS.plant(game.world, p, i, crops[i % crops.size()])
 	game.enter_camp()
