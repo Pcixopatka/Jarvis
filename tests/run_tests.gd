@@ -152,6 +152,7 @@ func _run() -> void:
 	await _suite_hero_names()
 	await _suite_pet_fetch()
 	await _suite_salvage_confirm()
+	await _suite_scroll_keep()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -5981,7 +5982,7 @@ func _suite_kleinody_game() -> void:
 	check(scroller.call(game).scroll_vertical == 240, "після покупки список лишився на місці: %d" % scroller.call(game).scroll_vertical)
 	game.camp_do("select", p.equipment["weapon"]["uid"])
 	await _frames(2)
-	check(scroller.call(game).scroll_vertical == 0, "вибір речі показує екран згори")
+	check(scroller.call(game).scroll_vertical == 240, "вибір речі теж лишає список на місці: %d" % scroller.call(game).scroll_vertical)
 	root.size = win_size
 	# Збереження й повернення в гру
 	game.save_game()
@@ -11550,6 +11551,7 @@ func _suite_shop_game() -> void:
 	await _frames(3)
 	check(bar.max_value > bar.page + 100.0, "довше меню гортається, а не ховає нижні кнопки")
 	sc.scroll_vertical = 300
+	game.hud.close_overlay()  # те саме меню, що перемальовує себе, лишається прогорнутим; закрите й відкрите знову стає згори
 	game._show_pause()
 	await _frames(3)
 	check(sc.scroll_vertical == 0, "нове меню відкривається згори")
@@ -15610,6 +15612,394 @@ func _suite_salvage_confirm() -> void:
 			if str(e["title"]) == "Кування":
 				kuv = str(e["text"])
 	check("другим дотиком" in kuv, "у довіднику «Кування» сказано про підтвердження переплавки цінної речі")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Прокрутка після дотику: той самий екран і та сама вкладка лишаються прогорнутими, як були
+## (Hud.set_screen, open_overlay, set_map_panel). Згори екран стає, лише коли його відкрили заново
+## або перейшли на іншу вкладку.
+func _suite_scroll_keep() -> void:
+	suite("Прокрутка лишається на місці після дотику")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var UIK = load("res://scripts/ui/ui_kit.gd")
+	var DS = load("res://scripts/game/divine_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "kleinody", "kleinody_seen"]:
+		gw.hints[k] = true
+	gp.level = 60
+	gp.gold = 50000000
+	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	while not gp.bag_full():
+		gp.add_item(Data.gen_item(40, 1, ["belt", "boots", "head", "body"][gp.inventory.size() % 4]))
+	var Aud = root.get_node("Audio")
+	var sound0: bool = Aud.sound_on
+	var music0: bool = Aud.music_on
+	var filter0: Array = game.combat.pickup_filter.duplicate()
+	var win_size: Vector2i = root.size
+	root.size = Vector2i(1560, 720)  # без вікна екран безмежний і гортати нема чого, тож даємо йому розмір телефона
+	var hud = game.hud
+	# Низький телефон: знизу велика безпечна зона, і видно лише 400 точок, тож довгі вкладки й меню гортаються
+	hud.insets_override = [0.0, 0.0, 0.0, 320.0]
+	hud.layout()
+	var tabs_of := func() -> TabContainer:
+		return hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var open_tab := func(prefix: String) -> bool:
+		var tc: TabContainer = tabs_of.call()
+		for i in tc.get_tab_count():
+			if tc.get_tab_title(i).begins_with(prefix):
+				tc.current_tab = i
+				return true
+		return false
+	var sc_now := func() -> ScrollContainer:
+		return tabs_of.call().get_current_tab_control() as ScrollContainer
+	var room := func(sc: ScrollContainer) -> int:
+		return int(sc.get_v_scroll_bar().max_value - sc.get_v_scroll_bar().page)
+	# прогорнути відкриту вкладку на want (або до кінця, якщо коротша); вертає, куди стало
+	var scroll_to := func(want: int) -> int:
+		var sc: ScrollContainer = sc_now.call()
+		sc.scroll_vertical = mini(want, room.call(sc))
+		return sc.scroll_vertical
+	var near := func(a: int, b: int) -> bool:
+		return absi(a - b) <= 4
+	# Бере дію й перевіряє, що вкладка лишилась на місці
+	var keeps := func(what: String, act: Callable, want: int = 260) -> void:
+		await _frames(2)
+		var at: int = scroll_to.call(want)
+		check(at >= 40, "%s: вкладка довга й гортається (%d)" % [what, at])
+		act.call()
+		await _frames(1)
+		var first: int = sc_now.call().scroll_vertical
+		await _frames(3)
+		var now: int = sc_now.call().scroll_vertical
+		check(near.call(first, at) and near.call(now, at), "%s: прокрутка лишилась на місці (%d → %d, у першому кадрі %d)" % [what, at, now, first])
+
+	# ---- Екран героя ----
+	game.enter_map()
+	await _frames(2)
+	game.open_character()
+	await _frames(2)
+	check(open_tab.call("Вміння"), "на екрані героя є вкладка вмінь")
+	gp.skill_points = 30
+	var learn := func() -> String:
+		for br in gp.Classes.TREES[gp.job]:
+			for n in br["nodes"]:
+				if gp.can_learn_skill(n):
+					return str(n["id"])
+		return ""
+	var sid: String = learn.call()
+	check(sid != "", "є вміння, яке можна вивчити")
+	await keeps.call("вміння після вивчення", func(): game.char_do("skill", sid))
+	check(gp.sk(sid) >= 1, "вміння справді вивчено")
+	await keeps.call("вміння після вибору картки", func(): game.char_do("skill_pick", sid))
+	check(open_tab.call("Загартування"), "є вкладка загартування")
+	gp.perk_points = 10
+	var perk := ""
+	for br in Data.PERK_BRANCHES:
+		for tier in br["tiers"]:
+			for pk in tier:
+				if perk == "" and gp.can_learn_perk(pk["id"]):
+					perk = str(pk["id"])
+	await keeps.call("загартування після вибору", func(): game.char_do("perk", perk))
+	check(gp.pk(perk) == 1, "загартування справді взято")
+	check(open_tab.call("Герой"), "є вкладка з торбою")
+	await keeps.call("торба після вибору речі", func(): game.char_do("select", int(gp.inventory[-1]["uid"])))
+	gp.stat_points = 5
+	await keeps.call("торба після очка характеристики", func(): game.char_do("stat", "str"))
+	# Коротший вміст: прокрутка впирається в кінець, без помилок
+	scroll_to.call(100000)
+	await _frames(1)
+	var kept: Array = gp.inventory.duplicate()
+	gp.inventory.clear()
+	game.char_do("select", -1)
+	await _frames(4)
+	var short: ScrollContainer = sc_now.call()
+	check(short.scroll_vertical >= 0 and short.scroll_vertical <= maxi(0, room.call(short)), "торба спорожніла: прокрутка в межах (%d із %d)" % [short.scroll_vertical, room.call(short)])
+	gp.inventory = kept
+	game.char_do("select", -1)
+	await _frames(2)
+	# Інша вкладка й нове відкриття починаються згори
+	scroll_to.call(250)
+	check(open_tab.call("Вміння"), "перехід на вкладку вмінь")
+	await _frames(2)
+	check(sc_now.call().scroll_vertical == 0, "інша вкладка відкривається згори")
+	game.char_do("skill_pick", sid)
+	await _frames(3)
+	check(sc_now.call().scroll_vertical == 0, "дія на новій вкладці не переносить прокрутку старої")
+	scroll_to.call(250)
+	game.close_character()
+	await _frames(2)
+	game.open_character()
+	await _frames(3)
+	check(sc_now.call().scroll_vertical == 0, "закрив і відкрив екран героя: вкладка згори")
+	# Вкладки лишились лінивими: будується тільки відкрита
+	var lazy := 0
+	var tcz: TabContainer = tabs_of.call()
+	for i in tcz.get_tab_count():
+		if tcz.get_tab_control(i).has_meta("build"):
+			lazy += 1
+	check(lazy == tcz.get_tab_count() - 1, "після перебудови невідкриті вкладки ще не збудовані (%d із %d)" % [lazy, tcz.get_tab_count()])
+	game.close_character()
+	await _frames(2)
+
+	# ---- Вкладені прокрутки: будь-який список усередині вкладки теж лишається ----
+	var make := func() -> Control:
+		var page := func() -> Control:
+			var v := VBoxContainer.new()
+			var inner := ScrollContainer.new()
+			inner.custom_minimum_size = Vector2(400, 200)
+			inner.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN  # вузький список, ширший за себе вміст гортається вбік
+			var big := Control.new()
+			big.custom_minimum_size = Vector2(2000, 1500)
+			inner.add_child(big)
+			v.add_child(inner)
+			var tall := Control.new()
+			tall.custom_minimum_size = Vector2(10, 2000)
+			v.add_child(tall)
+			return v
+		return UIK.screen("Перевірка", "Назад", func(): pass, [["Перша", page], ["Друга", page]], 0, func(_i): pass)
+	hud.set_screen(make.call(), "test_nested")
+	await _frames(3)
+	var scs: Array = hud._open_scrollers(hud.screen_root)
+	check(scs.size() == 2, "у вкладці дві прокрутки: сама вкладка й список у ній (%d)" % scs.size())
+	scs[0].scroll_vertical = 300
+	scs[1].scroll_vertical = 500
+	scs[1].scroll_horizontal = 700
+	await _frames(1)
+	hud.set_screen(make.call(), "test_nested")
+	await _frames(4)
+	scs = hud._open_scrollers(hud.screen_root)
+	check(scs.size() == 2 and scs[0].scroll_vertical == 300 and scs[1].scroll_vertical == 500 and scs[1].scroll_horizontal == 700, "вкладений список лишився на місці і вниз, і вбік: %d, %d, %d" % [scs[0].scroll_vertical, scs[1].scroll_vertical, scs[1].scroll_horizontal])
+	hud.set_screen(make.call(), "test_nested")
+	hud.set_screen(make.call(), "test_nested")  # двічі за кадр: друга перебудова не губить прокрутку першої
+	await _frames(4)
+	scs = hud._open_scrollers(hud.screen_root)
+	check(scs[0].scroll_vertical == 300 and scs[1].scroll_vertical == 500, "дві перебудови за кадр: прокрутка та сама")
+	hud.set_screen(make.call(), "test_other")
+	await _frames(3)
+	scs = hud._open_scrollers(hud.screen_root)
+	check(scs[0].scroll_vertical == 0 and scs[1].scroll_vertical == 0 and scs[1].scroll_horizontal == 0, "інший екран починається згори")
+	hud.set_screen(make.call())
+	await _frames(2)
+	hud.clear_screen()
+	await _frames(2)
+
+	# ---- Місто ----
+	game.enter_city("sich")
+	hud.close_dialogue()
+	await _frames(2)
+	check(open_tab.call("Крамниця"), "у місті є крамниця")
+	var stock: Array = game.shop_stock("sich")
+	gp.inventory.pop_back()  # місце для покупки
+	var gold_b: int = gp.gold
+	await keeps.call("крамниця після купівлі", func(): game.city_do("buy", int(stock[0]["uid"])))
+	check(gp.inventory.size() == gp.bag_size() and gp.gold < gold_b, "куплено")
+	await keeps.call("крамниця після продажу", func(): game.city_do("sell", int(gp.inventory[0]["uid"])))
+	await keeps.call("крамниця після вибору речі", func(): game.city_do("select", int(gp.inventory[0]["uid"])))
+	check(open_tab.call("Коваль"), "у місті є коваль")
+	game.city_do("select", int(gp.equipment["weapon"]["uid"]))
+	await keeps.call("коваль після заточки", func(): game.city_do("sharpen", int(gp.equipment["weapon"]["uid"])))
+	check(game.smith_msg != "", "коваль точив")
+	check(open_tab.call("Завдання"), "у місті є завдання")
+	var board: Array = gw.board("sich")
+	check(not board.is_empty(), "на дошці є оголошення")
+	await keeps.call("завдання після взяття", func(): game.city_do("take", board[0]["id"]), 120)
+	check(gw.quests.size() >= 1, "завдання взято")
+	game.leave_city()
+	await _frames(2)
+
+	# ---- Хутір ----
+	game.enter_camp()
+	await _frames(2)
+	check(open_tab.call("Будівлі"), "на хуторі є будівлі")
+	var bid := ""
+	for id in game.Camp.BUILD_ORDER:
+		if bid == "" and game.CampService.level(gw, id) < 1:
+			bid = str(id)
+	await keeps.call("будівлі після будівництва", func(): game.camp_do("build", bid))
+	check(game.CampService.level(gw, bid) >= 1, "збудовано: %s" % bid)
+	gw.camp["buildings"]["kuznia"] = 3
+	game._build_camp()
+	await _frames(2)
+	check(open_tab.call("Кузня"), "на хуторі є кузня")
+	var wuid := int(gp.equipment["weapon"]["uid"])
+	await keeps.call("кузня після вибору речі", func(): game.camp_do("select", wuid))
+	await keeps.call("кузня після заточки", func(): game.camp_do("sharpen", wuid))
+	check(open_tab.call("Скриня"), "на хуторі є скриня")
+	await keeps.call("скриня після «покласти»", func(): game.camp_do("chest_put", int(gp.inventory[-1]["uid"])), 120)
+	check(game.account.chest["items"].size() >= 1, "річ лягла в скриню")
+	await keeps.call("скриня після вибору речі", func(): game.camp_do("chest_select", "b:%d" % int(gp.inventory[0]["uid"])))
+	game.leave_camp()
+	await _frames(2)
+
+	# ---- Донатна крамниця й крамниця Хованця ----
+	game.open_shop(Callable())
+	await _frames(2)
+	game.shop_tab = 1
+	tabs_of.call().current_tab = 1
+	await keeps.call("донатна крамниця після вибору товару", func(): game.shop_do("select", "x"), 120)
+	game.close_shop()
+	await _frames(2)
+	game.ShopService.state(gw)["coins"] = 100000
+	check(DS.buy(gw, gp, "khovanets") and DS.remote_shop(gp), "Хованець вдягнений")
+	game.open_trader(game.enter_map)
+	await _frames(2)
+	await keeps.call("крамниця Хованця після вибору речі", func(): game.city_do("select", int(gp.inventory[0]["uid"])))
+	await keeps.call("крамниця Хованця після продажу", func(): game.city_do("sell", int(gp.inventory[0]["uid"])))
+	game.close_trader()
+	await _frames(2)
+
+	# ---- Довідник: закрив і відкрив, і він згори ----
+	game.open_wiki(game.enter_map)
+	await _frames(2)
+	var wat: int = scroll_to.call(300)
+	check(wat >= 40, "розділ довідника гортається")
+	game.close_wiki()
+	await _frames(2)
+	game.open_wiki(game.enter_map)
+	await _frames(3)
+	check(sc_now.call().scroll_vertical == 0, "довідник, відкритий знову, починається згори")
+	game.close_wiki()
+	await _frames(2)
+	var guide := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Гортання списків":
+				guide = str(e["text"])
+	check("лишається там, куди ти його прогорнув" in guide and "іншу вкладку" in guide, "довідник каже, що список лишається на місці")
+
+	# ---- Бічна панель мапи ----
+	game.enter_map()
+	game.TowerService.state(gw)["max"] = 30
+	game.map_sel = game.TowerService.LOC_ID
+	game.tower_sel = 10
+	game._build_map_panel()
+	await _frames(3)
+	var msc: ScrollContainer = hud._map_scroll
+	msc.scroll_vertical = mini(120, room.call(msc))
+	var mat: int = msc.scroll_vertical
+	check(mat >= 30, "панель Башти на низькому екрані гортається (%d)" % mat)
+	game.tower_sel = 11  # те саме, що «▸» на панелі
+	game._build_map_panel()
+	await _frames(4)
+	check(hud._map_scroll != msc and near.call(hud._map_scroll.scroll_vertical, mat), "вибір поверху: панель лишилась на місці (%d → %d)" % [mat, hud._map_scroll.scroll_vertical])
+	game.map_sel = "sich"
+	game._build_map_panel()
+	await _frames(3)
+	check(hud._map_scroll.scroll_vertical == 0, "інше місце на мапі: панель згори")
+
+	# ---- Меню паузи ----
+	var press_menu := func(prefix: String) -> bool:
+		for b in hud.overlay_box.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion() and b.text.begins_with(prefix):
+				b.pressed.emit()
+				return true
+		return false
+	var osc: ScrollContainer = hud.overlay_scroll
+	game.enter_location("wild_field")
+	await _frames(3)
+	game._show_pause()
+	await _frames(3)
+	osc.scroll_vertical = mini(200, room.call(osc))
+	var oat: int = osc.scroll_vertical
+	check(oat >= 40, "пауза на низькому екрані гортається (%d)" % oat)
+	check(press_menu.call("Звук:"), "у паузі є перемикач звуку")
+	await _frames(1)
+	var ofirst: int = osc.scroll_vertical
+	await _frames(3)
+	check(near.call(ofirst, oat) and near.call(osc.scroll_vertical, oat), "перемикач звуку: меню лишилось на місці (%d → %d)" % [oat, osc.scroll_vertical])
+	check(press_menu.call("Звук:"), "звук назад")
+	await _frames(3)
+	check(Aud.sound_on == sound0 and near.call(osc.scroll_vertical, oat), "звук повернуто, меню на місці")
+	check(press_menu.call("Музика:"), "перемикач музики")
+	await _frames(2)
+	check(press_menu.call("Музика:"), "музика назад")
+	await _frames(3)
+	check(Aud.music_on == music0 and near.call(osc.scroll_vertical, oat), "музика повернута, меню на місці (%d)" % osc.scroll_vertical)
+	# Підменю: фільтр автопідбору перемальовує себе, а «Назад» вертає паузу туди, де була
+	check(press_menu.call("Автопідбір"), "кнопка фільтра автопідбору")
+	await _frames(3)
+	check(osc.scroll_vertical == 0 or room.call(osc) < 4, "фільтр відкривається згори")
+	osc.scroll_vertical = mini(80, room.call(osc))
+	var fat: int = osc.scroll_vertical
+	for i in 2:
+		game.combat.pickup_filter[0] = not game.combat.pickup_filter[0]
+		game._show_pickup_menu(game._show_pause)
+		await _frames(3)
+	check(near.call(osc.scroll_vertical, fat), "фільтр після перемикання лишився на місці")
+	check(press_menu.call("Назад"), "з фільтра назад")
+	await _frames(4)
+	check(near.call(osc.scroll_vertical, oat), "назад із фільтра: пауза на тому самому місці (%d → %d)" % [oat, osc.scroll_vertical])
+	game.combat.pickup_filter = filter0.duplicate()
+	hud.close_overlay()
+	game._show_pause()
+	await _frames(3)
+	check(osc.scroll_vertical == 0, "пауза, відкрита знову, починається згори")
+	game._resume_play()
+	await _frames(2)
+	game.enter_map()
+	await _frames(2)
+
+	# ---- «Персонажі»: перейменування й «Ні» на видаленні вертають список на місце ----
+	game.save_game()
+	game._show_heroes_menu()
+	await _frames(3)
+	osc.scroll_vertical = mini(150, room.call(osc))
+	var hat2: int = osc.scroll_vertical
+	check(hat2 >= 40, "«Персонажі» на низькому екрані гортаються (%d)" % hat2)
+	game._ask_rename(1)  # без слотів перший слот це тестове збереження
+	await _frames(2)
+	check(game.naming == "rename" and game.name_edit != null, "відкрито екран імені")
+	game.name_edit.text = "Остап"
+	game.name_submit()
+	await _frames(4)
+	check(gp.nick == "Остап" and near.call(osc.scroll_vertical, hat2), "після перейменування «Персонажі» на тому самому місці (%d → %d)" % [hat2, osc.scroll_vertical])
+	game._confirm_delete_slot(5)
+	await _frames(2)
+	check(press_menu.call("Ні"), "на видаленні є «Ні»")
+	await _frames(4)
+	check(near.call(osc.scroll_vertical, hat2), "«Ні» на видаленні: список на тому самому місці")
+	game._show_main_menu()
+	await _frames(2)
+	game._show_heroes_menu()
+	await _frames(3)
+	check(osc.scroll_vertical == 0, "«Персонажі», відкриті з головного меню, згори")
+	# Перенесення роду: меню перемальовує себе після «Скопіювати код» і лишається на місці
+	game._show_transfer_menu()
+	await _frames(3)
+	osc.scroll_vertical = mini(120, room.call(osc))
+	var tat: int = osc.scroll_vertical
+	check(tat >= 20, "перенесення роду на низькому екрані гортається (%d)" % tat)
+	game.transfer_copy()
+	await _frames(4)
+	check(near.call(osc.scroll_vertical, tat), "після «Скопіювати код» меню на тому самому місці (%d → %d)" % [tat, osc.scroll_vertical])
+	hud.close_overlay()
+
+	root.size = win_size
+	hud.insets_override = []
+	hud.layout()
+	if Aud.sound_on != sound0:
+		Aud.set_sound(sound0)
+	if Aud.music_on != music0:
+		Aud.set_music(music0)
+	game.combat.pickup_filter = filter0.duplicate()
+	game._save_settings()
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

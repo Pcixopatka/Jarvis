@@ -449,10 +449,21 @@ func set_mode(show_stats: bool, combat: bool) -> void:
 func show_map(v: bool) -> void:
 	map_view.visible = v
 	map_panel.visible = v
+	if not v:
+		_map_key = ""  # мапу сховано: наступна панель відкривається згори
+
+
+var _map_key := ""  # що показує бічна панель мапи (див. set_map_panel)
+var _map_scroll: ScrollContainer = null
 
 
 ## Вміст панелі мапи гортається, а footer (подарунки спонсора) завжди видно внизу.
-func set_map_panel(content: Control, footer: Control = null) -> void:
+## key каже, що це за панель ("tower", "place:kyiv"...): та сама панель після дотику на ній (поверх,
+## глибина, табір печери) лишається прогорнутою, як була; інша панель починається згори.
+func set_map_panel(content: Control, footer: Control = null, key: String = "") -> void:
+	var at := Vector2i.ZERO
+	if key != "" and key == _map_key and _map_scroll != null and is_instance_valid(_map_scroll):
+		at = _scroll_of(_map_scroll)
 	for c in map_panel.get_children():
 		c.queue_free()
 	var v := VBoxContainer.new()
@@ -466,6 +477,10 @@ func set_map_panel(content: Control, footer: Control = null) -> void:
 	if footer != null:
 		v.add_child(footer)
 	map_panel.add_child(v)
+	_map_key = key
+	_map_scroll = sc
+	if at != Vector2i.ZERO:
+		_hold_scroll(sc, at)
 
 
 func move_vector() -> Vector2:
@@ -610,41 +625,121 @@ func show_hint(text: String, on_map: bool) -> void:
 
 # ======================= Повноекранні екрани =======================
 
-## Замінити екран. keep_scroll — це той самий екран після дії (купівля, заточка, врожай):
-## прокрутка відкритої вкладки лишається на місці, а не стрибає на початок списку.
-func set_screen(c: Control, keep_scroll: bool = false) -> void:
-	var was := _screen_scroller(screen_root) if keep_scroll else null
-	var at: int = was.scroll_vertical if was else 0
+## Замінити екран. id каже, що це за екран ("character", "city:kyiv", "camp", "shop", "trader", "wiki").
+## Правило прокрутки одне: якщо на місці старого екрана стає той самий (той самий id і та сама відкрита
+## вкладка), то це він же після дотику (купівля, заточка, вміння, вибір речі), і всі списки відкритої
+## вкладки, вкладені теж, лишаються там, куди їх прогорнули, і вгору-вниз, і вбік. Інакше екран відкрито
+## заново або перейдено на іншу вкладку, і він починається згори. Екран без id завжди починається згори.
+func set_screen(c: Control, id: String = "") -> void:
+	var marks := []
+	if id != "" and screen_root != null and is_instance_valid(screen_root) and str(screen_root.get_meta(SCREEN_ID, "")) == id:
+		marks = [_open_tab_name(screen_root)]
+		for sc in _open_scrollers(screen_root):
+			marks.append(_scroll_of(sc))
 	clear_screen()
 	screen_root = c
-	ui_root.add_child(c)
+	if id != "":
+		c.set_meta(SCREEN_ID, id)
+	ui_root.add_child(c)  # тут же вкладка нового екрана стає відкритою (UI.screen ставить її в ready)
 	ui_root.move_child(c, banner.get_index())
-	if at > 0:
-		_restore_scroll(_screen_scroller(c), at)
+	if marks.size() > 1 and marks[0] == _open_tab_name(c):
+		_restore_scrolls(_open_scrollers(c), marks.slice(1))
 
 
-## Прокрутка відкритої вкладки екрана (або перша на екрані без вкладок).
-func _screen_scroller(screen: Control) -> ScrollContainer:
-	if screen == null or not is_instance_valid(screen):
-		return null
+const SCREEN_ID := "screen_id"
+const _WANT := "_scroll_want"  # куди треба поставити прокрутку, поки вміст розкладається
+const _HOLD := "_scroll_hold"  # чиє це бажання (щоб давніше не скасувало новіше)
+const HOLD_FRAMES := 3  # стільки кадрів прокрутку тримають на місці, поки вміст розкладається
+var _hold_seq := 0
+
+
+## Назва відкритої вкладки без лічильника: «Вміння (+2)» і «Вміння» це та сама вкладка.
+## Порожньо, якщо вкладок нема.
+func _open_tab_name(screen: Control) -> String:
+	var tc := _tabs_of(screen)
+	if tc == null or tc.current_tab < 0:
+		return ""
+	return tc.get_tab_title(tc.current_tab).get_slice(" (", 0).strip_edges()
+
+
+func _tabs_of(screen: Control) -> TabContainer:
 	var tabs := screen.find_children("*", "TabContainer", true, false)
-	if not tabs.is_empty():
-		return tabs[0].get_current_tab_control() as ScrollContainer
-	var all := screen.find_children("*", "ScrollContainer", true, false)
-	return (all[0] as ScrollContainer) if not all.is_empty() else null
+	return tabs[0] if not tabs.is_empty() else null
 
 
-## Вміст нового екрана ще не розкладено, тож чекаємо, доки смуга прокрутки дізнається свою довжину,
-## і лише тоді ставимо її на місце. Це стається в тому самому кадрі, до малювання.
-func _restore_scroll(sc: ScrollContainer, at: int) -> void:
-	if sc == null:
-		return
-	var bar := sc.get_v_scroll_bar()
-	var st := {"done": false}
-	bar.changed.connect(func():
-		if not st["done"] and bar.max_value > bar.page:
-			st["done"] = true
-			sc.set_deferred("scroll_vertical", at))
+## Усі прокрутки відкритої вкладки (сама вкладка й вкладені в неї списки) у порядку дерева;
+## на екрані без вкладок усі прокрутки екрана.
+func _open_scrollers(screen: Control) -> Array:
+	var tc := _tabs_of(screen)
+	var top: Control = tc.get_current_tab_control() if tc != null else screen
+	var out := []
+	if top == null:
+		return out
+	if top is ScrollContainer:
+		out.append(top)
+	out.append_array(top.find_children("*", "ScrollContainer", true, false))
+	return out
+
+
+## Де стоїть прокрутка; якщо її саме ставлять на місце (екран перебудовано двічі за кадр), то куди ставлять.
+static func _scroll_of(sc: ScrollContainer) -> Vector2i:
+	if sc.has_meta(_WANT):
+		return sc.get_meta(_WANT)
+	return Vector2i(sc.scroll_horizontal, sc.scroll_vertical)
+
+
+## Старі прокрутки на нові: за порядком у дереві. Що зайве з будь-якого боку, лишається як є.
+func _restore_scrolls(scs: Array, at: Array) -> void:
+	for i in mini(scs.size(), at.size()):
+		if at[i] != Vector2i.ZERO:
+			_hold_scroll(scs[i], at[i])
+
+
+## Поставити прокрутку на місце. Вміст щойно збудовано й ще не розкладено, тож смуга не знає своєї
+## довжини. Щоразу, коли вона її дізнається (розкладка йде кількома проходами), ставимо прокрутку
+## знову, у тому самому кадрі, до малювання: гравець не бачить, як список мигнув угорі. Коротший
+## вміст просто впирає прокрутку в кінець. Кілька кадрів по тому розкладка встояна, і прокрутка вільна.
+func _hold_scroll(sc: ScrollContainer, want: Vector2i) -> void:
+	_hold_seq += 1
+	var token := _hold_seq
+	sc.set_meta(_WANT, want)
+	sc.set_meta(_HOLD, token)
+	# список можуть звільнити будь-якої миті (екран перебудовано знову), тож тримаємо не його, а його номер
+	var sc_id := sc.get_instance_id()
+	var apply := func():
+		var s := instance_from_id(sc_id) as ScrollContainer
+		if s != null and s.get_meta(_HOLD, -1) == token:
+			if s.scroll_horizontal != want.x:
+				s.scroll_horizontal = want.x
+			if s.scroll_vertical != want.y:
+				s.scroll_vertical = want.y
+	var on_change := func(): apply.call_deferred()
+	sc.get_v_scroll_bar().changed.connect(on_change)
+	sc.get_h_scroll_bar().changed.connect(on_change)
+	apply.call_deferred()
+	var tree := get_tree()
+	var st := {"left": HOLD_FRAMES, "tick": Callable()}
+	st["tick"] = func():
+		st["left"] -= 1
+		if st["left"] > 0:
+			return
+		tree.process_frame.disconnect(st["tick"])
+		st["tick"] = Callable()
+		var s := instance_from_id(sc_id) as ScrollContainer
+		if s == null:
+			return
+		s.get_v_scroll_bar().changed.disconnect(on_change)
+		s.get_h_scroll_bar().changed.disconnect(on_change)
+		if s.get_meta(_HOLD, -1) == token:
+			s.remove_meta(_WANT)
+			s.remove_meta(_HOLD)
+	tree.process_frame.connect(st["tick"])
+
+
+## Скасувати бажання прокрутки: список має стати згори, навіть якщо його саме ставили на місце.
+static func _drop_hold(sc: ScrollContainer) -> void:
+	sc.remove_meta(_WANT)
+	sc.remove_meta(_HOLD)
 
 
 func clear_screen() -> void:
@@ -667,10 +762,32 @@ func close_dialogue() -> void:
 
 # ======================= Меню-оверлеї =======================
 
-func open_overlay() -> void:
+var _overlay_key := ""  # яке меню зараз відкрите ("" означає без назви: завжди згори)
+var _overlay_back := {}  # меню, над якими відкрито підменю: назва → прокрутка, до якої вертатись
+
+
+## Відкрити меню поверх екрана. key каже, що це за меню. Те саме меню, що перемальовує себе після дотику
+## (звук, музика, фільтр автопідбору), лишається там, куди його прогорнули. child означає підменю (підтвердження,
+## ім'я героя, фільтр автопідбору): меню під ним запам'ятовує прокрутку, і повернення з підменю ставить її
+## на місце. Будь-яке інше меню, як і меню після закриття, відкривається згори.
+func open_overlay(key: String = "", child: bool = false) -> void:
 	for c in overlay_box.get_children():
 		c.queue_free()
-	overlay_scroll.scroll_vertical = 0
+	var at := 0
+	if overlay.visible and key != "" and key == _overlay_key:
+		at = _scroll_of(overlay_scroll).y
+	elif key != "" and _overlay_back.has(key):
+		at = int(_overlay_back[key])
+		_overlay_back.erase(key)
+	elif child and overlay.visible and _overlay_key != "":
+		_overlay_back[_overlay_key] = _scroll_of(overlay_scroll).y
+	else:
+		_overlay_back.clear()
+	_overlay_key = key
+	_drop_hold(overlay_scroll)
+	overlay_scroll.scroll_vertical = at
+	if at > 0:
+		_hold_scroll(overlay_scroll, Vector2i(0, at))
 	overlay.visible = true
 	controls.visible = false
 	joystick.release()
@@ -678,6 +795,8 @@ func open_overlay() -> void:
 
 func close_overlay() -> void:
 	overlay.visible = false
+	_overlay_key = ""
+	_overlay_back.clear()
 	for c in overlay_box.get_children():
 		c.queue_free()
 

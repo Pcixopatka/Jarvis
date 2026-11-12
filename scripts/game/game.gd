@@ -874,7 +874,7 @@ func open_trader(back: Callable) -> void:
 	sell_marked.clear()
 	hud.close_overlay()
 	Audio.play("coins", 0.05)
-	hud.set_screen(_trader_screen())
+	hud.set_screen(_trader_screen(), "trader")
 
 
 func _trader_screen() -> Control:
@@ -1450,12 +1450,12 @@ func _build_map_panel() -> void:
 	if map_legend and travel_to == "":
 		hud.set_map_panel(MapPanel.build_legend(func():
 			map_legend = false
-			_build_map_panel()), _sponsor_block())
+			_build_map_panel()), _sponsor_block(), "legend")
 		return
 	if map_bosses and travel_to == "":
 		hud.set_map_panel(MapPanel.build_bosses(world, player, func():
 			map_bosses = false
-			_build_map_panel(), start_boss), _sponsor_block())
+			_build_map_panel(), start_boss), _sponsor_block(), "bosses")
 		return
 	if travel_to != "":
 		var v := VBoxContainer.new()
@@ -1464,7 +1464,7 @@ func _build_map_panel() -> void:
 		var l := UI.label(("Їдемо навпростець. Торкнись мапи, щоб поквапитись." if travel_to == POINT_ID else "Їдемо: %s. Торкнись мапи, щоб поквапитись." % Data.place_name(travel_to)), 18, UI.TEXT, false)
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(l)
-		hud.set_map_panel(v)
+		hud.set_map_panel(v, null, "travel:" + travel_to)
 		return
 	if map_sel == DepthService.LOC_ID:
 		# «Спуститися» це теж дорога: герой їде до Глибин мапою, бій починається після прибуття (_arrive)
@@ -1472,7 +1472,7 @@ func _build_map_panel() -> void:
 			depth_sel = d
 			_build_map_panel(), func(d: int):
 			depth_sel = d
-			_go_to(DepthService.LOC_ID)), _sponsor_block())
+			_go_to(DepthService.LOC_ID)), _sponsor_block(), "depths")
 		return
 	if map_sel == TowerService.LOC_ID:
 		# «Піднятися» так само: спершу дорога до Башти, і лише стоячи під нею герой заходить одразу
@@ -1480,15 +1480,15 @@ func _build_map_panel() -> void:
 			tower_sel = f
 			_build_map_panel(), func(f: int):
 			tower_sel = f
-			_go_to(TowerService.LOC_ID)), _sponsor_block())
+			_go_to(TowerService.LOC_ID)), _sponsor_block(), "tower")
 		return
 	if Acts.SPOTS.has(map_sel):
-		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block())
+		hud.set_map_panel(MapPanel.build_spot(map_sel, world, player, _go_to), _sponsor_block(), "spot:" + map_sel)
 		return
 	if PerilService.is_peril(map_sel):
-		hud.set_map_panel(MapPanel.build_peril(map_sel, world, player, _at(map_sel), _go_to, enter_peril, peril_camp_do), _sponsor_block())
+		hud.set_map_panel(MapPanel.build_peril(map_sel, world, player, _at(map_sel), _go_to, enter_peril, peril_camp_do), _sponsor_block(), "peril:" + map_sel)
 		return
-	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort, quick_raid), _sponsor_block())
+	hud.set_map_panel(MapPanel.build(map_sel, world, player, _go_to, StoryService.target(world), StoryService.objective_line(world), _go_escort, quick_raid), _sponsor_block(), "place:" + map_sel)
 
 
 ## Подарунки спонсора внизу панелі мапи: видно завжди, хоч би яке місце обране.
@@ -2343,7 +2343,7 @@ func _travel_to(id: String) -> void:
 # ======================= Місто =======================
 
 func _build_city() -> void:
-	hud.set_screen(UiCity.build(self, city_id))
+	hud.set_screen(UiCity.build(self, city_id), "city:" + city_id)
 
 
 func shop_stock(city: String) -> Array:
@@ -2510,7 +2510,7 @@ func city_do(action: String, arg) -> void:
 				_record("bounty")
 	save_game()
 	if trader_open:
-		hud.set_screen(_trader_screen(), true)  # крамниця Хованця: ті самі дії, інший екран
+		hud.set_screen(_trader_screen(), "trader")  # крамниця Хованця: ті самі дії, інший екран
 	else:
 		_build_city()
 	dice_anim = {}  # анімація кидка стосується лише цього показу
@@ -2572,7 +2572,7 @@ func open_character() -> void:
 
 
 func _build_character() -> void:
-	hud.set_screen(UiCharacter.build(self))
+	hud.set_screen(UiCharacter.build(self), "character")
 
 
 func char_do(action: String, arg) -> void:
@@ -2744,8 +2744,10 @@ func close_character() -> void:
 
 # ======================= Меню =======================
 
-func _open_menu() -> void:
-	hud.open_overlay()
+## key і child: див. Hud.open_overlay; меню, що перемальовує себе, і повернення з підменю
+## лишають прокрутку на місці.
+func _open_menu(key: String = "", child: bool = false) -> void:
+	hud.open_overlay(key, child)
 	get_tree().paused = true
 
 
@@ -2790,7 +2792,7 @@ func _show_main_menu() -> void:
 	if use_slots:
 		SaveSystem.migrate_single_to_slots()  # перший запуск після оновлення: hero.save → слот 1
 		save_path = SaveSystem.slot_path(slot)
-	_open_menu()
+	_open_menu("main")
 	hud.add_title("Козацька Звитяга", 72)
 	hud.add_title("З Кремля повзе чорна зараза Путіноїда. Козаче, рушай у похід!", 24, UI.TEXT)
 	if use_slots:
@@ -2849,7 +2851,7 @@ func _slot_row_text(s_: Dictionary, current: bool) -> String:
 
 ## Екран «Персонажі»: до 5 слотів — грати, новий, видалити.
 func _show_heroes_menu() -> void:
-	_open_menu()
+	_open_menu("heroes", true)
 	_menu_back = _show_main_menu
 	hud.add_title("Персонажі", 56)
 	hud.add_title("Хутір, скриня, досягнення й виклики — спільні для всіх.", 20, UI.TEXT)
@@ -2894,7 +2896,7 @@ func _transfer_paths() -> Dictionary:
 
 
 func _show_transfer_menu(note: String = "", col: Color = UI.TEXT) -> void:
-	_open_menu()
+	_open_menu("transfer", true)
 	_menu_back = _transfer_back
 	hud.add_title("Перенесення роду", 52)
 	hud.add_title("Усі персонажі, хутір і скриня одним кодом.\nСкопіюй код тут, надішли його собі (пошта, нотатки, месенджер)\nі встав на іншому пристрої в цьому ж меню.", 20, UI.TEXT)
@@ -2945,7 +2947,7 @@ func transfer_paste() -> void:
 
 
 func _transfer_confirm(profile: Dictionary) -> void:
-	_open_menu()
+	_open_menu("transfer_confirm", true)
 	_menu_back = _show_transfer_menu
 	hud.add_title("Замінити рід на цьому пристрої?", 44)
 	hud.add_title("У коді:\n" + "\n".join(SaveTransfer.summary(profile)), 22, UI.GOLD)
@@ -2984,7 +2986,7 @@ func _forget_hero() -> void:
 
 
 func _confirm_delete_slot(n: int) -> void:
-	_open_menu()
+	_open_menu("delete", true)
 	_menu_back = _show_heroes_menu
 	hud.add_title("Видалити персонажа зі слота %d?" % n, 44)
 	hud.add_title("Хутір і скриня лишаться — вони спільні. Самого героя не повернути.", 22, UI.TEXT)
@@ -2995,7 +2997,7 @@ func _confirm_delete_slot(n: int) -> void:
 
 
 func _confirm_new_game() -> void:
-	_open_menu()
+	_open_menu("new_game", true)
 	_menu_back = _show_main_menu
 	hud.add_title("Почати нову гру?", 48)
 	hud.add_title("Поточне збереження буде втрачено.", 24, UI.TEXT)
@@ -3027,7 +3029,7 @@ func _name_screen(kind: String, start: String, back: Callable, done: Callable, s
 	_name_back = back
 	_name_done = done
 	_name_paused = get_tree().paused
-	_open_menu()
+	_open_menu("name", true)
 	# суцільне тло: крізь екран імені не просвічують ні мапа, ні банери, ні підказка
 	hud.overlay.color = Color(0.03, 0.03, 0.025, 1.0)
 	_menu_back = Callable()  # «Назад» тут розбирає go_back за naming
@@ -3152,7 +3154,7 @@ func _ask_rename(n: int) -> void:
 func _show_pause() -> void:
 	state = State.PAUSED
 	hud.set_mode(false, false)
-	_open_menu()
+	_open_menu("pause")
 	hud.add_title("Пауза")
 	hud.add_button("Продовжити", _resume_play)
 	# Другорядні кнопки стоять парами: інакше меню не вміщалось на низькому екрані
@@ -3242,7 +3244,7 @@ func _add_sound_toggles(refresh: Callable, shop: bool = false) -> void:
 
 ## Фільтр автопідбору: речі яких рідкостей герой підбирає сам. back — меню, з якого прийшли.
 func _show_pickup_menu(back: Callable) -> void:
-	_open_menu()
+	_open_menu("pickup", true)
 	if state == State.MENU:
 		_menu_back = back
 	hud.add_title("Фільтр автопідбору")
@@ -3391,7 +3393,7 @@ func open_wiki(back: Callable, section: String = "") -> void:
 		wiki_tab = WikiService.index_of(section)
 	hud.close_overlay()
 	Audio.play("page", 0.08)
-	hud.set_screen(UiWiki.build(self))
+	hud.set_screen(UiWiki.build(self), "wiki")
 
 
 func close_wiki() -> void:
@@ -3422,7 +3424,7 @@ func open_shop(back: Callable) -> void:
 	shop_confirm = ""
 	hud.close_overlay()
 	Audio.play("coins", 0.05)
-	hud.set_screen(UiShop.build(self))
+	hud.set_screen(UiShop.build(self), "shop")
 
 
 func close_shop() -> void:
@@ -3511,7 +3513,7 @@ func shop_do(action: String, arg) -> void:
 					Audio.play("coins", 0.05)
 					hud.show_banner("Дякуємо за підтримку!\n+%s червінців" % UI.num(n), UI.GOLD)
 				if shop_open:
-					hud.set_screen(UiShop.build(self), true))
+					hud.set_screen(UiShop.build(self), "shop"))
 			return
 		"buy":
 			var kind: String = str(arg[0])
@@ -3530,7 +3532,7 @@ func shop_do(action: String, arg) -> void:
 					Audio.play("quest", 0.0)
 					_check_full_set()
 				hud.show_banner(str(res["msg"]), UI.GOLD if bool(res["ok"]) else UI.BAD)
-	hud.set_screen(UiShop.build(self), true)
+	hud.set_screen(UiShop.build(self), "shop")
 
 
 ## Привал на мапі: звук, головне меню, вихід. Раніше з мапи до головного меню дороги не було.
@@ -3538,7 +3540,7 @@ func _show_map_menu() -> void:
 	if state != State.MAP or travel_to != "":
 		return  # у дорозі не спиняємось: поїздка триває кілька секунд
 	map_menu = true
-	_open_menu()
+	_open_menu("map_menu")
 	hud.add_title("Привал")
 	hud.add_button("Далі в дорогу", _close_map_menu)
 	hud.add_button("Довідник", func(): open_wiki(_show_map_menu))
@@ -3605,12 +3607,12 @@ func camp_tab_changed(i: int) -> void:
 	camp_tab = i
 	if confirm_action.begins_with("salvage:"):
 		confirm_action = ""
-		(func(): if state == State.CAMP: _build_camp(true)).call_deferred()
+		(func(): if state == State.CAMP: _build_camp()).call_deferred()
 
 
-## keep_scroll — екран перебудовано після дії на ньому: список лишається там, де був.
-func _build_camp(keep_scroll: bool = false) -> void:
-	hud.set_screen(UiCamp.build(self), keep_scroll)
+## Той самий хутір на тій самій вкладці лишається прогорнутим, як був (див. Hud.set_screen).
+func _build_camp() -> void:
+	hud.set_screen(UiCamp.build(self), "camp")
 
 
 func camp_do(action: String, arg) -> void:
@@ -3646,7 +3648,7 @@ func camp_do(action: String, arg) -> void:
 			if not sv.is_empty() and CampService.salvage_precious(sv) and confirm_action != "salvage:%d" % arg:
 				confirm_action = "salvage:%d" % arg
 				save_game()
-				_build_camp(true)
+				_build_camp()
 				return
 			confirm_action = ""
 			var v := CampService.salvage(world, player, arg)
@@ -3786,11 +3788,10 @@ func camp_do(action: String, arg) -> void:
 					hud.show_banner("+1 безпечна заточка" if PremiumService.active(world) else "Дякуємо! +1 безпечна заточка", UI.GOOD)
 				save_game()
 				if state == State.CAMP:
-					_build_camp(true))
+					_build_camp())
 			return
 	save_game()
-	# Вибір речі чи ступеня кування показує інше, тож список починається згори; решта дій лишає його на місці
-	_build_camp(action not in ["select", "craft_tier"])
+	_build_camp()  # той самий хутір: список лишається там, куди його прогорнули
 
 
 ## Гнізда й душі: пробити гніздо (uid), вселити душу ([uid, id душі]), вийняти душу (uid).
