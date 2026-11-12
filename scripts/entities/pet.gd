@@ -8,7 +8,7 @@ extends Node2D
 const GameDB := preload("res://scripts/core/game_db.gd")
 const PetMechanic := preload("res://scripts/mechanics/pet_mechanic.gd")
 const OUTLINE := Color(0.106, 0.078, 0.125)
-const SPEED := 420.0
+static var SPEED: float  # швидкість улюбленця в бою, пікселів за секунду
 
 var combat
 var player
@@ -23,6 +23,19 @@ var _hitch := Vector2.ZERO  # кінець голобель у місцевих 
 var mechanic  # механіка улюбленця (PetMechanic), своя в кожного
 var _mh := 0  # хуки, які механіка написала (біти PetMechanic.MOVE)
 var _fetches := false  # бігає до здобичі (пес, Хованець)
+
+
+## Числа-правила вище лежать у data/settings.json (запис «battle»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("battle")
+	SPEED = S["pet_speed"]
 
 
 func setup(combat_node, hero, pet_kind: String) -> void:

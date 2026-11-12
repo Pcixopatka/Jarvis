@@ -20,21 +20,47 @@ const StoryService := preload("res://scripts/game/story_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const CHANCE := 0.3  # шанс нової бойової події після походу (коли спокійно)
-const CALM := 2
+static var CHANCE: float  # шанс нової бойової події після походу (коли спокійно)
+static var CALM: int  # походів спокою після бойової події
 ## Бойові події, які вміє цей код (start, win, lose). Назва, значок, строк, хвилі, вигляд оборони й
 ## здоров'я того, що боронять, — запис події в data/events.json («battle»; перевіряє GameDB.problems()).
 const BATTLE_KINDS := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
-const BURN_TRIPS := 4
-const NIGHT_CHANCE := 0.2
-const NIGHT_TRIPS := 2
-const TREASURE_CHANCE := 0.15
-const FAIR_EVERY := 10
-const FAIR_TRIPS := 4
-const THEFT_HOURS := 8.0
-const THEFT_CHANCE := 0.35
-const THEFT_CHANCE_KURIN := 0.1
-const THEFT_PART := 0.3
+static var BURN_TRIPS: int  # стільки походів місцевість лишається спаленою
+static var NIGHT_CHANCE: float  # шанс нічного походу
+static var NIGHT_TRIPS: int  # стільки походів триває ніч у місцевості
+static var TREASURE_CHANCE: float  # шанс знахідки (сторож скарбу)
+static var FAIR_EVERY: int  # ярмарок у місті — раз на стільки походів
+static var FAIR_TRIPS: int  # ярмарок триває стільки походів
+static var THEFT_HOURS: float  # нічна крадіжка меду можлива, якщо в грі не було стільки годин
+static var THEFT_CHANCE: float  # шанс крадіжки
+static var THEFT_CHANCE_KURIN: float  # шанс крадіжки, коли хутір стереже Курінь
+static var THEFT_PART: float  # частка меду, яку крадуть
+
+
+## Числа-правила вище лежать у data/settings.json (запис «events»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("events")
+	CHANCE = S["battle_chance"]
+	CALM = S["battle_calm"]
+	BURN_TRIPS = S["burn_trips"]
+	NIGHT_CHANCE = S["night_chance"]
+	NIGHT_TRIPS = S["night_trips"]
+	TREASURE_CHANCE = S["treasure_chance"]
+	FAIR_EVERY = S["fair_every"]
+	FAIR_TRIPS = S["fair_trips"]
+	THEFT_HOURS = S["theft_hours"]
+	THEFT_CHANCE = S["theft_chance"]
+	THEFT_CHANCE_KURIN = S["theft_chance_kurin"]
+	THEFT_PART = S["theft_part"]
+
+
 const KREMLIN_LL := Vector2(37.62, 55.75)
 
 

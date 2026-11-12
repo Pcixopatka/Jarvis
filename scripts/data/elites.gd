@@ -1,14 +1,35 @@
 extends RefCounted
 ## Елітна нечисть: рідкісні сильніші вороги з властивостями. Більший шанс у зараженій місцевості.
 
-const CHANCE := 0.04  # базовий шанс, що звичайний ворог — еліта
-const CHANCE_PER_PLAGUE := 0.025
-const MIN_LEVEL := 4  # у найперших місцях еліт немає
-const SECOND_AFFIX_LEVEL := 8  # з цього рівня місцевості еліта може мати дві властивості
-const HP_MULT := 2.6
-const DMG_MULT := 1.25
-const XP_MULT := 3
-const ITEM_CHANCE := 0.35
+static var CHANCE: float  # базовий шанс, що звичайний ворог — еліта
+static var CHANCE_PER_PLAGUE: float  # і ще стільки за кожен рівень зарази місцевості
+static var MIN_LEVEL: int  # у місцях нижче цього рівня еліт немає
+static var SECOND_AFFIX_LEVEL: int  # з цього рівня місцевості еліта може мати дві властивості
+static var HP_MULT: float  # еліта у стільки разів здоровіша
+static var DMG_MULT: float  # і б'є у стільки разів сильніше
+static var XP_MULT: int  # і дає у стільки разів більше досвіду (ціле)
+static var ITEM_CHANCE: float  # шанс речі з еліти
+
+
+## Числа-правила вище лежать у data/settings.json (запис «elites»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("elites")
+	CHANCE = S["chance"]
+	CHANCE_PER_PLAGUE = S["chance_per_plague"]
+	MIN_LEVEL = S["min_level"]
+	SECOND_AFFIX_LEVEL = S["second_affix_level"]
+	HP_MULT = S["hp_mult"]
+	DMG_MULT = S["dmg_mult"]
+	XP_MULT = S["xp_mult"]
+	ITEM_CHANCE = S["item_chance"]
+
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 const _EMPTY := {}

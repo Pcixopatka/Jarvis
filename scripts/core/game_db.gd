@@ -7,6 +7,8 @@ extends RefCounted
 ## Опис полів, проміжки номерів і як додати нечисть чи річ — docs/data.md.
 
 const DIR := "res://data/"
+## Схеми налаштувань балансу (data/settings.json): у кожного запису своя (див. settings()).
+const SettingsSchema := preload("res://scripts/core/settings_schema.gd")
 
 ## Схема запису: поле → {"type": ..., "required": true}. Типи: string, int, float, bool,
 ## color (масив [r, g, b] або [r, g, b, a] із часток 0..1, стає Color), record (вкладений запис
@@ -1274,6 +1276,8 @@ const TABLES := {
 	"sounds": {"file": "sounds.json", "schema": VOLUME_SCHEMA},
 	"ambients": {"file": "ambients.json", "schema": VOLUME_SCHEMA},
 	"name_pools": {"file": "name_pools.json", "schema": NAME_POOL_SCHEMA},
+	# Налаштування балансу: запис — розділ гри зі своєю схемою («schemas» замість «schema», див. settings())
+	"settings": {"file": "settings.json", "schemas": SettingsSchema.SCHEMAS},
 }
 
 ## Проміжки сталих номерів за таблицями: [перший, останній]. Номер запису мусить лежати у своєму
@@ -1310,6 +1314,8 @@ const NUM_RANGES := {
 	# довідник, звуки, імена
 	"wiki_sections": [10401, 10419], "wiki_basics": [10421, 10469], "wiki_orders": [10471, 10479],
 	"sounds": [10501, 10599], "ambients": [10601, 10619], "name_pools": [10701, 10719],
+	# налаштування балансу
+	"settings": [11001, 11099],
 }
 const BOSS_NUM_RANGE := [2001, 2999]  # boss.num у mobs.json
 
@@ -1362,6 +1368,15 @@ static func row(name: String, id: String) -> Dictionary:
 ## Шлях до файлу таблиці.
 static func path_of(name: String) -> String:
 	return DIR + str(TABLES[name]["file"])
+
+
+## Схема запису id таблиці name: спільна для таблиці або, у налаштувань, своя в кожного запису
+## (для невідомого запису налаштувань — порожня).
+static func schema_of(name: String, id: String) -> Dictionary:
+	var T: Dictionary = TABLES[name]
+	if T.has("schemas"):
+		return T["schemas"].get(id, _EMPTY)
+	return T["schema"]
 
 
 static func _load(name: String) -> void:
@@ -1465,7 +1480,8 @@ static func validate(name: String, raw: Dictionary) -> Array:
 static func _normalize_rows(name: String, raw: Dictionary) -> Array:
 	var probs := []
 	var rows := {}
-	var schema: Dictionary = TABLES[name]["schema"]
+	# Налаштування: кожне поле обов'язкове, кожен запис має свою схему, і всі записи мусять бути
+	var every: bool = TABLES[name].has("schemas")
 	for id in raw:
 		var where := "%s/%s" % [name, id]
 		if not id is String or not _is_id(id):
@@ -1473,7 +1489,15 @@ static func _normalize_rows(name: String, raw: Dictionary) -> Array:
 		if not raw[id] is Dictionary:
 			probs.append("%s: запис має бути об'єктом" % where)
 			continue
-		rows[str(id)] = _normalize(raw[id], schema, where, probs)
+		var schema := schema_of(name, str(id))
+		if schema.is_empty():
+			probs.append("%s: невідомий запис (описка? записи — %s)" % [where, ", ".join(TABLES[name]["schemas"].keys())])
+			continue
+		rows[str(id)] = _normalize(raw[id], schema, where, probs, every)
+	if every:
+		for id in TABLES[name]["schemas"]:
+			if not raw.has(id):
+				probs.append("%s: немає запису «%s»" % [name, id])
 	return [rows, probs]
 
 
@@ -1486,7 +1510,8 @@ static func _is_id(id: String) -> bool:
 	return true
 
 
-static func _normalize(rec: Dictionary, schema: Dictionary, where: String, probs: Array) -> Dictionary:
+## every — кожне поле обов'язкове (налаштування балансу).
+static func _normalize(rec: Dictionary, schema: Dictionary, where: String, probs: Array, every: bool = false) -> Dictionary:
 	var out := {}
 	for k in rec:
 		if not schema.has(k):
@@ -1494,17 +1519,17 @@ static func _normalize(rec: Dictionary, schema: Dictionary, where: String, probs
 	for k in schema:
 		var f: Dictionary = schema[k]
 		if not rec.has(k):
-			if f.get("required", false):
+			if every or f.get("required", false):
 				probs.append("%s: немає обов'язкового поля «%s»" % [where, k])
 			continue
-		var v = _value(rec[k], f, "%s.%s" % [where, k], probs)
+		var v = _value(rec[k], f, "%s.%s" % [where, k], probs, every)
 		if v != null:
 			out[k] = v
 	return out
 
 
 ## Одне значення за описом поля; null, якщо воно хибне (тоді проблему вже записано).
-static func _value(v, f: Dictionary, where: String, probs: Array):
+static func _value(v, f: Dictionary, where: String, probs: Array, every: bool = false):
 	var t: String = f["type"]
 	match t:
 		"string":
@@ -1547,7 +1572,7 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 			return null
 		"record":
 			if v is Dictionary:
-				return _normalize(v, f["fields"], where, probs)
+				return _normalize(v, f["fields"], where, probs, every)
 		"enum":
 			if v is String:
 				if v in f["values"]:
@@ -1576,7 +1601,7 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 					return null
 				var out := []
 				for i in v.size():
-					var x = _value(v[i], items[i] if not items.is_empty() else f["of"], "%s[%d]" % [where, i], probs)
+					var x = _value(v[i], items[i] if not items.is_empty() else f["of"], "%s[%d]" % [where, i], probs, every)
 					if x == null:
 						return null
 					out.append(x)
@@ -1585,7 +1610,7 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 			if v is Dictionary:
 				var out := {}
 				for k in v:
-					var x = _value(v[k], f["of"], "%s.%s" % [where, k], probs)
+					var x = _value(v[k], f["of"], "%s.%s" % [where, k], probs, every)
 					if x != null:
 						out[k] = x
 				return out
@@ -1690,6 +1715,9 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 				out.append_array(_unique_nums(name, rows))
 			elif LIFE_TABLES.has(name):
 				out.append_array(_life_rules(name, rows))
+				out.append_array(_unique_nums(name, rows))
+			elif name == "settings":
+				out.append_array(_settings_rules(rows))
 				out.append_array(_unique_nums(name, rows))
 	return out
 
@@ -2046,6 +2074,8 @@ static func _links(name: String, rows: Dictionary) -> Array:
 				out.append_array(_quest_links(name, rows))
 			elif LIFE_TABLES.has(name):
 				out.append_array(_life_links(name, rows))
+			elif name == "settings":
+				out.append_array(_settings_links(rows))
 	return out
 
 
@@ -3467,8 +3497,8 @@ const LIFE_TABLES := ["glory_ranks", "glory_sources", "rivals", "duel_rounds", "
 const CODE_RESOURCES := {"wood": "res", "iron": "res", "herbs": "res", "trophy": "trophy", "meat": "food", "ryba": "food", "veg": "food"}
 ## Будівлі, які код називає прямо (CampService, GardenService), і поле рівня, яке читає код (bag, rate, beds).
 const CODE_BUILDINGS := {"kurin": "", "kuznia": "", "zillia": "", "sklad": "bag", "pasika": "rate", "horod": "beds"}
-## Драбини «round» і скільки кіл чекає код: [служба ("" — Activities), стала].
-const _ROUND_TABLES := {"duel_rounds": ["duel_service", "ROUNDS"], "muster_rounds": ["muster_service", "ROUNDS"], "ring_rounds": ["", "RING_STAGES"]}
+## Драбини «round» і скільки кіл чекає код: [запис налаштувань, поле] (data/settings.json).
+const _ROUND_TABLES := {"duel_rounds": ["duel", "rounds"], "muster_rounds": ["muster", "rounds"], "ring_rounds": ["ring", "ring_stages"]}
 
 
 ## Усі рядки запису (і вкладених записів і списків) не порожні.
@@ -3729,10 +3759,9 @@ static func _life_links(name: String, rows: Dictionary) -> Array:
 			out.append_array(_mechanic_orphans(["rival"], used, "rivals.json"))
 		"duel_rounds", "muster_rounds", "ring_rounds":
 			var src: Array = _ROUND_TABLES[name]
-			var S = load("res://scripts/game/%s.gd" % src[0]) if src[0] != "" else load("res://scripts/data/activities.gd")
-			var want := int(S.get(src[1]))
+			var want := int(settings(src[0]).get(src[1], 0))
 			if rows.size() != want:
-				out.append("%s: кіл %d, а код чекає %d (%s)" % [name, rows.size(), want, src[1]])
+				out.append("%s: кіл %d, а налаштування чекають %d (settings.json: %s.%s)" % [name, rows.size(), want, src[0], src[1]])
 		"muster_teams":
 			var styles := {}
 			for r in ids("rivals"):
@@ -4137,3 +4166,157 @@ static func ladder(name: String, field: String) -> Array:
 		out.make_read_only()
 		_nums[key] = out
 	return _nums[key]
+
+
+# ---------- Налаштування балансу ----------
+
+## Запис налаштувань балансу (data/settings.json): числа-правила одного розділу гри («enemies», «loot»…;
+## поля й межі — SettingsSchema). Лише для читання; для невідомого запису — порожній. Модулі тримають робочі
+## копії цих чисел у static var (їх заповнює apply_settings() модуля), тож бій читає змінну, а не словник.
+static func settings(domain: String) -> Dictionary:
+	return row("settings", domain)
+
+
+## Ставить нові налаштування замість теперішніх (усі записи разом, як у файлі) і роздає їх модулям: так число
+## гри можна змінити без нової збірки (згодом — із сервера). Спершу перевіряє (типи, межі, зв'язки з таблицями);
+## якщо щось не так, нічого не змінює й повертає перелік проблем. check = false — лише типи й повнота (для тестів).
+static func put_settings(raw: Dictionary, check: bool = true) -> Array:
+	var res := _normalize_rows("settings", raw)
+	var probs: Array = validate("settings", raw) if check else res[1]
+	if not probs.is_empty():
+		return probs
+	var rows: Dictionary = res[0]
+	_freeze(rows)
+	var keys := rows.keys()
+	keys.make_read_only()
+	_tables["settings"] = rows
+	_ids["settings"] = keys
+	apply_settings()
+	return []
+
+
+## Роздає налаштування всім модулям, що тримають їхні робочі копії (SettingsSchema.MODULES; у кожного apply_settings()).
+static func apply_settings() -> void:
+	var done := {}
+	for d in SettingsSchema.MODULES:
+		for m in SettingsSchema.MODULES[d]:
+			if not done.has(m[0]):
+				done[m[0]] = true
+				load(m[0]).apply_settings()
+
+
+## Роди ворога, за якими падає душа (Souls.CHANCE; так їх називає SoulService).
+const SOUL_KINDS := ["regular", "elite", "named", "boss"]
+
+
+## Межі чисел налаштувань («check» у SettingsSchema) і зв'язки між ними.
+static func _settings_rules(rows: Dictionary) -> Array:
+	var out := []
+	var cap := int(rows.get("experience", _EMPTY).get("base_level_max", 0))
+	for id in rows:
+		_settings_checks(rows[id], SettingsSchema.SCHEMAS.get(id, _EMPTY), "settings/" + id, cap, out)
+	var pairs := [  # [запис, менше чи рівне, більше чи рівне]
+		["quests", "daily_events", "daily_count"], ["quests", "weekly_events", "weekly_count"],
+		["sharpening", "sharpen_risk_from", "max_upgrade"], ["hero_combat", "charge_min", "charge_full"],
+		["ads", "xp2_seconds", "xp2_max"], ["ads", "drop2_seconds", "drop2_max"], ["far", "event_from", "event_full"],
+		["tower", "mini_affixes", "mini_affixes_top"], ["depths", "rooms_base", "rooms_max"], ["tower", "waves_base", "waves_max"],
+	]
+	for P in pairs:
+		var R: Dictionary = rows.get(P[0], _EMPTY)
+		if R.has(P[1]) and R.has(P[2]) and float(R[P[1]]) > float(R[P[2]]):
+			out.append("settings/%s: «%s» (%s) більше за «%s» (%s)" % [P[0], P[1], R[P[1]], P[2], R[P[2]]])
+	return out
+
+
+static func _settings_checks(R: Dictionary, schema: Dictionary, where: String, cap: int, out: Array) -> void:
+	for k in schema:
+		if not R.has(k) or k == "num":
+			continue
+		var f: Dictionary = schema[k]
+		var v = R[k]
+		var at := "%s.%s" % [where, k]
+		if f["type"] == "record":
+			_settings_checks(v, f["fields"], at, cap, out)
+			continue
+		match str(f.get("check", "")):
+			"chance":
+				if float(v) < 0.0 or float(v) > 1.0:
+					out.append("%s: шанс чи частка — від 0 до 1, а не %s" % [at, v])
+			"pos":
+				if float(v) <= 0.0:
+					out.append("%s: має бути більшим за нуль, а не %s" % [at, v])
+			"nonneg":
+				if float(v) < 0.0:
+					out.append("%s: має бути не від'ємним, а не %s" % [at, v])
+			"count":
+				if int(v) < 1:
+					out.append("%s: має бути не менше 1, а не %s" % [at, v])
+			"level":
+				if int(v) < 0 or int(v) > cap:
+					out.append("%s: рівень від 0 до стелі рівня героя (experience.base_level_max = %d), а не %s" % [at, cap, v])
+			"mults":
+				if v.is_empty():
+					out.append("%s: перелік порожній" % at)
+				for x in v:
+					if float(x) <= 0.0:
+						out.append("%s: множник має бути більшим за нуль, а не %s" % [at, x])
+			"zone":
+				if v.size() != 2 or float(v[0]) < 0.0 or float(v[0]) >= float(v[1]) or float(v[1]) > 1.0:
+					out.append("%s: має бути [від, до], 0 ≤ від < до ≤ 1, а не %s" % [at, v])
+			"curve":
+				if v.is_empty():
+					out.append("%s: мірка без точок" % at)
+				var prev := 0
+				for i in v.size():
+					var P: Dictionary = v[i]
+					if not P.has("level") or not P.has("ttk") or not P.has("hit"):
+						continue  # про брак поля вже сказала схема
+					if int(P["level"]) <= prev:
+						out.append("%s[%d]: рівні точок мають рости, від 1" % [at, i])
+					prev = int(P["level"])
+					if float(P["ttk"]) <= 0.0 or float(P["hit"]) <= 0.0 or float(P["hit"]) >= 1.0:
+						out.append("%s[%d]: ttk має бути більшим за нуль, hit — між 0 і 1" % [at, i])
+			"soul_chance":
+				if v.keys() != SOUL_KINDS:
+					out.append("%s: роди мають бути саме %s, по порядку, а не %s" % [at, str(SOUL_KINDS), str(v.keys())])
+				for x in v.values():
+					if float(x) < 0.0 or float(x) > 1.0:
+						out.append("%s: шанс — від 0 до 1, а не %s" % [at, x])
+
+
+## Зв'язки налаштувань з таблицями: номери рідкостей і ступенів, скільки кіл і викликів є в таблицях,
+## скільки місць у строю загону.
+static func _settings_links(rows: Dictionary) -> Array:
+	var out := []
+	var counts := {"rarity": ladder("rarities", "rank").size() - 1, "tier": ladder("golden_tiers", "tier").size() - 1,
+		"soul_tier": ladder("soul_tiers", "tier").size() - 1}
+	var what := {"rarity": "номер рідкості rarities.json", "tier": "ступінь golden_tiers.json", "soul_tier": "ступінь soul_tiers.json"}
+	for id in rows:
+		var schema: Dictionary = SettingsSchema.SCHEMAS.get(id, _EMPTY)
+		for k in schema:
+			var c := str(schema[k].get("check", ""))
+			if counts.has(c) and rows[id].has(k):
+				var lo := 0 if c == "rarity" else 1
+				if int(rows[id][k]) < lo or int(rows[id][k]) > int(counts[c]):
+					out.append("settings/%s.%s: %s від %d до %d, а не %s" % [id, k, what[c], lo, counts[c], rows[id][k]])
+	for P in [["duel", "rounds", "duel_rounds"], ["muster", "rounds", "muster_rounds"], ["ring", "ring_stages", "ring_rounds"]]:
+		var R: Dictionary = rows.get(P[0], _EMPTY)
+		if R.has(P[1]) and int(R[P[1]]) != ids(P[2]).size():
+			out.append("settings/%s.%s: %d, а в %s.json кіл %d" % [P[0], P[1], int(R[P[1]]), P[2], ids(P[2]).size()])
+	var Q: Dictionary = rows.get("quests", _EMPTY)
+	for kind in ["daily", "weekly"]:
+		var groups := {"base": 0, "event": 0}
+		for t in ids(kind):
+			groups[str(row(kind, t).get("group", "base"))] += 1
+		var n := int(Q.get(kind + "_count", 0))
+		var ev := int(Q.get(kind + "_events", 0))
+		if ev > int(groups["event"]):
+			out.append("settings/quests.%s_events: %d, а шаблонів групи event у %s.json лише %d" % [kind, ev, kind, groups["event"]])
+		if n - ev > int(groups["base"]):
+			out.append("settings/quests.%s_count: решта %d, а шаблонів групи base у %s.json лише %d" % [kind, n - ev, kind, groups["base"]])
+	# Курінь додає до двох місць у загоні (CampService.max_companions), а стрій має місця для всіх (Companion.OFFSETS)
+	var spots: int = load("res://scripts/entities/companion.gd").OFFSETS.size()
+	var most := int(rows.get("party", _EMPTY).get("max_companions", 0)) + 2
+	if most > spots:
+		out.append("settings/party.max_companions: з Куренем супутників буде %d, а в строю загону місць %d (Companion.OFFSETS)" % [most, spots])
+	return out

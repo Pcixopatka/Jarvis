@@ -13,12 +13,30 @@ const StoneService := preload("res://scripts/game/stone_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const MIN_LEVEL := 20
-const GOLD_ITEMS := 3  # золотих речей на тиждень
+static var MIN_LEVEL: int  # з якого рівня героя відкрито ярмарок
+static var GOLD_ITEMS: int  # золотих речей на ярмарку на тиждень
 ## Ціна золотої речі за її ступенем — «fair» у data/golden_tiers.json (трофеї й гривні). Шостий ступінь
 ## лишається надважким печерам, у нього ярмаркової ціни нема.
-const ARTIFACT_TROPHY := 400
-const ARTIFACT_GOLD := 80000
+static var ARTIFACT_TROPHY: int  # ціна артефакта: трофеї
+static var ARTIFACT_GOLD: int  # ціна артефакта: гривні
+
+
+## Числа-правила вище лежать у data/settings.json (запис «fair»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("fair")
+	MIN_LEVEL = S["min_level"]
+	GOLD_ITEMS = S["gold_items"]
+	ARTIFACT_TROPHY = S["artifact_trophy"]
+	ARTIFACT_GOLD = S["artifact_gold"]
+
+
 ## Дрібний товар — data/fair_goods.json: камені долі (ключ — камінь із stones.json) і жетон безпечної
 ## заточки («safe»): назва, трофеї, гривні, скільки на тиждень. Порядок файлу — порядок на прилавку.
 const SAFE := "safe"

@@ -2,6 +2,8 @@ class_name Player
 extends Node2D
 ## Козак — головний герой. Рух, бій, характеристики, вміння і перки.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 signal died
 signal leveled_up(level: int)
 
@@ -25,8 +27,8 @@ const SkillMechanic := preload("res://scripts/mechanics/skill_mechanic.gd")
 const ActMechanic := preload("res://scripts/mechanics/act_mechanic.gd")
 const PowerMechanic := preload("res://scripts/mechanics/power_mechanic.gd")
 const WeaponMechanic := preload("res://scripts/mechanics/weapon_mechanic.gd")
-const ATTACK_SLOTS := 3  # кнопки атак праворуч (біля основного удару)
-const BUFF_SLOTS := 5  # кнопки бафів знизу посередині
+static var ATTACK_SLOTS: int  # кнопок атак праворуч (біля основного удару)
+static var BUFF_SLOTS: int  # кнопок бафів знизу посередині
 
 var combat: Combat
 
@@ -150,15 +152,16 @@ var swing_time := 0.0
 var swing_duration := 0.18
 var swing_full := false
 # --- Комбо, блок, парирування, заряд ---
-const COMBO_WINDOW := 1.0  # скільки чекає серія між ударами
-const COMBO_MULT := [1.0, 1.15, 1.8]  # третій удар серії — сильний і широкий
+static var COMBO_WINDOW: float  # скільки секунд серія чекає наступного удару
+static var COMBO_MULT: Array  # множники шкоди ударів серії (третій — сильний і широкий)
 ## Стрілець не стріляє частіше за 10 разів на секунду: надлишок швидкості йде в силу пострілу (shot_mult).
 ## Так шкода за секунду та сама, а екран не тоне в кулях і гра встигає порахувати кожен постріл.
-const RANGED_MIN_CD := 0.099
-const PARRY_WINDOW := 0.25  # натиснув «Блок» за мить до удару — парирування
-const BLOCK_MULT := 0.35  # частка шкоди, що проходить крізь блок
-const CHARGE_MIN := 0.6  # з якого часу утримання блоку удар уже заряджений
-const CHARGE_FULL := 1.4
+static var RANGED_MIN_CD: float  # стрілець не стріляє частіше (с між пострілами); надлишок швидкості йде в силу пострілу
+static var PARRY_WINDOW: float  # натиснув «Блок» не раніше, ніж за стільки секунд до удару, — парирування
+static var BLOCK_MULT: float  # частка шкоди, що проходить крізь блок
+static var CHARGE_MIN: float  # з якого часу утримання блоку, с, удар уже заряджений
+static var CHARGE_FULL: float  # з якого часу утримання блоку удар заряджений повністю, с
+
 var combo_step := 0
 var combo_timer := 0.0
 var block_held := false
@@ -182,6 +185,27 @@ var _by_skill := {}  # id вивченого вміння → його меха�
 var _acts := {}  # шаблон дії → його механіка
 var _probes := {}  # id уміння → механіка без стану для картки й перезарядки невивченого
 var weapon_mech  # механіка зброї в руках
+
+
+## Числа-правила вище лежать у data/settings.json (запис «hero_combat»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("hero_combat")
+	COMBO_WINDOW = S["combo_window"]
+	COMBO_MULT = S["combo_mult"]
+	RANGED_MIN_CD = S["ranged_min_cd"]
+	PARRY_WINDOW = S["parry_window"]
+	BLOCK_MULT = S["block_mult"]
+	CHARGE_MIN = S["charge_min"]
+	CHARGE_FULL = S["charge_full"]
+	ATTACK_SLOTS = S["attack_slots"]
+	BUFF_SLOTS = S["buff_slots"]
 
 
 func _ready() -> void:

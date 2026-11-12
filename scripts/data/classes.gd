@@ -12,8 +12,23 @@ extends RefCounted
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const BASE_LEVEL_MAX := 99
-const HARDEN_EVERY := 2  # одне очко Загартування за кожні 2 рівні героя
+static var BASE_LEVEL_MAX: int  # стеля рівня героя
+static var HARDEN_EVERY: int  # одне очко Загартування за кожні стільки рівнів героя
+
+
+## Числа-правила вище лежать у data/settings.json (запис «experience»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("experience")
+	BASE_LEVEL_MAX = S["base_level_max"]
+	HARDEN_EVERY = S["harden_every"]
+
 
 const _EMPTY := {}
 const _EMPTY_LIST := []

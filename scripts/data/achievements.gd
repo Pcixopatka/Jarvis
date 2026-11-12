@@ -12,10 +12,27 @@ extends RefCounted
 const GameDB := preload("res://scripts/core/game_db.gd")
 
 ## Скільки викликів щодня й щотижня і скільки з них про події й заняття (правила, не записи).
-const DAILY_COUNT := 4
-const DAILY_EVENTS := 2  # скільки з них про події й заняття
-const WEEKLY_COUNT := 3
-const WEEKLY_EVENTS := 2
+static var DAILY_COUNT: int  # викликів щодня
+static var DAILY_EVENTS: int  # скільки з них про події й заняття
+static var WEEKLY_COUNT: int  # викликів щотижня
+static var WEEKLY_EVENTS: int  # скільки з них про події й заняття
+
+
+## Числа-правила вище лежать у data/settings.json (запис «quests»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("quests")
+	DAILY_COUNT = S["daily_count"]
+	DAILY_EVENTS = S["daily_events"]
+	WEEKLY_COUNT = S["weekly_count"]
+	WEEKLY_EVENTS = S["weekly_events"]
+
 
 static var _lists := {}  # таблиця → [записи в порядку файлу]
 

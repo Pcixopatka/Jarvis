@@ -5,6 +5,8 @@ extends RefCounted
 ## ходити і на 20-му рівні, і на 90-му, а краще спорядження тут справді відчувається.
 ## Героєві, слабшому за позначений рівень, край не піддається: там звичайна нечисть цього рівня.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Data := preload("res://scripts/data/data.gd")
 
 ## Підлога сили нечисті: частка звичайної мірки для рівня героя (Data.enemy_std_hp і enemy_std_dmg).
@@ -12,15 +14,15 @@ const Data := preload("res://scripts/data/data.gd")
 ## у полі для новачків, зайшов уночі в давню печеру. Нечисть свого рівня й так не слабша за мірку.
 ## У Глибинах і Башті підлога помітно нижча за повну мірку: мілкіша глибина чи нижчий поверх мають бути
 ## легшим кроком для героя, якому свій рівень ще не під силу, але не прогулянкою.
-const DEPTH_FLOOR := 0.6
-const TOWER_FLOOR := 0.5
+static var DEPTH_FLOOR: float  # Глибини: нечисть не слабша за цю частку звичайної мірки для рівня героя
+static var TOWER_FLOOR: float  # Башта: те саме
 # Події: облоги, набіги, валки, полон, супровід, розшук, сторож скарбу, лігво на стежці, ніч.
-const EVENT_FLOOR := 0.8
-const NIGHT_MULT := 1.3  # уночі мірка лютіша
+static var EVENT_FLOOR: float  # події (облоги, набіги, валки, полон, супровід, розшук, сторож скарбу, лігво, ніч): те саме
+static var NIGHT_MULT: float  # уночі мірка подій у стільки разів лютіша
 # Новачкам події лишаються як були: мірка вмикається плавно, від EVENT_FROM-го рівня героя до повної сили на EVENT_FULL-му.
-const EVENT_FROM := 10
-const EVENT_FULL := 30
-const GOAL_MAX := 110  # більше стількох на зачистку не просимо, хоч який рівень
+static var EVENT_FROM: int  # мірка подій вмикається плавно з цього рівня героя…
+static var EVENT_FULL: int  # …до повної сили на цьому
+static var GOAL_MAX: int  # більше стількох нечисті на зачистку не просимо, хоч який рівень
 
 
 static func is_far(L: Dictionary) -> bool:
@@ -68,7 +70,29 @@ static func event_mods(player, mult: float = 1.0) -> Dictionary:
 ## У скільки разів міцніші брама, хати, вози й мандрівник на рівні level. Формули їхнього здоров'я зроблені
 ## під стару лінійну шкоду нечисті, тож міцність росте разом з ударом нечисті, і ще на GUARD_EXTRA понад те:
 ## нечисть тепер живе довше й устигає вдарити більше разів. Новачкам (удар не сильніший за старий) без змін.
-const GUARD_EXTRA := 1.25
+static var GUARD_EXTRA: float  # брама, хати, вози й мандрівник міцніші ще у стільки разів понад ріст удару нечисті
+
+
+## Числа-правила вище лежать у data/settings.json (запис «far»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("far")
+	DEPTH_FLOOR = S["depth_floor"]
+	TOWER_FLOOR = S["tower_floor"]
+	EVENT_FLOOR = S["event_floor"]
+	NIGHT_MULT = S["night_mult"]
+	EVENT_FROM = S["event_from"]
+	EVENT_FULL = S["event_full"]
+	GOAL_MAX = S["goal_max"]
+	GUARD_EXTRA = S["guard_extra"]
+
+
 static func guard_mult(level: int, _mods: Dictionary = {}) -> float:
 	var harder: float = Data.enemy_std_dmg(level) / (Data.STD_DMG * (1.0 + Data.OLD_DMG_PER_LEVEL * (level - 1)))
 	return 1.0 + maxf(0.0, harder - 1.0) * GUARD_EXTRA

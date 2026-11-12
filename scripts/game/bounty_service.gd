@@ -11,7 +11,20 @@ const Elites := preload("res://scripts/data/elites.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 
-const MIN_LEVEL := 4  # як і еліти: у найперших місцях розшуку нема
+static var MIN_LEVEL: int  # рівень місцевості, з якого буває розшук
+
+
+## Числа-правила вище лежать у data/settings.json (запис «bounty»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("bounty")
+	MIN_LEVEL = S["min_level"]
 
 
 static func state(world) -> Dictionary:

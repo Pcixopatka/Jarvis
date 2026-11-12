@@ -10,8 +10,24 @@ const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const CHANCE := 0.3
-const COOLDOWN := 2  # стільки походів без пригод після кожної
+static var CHANCE: float  # шанс дорожньої пригоди
+static var COOLDOWN: int  # стільки походів без дорожніх пригод після кожної
+
+
+## Числа-правила вище лежать у data/settings.json (запис «events»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("events")
+	CHANCE = S["road_chance"]
+	COOLDOWN = S["road_cooldown"]
+
+
 ## Пригоди, які вміє prepare(), і варіанти вибору кожної: у data/road_events.json мусять бути саме вони, з
 ## саме такими «choices» (перевіряє GameDB.problems()). Котра пригода трапиться — кидок за порядком файлу таблиці.
 const CHOICES := {

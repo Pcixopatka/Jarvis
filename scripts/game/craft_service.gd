@@ -120,8 +120,22 @@ static func reforge(world, player, uid: int, affix: String) -> String:
 ## Кожен рівень речі коштує окремо й щораз дорожче: гривні ростуть як квадрат рівня, від першого ж рівня.
 ## Так підняти річ із 98-го на 99-й рівень відчутно б'є по кишені, а з 4-го на 5-й ще ні.
 ## Множник за якість — «renew» рідкості: звичайна, добротна, рідкісна, легендарна, золота (вище — як найвища з ним).
-const RENEW_BASE := 20
-const RENEW_GOLD := 4.0
+static var RENEW_BASE: int  # оновлення речі до свого рівня: гривень за рівень (ростуть як квадрат рівня)
+static var RENEW_GOLD: float  # множник ціни оновлення золотої речі
+
+
+## Числа-правила вище лежать у data/settings.json (запис «craft»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("craft")
+	RENEW_BASE = S["renew_base"]
+	RENEW_GOLD = S["renew_gold"]
 
 
 ## Множник ціни оновлення для рідкості r (renew_mult); вища за останню з «renew» — як остання.

@@ -61,12 +61,12 @@ static func biome_resource(biome: String) -> String:
 
 ## Скільки добра падає з нечисті. У версії 0.45 усе це вдвічі-втричі рідше: розвинений герой збирав
 ## ресурси десятками тисяч, і витратити їх було нікуди.
-const RESOURCE_DROP_CHANCE := 0.1  # шанс ресурсу з рядового ворога (було 0,25)
-const BUNDLE_LEVEL_STEP := 10  # у жмені ресурсів з еліти, боса чи зачистки 1 + рівень/10 одиниць (було рівень/4)
-const TROPHY_ELITE_CHANCE := 0.5  # еліта лишає трофей через раз (було завжди)
-const TROPHY_BOSS_BASE := 2  # бос: 2 + рівень/10 трофеїв (було 3 + рівень/5)
-const TROPHY_BOSS_LEVEL_STEP := 10
-const TROPHY_BOUNTY := 1  # голова з дошки розшуку (було 2)
+static var RESOURCE_DROP_CHANCE: float  # шанс ресурсу з рядового ворога
+static var BUNDLE_LEVEL_STEP: int  # у жмені ресурсів з еліти, боса чи зачистки 1 + рівень / стільки одиниць
+static var TROPHY_ELITE_CHANCE: float  # шанс трофея з еліти
+static var TROPHY_BOSS_BASE: int  # трофеїв із боса: основа (+ рівень / trophy_boss_level_step)
+static var TROPHY_BOSS_LEVEL_STEP: int  # і ще трофей за кожні стільки рівнів боса
+static var TROPHY_BOUNTY: int  # трофеїв за голову з дошки розшуку
 
 
 ## Скільки одиниць ресурсу в одній жмені на цьому рівні.
@@ -97,8 +97,29 @@ static func level_value(id: String, field: String, level: int) -> int:
 	return int(lv[mini(level, lv.size()) - 1].get(field, 0))
 
 
-const GARDEN_FAST := 0.75  # на 3-му рівні городу час росту множиться на це
-const PASIKA_CAP_HOURS := 12.0
+static var GARDEN_FAST: float  # на 3-му рівні городу час росту множиться на це
+static var PASIKA_CAP_HOURS: float  # пасіка накопичує мед щонайбільше за стільки годин
+
+
+## Числа-правила вище лежать у data/settings.json (запис «camp»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("camp")
+	RESOURCE_DROP_CHANCE = S["resource_drop_chance"]
+	BUNDLE_LEVEL_STEP = S["bundle_level_step"]
+	TROPHY_ELITE_CHANCE = S["trophy_elite_chance"]
+	TROPHY_BOSS_BASE = S["trophy_boss_base"]
+	TROPHY_BOSS_LEVEL_STEP = S["trophy_boss_level_step"]
+	TROPHY_BOUNTY = S["trophy_bounty"]
+	GARDEN_FAST = S["garden_fast"]
+	PASIKA_CAP_HOURS = S["pasika_cap_hours"]
+
 
 # ======================= Клейноди роду =======================
 ## Довгі цілі для зароблених гривень, трофеїв і ресурсів (див. KleinodService).

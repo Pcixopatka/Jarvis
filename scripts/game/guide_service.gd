@@ -6,11 +6,29 @@ extends RefCounted
 ##
 ## Порада: {"kind", "text", "sub", "place", "tab"}; place — id для мапи ("" — нема), tab — номер вкладки (-1 — нема).
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Data := preload("res://scripts/data/data.gd")
 
 const MAX := 5  # скільки порад показує журнал
-const WEAK_FROM := 10  # з якого рівня героя порадник стежить, чи під силу йому нечисть свого рівня
-const WEAK_GRADE := 3  # оцінка Power.threat, з якої радить зміцнити спорядження (3 — смертельно)
+static var WEAK_FROM: int  # порадник: з цього рівня героя стежить, чи під силу йому нечисть свого рівня
+static var WEAK_GRADE: int  # порадник: з цієї оцінки Power.threat (3 — смертельно) радить зміцнити спорядження
+
+
+## Числа-правила вище лежать у data/settings.json (запис «power»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("power")
+	WEAK_FROM = S["weak_from"]
+	WEAK_GRADE = S["weak_grade"]
+
+
 const TAB_HERO := 0
 const TAB_JOURNAL := 1
 const TAB_SKILLS := 2

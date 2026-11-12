@@ -11,7 +11,7 @@ const Gfx := preload("res://scripts/world/gfx.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 const Mechanic := preload("res://scripts/mechanics/mechanic.gd")
 const Activities := preload("res://scripts/data/activities.gd")
-const HIT_STATUS_CHANCE := 0.3
+static var HIT_STATUS_CHANCE: float  # шанс, що удар нечисті накладе її стан (hit_status у mobs.json)
 
 var combat: Combat
 var kind := "mavka"
@@ -78,6 +78,19 @@ var mechanic = null
 var _mh := 0  # хуки, які механіка написала (біти Mechanic.SETUP...)
 var _mech_boss := false  # механіка — бойова форма боса (запис «boss.mechanic»), а не звичайна
 var _trick := false  # звичайна нечисть має свій прийом (механіка пише ability)
+
+
+## Числа-правила вище лежать у data/settings.json (запис «battle»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("battle")
+	HIT_STATUS_CHANCE = S["hit_status_chance"]
 
 
 func setup(k: String, lvl: int, boss: bool = false) -> void:

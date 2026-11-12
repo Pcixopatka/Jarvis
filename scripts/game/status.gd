@@ -6,7 +6,22 @@ extends RefCounted
 ## plague — лікування вдвічі слабше, weak б'є слабше) і в Enemy (curse — отримує більше шкоди).
 
 const GameDB := preload("res://scripts/core/game_db.gd")
-const TICK := 0.5
+static var TICK: float  # стани (кровотеча, опік…) діють раз на стільки секунд
+
+
+## Числа-правила вище лежать у data/settings.json (запис «battle»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("battle")
+	TICK = S["status_tick"]
+
+
 ## Чий колір бере підсвітка, коли станів кілька (перший знайдений). Тут мусять бути всі стани з
 ## data/statuses.json, а в таблиці — всі стани, що тут (перевіряє GameDB.problems()).
 const TINT_ORDER := ["burn", "plague", "bleed", "chill", "weak", "curse"]

@@ -2,9 +2,126 @@ extends RefCounted
 ## Опис характеристик, дерева вмінь і дерева пасивних перків.
 ## Щоб додати новий вузол — достатньо дописати його сюди та реалізувати ефект у player.gd.
 
-const STAT_BASE := 5
+static var STAT_BASE: int  # початкове значення кожної характеристики героя
 
-# ======================= Баланс (усі ключові числа тут) =======================
+## Числа-правила лежать у data/settings.json (записи «enemies», «experience», «hero_combat», «battle», «loot»,
+## «potions», «buffs», «death», «sharpening», «quests», «party»; docs/data.md, «Налаштування балансу»). Нижче — їхні
+## робочі копії (static var): читати їх так само дешево, як сталі. Заповнює їх apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S_enemies := GameDB.settings("enemies")
+	REF_DPS_BASE = S_enemies["ref_dps"]["base"]
+	REF_DPS_K = S_enemies["ref_dps"]["k"]
+	REF_DPS_POW = S_enemies["ref_dps"]["pow"]
+	REF_EHP_BASE = S_enemies["ref_ehp"]["base"]
+	REF_EHP_Q = S_enemies["ref_ehp"]["q"]
+	REF_EHP_KNEE = S_enemies["ref_ehp"]["knee"]
+	REF_EHP_LIN = S_enemies["ref_ehp"]["lin"]
+	var curve := []
+	for P in S_enemies["enemy_curve"]:
+		curve.append([P["level"], P["ttk"], P["hit"]])
+	GameDB._freeze(curve)
+	ENEMY_CURVE = curve
+	STD_HP = S_enemies["std_hp"]
+	STD_DMG = S_enemies["std_dmg"]
+	OLD_DMG_PER_LEVEL = S_enemies["old_dmg_per_level"]
+	ENDLESS_SOFT = S_enemies["endless_soft"]
+	ENDLESS_HP_PER_LEVEL = S_enemies["endless_hp_per_level"]
+	ENDLESS_DMG_PER_LEVEL = S_enemies["endless_dmg_per_level"]
+	ENEMY_XP_PER_LEVEL = S_enemies["enemy_xp_per_level"]
+	BOSS_HP_MULT = S_enemies["boss_hp_mult"]
+	BOSS_XP_MULT = S_enemies["boss_xp_mult"]
+	BOSS_DMG_MULT = S_enemies["boss_dmg_mult"]
+	var S_experience := GameDB.settings("experience")
+	XP_BASE = S_experience["xp"]["base"]
+	XP_PER_LEVEL = S_experience["xp"]["per_level"]
+	XP_PER_LEVEL_SQ = S_experience["xp"]["per_level_sq"]
+	XP_STEEP_FROM = S_experience["xp"]["steep_from"]
+	XP_STEEP_K = S_experience["xp"]["steep_k"]
+	XP_STEEP_POW = S_experience["xp"]["steep_pow"]
+	XP_LATE_FROM = S_experience["xp"]["late_from"]
+	XP_LATE_STEP = S_experience["xp"]["late_step"]
+	STAT_BASE = S_experience["stat_base"]
+	STAT_POINTS_PER_LEVEL = S_experience["stat_points_per_level"]
+	SKILL_POINTS_PER_LEVEL = S_experience["skill_points_per_level"]
+	PERK_POINTS_PER_LEVEL = S_experience["perk_points_per_level"]
+	PERK_TIER_STEP = S_experience["perk_tier_step"]
+	var S_hero_combat := GameDB.settings("hero_combat")
+	ARMOR_CAP = S_hero_combat["armor_cap"]
+	LIFESTEAL_MAX_HPS = S_hero_combat["lifesteal_max_hps"]
+	MANA_ON_HIT = S_hero_combat["mana_on_hit"]
+	MANA_ON_HIT_CD = S_hero_combat["mana_on_hit_cd"]
+	MANA_ON_SHOT = S_hero_combat["mana_on_shot"]
+	SPI_SOFT = S_hero_combat["spi_soft"]
+	SPI_LATE = S_hero_combat["spi_late"]
+	AGI_ASPD_SOFT = S_hero_combat["agi_aspd_soft"]
+	AGI_ASPD_LATE = S_hero_combat["agi_aspd_late"]
+	var S_battle := GameDB.settings("battle")
+	FIELD_GOAL_BASE = S_battle["field_goal_base"]
+	FIELD_GOAL_PER_LEVEL = S_battle["field_goal_per_level"]
+	DUNGEON_ROOM_BASE = S_battle["dungeon_room_base"]
+	DUNGEON_ROOM_PER = S_battle["dungeon_room_per"]
+	var S_loot := GameDB.settings("loot")
+	ITEM_DROP_CHANCE = S_loot["item_drop_chance"]
+	COIN_GOLD_RATIO = S_loot["coin_gold_ratio"]
+	RARITY_MAX_RANDOM = S_loot["rarity_max_random"]
+	RARITY_QUALITY = S_loot["rarity_quality"]
+	INVENTORY_SIZE = S_loot["inventory_size"]
+	ITEM_PRICE_BASE = S_loot["item_price_base"]
+	ITEM_PRICE_LEVEL = S_loot["item_price_level"]
+	ITEM_PRICE_SPENT = S_loot["item_price_spent"]
+	XP_GOLD_MAX_TOP = S_loot["xp_gold_max_top"]
+	XP_GOLD_TOP_LEVEL = S_loot["xp_gold_top_level"]
+	XP_GOLD_TOP_RARITY = S_loot["xp_gold_top_rarity"]
+	var S_potions := GameDB.settings("potions")
+	POTION_MAX = S_potions["potion_max"]
+	POTION_HEAL = S_potions["potion_heal"]
+	POTION_CD = S_potions["potion_cd"]
+	POTION_START = S_potions["potion_start"]
+	POTION_DROP_CHANCE = S_potions["potion_drop_chance"]
+	POTION_ELITE_CHANCE = S_potions["potion_elite_chance"]
+	POTION_PRICE_BASE = S_potions["potion_price_base"]
+	POTION_PRICE_PER_LEVEL = S_potions["potion_price_per_level"]
+	VARENYK_HEAL = S_potions["varenyk_heal"]
+	VARENYK_MIN = S_potions["varenyk_min"]
+	VARENYK_DROP_CHANCE = S_potions["varenyk_drop_chance"]
+	MANA_POTION_MAX = S_potions["mana_potion_max"]
+	MANA_POTION_RESTORE = S_potions["mana_potion_restore"]
+	MANA_POTION_CD = S_potions["mana_potion_cd"]
+	MANA_POTION_DROP_CHANCE = S_potions["mana_potion_drop_chance"]
+	MANA_POTION_PRICE_BASE = S_potions["mana_potion_price_base"]
+	MANA_POTION_PRICE_PER_LEVEL = S_potions["mana_potion_price_per_level"]
+	var S_buffs := GameDB.settings("buffs")
+	MEAL_TIME = S_buffs["meal_time"]
+	BREW_TIME = S_buffs["brew_time"]
+	INSPIRED_TIME = S_buffs["inspired_time"]
+	BUFF_CAP = S_buffs["buff_cap"]
+	var S_death := GameDB.settings("death")
+	DEATH_XP_LOSS = S_death["death_xp_loss"]
+	DEATH_GOLD_LOSS = S_death["death_gold_loss"]
+	DEATH_XP_FROM = S_death["death_xp_from"]
+	var S_sharpening := GameDB.settings("sharpening")
+	MAX_UPGRADE = S_sharpening["max_upgrade"]
+	UPGRADE_BONUS = S_sharpening["upgrade_bonus"]
+	SHARPEN_RISK_FROM = S_sharpening["sharpen_risk_from"]
+	SHARPEN_SAFE_MULT = S_sharpening["sharpen_safe_mult"]
+	SHARPEN_COST_BASE = S_sharpening["sharpen_cost_base"]
+	SHARPEN_COST_RARITY = S_sharpening["sharpen_cost_rarity"]
+	SHARPEN_COST_LEVEL = S_sharpening["sharpen_cost_level"]
+	var S_quests := GameDB.settings("quests")
+	MAX_ACTIVE_QUESTS = S_quests["max_active_quests"]
+	var S_party := GameDB.settings("party")
+	MAX_COMPANIONS = S_party["max_companions"]
+	# Похідне число: стеля властивості xp чи gold на речі без заточки
+	XP_GOLD_CAP = XP_GOLD_MAX_TOP / (1.0 + UPGRADE_BONUS * MAX_UPGRADE)
+
+
+# ======================= Баланс (числа — у data/settings.json) =======================
 # ---- Сила нечисті: мірка від еталонного героя ----
 # Раніше здоров'я нечисті росло з рівнем лінійно, а шкода героя приблизно як квадрат рівня. На 20-му рівні
 # звичайний ворог падав за чверть секунди, на 75-му за три сотих, і герой міг пропустити понад 60 ударів.
@@ -12,32 +129,32 @@ const STAT_BASE := 5
 # (криві REF_* зняті з tools/power_probe.gd): звичайний заражений тримає ENEMY_TTK секунд його чистої шкоди,
 # а удар забирає ENEMY_HIT його запасу живучості. Хто вдягнений краще за еталон, тому легше; хто гірше, тому важче.
 # Герой у найкращому спорядженні з душами й клейнодами має шкоди в 4–8 разів більше й живучості у 2,5 раза.
-const REF_DPS_BASE := 100.0
-const REF_DPS_K := 2.7
-const REF_DPS_POW := 2.34
-const REF_EHP_BASE := 235.0
-const REF_EHP_Q := 6.1  # до REF_EHP_KNEE-го рівня запас живучості росте квадратом: набирається захист
-const REF_EHP_KNEE := 20
-const REF_EHP_LIN := 143.0  # далі лінійно
+static var REF_DPS_BASE: float  # шкода за секунду еталонного героя: основа
+static var REF_DPS_K: float  # шкода за секунду: множник при рівні в степені pow
+static var REF_DPS_POW: float  # шкода за секунду: степінь рівня (ref_dps = base + k × рівень^pow)
+static var REF_EHP_BASE: float  # запас живучості еталонного героя: основа
+static var REF_EHP_Q: float  # до рівня knee запас росте квадратом: + q × рівень²
+static var REF_EHP_KNEE: int  # рівень, після якого запас росте лінійно
+static var REF_EHP_LIN: float  # після knee: + lin за кожен рівень
 # Мірка за рівнем, точками [рівень, секунд чистої шкоди еталонного героя на звичайного зараженого,
 # частка його запасу живучості за удар]; між точками плавно, після останньої рівно.
 # Новачкові м'яко. До 20-го рівня (сюжет) гра вже тверда: у середньому спорядженні поле свого рівня
 # проходиться із зіллям, печера свого рівня вбиває. Далі мірка росте ще, бо на високих рівнях герой уже
 # має ходити в легендарному: у середньому там дуже важко, у доброму (легендарне із заточкою) суворо,
 # а нормально косити нечисть виходить лише в найкращому. Числа перевірено симуляціями (docs/balance.md).
-const ENEMY_CURVE := [[1, 0.9, 0.045], [20, 1.4, 0.06], [50, 2.5, 0.10]]
-const STD_HP := 70.0  # здоров'я й удар «звичайного зараженого» в таблиці видів (решта видів у пропорції до нього)
-const STD_DMG := 13.0
-const OLD_DMG_PER_LEVEL := 0.16  # стара лінійна шкода нечисті: під неї зроблені формули брам і возів (див. FarService.guard_mult)
+static var ENEMY_CURVE: Array  # мірка за рівнем: точки {level, ttk — секунд чистої шкоди еталонного героя на звичайного зараженого, hit — частка його живучості за удар}; між точками плавно, після останньої рівно
+static var STD_HP: float  # здоров'я «звичайного зараженого» в таблиці видів mobs.json (решта видів у пропорції до нього)
+static var STD_DMG: float  # удар «звичайного зараженого» в таблиці видів (решта видів у пропорції до нього)
+static var OLD_DMG_PER_LEVEL: float  # стара лінійна шкода нечисті за рівень: під неї зроблені формули міцності брам і возів (FarService.guard_mult)
 
 
 ## Башта Кощія й Глибини зарази не мають стелі. До ENDLESS_SOFT-го рівня нечисть росте за звичайною міркою.
 ## Вище рівень росте далі, а здоров'я й удар ще й множаться за кожен рівень понад межу: так сходинки
 ## лишаються відчутними, хоч мірка після 50-го рівня вже рівна. Здобич вище за ENDLESS_SOFT-й рівень не росте:
 ## речі 100–140-го рівня дають лише надважкі печери.
-const ENDLESS_SOFT := 99
-const ENDLESS_HP_PER_LEVEL := 1.02
-const ENDLESS_DMG_PER_LEVEL := 1.015
+static var ENDLESS_SOFT: int  # Башта й Глибини: до цього рівня нечисть росте за звичайною міркою, вище — ще й множиться; здобич вище не росте
+static var ENDLESS_HP_PER_LEVEL: float  # множник здоров'я за кожен рівень понад endless_soft
+static var ENDLESS_DMG_PER_LEVEL: float  # множник удару за кожен рівень понад endless_soft
 
 
 static func endless_hp(lvl: int) -> float:
@@ -100,73 +217,85 @@ static func enemy_hp_scale(lvl: int) -> float:
 
 static func enemy_dmg_scale(lvl: int) -> float:
 	return enemy_std_dmg(lvl) / STD_DMG
-const ENEMY_XP_PER_LEVEL := 0.25  # +25% досвіду з ворога за рівень
-const COIN_GOLD_RATIO := 0.34  # скільки гривень дає монета відносно її досвіду
-const ITEM_DROP_CHANCE := 0.03  # шанс речі з рядового ворога
-const FIELD_GOAL_BASE := 40  # скільки нечисті треба знищити для зачистки
-const FIELD_GOAL_PER_LEVEL := 5
-const BOSS_HP_MULT := 9.0  # бос у стільки разів «товстіший» за звичайного ворога
-const BOSS_XP_MULT := 8
-const BOSS_DMG_MULT := 1.6  # бос б'є у стільки разів сильніше за рядового свого виду
-const ARMOR_CAP := 0.65  # захист не гасить більше цієї частки удару
-const LIFESTEAL_MAX_HPS := 0.015  # вампіризм лікує щонайбільше цю частку здоров'я за секунду
-const MANA_ON_HIT := 1.5  # наснаги за влучний удар зі звичайною швидкістю (швидші удари дають стільки ж за секунду)
-const MANA_ON_HIT_CD := 0.42  # перезарядка удару, для якої рахується MANA_ON_HIT
-const DUNGEON_ROOM_BASE := 6  # ворогів у кімнаті печери: база + за номер кімнати
-const DUNGEON_ROOM_PER := 3
-const POTION_MAX := 5  # скільки зілля можна нести
-const POTION_HEAL := 0.4  # частка здоров'я, яку відновлює зілля
-const POTION_CD := 6.0  # секунд між ковтками
-const POTION_START := 2
-const POTION_DROP_CHANCE := 0.01  # зілля з рядового ворога (до 0.45 було 0,02)
-const POTION_ELITE_CHANCE := 0.15  # зілля з еліти (було 0,3); бос лишає одне завжди
+static var ENEMY_XP_PER_LEVEL: float  # досвіду з ворога більше на цю частку за кожен його рівень
+static var COIN_GOLD_RATIO: float  # скільки гривень дає монета відносно її досвіду
+static var ITEM_DROP_CHANCE: float  # шанс речі з рядового ворога
+static var FIELD_GOAL_BASE: int  # скільки нечисті треба знищити для зачистки: основа
+static var FIELD_GOAL_PER_LEVEL: int  # і ще стільки за кожен рівень місцевості
+static var BOSS_HP_MULT: float  # бос у стільки разів здоровіший за звичайного ворога свого виду
+static var BOSS_XP_MULT: int  # бос дає у стільки разів більше досвіду (ціле)
+static var BOSS_DMG_MULT: float  # бос б'є у стільки разів сильніше за рядового свого виду
+static var ARMOR_CAP: float  # захист не гасить більше цієї частки удару
+static var LIFESTEAL_MAX_HPS: float  # вампіризм лікує щонайбільше цю частку здоров'я за секунду
+static var MANA_ON_HIT: float  # наснаги за влучний удар зі звичайною швидкістю (швидші удари дають стільки ж за секунду)
+static var MANA_ON_HIT_CD: float  # перезарядка удару, с, для якої рахується mana_on_hit
+static var DUNGEON_ROOM_BASE: int  # ворогів у кімнаті печери: основа
+static var DUNGEON_ROOM_PER: int  # і ще стільки за кожен номер кімнати
+static var POTION_MAX: int  # скільки зілля можна нести
+static var POTION_HEAL: float  # частка здоров'я, яку відновлює зілля
+static var POTION_CD: float  # секунд між ковтками зілля
+static var POTION_START: int  # скільки зілля в нового героя
+static var POTION_DROP_CHANCE: float  # шанс зілля з рядового ворога
+static var POTION_ELITE_CHANCE: float  # шанс зілля з еліти (бос лишає одне завжди)
 ## Вареник із нечисті лікує частку здоров'я героя (не менш як VARENYK_MIN): раніше це були ті самі 20
 ## здоров'я на будь-якому рівні, і на високих рівнях вареник нічого не важив. З боса вареник удвічі ситніший.
-const VARENYK_HEAL := 0.08
-const VARENYK_MIN := 20
-const VARENYK_DROP_CHANCE := 0.03  # до 0.45 було 0,05
+static var VARENYK_HEAL: float  # вареник лікує цю частку здоров'я героя (з боса — удвічі більше)
+static var VARENYK_MIN: int  # але не менше стількох здоров'я
+static var VARENYK_DROP_CHANCE: float  # шанс вареника з рядового ворога
 ## Зілля наснаги: окремий запас, відновлює частку наснаги (здоров'я не лікує).
-const MANA_POTION_MAX := 3  # волхви несуть на одне більше
-const MANA_POTION_RESTORE := 0.7
-const MANA_POTION_CD := 6.0
+static var MANA_POTION_MAX: int  # скільки зілля наснаги можна нести (волхви — на одне більше)
+static var MANA_POTION_RESTORE: float  # зілля наснаги відновлює цю частку наснаги
+static var MANA_POTION_CD: float  # секунд між ковтками зілля наснаги
 ## Страви з казана й зілля сили діють певний час бою, а не «один похід». Час іде лише в бою.
-const MEAL_TIME := 1200.0  # страва, секунд бою
-const BREW_TIME := 900.0  # зілля сили й зілля проти зарази
-const INSPIRED_TIME := 600.0  # натхнення від кобзаря в дорозі
-const BUFF_CAP := 3600.0  # більше години наперед не запасти
-const MANA_POTION_DROP_CHANCE := 0.006  # у волхвів удвічі частіше (до 0.45 було 0,012)
+static var MEAL_TIME: float  # страва з казана діє стільки секунд бою
+static var BREW_TIME: float  # зілля сили й зілля проти зарази, секунд бою
+static var INSPIRED_TIME: float  # натхнення від кобзаря в дорозі, секунд бою
+static var BUFF_CAP: float  # більше стількох секунд наперед не запасти
+static var MANA_POTION_DROP_CHANCE: float  # шанс зілля наснаги з рядового ворога (у волхвів удвічі більший)
+static var POTION_PRICE_BASE: int  # ціна зілля: основа + per_level × рівень героя
+static var POTION_PRICE_PER_LEVEL: int  # приріст ціни зілля за рівень героя
+static var MANA_POTION_PRICE_BASE: int  # ціна зілля наснаги: основа + per_level × рівень героя
+static var MANA_POTION_PRICE_PER_LEVEL: int  # приріст ціни зілля наснаги за рівень героя
 
 
 static func potion_price(hero_level: int) -> int:
-	return 25 + 10 * hero_level
+	return POTION_PRICE_BASE + POTION_PRICE_PER_LEVEL * hero_level
 
 
 static func mana_potion_price(hero_level: int) -> int:
-	return 20 + 8 * hero_level
+	return MANA_POTION_PRICE_BASE + MANA_POTION_PRICE_PER_LEVEL * hero_level
 
 
 ## Ціна смерті в бою: частка досвіду, потрібного на поточний рівень (рівень не падає), і частка гривень.
 ## Новачків до DEATH_XP_FROM-го рівня досвідом не караємо. Двобій, варта й вали — випробування, там ціни немає.
-const DEATH_XP_LOSS := 0.01
-const DEATH_GOLD_LOSS := 0.05
-const DEATH_XP_FROM := 10
+static var DEATH_XP_LOSS: float  # частка досвіду, потрібного на поточний рівень, яку забирає смерть (рівень не падає)
+static var DEATH_GOLD_LOSS: float  # частка гривень, яку забирає смерть
+static var DEATH_XP_FROM: int  # до цього рівня досвідом не караємо
 
 
 ## З XP_LATE_FROM-го рівня кожен наступний рівень дорожчий ще на XP_LATE_STEP: дорога до останнього має
 ## відчуватися. У доброму спорядженні в Глибинах рівень на 75-му бере близько півтори години бою,
 ## останній — близько чотирьох (tools/depth_sim.gd, docs/balance.md).
-const XP_LATE_FROM := 50
-const XP_LATE_STEP := 0.08
+
+## Крива досвіду (Data.xp_for_level): основа, приріст за рівень і за його квадрат; з XP_STEEP_FROM-го рівня крутішає.
+static var XP_BASE: int  # досвід на рівень l: base + per_level × l + per_level_sq × l²
+static var XP_PER_LEVEL: int  # приріст досвіду на рівень за кожен рівень
+static var XP_PER_LEVEL_SQ: int  # приріст досвіду на рівень за квадрат рівня
+static var XP_STEEP_FROM: int  # з цього рівня крива крутішає: × (1 + steep_k × (l − steep_from + 1))^steep_pow
+static var XP_STEEP_K: float  # крутість кривої після steep_from
+static var XP_STEEP_POW: float  # степінь кривої після steep_from
+static var XP_LATE_FROM: int  # з цього рівня кожен наступний дорожчий ще на late_step
+static var XP_LATE_STEP: float  # надбавка до ціни рівня за кожен рівень від late_from
 
 
 ## Досвід, потрібний, щоб перейти з рівня l на l+1.
 ## До 30-го рівня крива м'яка (сюжет), далі — крутішає: гра після сюжету розрахована на десятки годин.
 static func xp_for_level(l: int) -> int:
-	var base := 200 + 150 * l + 15 * l * l
-	if l < 30:
+	var base := XP_BASE + XP_PER_LEVEL * l + XP_PER_LEVEL_SQ * l * l
+	if l < XP_STEEP_FROM:
 		return base
 	var late := 1.0 + XP_LATE_STEP * maxi(0, l - XP_LATE_FROM + 1)
-	return int(base * pow(1.0 + 0.6 * (l - 29), 0.8) * late)
+	return int(base * pow(1.0 + XP_STEEP_K * (l - (XP_STEEP_FROM - 1)), XP_STEEP_POW) * late)
 
 
 static func coin_gold(xp_value: int) -> int:
@@ -175,8 +304,8 @@ static func coin_gold(xp_value: int) -> int:
 ## Характерництво підсилює вміння щораз слабше: перші SPI_SOFT очок понад початкові повною мірою (+5% сили вмінь, швидша
 ## перезарядка), кожне наступне — лише часткою SPI_LATE від того. Волхвові Характерництво дає ще й шкоду
 ## посохом, тож без цього його вміння били вп'ятеро сильніше за воїнові (tools/dps_probe.gd).
-const SPI_SOFT := 20.0
-const SPI_LATE := 0.1
+static var SPI_SOFT: float  # Характерництво: стільки очок підсилює вміння повною мірою
+static var SPI_LATE: float  # кожне очко Характерництва понад spi_soft діє лише цією часткою
 
 
 static func soft_spi(spi: float) -> float:
@@ -186,20 +315,20 @@ static func soft_spi(spi: float) -> float:
 ## Стрільцям (лук, пістолі, пищаль) Спритність дає і силу пострілу, і його швидкість. Щоб одна характеристика
 ## не множила сама себе, швидкість пострілу від неї росте повною мірою лише перші AGI_ASPD_SOFT очок,
 ## далі часткою AGI_ASPD_LATE. Сила пострілу й крит ростуть як і раніше.
-const AGI_ASPD_SOFT := 60.0
-const AGI_ASPD_LATE := 0.1
+static var AGI_ASPD_SOFT: float  # Спритність стрільця: стільки очок прискорюють постріл повною мірою
+static var AGI_ASPD_LATE: float  # кожне очко Спритності понад agi_aspd_soft прискорює постріл лише цією часткою
 ## Наснага за звичайний постріл стрільця: частка від того, що дає влучний удар у ближньому бою.
-const MANA_ON_SHOT := 0.5
+static var MANA_ON_SHOT: float  # наснага за звичайний постріл стрільця: частка від влучного удару в ближньому бою
 
 
 static func soft_agi_aspd(agi: float) -> float:
 	return agi if agi <= AGI_ASPD_SOFT else AGI_ASPD_SOFT + (agi - AGI_ASPD_SOFT) * AGI_ASPD_LATE
 
 
-const STAT_POINTS_PER_LEVEL := 3
-const SKILL_POINTS_PER_LEVEL := 1  # очок вмінь за рівень майстерності
-const PERK_POINTS_PER_LEVEL := 1  # очок Загартування за кожні Classes.HARDEN_EVERY рівнів героя
-const PERK_TIER_STEP := 2  # скільки очок треба вкласти в гілку, щоб відкрити наступний ярус
+static var STAT_POINTS_PER_LEVEL: int  # очок характеристик за рівень героя
+static var SKILL_POINTS_PER_LEVEL: int  # очок умінь за рівень майстерності класу
+static var PERK_POINTS_PER_LEVEL: int  # очок Загартування за кожні harden_every рівнів героя
+static var PERK_TIER_STEP: int  # скільки очок треба вкласти в гілку Загартування, щоб відкрити наступний ярус
 
 # Характеристики героя (назва й опис) лежать у data/base_stats.json, Загартування — у
 # data/perk_branches.json і perks.json (docs/data.md, «Класи й уміння»); що вони дають — Player.recalc.
@@ -257,24 +386,31 @@ static func find_perk(id: String) -> Array:
 const GameDB := preload("res://scripts/core/game_db.gd")
 const _EMPTY := {}
 
-const INVENTORY_SIZE := 24
-const MAX_UPGRADE := 10
-const UPGRADE_BONUS := 0.12  # +12% до всіх бонусів речі за кожен рівень заточки
-const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
-const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гривні: у стільки разів дорожча
+static var INVENTORY_SIZE: int  # місць у торбі
+static var MAX_UPGRADE: int  # найвища заточка
+static var UPGRADE_BONUS: float  # бонуси речі більші на цю частку за кожен рівень заточки
+static var SHARPEN_RISK_FROM: int  # з цієї заточки невдача знижує рівень на 1
+static var SHARPEN_SAFE_MULT: float  # заточка без ризику за гривні у стільки разів дорожча
+static var SHARPEN_COST_BASE: int  # ціна заточки: base × (заточка + 1) × (1 + cost_rarity × рідкість) × (1 + cost_level × рівень речі)
+static var SHARPEN_COST_RARITY: float  # приріст ціни заточки за щабель рідкості
+static var SHARPEN_COST_LEVEL: float  # приріст ціни заточки за рівень речі
+static var ITEM_PRICE_BASE: int  # ціна речі: base × (1 + рідкість) × (1 + price_level × рівень) + price_spent × вкладене в заточку
+static var ITEM_PRICE_LEVEL: float  # приріст ціни речі за кожен її рівень
+static var ITEM_PRICE_SPENT: float  # частка гривень, вкладених у заточку, що вертається в ціні
 
 ## Найбільший бонус досвіду чи гривень від однієї речі при найвищій заточці (+MAX_UPGRADE), у відсотках.
 ## Шість речей із найкращою такою властивістю разом дають близько 100%. До версії 0.50 одна легендарна
 ## шапка 99-го рівня на +10 давала +152% досвіду, а сума по всьому спорядженню сягала кількасот відсотків.
-const XP_GOLD_MAX_TOP := 16.7
+static var XP_GOLD_MAX_TOP: float  # найбільший бонус досвіду чи гривень від однієї речі при найвищій заточці, %
 ## Стеля самої властивості xp чи gold на речі (без заточки): заточка множить її до XP_GOLD_MAX_TOP.
 ## Які властивості так рахуються — «capped» у bonuses.json, їхній кидок — там само («roll»).
-const XP_GOLD_CAP := XP_GOLD_MAX_TOP / (1.0 + UPGRADE_BONUS * MAX_UPGRADE)
+static var XP_GOLD_CAP: float  # = XP_GOLD_MAX_TOP / (1 + UPGRADE_BONUS × MAX_UPGRADE), рахує apply_settings()
 ## Найкраща звичайна річ, від якої рахується масштаб: легендарна цього рівня з найвищим кидком дає рівно стелю.
-const XP_GOLD_TOP_LEVEL := 99
-const XP_GOLD_TOP_RARITY := 3
+static var XP_GOLD_TOP_LEVEL: int  # рівень найкращої звичайної речі, від якої рахується масштаб досвіду й гривень
+static var XP_GOLD_TOP_RARITY: int  # і її рідкість
 
-const RARITY_MAX_RANDOM := 3  # випадкова річ не буває унікальною: золоті речі іменні (див. Uniques)
+static var RARITY_MAX_RANDOM: int  # найвища рідкість випадкової речі (вище — лише іменні: золоті, набори, артефакти)
+static var RARITY_QUALITY: float  # якість рідкості: бонуси речі × (1 + rarity_quality × номер рідкості)
 
 ## Яку зброю генерувати в здобичі й крамницях (виставляє гра під клас героя; порожньо — будь-яку «basic»).
 static var weapon_pool: Array = []
@@ -506,7 +642,7 @@ static func fmt_stat(id: String, value: float) -> String:
 ## дорівнює XP_GOLD_CAP. Так само множаться й ці властивості на речах зі старих збережень.
 static func xp_gold_scale(id: String) -> float:
 	var r: Dictionary = GameDB.bonus(id)["roll"]
-	return XP_GOLD_CAP / ((float(r["max"]) + float(r["per_level"]) * XP_GOLD_TOP_LEVEL) * (1.0 + 0.15 * XP_GOLD_TOP_RARITY))
+	return XP_GOLD_CAP / ((float(r["max"]) + float(r["per_level"]) * XP_GOLD_TOP_LEVEL) * (1.0 + RARITY_QUALITY * XP_GOLD_TOP_RARITY))
 
 
 ## Значення властивості під стелею: досвід і гривні не більші за XP_GOLD_CAP, решта як є.
@@ -540,7 +676,7 @@ static func rescale_xp_gold(item: Dictionary) -> bool:
 ## Кидок властивості (bonuses.json, «roll»): дробова — (min..max + per_level × рівень) × якість рідкості,
 ## ціла — від min до max + рівень/every + рідкість/2, досвід і гривні — ще й масштаб і стеля.
 static func _roll_value(id: String, ilvl: int, rarity: int) -> float:
-	var q := 1.0 + 0.15 * rarity
+	var q := 1.0 + RARITY_QUALITY * rarity
 	var B: Dictionary = GameDB.bonus(id)
 	var R: Dictionary = B.get("roll", _EMPTY)
 	if R.is_empty():
@@ -555,7 +691,7 @@ static func _roll_value(id: String, ilvl: int, rarity: int) -> float:
 ## Головний бонус речі (gear_slots.json, «primary»): дробовий — (base + per_level × рівень) × якість,
 ## цілий — base + рівень/every + рідкість/2.
 static func _primary_value(slot: String, ilvl: int, rarity: int) -> float:
-	var q := 1.0 + 0.15 * rarity
+	var q := 1.0 + RARITY_QUALITY * rarity
 	var P: Dictionary = GameDB.gear_slot(slot).get("primary", _EMPTY)
 	if P.is_empty():
 		return 0.0
@@ -659,7 +795,7 @@ static func item_stats(item: Dictionary) -> Dictionary:
 
 
 static func sharpen_cost(item: Dictionary) -> int:
-	return int(20 * (item["up"] + 1) * (1.0 + 0.5 * item["rarity"]) * (1.0 + 0.25 * item["ilvl"]))
+	return int(SHARPEN_COST_BASE * (item["up"] + 1) * (1.0 + SHARPEN_COST_RARITY * item["rarity"]) * (1.0 + SHARPEN_COST_LEVEL * item["ilvl"]))
 
 
 ## Ціна заточки без ризику: звичайна (зі знижкою своєї кузні) × SHARPEN_SAFE_MULT.
@@ -678,7 +814,7 @@ static var sell_mult: float = 1.0
 
 ## Ціна речі без надбавки ярмарку: від неї рахується, за скільки річ продає крамниця.
 static func base_price(item: Dictionary) -> int:
-	return int(8 * (1 + item["rarity"]) * (1.0 + 0.35 * item["ilvl"]) + item["spent"] * 0.3)
+	return int(ITEM_PRICE_BASE * (1 + item["rarity"]) * (1.0 + ITEM_PRICE_LEVEL * item["ilvl"]) + item["spent"] * ITEM_PRICE_SPENT)
 
 
 ## Цінна річ: золота, іменна чи з набору. Її не можна ні купити, ні викувати, тож за повну торбу
@@ -767,8 +903,10 @@ static func loc_level(L: Dictionary, hero_level: int) -> int:
 
 ## Імена, множини й трофеї нечисті — у data/mobs.json (див. GameDB).
 
-const MAX_ACTIVE_QUESTS := 5
-const MAX_COMPANIONS := 2
+static var MAX_ACTIVE_QUESTS: int  # скільки завдань можна взяти водночас
+static var MAX_COMPANIONS: int  # супутників у загоні без Куреня (Курінь додає до двох)
+
+
 
 ## Найманці (ім'я, ціна, сила, механіка бою) — у data/companions.json (див. GameDB).
 

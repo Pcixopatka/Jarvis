@@ -7,15 +7,38 @@ extends RefCounted
 ## Вільний герць — поза турніром, скільки завгодно: суперники виходять один за одним до першої поразки,
 ## кожен наступний міцніший. Перші перемоги дня — з гаманцем, далі б'ються за серію й рекорд.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Acts := preload("res://scripts/data/activities.gd")
 const Data := preload("res://scripts/data/data.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const Power := preload("res://scripts/game/power.gd")
 
-const ROUNDS := 3
-const TRIES := 3
-const MIN_LEVEL := 5
+static var ROUNDS: int  # кіл турніру (стільки ж записів у data/duel_rounds.json)
+static var TRIES: int  # спроб турніру на тиждень
+static var MIN_LEVEL: int  # з якого рівня героя пускають на герць
+static var STREAK_GOLD: float  # вільний герць: гривень більше на цю частку за кожну перемогу серії…
+static var STREAK_MAX: int  # …але враховується не більше стількох перемог
+
+
+## Числа-правила вище лежать у data/settings.json (запис «duel»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("duel")
+	ROUNDS = S["rounds"]
+	TRIES = S["tries"]
+	MIN_LEVEL = S["min_level"]
+	STREAK_GOLD = S["streak_gold"]
+	STREAK_MAX = S["streak_max"]
+
+
 const BELT_NAME := "Пояс чемпіона Січі"
 
 
@@ -160,7 +183,7 @@ static func free_paid_left(world) -> int:
 
 ## Гаманець за перемогу над суперником номер streak+1 у серії.
 static func free_gold(level: int, streak: int) -> int:
-	return int(Acts.FREE_DUEL_GOLD * level * (1.0 + 0.25 * mini(streak, 8)))
+	return int(Acts.FREE_DUEL_GOLD * level * (1.0 + STREAK_GOLD * mini(streak, STREAK_MAX)))
 
 
 ## Опис бою вільного герцю: суперник росте з рівнем героя й міцнішає з кожною перемогою в серії.

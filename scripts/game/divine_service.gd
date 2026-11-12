@@ -3,17 +3,36 @@ extends RefCounted
 ## Куплене лежить у роду (world.shop["divine"]), вдягнене записане в героя (player.divine = {гніздо: id}).
 ## Що дари дають героєві, лягає в player.divine_fx (CampService.apply_effects), у збереження не йде.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Divine := preload("res://scripts/data/divine.gd")
 const Shop := preload("res://scripts/data/shop.gd")
 const SkillInfo := preload("res://scripts/data/skill_info.gd")
 
 # Авто-бафи Німба: бафи з нижньої панелі бою вмикаються самі
-const AUTO_STEP := 0.25  # як часто перевіряти (с): чотири рази на секунду, не щокадру
-const AUTO_NEAR := 600.0  # нечисть ближча за це (приблизно пів екрана телефона) вважається «поруч»
-const AUTO_HEAL_AT := 0.6  # лікувальні вміння вмикаються самі лише нижче цієї частки здоров'я
+static var AUTO_STEP: float  # Німб: як часто перевіряти авто-бафи, с
+static var AUTO_NEAR: float  # Німб: нечисть ближча за стільки пікселів вважається «поруч»
+static var AUTO_HEAL_AT: float  # Німб: лікувальні вміння вмикаються самі лише нижче цієї частки здоров'я
 
-## Чи продаються дари зараз. Типове значення в Divine.ON_SALE; тести можуть перемкнути.
-static var on_sale: bool = Divine.ON_SALE
+
+## Числа-правила вище й вимикач продажу on_sale нижче лежать у data/settings.json (запис «divine»; docs/data.md,
+## «Налаштування балансу»): тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("divine")
+	AUTO_STEP = S["auto_step"]
+	AUTO_NEAR = S["auto_near"]
+	AUTO_HEAL_AT = S["auto_heal_at"]
+	on_sale = S["on_sale"]
+
+
+## Чи продаються дари зараз: робоча копія вимикача Divine.ON_SALE (settings.json, «divine»); тести можуть перемкнути.
+static var on_sale: bool
 const OFF_TEXT := "зараз не продається"
 
 

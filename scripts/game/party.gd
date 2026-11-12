@@ -5,9 +5,24 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const XP_SHARE := 1.0  # частка досвіду з убитого ворога, яку отримує кожен супутник у загоні
-const CURVE := 0.7  # супутникам треба менше досвіду на рівень, ніж козакові
-const HIRE_BELOW_HERO := 2  # новий супутник приходить на стільки рівнів нижче за козака
+static var XP_SHARE: float  # частка досвіду з убитого ворога, яку отримує кожен супутник у загоні
+static var CURVE: float  # супутникам на рівень треба стільки досвіду, як козакові, помножене на це
+static var HIRE_BELOW_HERO: int  # новий супутник приходить на стільки рівнів нижче за героя
+
+
+## Числа-правила вище лежать у data/settings.json (запис «party»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("party")
+	XP_SHARE = S["xp_share"]
+	CURVE = S["curve"]
+	HIRE_BELOW_HERO = S["hire_below_hero"]
 
 
 static func xp_for_level(l: int) -> int:

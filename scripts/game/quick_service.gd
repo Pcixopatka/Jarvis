@@ -5,14 +5,31 @@ extends RefCounted
 ## камені долі й душі дає лише справжній бій. Зараза, ніч, розшук і скарб у швидкому поході не діють.
 ## Стан денної межі — world.ads["quick_day"], world.ads["quick_used"].
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Elites := preload("res://scripts/data/elites.gd")
 const FarService := preload("res://scripts/game/far_service.gd")
 const Premium := preload("res://scripts/game/premium_service.gd")
 
-const MIN_CLEARS := 3  # скільки разів треба пройти місце по-справжньому, щоб відкрився швидкий похід
-const PER_DAY := 10  # швидких походів на день
+static var MIN_CLEARS: int  # скільки разів треба пройти місце по-справжньому, щоб відкрився швидкий похід
+static var PER_DAY: int  # швидких походів на день
+
+
+## Числа-правила вище лежать у data/settings.json (запис «quick»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("quick")
+	MIN_CLEARS = S["min_clears"]
+	PER_DAY = S["per_day"]
+
 
 static var _xp_cache := {}
 

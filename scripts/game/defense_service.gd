@@ -7,19 +7,41 @@ extends RefCounted
 ## Стан — world.defense: {"sieges": {ціль: походів_лишилось}, "ruined": {місто: походів},
 ##                         "won": n, "lost": n, "calm": походів_без_облог}
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
-const CHANCE := 0.22  # шанс нової облоги після походу
-const CHANCE_WANTED := 0.6  # те саме, коли облогу просить виклик тижня
-const CALM := 3  # походів спокою після кожної облоги
-const DEADLINE := 3  # скільки походів місто протримається саме
-const THREAT_RANGE := 4.0  # градусів: заражена місцевість ближче — місту загрожує облога
-const WAVES := 4
-const RUIN_TRIPS := 3
-const RUIN_MARKUP := 0.3  # пограбоване місто: усе дорожче
+static var CHANCE: float  # шанс нової облоги після походу
+static var CHANCE_WANTED: float  # шанс облоги, коли її просить виклик тижня
+static var CALM: int  # походів спокою після кожної облоги
+static var DEADLINE: int  # скільки походів місто протримається саме
+static var THREAT_RANGE: float  # градусів мапи: заражена місцевість ближче — місту загрожує облога
+static var WAVES: int  # хвиль у бою біля брами
+static var RUIN_TRIPS: int  # стільки походів місто лишається пограбованим
+static var RUIN_MARKUP: float  # у пограбованому місті все дорожче на цю частку
+
+
+## Числа-правила вище лежать у data/settings.json (запис «defense»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("defense")
+	CHANCE = S["chance"]
+	CHANCE_WANTED = S["chance_wanted"]
+	CALM = S["calm"]
+	DEADLINE = S["deadline"]
+	THREAT_RANGE = S["threat_range"]
+	WAVES = S["waves"]
+	RUIN_TRIPS = S["ruin_trips"]
+	RUIN_MARKUP = S["ruin_markup"]
 
 
 static func state(world) -> Dictionary:

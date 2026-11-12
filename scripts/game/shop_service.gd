@@ -14,9 +14,22 @@ const Souls := preload("res://scripts/data/souls.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
-## Чи продаються червінці зараз. Типове значення в Shop.COINS_ON_SALE; тести можуть перемкнути.
-static var coins_on_sale: bool = Shop.COINS_ON_SALE
+## Чи продаються червінці зараз: робоча копія вимикача Shop.COINS_ON_SALE (data/settings.json, запис «shop»);
+## тести можуть перемкнути.
+static var coins_on_sale: bool
+
+
+## Вимикач бере з налаштувань, щойно скрипт завантажено, і знову, коли їх змінено під час гри (GameDB.apply_settings).
+static func _static_init() -> void:
+	apply_settings()
+
+
+static func apply_settings() -> void:
+	coins_on_sale = GameDB.settings("shop")["coins_on_sale"]
+
+
 const OFF_TEXT := "Зараз не продається"
 
 

@@ -6,17 +6,40 @@ extends RefCounted
 const GameDB := preload("res://scripts/core/game_db.gd")
 
 ## Шанс душі за одне вбивство (до поправки на гідність ворога й поклик душ).
-const CHANCE := {"regular": 0.00005, "elite": 0.00015, "named": 0.005, "boss": 0.005}
-const CHANCE_PERIL := 0.03  # надважкий бос у своїй печері: бій довгий і лютий, тож душа падає частіше
-const W_MIN := 0.1  # найменша гідність рядового ворога, набагато слабшого за нечисть рівня героя
-const W_MIN_BOSS := 0.25
-const PITY_MAX := 2.0  # поклик душ: невдачі підіймають шанс щонайбільше втричі
-const FIRST_LEVEL := 10  # перша душа героя: з першого ж елітного, розшукуваного чи боса від цього рівня (0 — вимкнено)
-const PROC_LOCK := 8.0  # той самий стан від душі лягає на того самого ворога не частіше ніж раз на стільки секунд
-const BOSS_TIER := 4  # душі від цього ступеня стають лише в зброю й оберіг
+static var CHANCE: Dictionary  # шанс душі за одне вбивство за родом ворога (до поправки на гідність і поклик душ)
+static var CHANCE_PERIL: float  # шанс душі з надважкого боса в його печері
+static var W_MIN: float  # найменша гідність рядового ворога, набагато слабшого за нечисть рівня героя (множник шансу)
+static var W_MIN_BOSS: float  # найменша гідність боса
+static var PITY_MAX: float  # поклик душ: невдачі підіймають шанс щонайбільше в (1 + стільки) разів
+static var FIRST_LEVEL: int  # перша душа героя — з першого ж елітного, розшукуваного чи боса від цього рівня (0 — вимкнено)
+static var PROC_LOCK: float  # той самий стан від душі лягає на того самого ворога не частіше ніж раз на стільки секунд
+static var BOSS_TIER: int  # душі від цього ступеня стають лише в зброю й оберіг
 const BOSS_SLOTS := ["weapon", "amulet"]
-const SOCKET_TROPHY := 3
-const REMOVE_PART := 0.1  # вийняти душу коштує цю частку ціни гнізда
+static var SOCKET_TROPHY: int  # трофеїв за пробите гніздо
+static var REMOVE_PART: float  # вийняти душу коштує цю частку ціни гнізда
+
+
+## Числа-правила вище лежать у data/settings.json (запис «souls»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("souls")
+	CHANCE = S["chance"]
+	CHANCE_PERIL = S["chance_peril"]
+	W_MIN = S["w_min"]
+	W_MIN_BOSS = S["w_min_boss"]
+	PITY_MAX = S["pity_max"]
+	FIRST_LEVEL = S["first_level"]
+	PROC_LOCK = S["proc_lock"]
+	BOSS_TIER = S["boss_tier"]
+	SOCKET_TROPHY = S["socket_trophy"]
+	REMOVE_PART = S["remove_part"]
+
 
 ## Записи — у data/souls.json (душі: назва, ступінь, бонуси «fx» у відсотках, переказ), data/soul_effects.json
 ## (тексти бонусів і межа суми всіх душ разом) і data/soul_tiers.json (ступені: назва, колір, ціна).

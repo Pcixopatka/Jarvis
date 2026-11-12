@@ -1,8 +1,8 @@
 extends RefCounted
 ## Заняття поза сюжетом: герць, огляд, Коло Кожум'яки, розшук, варта, торгівля, полювання, шинок, сліди,
 ## походи побратимів, слава й рекорди, свята, супровід. Записи — у таблицях data/*.json (docs/data.md,
-## «Заняття»), логіка — у службах scripts/game/*_service.gd. Тут — зручні виклики над таблицями й
-## числа-правила, які збере етап загальних налаштувань.
+## «Заняття»), логіка — у службах scripts/game/*_service.gd. Тут — зручні виклики над таблицями й робочі
+## копії чисел-правил занять (самі числа — у data/settings.json, див. apply_settings()).
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
@@ -15,22 +15,22 @@ const GameDB := preload("res://scripts/core/game_db.gd")
 ## порада); кола турніру — data/duel_rounds.json: здоров'я суперника рівня з героєм — скільки секунд чистої шкоди
 ## еталонного героя цього рівня він тримає, удар — частка здоров'я героя вже після його захисту.
 ## Вільний герць: поза турніром, до першої поразки. Кожен наступний суперник у серії міцніший.
-const FREE_DUEL_SECONDS := 20.0  # скільки секунд шкоди еталонного героя тримає перший суперник
-const FREE_DUEL_HIT := 0.11  # частка здоров'я героя за удар першого суперника
-const FREE_DUEL_HP_STEP := 0.12  # за кожну перемогу в серії суперник на стільки здоровіший
-const FREE_DUEL_HIT_STEP := 0.05  # і на стільки сильніше б'є
-const FREE_DUEL_GOLD := 15  # × рівень героя; за серію більше (див. DuelService.free_gold)
-const FREE_DUEL_PAID := 3  # скільки перемог на день оплачується
-const FREE_DUEL_GLORY := 2  # слава за першу оплачену перемогу дня
+static var FREE_DUEL_SECONDS: float  # вільний герць: скільки секунд шкоди еталонного героя тримає перший суперник
+static var FREE_DUEL_HIT: float  # вільний герць: частка здоров'я героя за удар першого суперника
+static var FREE_DUEL_HP_STEP: float  # за кожну перемогу в серії суперник здоровіший на цю частку
+static var FREE_DUEL_HIT_STEP: float  # і б'є сильніше на цю частку
+static var FREE_DUEL_GOLD: int  # гривень за перемогу × рівень героя (за серію більше, DuelService.free_gold)
+static var FREE_DUEL_PAID: int  # скільки перемог вільного герцю на день оплачується
+static var FREE_DUEL_GLORY: int  # слава за першу оплачену перемогу дня
 ## Глядачі на майдані (листи спрайтів; це вигляд, а не дані гри)
 const SPECTATORS := ["comp_dzhura", "comp_strilets", "comp_petro", "cossack_sabre", "cossack_pike", "peasant_pike", "comp_znakhar", "comp_oksana", "zaporozhets_sabre", "plastun_pike"]
 
 # ======================= Дошка розшуку =======================
 ## Ціль — еліта з кількома властивостями, удвічі міцніша. Прізвиська розшукуваної нечисті — у її записі
 ## («bounty_names» у data/mobs.json).
-const BOUNTY_BOARD := 2  # оголошень на дошці міста
-const BOUNTY_ACTIVE := 2  # скільки голів можна шукати водночас
-const BOUNTY_REFRESH := 6  # через стільки походів дошка оновлюється
+static var BOUNTY_BOARD: int  # оголошень на дошці міста
+static var BOUNTY_ACTIVE: int  # скільки голів можна шукати водночас
+static var BOUNTY_REFRESH: int  # через стільки походів дошка оновлюється
 
 # ======================= Гетьманський огляд (Чигирин) =======================
 ## Тижневі сутички ватаг: герой із побратимами проти сотні. Три сутички, три спроби, смерті нема.
@@ -38,94 +38,94 @@ const BOUNTY_REFRESH := 6  # через стільки походів дошка
 ## сутичці), сутички — data/muster_rounds.json, імена бійців — пул «muster_first» у data/name_pools.json, а
 ## прізвиська — «nicks» суперника того самого стилю.
 const MUSTER_CITY := "chyhyryn"
-const MUSTER_MIN_LEVEL := 8
-const MUSTER_CAPTAIN := 1.5  # сотник у стільки разів здоровіший
+static var MUSTER_MIN_LEVEL: int  # з якого рівня героя пускають на огляд
+static var MUSTER_CAPTAIN: float  # сотник у стільки разів здоровіший за бійців
 
 # ======================= Коло Кожум'яки =======================
 ## Три чудовиська поспіль на Змієвих валах (місце "kolo" на мапі); склад міняється щотижня. Хто буває в
 ## колі — пул «ring» у data/boss_pools.json, кола — data/ring_rounds.json.
 ## Сила чудовиськ — від рівня героя: здоров'я — секунди чистої шкоди еталонного героя, удар — частка його живучості
 ## вже після захисту (за колами: перше, друге, третє). Посіпаки чудовиськ — у пропорції до «звичайного зараженого».
-const RING_STAGES := 3  # кіл (стільки ж записів у data/ring_rounds.json)
-const RING_CAP := 0.7  # чудовисько не впаде швидше, ніж за цю частку розрахункового часу
-const RING_STD_TTK := 1.1
-const RING_STD_HIT := 0.035
-const RING_XP := 0.3  # досвіду з кола менше: нагорода тут — гаманець і слава
-const RING_BREAK := 5.0  # перепочинок між чудовиськами, с
-const RING_REPEAT_GOLD := 10  # × рівень: за чудовисько, коли тижневе вже взято
-const RING_REPEAT_PAID := 3  # скільки таких на день оплачується
-const RING_FAST := 90.0  # швидше за стільки секунд бою — досягнення
+static var RING_STAGES: int  # кіл (стільки ж записів у data/ring_rounds.json)
+static var RING_CAP: float  # чудовисько не впаде швидше, ніж за цю частку розрахункового часу
+static var RING_STD_TTK: float  # посіпаки: секунд чистої шкоди еталонного героя на одного
+static var RING_STD_HIT: float  # посіпаки: частка живучості еталонного героя за удар
+static var RING_XP: float  # множник досвіду з кола (нагорода тут — гаманець і слава)
+static var RING_BREAK: float  # перепочинок між чудовиськами, с
+static var RING_REPEAT_GOLD: int  # гривень × рівень героя за чудовисько, коли тижневе вже взято
+static var RING_REPEAT_PAID: int  # скільки таких чудовиськ на день оплачується
+static var RING_FAST: float  # пройшов коло швидше за стільки секунд бою — досягнення
 
 # ======================= Місця на мапі (не міста й не місцевості) =======================
 ## data/spots.json: варта, полювання, рибалка, Коло Кожум'яки; level — з якого рівня героя відкрито.
 
 # ======================= Козацька варта =======================
-const VIGIL_GOAL := 300.0  # секунд, які треба вистояти
-const VIGIL_GOLD := 5  # гривень × рівень × номер хвилини
-const VIGIL_GLORY := 3  # слави за хвилину (до мети)
-const VIGIL_GLORY_GOAL := 10  # додатково за повну варту
+static var VIGIL_GOAL: float  # секунд, які треба вистояти на варті
+static var VIGIL_GOLD: int  # гривень × рівень героя × номер хвилини
+static var VIGIL_GLORY: int  # слави за кожну хвилину (до мети)
+static var VIGIL_GLORY_GOAL: int  # слави додатково за повну варту
 ## Нечисть на варті — частка звичайної мірки рівня героя (Data.enemy_std_hp, enemy_std_dmg): на першій
 ## хвилині вона вдвічі кволіша за нечисть свого рівня, бо суне юрбою, і щохвилини міцнішає.
 ## На п'ятій хвилині здоров'я вже 130% мірки, удар 88%.
-const VIGIL_HP := 0.5
-const VIGIL_HP_STEP := 0.2
-const VIGIL_HIT := 0.4
-const VIGIL_HIT_STEP := 0.12
-const VIGIL_XP := 0.3  # множник досвіду й гривень із ворогів на варті
+static var VIGIL_HP: float  # здоров'я нечисті на першій хвилині: частка звичайної мірки рівня героя
+static var VIGIL_HP_STEP: float  # і ще стільки за кожну хвилину
+static var VIGIL_HIT: float  # удар нечисті на першій хвилині: частка звичайної мірки
+static var VIGIL_HIT_STEP: float  # і ще стільки за кожну хвилину
+static var VIGIL_XP: float  # множник досвіду й гривень із ворогів на варті
 
 # ======================= Чумацький шлях (торгівля крамом) =======================
 ## Крам — data/trade_goods.json (назва й базова ціна одиниці, множиться на «заможність» рівня героя),
 ## торг у містах — data/trade_cities.json (ціна краму відносно базової: менше 1 — тут його роблять).
-const TRADE_WEALTH := 0.15  # ціни ростуть із рівнем героя: +15% за рівень
-const TRADE_SPREAD := 0.9  # продаєш на 10% дешевше, ніж тут купують
-const TRADE_STEP := 0.06  # кожна продана одиниця збиває ціну на 6%, куплена — піднімає
-const TRADE_STOCK := 6  # стільки одиниць кожного краму місто продасть за один торговий день
-const TRADE_PERIOD := 3  # торговий день триває стільки походів; потім ціни й запаси оновлюються
-const TRADE_CART := 6  # місткість воза; кожен рівень Складу додає TRADE_CART_SKLAD
-const TRADE_CART_SKLAD := 4
-const TRADE_AMBUSH := 0.1  # шанс нападу на валку дорогою до міста
-const TRADE_AMBUSH_UNIT := 0.02  # і ще стільки за кожну одиницю краму (не більше TRADE_AMBUSH_MAX)
-const TRADE_AMBUSH_MAX := 0.4
+static var TRADE_WEALTH: float  # ціни краму ростуть на цю частку за кожен рівень героя
+static var TRADE_SPREAD: float  # продаєш за цю частку від ціни, за яку тут купують
+static var TRADE_STEP: float  # кожна продана одиниця збиває ціну на цю частку, куплена — піднімає
+static var TRADE_STOCK: int  # стільки одиниць кожного краму місто продасть за торговий день
+static var TRADE_PERIOD: int  # торговий день триває стільки походів; потім ціни й запаси оновлюються
+static var TRADE_CART: int  # місткість воза без Складу
+static var TRADE_CART_SKLAD: int  # місткість воза: ще стільки за кожен рівень Складу
+static var TRADE_AMBUSH: float  # шанс нападу на валку дорогою до міста
+static var TRADE_AMBUSH_UNIT: float  # і ще стільки за кожну одиницю краму (не більше trade_ambush_max)
+static var TRADE_AMBUSH_MAX: float  # найбільший шанс нападу на валку
 
 # ======================= Полювання, рибалка й казан =======================
 ## Провіант (м'ясо, риба, городина) — ресурси героя з data/resources.json («food»). Звірі —
 ## data/hunt_animals.json, риба — data/fish.json, страви з казана — data/recipes.json (одна страва за раз;
 ## діє Data.MEAL_TIME секунд бою).
-const HUNT_ARROWS := 3
-const HUNT_PASSES := 6  # скільки звірів пробіжить галявиною за одне полювання
-const HUNT_BULLSEYE := 0.45  # частка радіуса: влучив ближче — «в яблучко»
-const FISH_BAIT := 5  # закидів за одну рибалку
-const FISH_ZONE := [0.3, 0.75]  # у цій смузі натягу риба йде до берега
+static var HUNT_ARROWS: int  # стріл на одного звіра
+static var HUNT_PASSES: int  # скільки звірів пробіжить галявиною за одне полювання
+static var HUNT_BULLSEYE: float  # частка радіуса звіра: влучив ближче до серця — «в яблучко»
+static var FISH_BAIT: int  # закидів за одну рибалку
+static var FISH_ZONE: Array  # [від, до]: у цій смузі натягу (частки) риба йде до берега
 
 # ======================= Шинок: кості й чутки =======================
 ## Гра «дванадцять»: кидаєш по кості й додаєш очки; понад DICE_LIMIT — перебір. Суперники — data/dice_rivals.json
 ## (style — як грає, див. TavernService.rival_goes; stake — множник ставки).
-const DICE_LIMIT := 12
-const DICE_GAMES := 8  # партій на день
-const DICE_TWELVE := 1.5  # рівно дванадцять — виграш у півтора раза
-const DICE_GLORY := 1  # слава за першу за день перемогу над сотником
+static var DICE_LIMIT: int  # гра «дванадцять»: понад стільки очок — перебір
+static var DICE_GAMES: int  # партій у кості на день
+static var DICE_TWELVE: float  # рівно дванадцять — виграш у стільки разів
+static var DICE_GLORY: int  # слава за першу за день перемогу над сотником
 ## Чутки: скільки походів живе торгова порада й наскільки вона піднімає ціну.
-const RUMOR_TIP_TRIPS := 3
-const RUMOR_TIP_BONUS := 1.15
+static var RUMOR_TIP_TRIPS: int  # скільки походів живе торгова порада з чуток
+static var RUMOR_TIP_BONUS: float  # у стільки разів порада піднімає ціну краму
 
 # ======================= Сліди на арені =======================
 ## У місцевості трапляється стежка слідів: іди по ній від точки до точки — наприкінці знахідка
 ## (data/trail_kinds.json: вага появи й підпис; що вона дає — Combat).
-const TRAIL_MIN_LEVEL := 3  # новачкові в перших походах не до слідів (і лігво йому зарано)
-const TRAIL_CHANCE := 0.35  # шанс стежки в поході
-const TRAIL_CHANCE_SCOUT := 0.6  # пластун помічає сліди частіше (і бачить усю стежку одразу)
-const TRAIL_START := 200.0  # як далеко від героя починаються сліди
-const TRAIL_STEP := 380.0  # довжина відтинка між точками
-const TRAIL_POINTS := 4  # точок на стежці (остання — знахідка)
-const TRAIL_REACH := 70.0  # наскільки близько треба підійти до точки
-const TRAIL_CACHE_ITEM := 0.45  # шанс речі в схованці
+static var TRAIL_MIN_LEVEL: int  # з цього рівня героя трапляються сліди (і лігво)
+static var TRAIL_CHANCE: float  # шанс стежки слідів у поході
+static var TRAIL_CHANCE_SCOUT: float  # шанс стежки в пластуна (він бачить усю стежку одразу)
+static var TRAIL_START: float  # як далеко від героя починаються сліди, пікселів
+static var TRAIL_STEP: float  # довжина відтинка між точками стежки, пікселів
+static var TRAIL_POINTS: int  # точок на стежці (остання — знахідка)
+static var TRAIL_REACH: float  # наскільки близько треба підійти до точки, пікселів
+static var TRAIL_CACHE_ITEM: float  # шанс речі в схованці
 
 # ======================= Походи побратимів =======================
 ## Супутника можна відправити у власний похід: він іде сам і повертається зі здобиччю (data/expeditions.json).
 ## Поки він у поході, в бою його нема.
-const EXPEDITION_GOLD := 25  # гривень за одиницю множника на 1-му рівні супутника
-const EXPEDITION_LEVEL := 0.15  # приріст здобичі за кожен рівень супутника
-const EXPEDITION_HERO := 1.25  # іменні побратими приносять більше
+static var EXPEDITION_GOLD: int  # гривень за одиницю множника походу на 1-му рівні супутника
+static var EXPEDITION_LEVEL: float  # здобич походу більша на цю частку за кожен рівень супутника
+static var EXPEDITION_HERO: float  # іменні побратими приносять у стільки разів більше
 
 # ======================= Літопис слави: рекорди роду =======================
 ## Рекорди спільні для всіх персонажів (account.records): data/records.json, порядок файлу — порядок показу.
@@ -134,24 +134,124 @@ const EXPEDITION_HERO := 1.25  # іменні побратими принося�
 ## Свята — data/holidays.json (порядок файлу — за календарем, від січня), назви місяців — data/months.json,
 ## пороги жетонів — data/token_scales.json. Які ключі бонусу вміє гра — HolidayService.
 ## Жетони: шанс із звичайної нечисті, скільки з еліти й боса.
-const TOKEN_CHANCE := 0.08
-const TOKEN_ELITE := 2
-const TOKEN_BOSS := 5
-const TOKEN_GLORY := 15  # слава за найвищу нагороду великого свята
-const TOKEN_GLORY_SMALL := 8  # і малого
+static var TOKEN_CHANCE: float  # шанс жетона свята зі звичайної нечисті
+static var TOKEN_ELITE: int  # жетонів з еліти
+static var TOKEN_BOSS: int  # жетонів з боса
+static var TOKEN_GLORY: int  # слава за найвищу нагороду великого свята
+static var TOKEN_GLORY_SMALL: int  # слава за найвищу нагороду малого свята
 
 # ---------- Супровід: завдання міста «проведи мандрівника» (див. EscortService) ----------
 ## Мандрівники — data/escorts.json.
-const ESCORT_CHANCE := 0.22  # частка завдань у дику місцевість, що стають супроводом
-const ESCORT_MULT := 1.6  # нагорода проти звичайного завдання
-const ESCORT_WAVES := 3  # засідок на шляху
-const ESCORT_PACK := 2  # нечисті в засідці: основа й приріст за кожну наступну (4, 6, 8)
-const ESCORT_PACK_STEP := 2
-const ESCORT_SPEED := 46.0  # крок мандрівника, пікселів за секунду
-const ESCORT_FEAR := 250.0  # нечисть ближче — мандрівник стоїть і чекає
-const ESCORT_HP := 260.0  # здоров'я мандрівника: основа й приріст за рівень місцевості
-const ESCORT_HP_LVL := 45.0
-const ESCORT_TIP := 6  # гривень за рівень від вдячного мандрівника, якщо дійшов цілим
+static var ESCORT_CHANCE: float  # частка завдань у дику місцевість, що стають супроводом
+static var ESCORT_MULT: float  # нагорода за супровід у стільки разів більша за звичайне завдання
+static var ESCORT_WAVES: int  # засідок на шляху
+static var ESCORT_PACK: int  # нечисті в першій засідці
+static var ESCORT_PACK_STEP: int  # і ще стільки за кожну наступну засідку
+static var ESCORT_SPEED: float  # крок мандрівника, пікселів за секунду
+static var ESCORT_FEAR: float  # нечисть ближче за стільки пікселів — мандрівник стоїть і чекає
+static var ESCORT_HP: float  # здоров'я мандрівника: основа
+static var ESCORT_HP_LVL: float  # і ще стільки за рівень місцевості
+static var ESCORT_TIP: int  # гривень × рівень від вдячного мандрівника, якщо дійшов цілим
+
+
+## Числа-правила вище лежать у data/settings.json (записи «duel», «muster», «ring», «vigil», «bounty», «trade», «hunting», «tavern», «trails», «expeditions», «holidays», «escort»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S_duel := GameDB.settings("duel")
+	FREE_DUEL_SECONDS = S_duel["free_duel_seconds"]
+	FREE_DUEL_HIT = S_duel["free_duel_hit"]
+	FREE_DUEL_HP_STEP = S_duel["free_duel_hp_step"]
+	FREE_DUEL_HIT_STEP = S_duel["free_duel_hit_step"]
+	FREE_DUEL_GOLD = S_duel["free_duel_gold"]
+	FREE_DUEL_PAID = S_duel["free_duel_paid"]
+	FREE_DUEL_GLORY = S_duel["free_duel_glory"]
+	var S_muster := GameDB.settings("muster")
+	MUSTER_MIN_LEVEL = S_muster["muster_min_level"]
+	MUSTER_CAPTAIN = S_muster["muster_captain"]
+	var S_ring := GameDB.settings("ring")
+	RING_STAGES = S_ring["ring_stages"]
+	RING_CAP = S_ring["ring_cap"]
+	RING_STD_TTK = S_ring["ring_std_ttk"]
+	RING_STD_HIT = S_ring["ring_std_hit"]
+	RING_XP = S_ring["ring_xp"]
+	RING_BREAK = S_ring["ring_break"]
+	RING_REPEAT_GOLD = S_ring["ring_repeat_gold"]
+	RING_REPEAT_PAID = S_ring["ring_repeat_paid"]
+	RING_FAST = S_ring["ring_fast"]
+	var S_vigil := GameDB.settings("vigil")
+	VIGIL_GOAL = S_vigil["vigil_goal"]
+	VIGIL_GOLD = S_vigil["vigil_gold"]
+	VIGIL_GLORY = S_vigil["vigil_glory"]
+	VIGIL_GLORY_GOAL = S_vigil["vigil_glory_goal"]
+	VIGIL_HP = S_vigil["vigil_hp"]
+	VIGIL_HP_STEP = S_vigil["vigil_hp_step"]
+	VIGIL_HIT = S_vigil["vigil_hit"]
+	VIGIL_HIT_STEP = S_vigil["vigil_hit_step"]
+	VIGIL_XP = S_vigil["vigil_xp"]
+	var S_bounty := GameDB.settings("bounty")
+	BOUNTY_BOARD = S_bounty["bounty_board"]
+	BOUNTY_ACTIVE = S_bounty["bounty_active"]
+	BOUNTY_REFRESH = S_bounty["bounty_refresh"]
+	var S_trade := GameDB.settings("trade")
+	TRADE_WEALTH = S_trade["trade_wealth"]
+	TRADE_SPREAD = S_trade["trade_spread"]
+	TRADE_STEP = S_trade["trade_step"]
+	TRADE_STOCK = S_trade["trade_stock"]
+	TRADE_PERIOD = S_trade["trade_period"]
+	TRADE_CART = S_trade["trade_cart"]
+	TRADE_CART_SKLAD = S_trade["trade_cart_sklad"]
+	TRADE_AMBUSH = S_trade["trade_ambush"]
+	TRADE_AMBUSH_UNIT = S_trade["trade_ambush_unit"]
+	TRADE_AMBUSH_MAX = S_trade["trade_ambush_max"]
+	var S_hunting := GameDB.settings("hunting")
+	HUNT_ARROWS = S_hunting["hunt_arrows"]
+	HUNT_PASSES = S_hunting["hunt_passes"]
+	HUNT_BULLSEYE = S_hunting["hunt_bullseye"]
+	FISH_BAIT = S_hunting["fish_bait"]
+	FISH_ZONE = S_hunting["fish_zone"]
+	var S_tavern := GameDB.settings("tavern")
+	DICE_LIMIT = S_tavern["dice_limit"]
+	DICE_GAMES = S_tavern["dice_games"]
+	DICE_TWELVE = S_tavern["dice_twelve"]
+	DICE_GLORY = S_tavern["dice_glory"]
+	RUMOR_TIP_TRIPS = S_tavern["rumor_tip_trips"]
+	RUMOR_TIP_BONUS = S_tavern["rumor_tip_bonus"]
+	var S_trails := GameDB.settings("trails")
+	TRAIL_MIN_LEVEL = S_trails["trail_min_level"]
+	TRAIL_CHANCE = S_trails["trail_chance"]
+	TRAIL_CHANCE_SCOUT = S_trails["trail_chance_scout"]
+	TRAIL_START = S_trails["trail_start"]
+	TRAIL_STEP = S_trails["trail_step"]
+	TRAIL_POINTS = S_trails["trail_points"]
+	TRAIL_REACH = S_trails["trail_reach"]
+	TRAIL_CACHE_ITEM = S_trails["trail_cache_item"]
+	var S_expeditions := GameDB.settings("expeditions")
+	EXPEDITION_GOLD = S_expeditions["expedition_gold"]
+	EXPEDITION_LEVEL = S_expeditions["expedition_level"]
+	EXPEDITION_HERO = S_expeditions["expedition_hero"]
+	var S_holidays := GameDB.settings("holidays")
+	TOKEN_CHANCE = S_holidays["token_chance"]
+	TOKEN_ELITE = S_holidays["token_elite"]
+	TOKEN_BOSS = S_holidays["token_boss"]
+	TOKEN_GLORY = S_holidays["token_glory"]
+	TOKEN_GLORY_SMALL = S_holidays["token_glory_small"]
+	var S_escort := GameDB.settings("escort")
+	ESCORT_CHANCE = S_escort["escort_chance"]
+	ESCORT_MULT = S_escort["escort_mult"]
+	ESCORT_WAVES = S_escort["escort_waves"]
+	ESCORT_PACK = S_escort["escort_pack"]
+	ESCORT_PACK_STEP = S_escort["escort_pack_step"]
+	ESCORT_SPEED = S_escort["escort_speed"]
+	ESCORT_FEAR = S_escort["escort_fear"]
+	ESCORT_HP = S_escort["escort_hp"]
+	ESCORT_HP_LVL = S_escort["escort_hp_lvl"]
+	ESCORT_TIP = S_escort["escort_tip"]
 
 
 # ======================= Зручні виклики над таблицями =======================

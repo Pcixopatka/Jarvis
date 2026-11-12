@@ -5,13 +5,31 @@ extends RefCounted
 ## Доступний у звичайній місцевості чи печері, пройденій MIN_CLEARS разів (із Гетьманським універсалом
 ## досить одного). У надважких печерах, Глибинах, Башті, на босах дня й тижня та в особливих боях його нема.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Data := preload("res://scripts/data/data.gd")
 const Premium := preload("res://scripts/game/premium_service.gd")
 
-const MIN_CLEARS := 3
-const POTION_AT := 0.4  # нижче цієї частки здоров'я герой п'є зілля
-const MANA_AT := 0.2
-const AID_AT := 0.6  # «Перша допомога» лише коли здоров'я нижче
+static var MIN_CLEARS: int  # скільки разів треба пройти місце, щоб відкрився автобій
+static var POTION_AT: float  # нижче цієї частки здоров'я герой п'є зілля
+static var MANA_AT: float  # нижче цієї частки наснаги герой п'є зілля наснаги
+static var AID_AT: float  # «Перша допомога» лише коли частка здоров'я нижча
+
+
+## Числа-правила вище лежать у data/settings.json (запис «auto»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("auto")
+	MIN_CLEARS = S["min_clears"]
+	POTION_AT = S["potion_at"]
+	MANA_AT = S["mana_at"]
+	AID_AT = S["aid_at"]
 
 
 ## Чи буває автобій у цьому бою взагалі (тоді показуємо кнопку).

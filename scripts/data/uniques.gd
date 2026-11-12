@@ -10,10 +10,33 @@ const _EMPTY := {}
 const RARITY := 4
 ## Записи — у data/golden.json (речі), data/powers.json (сили) і data/golden_tiers.json (ступені: назва,
 ## множник головної властивості, шанс із боса, ціни). Тут правила й зручні виклики.
-const TOP_COMMON_TIER := 5  # найвищий ступінь поза надважкими печерами: шостий дають лише їхні боси
-const LUCK_STEP := 20.0  # кожні 20 босів без золота подвоюють шанс
-const LUCK_SURE := 99  # сотий бос поспіль без золота дає річ напевно
-const LEVEL_GAP := 8  # бос має бути не нижчий за героя більш як на стільки рівнів
+static var TOP_COMMON_TIER: int  # найвищий ступінь золота поза надважкими печерами (вищий дають лише їхні боси)
+static var LUCK_STEP: float  # кожні стільки босів без золота подвоюють шанс
+static var LUCK_SURE: int  # стільки босів поспіль без золота — і наступний дає річ напевно
+static var LEVEL_GAP: int  # бос має бути не нижчий за героя більш як на стільки рівнів
+
+
+# Числа з формул цього скрипта (налаштування, як і решта вище).
+static var QUALITY: float  # золота річ проти звичайної того самого рівня: головна властивість × це × множник ступеня
+
+
+## Числа-правила вище лежать у data/settings.json (запис «golden»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("golden")
+	TOP_COMMON_TIER = S["top_common_tier"]
+	LUCK_STEP = S["luck_step"]
+	LUCK_SURE = S["luck_sure"]
+	LEVEL_GAP = S["level_gap"]
+	QUALITY = S["quality"]
+
+
 ## Власний ступінь боса — boss.tier у data/mobs.json. Нового боса без нього оцінюють за рівнем лігва (див. LootService.boss_tier).
 
 static var _tiers: Array = []  # записи ступенів за номером (0 — порожній)
@@ -88,7 +111,7 @@ static func value(stat: String, ilvl: int, m: float) -> float:
 	if Data.is_whole(stat):
 		return floorf(m * (2 + ilvl / 3))
 	var mid: Array = GameDB.bonus(stat)["mid"]
-	var v := 1.6 * (float(mid[0]) + float(mid[1]) * ilvl) * m
+	var v := QUALITY * (float(mid[0]) + float(mid[1]) * ilvl) * m
 	if Data.is_capped(stat):
 		v = Data.cap_affix(stat, v * Data.xp_gold_scale(stat))
 	return v

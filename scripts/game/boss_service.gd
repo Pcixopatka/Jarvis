@@ -19,7 +19,20 @@ const LootService := preload("res://scripts/game/loot_service.gd")
 const KINDS := ["day", "week"]
 ## Поля властивості боса (boss_mods.json), що множаться, а не замінюються.
 const MULT_KEYS := ["boss_dmg_mult", "boss_hp_mult", "boss_speed_mult", "minions"]
-const WEEK_ITEMS := 2  # бос тижня дає дві легендарні речі й золоту
+static var WEEK_ITEMS: int  # легендарних речей із боса тижня (і ще золота)
+
+
+## Числа-правила вище лежать у data/settings.json (запис «events»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("events")
+	WEEK_ITEMS = S["boss_week_items"]
 
 
 ## Запис боса дня чи тижня (boss_hunts.json).

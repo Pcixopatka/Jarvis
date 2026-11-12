@@ -6,6 +6,8 @@ extends RefCounted
 ## Стан — world.muster: {"week": ключ тижня, "round": виграно сутичок (0..3), "tries": спроб лишилось,
 ##   "titles": скільки разів виграно весь огляд, "wins": виграних сутичок за весь час, "prize": чи вже має ладанку}
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Acts := preload("res://scripts/data/activities.gd")
 const Data := preload("res://scripts/data/data.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
@@ -13,8 +15,24 @@ const DuelService := preload("res://scripts/game/duel_service.gd")
 const GloryService := preload("res://scripts/game/glory_service.gd")
 const Power := preload("res://scripts/game/power.gd")
 
-const ROUNDS := 3
-const TRIES := 3
+static var ROUNDS: int  # сутичок (стільки ж записів у data/muster_rounds.json)
+static var TRIES: int  # спроб на тиждень
+
+
+## Числа-правила вище лежать у data/settings.json (запис «muster»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("muster")
+	ROUNDS = S["rounds"]
+	TRIES = S["tries"]
+
+
 const PRIZE_NAME := "Гетьманська ладанка"
 
 

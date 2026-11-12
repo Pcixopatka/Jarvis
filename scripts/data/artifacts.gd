@@ -7,16 +7,35 @@ const GameDB := preload("res://scripts/core/game_db.gd")
 const RARITY := 5
 const SLOT := "artifact"
 ## Шанс трофея з господаря лігва за одну перемогу. Повторів нема: що вже лежить у торбі, удруге не падає.
-const CHANCE := 0.04
-const CHANCE_TOWER := 0.06  # супербос Башти
-const CHANCE_GREY := 0.02  # бос, значно слабший за героя (див. Uniques.LEVEL_GAP)
-const CHANCE_PERIL := 0.08  # надважкий бос у своїй печері
+static var CHANCE: float  # шанс трофея з господаря лігва за одну перемогу
+static var CHANCE_TOWER: float  # шанс артефакта із супербоса Башти
+static var CHANCE_GREY: float  # шанс артефакта з боса, значно слабшого за героя (golden.level_gap)
+static var CHANCE_PERIL: float  # шанс артефакта з надважкого боса в його печері
 ## Доля трофея: кожна перемога над босом без його артефакта наближає удачу саме з цим босом.
 ## Без цього кожен десятий гравець бив одного боса понад 59 разів, а кожен сотий понад 113 (tools/loot_probe.gd).
 ## Із цими числами трофей у середньому за 17 перемог (без долі було 25), кожен десятий чекає понад 36,
 ## найдовше 61.
-const LUCK_STEP := 30.0  # за стільки перемог без трофея шанс подвоюється
-const LUCK_SURE := 60  # стільки перемог поспіль без трофея, і наступна дає його напевно
+static var LUCK_STEP: float  # за стільки перемог без трофея шанс подвоюється
+static var LUCK_SURE: int  # стільки перемог поспіль без трофея — і наступна дає його напевно
+
+
+## Числа-правила вище лежать у data/settings.json (запис «artifacts»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("artifacts")
+	CHANCE = S["chance"]
+	CHANCE_TOWER = S["chance_tower"]
+	CHANCE_GREY = S["chance_grey"]
+	CHANCE_PERIL = S["chance_peril"]
+	LUCK_STEP = S["luck_step"]
+	LUCK_SURE = S["luck_sure"]
+
 
 ## Записи — у data/artifacts.json: назва, чий трофей («boss»), бонуси («bonus»: ключ → значення, їх читають
 ## Player і служби), текст і переказ.

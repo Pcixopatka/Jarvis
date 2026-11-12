@@ -3,13 +3,32 @@ extends RefCounted
 ## Із Гетьманським універсалом (PremiumService) реклама не потрібна: ×2 досвіду й ×2 здобичі діють
 ## постійно, накопичені години не згорають, а безпечних заточок на день більше.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Premium := preload("res://scripts/game/premium_service.gd")
 
-const XP2_SECONDS := 3600.0  # ×2 досвіду на годину гри (час іде лише в поході)
-const XP2_MAX := 3.0 * 3600.0  # можна накопичити до 3 годин
-const DROP2_SECONDS := 3600.0  # ×2 здобичі: так само година гри за перегляд
-const DROP2_MAX := 3.0 * 3600.0
-const SAFE_PER_DAY := 3  # безпечних заточок за рекламу на день
+static var XP2_SECONDS: float  # ×2 досвіду: секунд гри за перегляд (час іде лише в поході)
+static var XP2_MAX: float  # ×2 досвіду: можна накопичити до стількох секунд
+static var DROP2_SECONDS: float  # ×2 здобичі: секунд гри за перегляд
+static var DROP2_MAX: float  # ×2 здобичі: можна накопичити до стількох секунд
+static var SAFE_PER_DAY: int  # безпечних заточок за рекламу на день
+
+
+## Числа-правила вище лежать у data/settings.json (запис «ads»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("ads")
+	XP2_SECONDS = S["xp2_seconds"]
+	XP2_MAX = S["xp2_max"]
+	DROP2_SECONDS = S["drop2_seconds"]
+	DROP2_MAX = S["drop2_max"]
+	SAFE_PER_DAY = S["safe_per_day"]
 
 
 static func xp2_left(world) -> float:

@@ -2,6 +2,8 @@ extends Node2D
 ## Брама міста (частокіл) чи тин хутора в бою-обороні. Нечисть б'є її, як козака;
 ## коли міцність падає до нуля — оборону програно.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 var combat
 var max_hp := 1000.0
 var hp := 1000.0
@@ -20,7 +22,20 @@ var walking := false  # іде (true) чи стоїть
 var scared := false  # нечисть поруч: стоїть і озирається
 var step := 0.0  # фаза кроку
 var flinch := 0.0  # щойно влучили (здалеку теж): на мить завмирає
-const FLINCH_TIME := 1.2
+static var FLINCH_TIME: float  # брама після удару тремтить стільки секунд
+
+
+## Числа-правила вище лежать у data/settings.json (запис «battle»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("battle")
+	FLINCH_TIME = S["gate_flinch_time"]
 
 
 func take_damage(amount: float, _source = null) -> bool:

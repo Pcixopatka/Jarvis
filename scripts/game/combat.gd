@@ -49,10 +49,10 @@ const DUEL_ARENA := Rect2(-480, -360, 960, 720)  # майдан для герц�
 const MUSTER_ARENA := Rect2(-680, -480, 1360, 960)  # майдан для сутички ватаг
 const VIGIL_ARENA := Rect2(-1000, -800, 2000, 1600)  # сторожова могила
 const RING_ARENA := Rect2(-720, -540, 1440, 1080)  # Коло Кожум'яки на Змієвих валах
-const FIELD_ALIVE_BASE := 4  # нечисті водночас у дикій місцевості: стільки плюс одна за кожні FIELD_ALIVE_STEP рівнів
-const FIELD_ALIVE_STEP := 5
-const FIELD_SPAWN_MIN := 1.0  # найменше секунд між появами нової нечисті
-const PACE_MAX := 22  # більше за 7 + стільки ворогів на арені дикої місцевості разом не буває
+static var FIELD_ALIVE_BASE: int  # нечисті водночас у дикій місцевості: основа (і ще одна за кожні field_alive_step рівнів)
+static var FIELD_ALIVE_STEP: int  # і ще одна нечисть за кожні стільки рівнів
+static var FIELD_SPAWN_MIN: float  # найменше секунд між появами нової нечисті
+static var PACE_MAX: int  # на арені дикої місцевості разом не буває більше за 7 + стільки ворогів
 const BIOME_TINT := {
 	"steppe": Color(1.0, 0.97, 0.9), "river": Color(0.97, 1.0, 1.0), "forest": Color(0.82, 0.92, 0.82),
 	"swamp": Color(0.78, 0.86, 0.8), "mountain": Color(0.92, 0.95, 1.0), "cave": Color(0.2, 0.18, 0.25),
@@ -113,7 +113,7 @@ var _filter_sold := 0  # скільки речей продано на вихо�
 var _filter_gold := 0
 var _sweep_sold := 0  # скільки речей продано при прибиранні перед виходом, бо не вмістились
 var _sweep_gold := 0
-const FIELD_PAIR_CHANCE := 0.5  # шанс, що в далекому полі замість одного ворога вийдуть двоє
+static var FIELD_PAIR_CHANCE: float  # шанс, що в далекому полі замість одного ворога вийдуть двоє
 var drop_boost := 1.0  # ×2 здобичі за рекламу (виставляє Game щокадру)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість місця з data/places.json)
 var gate = null
@@ -136,6 +136,23 @@ var field_cleared := false
 var shake_strength := 0.0
 var _hitstop_active := false
 var _time := 0.0
+
+
+## Числа-правила вище лежать у data/settings.json (запис «battle»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("battle")
+	FIELD_ALIVE_BASE = S["field_alive_base"]
+	FIELD_ALIVE_STEP = S["field_alive_step"]
+	FIELD_SPAWN_MIN = S["field_spawn_min"]
+	PACE_MAX = S["pace_max"]
+	FIELD_PAIR_CHANCE = S["field_pair_chance"]
 
 
 func _ready() -> void:

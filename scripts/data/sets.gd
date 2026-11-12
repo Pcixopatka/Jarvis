@@ -13,11 +13,28 @@ const MARK := "✦"
 const STEPS := [2, 4, 6]  # щаблі бонусу: кожен набір у sets.json має саме ці (перевіряє GameDB.problems())
 ## Шанс речі набору: з надважкого боса, з елітної нечисті надважкої печери.
 ## Перша перемога над кожним надважким босом дає річ набору напевно.
-const BOSS_CHANCE := 0.25
-const ELITE_CHANCE := 0.03
+static var BOSS_CHANCE: float  # шанс речі набору з надважкого боса (перша перемога — напевно)
+static var ELITE_CHANCE: float  # шанс речі набору з елітної нечисті надважкої печери
 ## Яку річ дадуть: набір під головну рису класу й річ, якої ще нема, трапляються частіше.
-const W_CLASS := 4.0
-const W_NEW := 4.0
+static var W_CLASS: float  # вага набору під головну рису класу (решта — 1)
+static var W_NEW: float  # вага речі набору, якої ще нема (решта — 1)
+
+
+## Числа-правила вище лежать у data/settings.json (запис «sets»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("sets")
+	BOSS_CHANCE = S["boss_chance"]
+	ELITE_CHANCE = S["elite_chance"]
+	W_CLASS = S["w_class"]
+	W_NEW = S["w_new"]
+
 
 ## Записи — у data/sets.json (набори: назва, родовий відмінок, головна риса класу «stat», з яких бонусів
 ## кидаються властивості «affixes», бонуси за 2, 4 і 6 речей) і data/set_effects.json (тексти бонусів).

@@ -49,6 +49,7 @@ func _run() -> void:
 	_suite_class_db()
 	_suite_quest_db()
 	_suite_life_db()
+	_suite_settings_db()
 	await _suite_rival_mechanics()
 	_suite_player()
 	_suite_save()
@@ -19459,3 +19460,233 @@ func _suite_rival_mechanics() -> void:
 	await _frames(2)
 	game.queue_free()
 	await _frames(2)
+
+
+## Налаштування балансу (data/settings.json): кожне число-правило лежить лише там, модулі тримають робочі копії
+## (static var), їх можна змінити під час гри, а зламаний запис помічає перевірка.
+func _suite_settings_db() -> void:
+	suite("Налаштування балансу")
+	var SS = load("res://scripts/core/settings_schema.gd")
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("settings")))
+	var vprobs := GameDB.validate("settings", raw)
+	check(vprobs.is_empty(), "налаштування з файлу без проблем: %s" % str(vprobs.slice(0, 5)))
+	# ---- Записи: усі розділи є, номери в проміжку 11001… і за порядком ----
+	var doms: Array = SS.SCHEMAS.keys()
+	check(GameDB.ids("settings") == doms and doms.size() == SS.MODULES.size() and doms.size() == SS.TITLES.size(), "у файлі всі %d розділів у порядку схеми, у кожного є модулі й заголовок" % doms.size())
+	var num_bad := []
+	for i in doms.size():
+		if int(GameDB.settings(doms[i])["num"]) != 11001 + i or GameDB.by_num("settings", 11001 + i) != doms[i]:
+			num_bad.append(doms[i])
+	check(num_bad.is_empty() and GameDB.NUM_RANGES["settings"] == [11001, 11099], "номери записів 11001… по порядку, шукаються за номером: %s" % str(num_bad))
+	# ---- Типи й заморожені записи ----
+	var Elites = load("res://scripts/data/elites.gd")
+	var Souls = load("res://scripts/data/souls.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var PS = load("res://scripts/entities/player.gd")
+	var L: Dictionary = GameDB.settings("loot")
+	check(L.is_read_only() and GameDB.settings("enemies")["enemy_curve"].is_read_only() and GameDB.settings("enemies")["enemy_curve"][0].is_read_only()
+		and GameDB.settings("enemies")["ref_dps"].is_read_only() and GameDB.settings("souls")["chance"].is_read_only(), "записи налаштувань заморожені")
+	check(typeof(L["item_drop_chance"]) == TYPE_FLOAT and typeof(L["inventory_size"]) == TYPE_INT and typeof(GameDB.settings("enemies")["enemy_curve"][0]["level"]) == TYPE_INT
+		and typeof(GameDB.settings("enemies")["std_hp"]) == TYPE_FLOAT and typeof(GameDB.settings("shop")["coins_on_sale"]) == TYPE_BOOL, "цілі — цілі, дробові — дробові, вимикачі — так/ні")
+	check(typeof(Data.ITEM_DROP_CHANCE) == TYPE_FLOAT and typeof(Data.INVENTORY_SIZE) == TYPE_INT and typeof(Elites.XP_MULT) == TYPE_INT and typeof(Data.BOSS_XP_MULT) == TYPE_INT
+		and typeof(Data.STD_HP) == TYPE_FLOAT and typeof(Acts.FISH_ZONE) == TYPE_ARRAY and typeof(Souls.CHANCE) == TYPE_DICTIONARY and typeof(PS.COMBO_MULT[0]) == TYPE_FLOAT
+		and typeof(Data.ENEMY_CURVE[0][0]) == TYPE_INT and typeof(Data.ENEMY_CURVE[0][1]) == TYPE_FLOAT, "робочі копії в модулях тих самих типів, що були сталі")
+	check(Data.ENEMY_CURVE.is_read_only() and Data.ENEMY_CURVE[0].is_read_only() and PS.COMBO_MULT.is_read_only() and Souls.CHANCE.is_read_only() and Acts.FISH_ZONE.is_read_only(),
+		"перелічені числа модулів лише для читання, як були сталі")
+	check(is_same(Data.ITEM_DROP_CHANCE, L["item_drop_chance"]) and Data.XP_GOLD_CAP == Data.XP_GOLD_MAX_TOP / (1.0 + Data.UPGRADE_BONUS * Data.MAX_UPGRADE),
+		"модуль бере число з налаштувань, похідне (XP_GOLD_CAP) рахує з них")
+	# ---- Кожне поле дійшло до свого модуля, і жодне не лишилося сталою ----
+	var where := _settings_targets(SS)
+	var lost: Array = where[1]
+	var targets: Dictionary = where[0]
+	check(lost.is_empty() and not targets.is_empty(), "кожне поле налаштувань має робочу копію в одному з модулів запису (static var, не стала): %s" % str(lost))
+	var mism := _settings_mismatch(targets)
+	check(mism.is_empty(), "робочі копії дорівнюють налаштуванням (тип і значення): %s" % str(mism.slice(0, 5)))
+	var consts := []
+	for d in SS.MODULES:
+		for m in SS.MODULES[d]:
+			var cm: Dictionary = load(m[0]).get_script_constant_map()
+			for key in targets:
+				if str(key).begins_with(d + ".") and cm.has(targets[key][1]):
+					consts.append("%s.%s" % [m[0].get_file(), targets[key][1]])
+	check(consts.is_empty(), "перенесені імена ніде в модулях запису не лишилися сталими: %s" % str(consts))
+	# Ініціалізатор static var виконується раніше за _static_init, а в зібраній грі ще й в іншому порядку: він не
+	# має читати перенесених чисел (усе похідне рахує apply_settings()). Сталі, що їх читають, не скомпілюються.
+	var moved_names := {}
+	for key in targets:
+		moved_names[targets[key][1]] = true
+	moved_names["XP_GOLD_CAP"] = true
+	var re := RegEx.new()
+	re.compile("\\b(" + "|".join(moved_names.keys()) + ")\\b")
+	var early := []
+	for path in _gd_files("res://scripts"):
+		var lines := FileAccess.get_file_as_string(path).split("\n")
+		for i in lines.size():
+			var code := lines[i].get_slice("#", 0)
+			if code.begins_with("static var ") and "=" in code and re.search(code.get_slice("=", 1)) != null:
+				early.append("%s:%d" % [path.get_file(), i + 1])
+	check(early.is_empty() and moved_names.size() > 300, "жоден ініціалізатор static var не читає перенесених чисел: %s" % str(early))
+	# ---- Нові налаштування під час гри: модулі беруть нові числа ----
+	var orig: Dictionary = raw.duplicate(true)
+	var file_rows: Dictionary = GameDB.table("settings")
+	var edit: Dictionary = raw.duplicate(true)
+	edit["loot"]["item_drop_chance"] = 0.5
+	edit["elites"]["hp_mult"] = 3.25
+	edit["sharpening"]["max_upgrade"] = 12
+	edit["shop"]["coins_on_sale"] = true
+	edit["divine"]["on_sale"] = false
+	var put := GameDB.put_settings(edit)
+	check(put.is_empty() and Data.ITEM_DROP_CHANCE == 0.5 and Elites.HP_MULT == 3.25 and Data.MAX_UPGRADE == 12 and Data.XP_GOLD_CAP == Data.XP_GOLD_MAX_TOP / (1.0 + Data.UPGRADE_BONUS * 12)
+		and load("res://scripts/data/shop.gd").COINS_ON_SALE and load("res://scripts/game/shop_service.gd").coins_on_sale and not load("res://scripts/game/divine_service.gd").on_sale and GameDB.settings("loot")["item_drop_chance"] == 0.5,
+		"змінене в копії налаштувань число після put_settings — у модулях (і похідне, і вимикачі продажу): %s" % str(put.slice(0, 3)))
+	# Кожне поле окремо: усі числа змінено, і кожна робоча копія стала новим числом
+	var bumped := {}
+	for d in doms:
+		bumped[d] = _settings_bump(file_rows[d], SS.SCHEMAS[d])
+	var put2 := GameDB.put_settings(bumped, false)
+	var mism2 := _settings_mismatch(targets)
+	var same := []
+	for key in targets:
+		if var_to_str(targets[key][0].get(targets[key][1])) == var_to_str(_settings_value_in(file_rows, key)):
+			same.append(key)
+	check(put2.is_empty() and mism2.is_empty() and same.is_empty(), "кожне з %d полів, змінене в налаштуваннях, змінює своє число в модулі: %s %s" % [targets.size(), str(mism2.slice(0, 5)), str(same.slice(0, 5))])
+	# Назад: числа з файлу
+	var back := GameDB.put_settings(orig)
+	_set_sale(true)
+	check(back.is_empty() and _settings_mismatch(targets).is_empty() and is_same(Data.ITEM_DROP_CHANCE, GameDB.settings("loot")["item_drop_chance"])
+		and Data.XP_GOLD_CAP == Data.XP_GOLD_MAX_TOP / (1.0 + Data.UPGRADE_BONUS * Data.MAX_UPGRADE) and not load("res://scripts/data/shop.gd").COINS_ON_SALE, "налаштування з файлу повернулися в модулі")
+	# ---- Зламаний запис помічає перевірка, і такі налаштування не ставляться ----
+	var bad: Dictionary = raw.duplicate(true)
+	bad["loot"]["item_drop_chance"] = 1.5
+	bad["potions"]["potion_max"] = "п'ять"
+	bad["elites"]["chanse"] = 0.1
+	bad["death"].erase("death_gold_loss")
+	bad.erase("ads")
+	bad["bogus"] = {"num": 11098}
+	bad["trails"]["trail_min_level"] = 150
+	bad["enemies"]["enemy_curve"][1]["level"] = 1
+	bad["quests"]["daily_count"] = 40
+	bad["party"]["max_companions"] = 9
+	bad["duel"]["rounds"] = 5
+	bad["loot"]["rarity_max_random"] = 9
+	bad["hunting"]["fish_zone"] = [0.8, 0.3]
+	bad["souls"]["chance"].erase("named")
+	bad["battle"]["field_spawn_min"] = 0
+	var bp := GameDB.validate("settings", bad)
+	var want := {"шанс": "settings/loot.item_drop_chance: шанс", "тип": "settings/potions.potion_max: має бути цілим числом", "невідоме поле": "settings/elites: невідоме поле «chanse»",
+		"нема поля": "settings/death: немає обов'язкового поля «death_gold_loss»", "нема запису": "settings: немає запису «ads»", "невідомий запис": "settings/bogus: невідомий запис",
+		"рівень": "settings/trails.trail_min_level: рівень від 0 до стелі", "мірка": "settings/enemies.enemy_curve[1]: рівні точок мають рости", "виклики": "settings/quests.daily_count:",
+		"загін": "settings/party.max_companions:", "кола": "settings/duel.rounds:", "рідкість": "settings/loot.rarity_max_random: номер рідкості", "смуга": "settings/hunting.fish_zone:",
+		"душі": "settings/souls.chance: роди", "більше нуля": "settings/battle.field_spawn_min: має бути більшим за нуль"}
+	var missed := []
+	for k in want:
+		var found := false
+		for p in bp:
+			found = found or str(p).begins_with(want[k])
+		if not found:
+			missed.append(k)
+	check(missed.is_empty(), "зламаний запис помічено: тип, межа шансу, невідоме поле, брак поля чи запису, рівень понад стелю, мірка, зв'язки з таблицями: %s; %s" % [str(missed), str(bp.slice(0, 4))])
+	var refused := GameDB.put_settings(bad)
+	check(not refused.is_empty() and is_same(Data.ITEM_DROP_CHANCE, GameDB.settings("loot")["item_drop_chance"]) and Data.ITEM_DROP_CHANCE < 1.0, "зламані налаштування не ставляться: лишаються теперішні")
+	check(GameDB.problems().is_empty(), "у базі нема проблем після всіх замін")
+
+
+## Куди йде кожне поле налаштувань: {"запис.поле": [модуль, ІМ'Я]} і перелік полів без робочої копії.
+## Ім'я — поле великими літерами (вкладений запис — через «_»), без префікса модуля (SettingsSchema.MODULES).
+func _settings_targets(SS) -> Array:
+	var out := {}
+	var lost := []
+	for d in SS.SCHEMAS:
+		var flat := []
+		for k in SS.SCHEMAS[d]:
+			if k == "num":
+				continue
+			var f: Dictionary = SS.SCHEMAS[d][k]
+			if f["type"] == "record":
+				for sub in f["fields"]:
+					flat.append("%s_%s" % [k, sub])
+			else:
+				flat.append(k)
+		for k in flat:
+			var hits := []
+			for m in SS.MODULES[d]:
+				var M = load(m[0])
+				var cm: Dictionary = M.get_script_constant_map()
+				var names := [str(k).to_upper()]
+				if m[1] != "" and str(k).begins_with(m[1]):
+					names.append(str(k).trim_prefix(m[1]).to_upper())
+				for n in names:
+					if not cm.has(n) and M.get(n) != null:
+						hits.append([M, n])
+			if hits.size() == 1:
+				out["%s.%s" % [d, k]] = hits[0]
+			else:
+				lost.append("%s.%s (%d)" % [d, k, hits.size()])
+	return [out, lost]
+
+
+## Значення поля «запис.поле» (вкладене — через «_») так, як його тримає модуль (мірка — [рівень, ttk, hit]).
+func _settings_value(key: String):
+	return _settings_value_in(GameDB.table("settings"), key)
+
+
+func _settings_value_in(all: Dictionary, key: String):
+	var d := key.get_slice(".", 0)
+	var k := key.get_slice(".", 1)
+	var R: Dictionary = all[d]
+	if not R.has(k):
+		for rec in R:
+			if R[rec] is Dictionary and k.begins_with(str(rec) + "_") and R[rec].has(k.trim_prefix(str(rec) + "_")):
+				return R[rec][k.trim_prefix(str(rec) + "_")]
+	var v = R[k]
+	if v is Array and not v.is_empty() and v[0] is Dictionary:
+		return v.map(func(P): return [P["level"], P["ttk"], P["hit"]])
+	return v
+
+
+## Поля, у яких робоча копія не дорівнює налаштуванню (за значенням і типом).
+func _settings_mismatch(targets: Dictionary) -> Array:
+	var out := []
+	for key in targets:
+		var have = targets[key][0].get(targets[key][1])
+		var want = _settings_value(key)
+		if typeof(have) != typeof(want) or have != want:
+			out.append("%s: %s / %s" % [key, var_to_str(have), var_to_str(want)])
+	return out
+
+
+## Те саме налаштування з іншими числами: ціле +1, дробове — половина й ще трохи (лишається в межах шансу), так/ні навпаки.
+func _settings_bump(v, f: Dictionary):
+	var t: String = f.get("type", "schema")
+	match t:
+		"schema", "record":
+			var out := {}
+			var fields: Dictionary = f if t == "schema" else f["fields"]
+			for k in v:
+				out[k] = v[k] if k == "num" else _settings_bump(v[k], fields[k])
+			return out
+		"bool":
+			return not v
+		"int":
+			return v + 1
+		"float":
+			return v * 0.5 + 0.001
+		"list":
+			return v.map(func(x): return _settings_bump(x, f["of"]))
+		"map":
+			var out := {}
+			for k in v:
+				out[k] = _settings_bump(v[k], f["of"])
+			return out
+	return v
+
+
+## Усі .gd у теці (з підтеками).
+func _gd_files(dir: String) -> Array:
+	var out := []
+	for d in DirAccess.get_directories_at(dir):
+		out.append_array(_gd_files(dir + "/" + d))
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".gd"):
+			out.append(dir + "/" + f)
+	return out

@@ -8,9 +8,25 @@ const Data := preload("res://scripts/data/data.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const BAR_PART := 0.1  # перша смуга: ця частка досвіду останнього рівня героя
-const BAR_STEP := 0.02  # кожна наступна смуга дорожча на стільки від першої
-const LINE_MAX := 30  # найбільше очок в одну лінію
+static var BAR_PART: float  # перша смуга звитяги: ця частка досвіду останнього рівня героя
+static var BAR_STEP: float  # кожна наступна смуга дорожча на цю частку від першої
+static var LINE_MAX: int  # найбільше очок в одну лінію звитяги
+
+
+## Числа-правила вище лежать у data/settings.json (запис «valor»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("valor")
+	BAR_PART = S["bar_part"]
+	BAR_STEP = S["bar_step"]
+	LINE_MAX = S["line_max"]
+
 
 ## Лінії звитяги (назва, текст бонусу й скільки відсотків дає одне очко) і бонуси, що бувають лише в
 ## іменних звитяг («named»), лежать у data/valor_lines.json (docs/data.md, «Класи й уміння»).

@@ -40,11 +40,10 @@ func _initialize() -> void:
 
 ## Текст таблиці в єдиному вигляді.
 static func format_table(name: String, raw: Dictionary) -> String:
-	var schema: Dictionary = GameDB.TABLES[name]["schema"]
 	var lines := PackedStringArray()
 	var ids := raw.keys()
 	for i in ids.size():
-		var body := _record(raw[ids[i]], schema, 1, true)
+		var body := _record(raw[ids[i]], GameDB.schema_of(name, str(ids[i])), 1, true)
 		lines.append("\t%s: %s%s" % [JSON.stringify(str(ids[i])), body, "," if i < ids.size() - 1 else ""])
 	return "{\n" + "\n".join(lines) + "\n}\n"
 

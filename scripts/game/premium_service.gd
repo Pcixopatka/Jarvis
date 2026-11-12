@@ -7,17 +7,40 @@ extends RefCounted
 ##  - швидких походів на день QUICK_PER_DAY замість звичайних, безпечних заточок SAFE_PER_DAY;
 ##  - щоденна платня червінцями, більша торба, швидша дорога мапою, автобій у будь-якому пройденому місці.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Shop := preload("res://scripts/data/shop.gd")
 const Clock := preload("res://scripts/core/clock.gd")
 
 const DAY := 86400.0
-const DAYS := 30  # на скільки днів один універсал
-const PRICE := 600  # червінців
-const QUICK_PER_DAY := 30  # швидких походів на день (без універсалу 10)
-const SAFE_PER_DAY := 10  # безпечних заточок на день (без універсалу 3)
-const STIPEND := 15  # червінців платні на день: за місяць вертається три чверті ціни
-const BAG_BONUS := 20  # додаткових місць у торбі
-const TRAVEL_MULT := 2.0  # у скільки разів швидша дорога мапою
+static var DAYS: int  # на скільки днів один універсал
+static var PRICE: int  # ціна в червінцях
+static var QUICK_PER_DAY: int  # швидких походів на день з універсалом
+static var SAFE_PER_DAY: int  # безпечних заточок на день з універсалом
+static var STIPEND: int  # червінців платні на день
+static var BAG_BONUS: int  # додаткових місць у торбі
+static var TRAVEL_MULT: float  # у скільки разів швидша дорога мапою
+
+
+## Числа-правила вище лежать у data/settings.json (запис «premium»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("premium")
+	DAYS = S["days"]
+	PRICE = S["price"]
+	QUICK_PER_DAY = S["quick_per_day"]
+	SAFE_PER_DAY = S["safe_per_day"]
+	STIPEND = S["stipend"]
+	BAG_BONUS = S["bag_bonus"]
+	TRAVEL_MULT = S["travel_mult"]
+
+
 const NAME := "Гетьманський універсал"
 
 static var now_override := -1.0  # для тестів: «зараз» у секундах від початку епохи

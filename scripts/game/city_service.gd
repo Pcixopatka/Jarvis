@@ -7,8 +7,22 @@ const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const SHOP_SIZE := 6
-const BUY_MARKUP := 4.0
+static var SHOP_SIZE: int  # речей у крамниці міста
+static var BUY_MARKUP: float  # крамниця продає річ у стільки разів дорожче за її ціну
+
+
+## Числа-правила вище лежать у data/settings.json (запис «city»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("city")
+	SHOP_SIZE = S["shop_size"]
+	BUY_MARKUP = S["buy_markup"]
 
 
 static func shop_stock(world, player: Player, city: String) -> Array:

@@ -16,7 +16,21 @@ extends RefCounted
 ## Чи продаються божі дари за червінці. ТИМЧАСОВЕ рішення власника гри: купівлю дарів вимкнено.
 ## Куплені дари лишаються, вдягаються, знімаються й діють, як раніше. Щоб повернути продаж, постав true
 ## (робоче значення лежить у DivineService.on_sale, його читають служба, крамниця, екран героя й довідник).
-const ON_SALE := false
+static var ON_SALE: bool  # чи продаються божі дари (вимикач продажу; купленого не забирає)
+
+
+## Числа-правила вище лежать у data/settings.json (запис «divine»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("divine")
+	ON_SALE = S["on_sale"]
+
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 

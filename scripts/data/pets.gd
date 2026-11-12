@@ -12,7 +12,21 @@ extends RefCounted
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const MAX_LEVEL := 5
+static var MAX_LEVEL: int  # найвищий ступінь улюбленця
+
+
+## Числа-правила вище лежать у data/settings.json (запис «party»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("party")
+	MAX_LEVEL = S["pet_max_level"]
+
 
 static var _ids: Array = []
 

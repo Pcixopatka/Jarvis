@@ -10,14 +10,32 @@ extends RefCounted
 ## WorldState кожного персонажа тримає посилання на ці словники, тож сервіси, що працюють із
 ## world.camp / world.stats / world.challenges, не змінюються.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+
 const Data := preload("res://scripts/data/data.gd")
 const Clock := preload("res://scripts/core/clock.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const Valor := preload("res://scripts/data/valor.gd")
 
-const CHEST_SIZE := 40
-const CHEST_PER_SKLAD := 20  # кожен рівень Складу на хуторі — ще стільки місць у скрині
-const MAX_HEROES := 5
+static var CHEST_SIZE: int  # місць у скрині роду
+static var CHEST_PER_SKLAD: int  # кожен рівень Складу на хуторі — ще стільки місць у скрині
+static var MAX_HEROES: int  # героїв у роді
+
+
+## Числа-правила вище лежать у data/settings.json (запис «account»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("account")
+	CHEST_SIZE = S["chest_size"]
+	CHEST_PER_SKLAD = S["chest_per_sklad"]
+	MAX_HEROES = S["max_heroes"]
+
 
 var camp := {}
 var chest := {"gold": 0, "items": [], "stones": {}}

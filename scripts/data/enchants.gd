@@ -7,14 +7,35 @@ extends RefCounted
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
-const MIN_RARITY := 3  # зачаровують лише легендарне й краще
-const STRONG_LEVEL := 100  # з цього рівня речі зачарування сильніше
-const STRONG_MULT := 1.5
+static var MIN_RARITY: int  # зачаровують речі від цієї рідкості
+static var STRONG_LEVEL: int  # з цього рівня речі зачарування сильніше
+static var STRONG_MULT: float  # у стільки разів сильніше зачарування на речах від strong_level
 ## Ціна: трофеї, гривні й ресурс за рівень речі.
-const TROPHY_BASE := 20
-const TROPHY_PER_LEVEL := 0.4
-const GOLD_PER_LEVEL := 400
-const RES_PER_LEVEL := 6
+static var TROPHY_BASE: int  # ціна: трофеї — основа
+static var TROPHY_PER_LEVEL: float  # і ще стільки трофеїв за рівень речі
+static var GOLD_PER_LEVEL: int  # гривень за рівень речі
+static var RES_PER_LEVEL: int  # ресурсу за рівень речі
+
+
+## Числа-правила вище лежать у data/settings.json (запис «enchants»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("enchants")
+	MIN_RARITY = S["min_rarity"]
+	STRONG_LEVEL = S["strong_level"]
+	STRONG_MULT = S["strong_mult"]
+	TROPHY_BASE = S["trophy_base"]
+	TROPHY_PER_LEVEL = S["trophy_per_level"]
+	GOLD_PER_LEVEL = S["gold_per_level"]
+	RES_PER_LEVEL = S["res_per_level"]
+
+
 const RES := {"weapon": "iron", "amulet": "herbs"}  # решта речей просить дерево
 
 
