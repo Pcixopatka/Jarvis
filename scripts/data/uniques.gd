@@ -199,11 +199,24 @@ static func make(id: String, ilvl: int) -> Dictionary:
 
 
 ## Перерахувати річ на новий рівень (оновлення в кузні): ті самі властивості, сила нового рівня.
+## Набір властивостей лишається нинішнім, тож перекований бонус не зникає. Властивість з опису речі
+## дістає Uniques.value нового рівня; перекована росте, як у звичайної речі: більше з нинішнього
+## значення й нового кидка, досвід і гривні не вище стелі.
 static func rescale(item: Dictionary, ilvl: int) -> void:
 	var fresh := make(str(item["unique"]), ilvl)
 	item["ilvl"] = ilvl
 	item["base"] = fresh["base"]
-	item["affixes"] = fresh["affixes"]
+	var old_affixes = item.get("affixes")
+	if typeof(old_affixes) != TYPE_DICTIONARY:
+		item["affixes"] = fresh["affixes"]
+		return
+	var affixes := {}
+	for a in old_affixes:
+		if fresh["affixes"].has(a):
+			affixes[a] = fresh["affixes"][a]
+		else:
+			affixes[a] = Data.cap_affix(a, maxf(float(old_affixes[a]), Data._roll_value(a, ilvl, int(item.get("rarity", RARITY)))))
+	item["affixes"] = affixes
 
 
 static func tier(item: Dictionary) -> int:

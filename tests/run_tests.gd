@@ -159,6 +159,7 @@ func _run() -> void:
 	await _suite_auto_buffs()
 	await _suite_sale_off()
 	await _suite_xp_gold_cap()
+	await _suite_reforge_rare()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -14426,7 +14427,7 @@ func _suite_audit() -> void:
 	var cw = WorldState.new()
 	cw.camp = {"buildings": {"kuznia": 3}}
 	var plain_it: Dictionary = Data.gen_item(20, 3, "body")
-	check(Craft.can_reforge(cw, plain_it) and not Craft.can_reforge(cw, set_it) and not Craft.can_reforge(cw, gold_it), "золоті й наборні речі не перековуються, звичайні перековуються")
+	check(Craft.can_reforge(cw, plain_it) and Craft.can_reforge(cw, set_it) and Craft.can_reforge(cw, gold_it), "золоті, наборні й звичайні речі перековуються")
 	var rp = _new_player()
 	rp.change_class("cossack")
 	rp.level = 60
@@ -14557,7 +14558,7 @@ func _suite_audit() -> void:
 	for t in want_titles:
 		have_all = have_all and t in rule_titles
 	check(have_all, "довідник, розділ правил: годинник гри, покинутий бій, цінна здобич, кара за смерть, ціни без лазівок")
-	check("не перековуються" in all_text and "не стає нижчою" in all_text and "швидкий похід не дається" in all_text and "поступається бос дня" in all_text, "довідник: перековка золотих і наборних, оновлення без втрат, швидкий похід і бос тижня описані по-новому")
+	check(not "не перековуються" in all_text and "золотої й наборної теж" in all_text and "не стає нижчою" in all_text and "швидкий похід не дається" in all_text and "поступається бос дня" in all_text, "довідник: золоті й наборні перековуються, оновлення без втрат, швидкий похід і бос тижня описані по-новому")
 
 	# ---- Герой: перевдягання в бою не лікує, хмара не дає невразливості ----
 	var hp_p = _new_player()
@@ -16983,6 +16984,218 @@ func _suite_xp_gold_cap() -> void:
 			if str(e["title"]) == "Властивості":
 				prop_txt = str(e["text"])
 	check("не перевищують 16,7% навіть при заточці +10" in prop_txt and not ("—" in prop_txt), "довідник: досвід і гривні на одній речі не більше 16,7%% при +10")
+	game.queue_free()
+	await _frames(3)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+# ======================= Перекування золотих і наборних речей =======================
+
+func _suite_reforge_rare() -> void:
+	suite("Перекування золотих і наборних речей")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Sets = load("res://scripts/data/sets.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var CR = load("res://scripts/game/craft_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var cap: float = Data.XP_GOLD_CAP
+	var top := 1.0 + Data.UPGRADE_BONUS * Data.MAX_UPGRADE
+	var cw = WorldState.new()
+	cw.camp = {"buildings": {"kuznia": 3}}
+	var cw1 = WorldState.new()
+	cw1.camp = {"buildings": {"kuznia": 1}}
+	var new_cp := func():
+		var p = _new_player()
+		p.level = 99
+		p.gold = 1000000000
+		p.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+		return p
+	var cp = new_cp.call()
+	# одна властивість замінена новою, решта ті самі й з тими самими значеннями
+	var one_swapped := func(before: Dictionary, after: Dictionary, victim: String, fresh: String) -> bool:
+		if fresh == "" or after.has(victim) or not after.has(fresh) or before.has(fresh) or after.size() != before.size():
+			return false
+		for k in before:
+			if k != victim and (not after.has(k) or float(after[k]) != float(before[k])):
+				return false
+		return true
+	var set_id: String = Sets.SETS.keys()[0]
+	var gid := "oberih_berehyni"
+	var probe_set: Dictionary = Sets.make(set_id, "head", 60)
+	var probe_gold: Dictionary = Uniques.make(gid, 40)
+	check(CR.can_reforge(cw, probe_set) and CR.can_reforge(cw, probe_gold), "наборна й золота речі перековуються в кузні 3")
+	check(not CR.can_reforge(cw1, probe_set) and not CR.can_reforge(cw1, probe_gold), "у кузні 1 перекування ще нема, як і для звичайних")
+	# ---- Наборна річ ----
+	var pieces := []
+	for slot in ["head", "body", "belt", "boots"]:
+		var sp: Dictionary = Sets.make(set_id, slot, 60)
+		cp.add_item(sp)
+		cp.equip(int(sp["uid"]))
+		pieces.append(sp)
+	var cnt_before: String = var_to_str(Sets.count(cp.equipment))
+	var fx_before: String = var_to_str(Sets.fx(cp.equipment))
+	check(int(Sets.count(cp.equipment).get(set_id, 0)) == 4, "вдягнено чотири речі набору")
+	var sp0: Dictionary = pieces[0]
+	var name0: String = str(sp0["name"])
+	var sb: Dictionary = sp0["affixes"].duplicate()
+	var sv: String = str(sb.keys()[0])
+	var s_fresh: String = CR.reforge(cw, cp, int(sp0["uid"]), sv)
+	check(one_swapped.call(sb, sp0["affixes"], sv, s_fresh), "наборна річ: замінено одну властивість (%s → %s), решта ті самі" % [sv, s_fresh])
+	check(str(sp0.get("set", "")) == set_id and str(sp0["name"]) == name0 and Sets.is_set(sp0), "наборна річ лишилась у наборі: ключ і назва на місці")
+	check(var_to_str(Sets.count(cp.equipment)) == cnt_before and var_to_str(Sets.fx(cp.equipment)) == fx_before, "рахунок речей набору й бонус набору ті самі")
+	# оновлення наборної речі: як у звичайної, властивості не нижчають, ключ набору лишається
+	var sp1: Dictionary = pieces[1]
+	var sb1: Dictionary = sp1["affixes"].duplicate()
+	var sv1: String = str(sb1.keys()[0])
+	var s_fresh1: String = CR.reforge(cw, cp, int(sp1["uid"]), sv1)
+	var s_after: Dictionary = sp1["affixes"].duplicate()
+	var s_ok: bool = CR.renew(cw, cp, int(sp1["uid"])) and int(sp1["ilvl"]) == 99 and str(sp1.get("set", "")) == set_id and sp1["affixes"].keys() == s_after.keys()
+	for k in s_after:
+		s_ok = s_ok and float(sp1["affixes"][k]) >= float(s_after[k])
+	check(s_fresh1 != "" and s_ok and var_to_str(Sets.count(cp.equipment)) == cnt_before, "перекована наборна річ після оновлення: ті самі властивості, не нижчі, у наборі")
+	# ---- Золота річ ----
+	var g: Dictionary = Uniques.make(gid, 40)
+	g["up"] = 5
+	cp.add_item(g)
+	var gb: Dictionary = g["affixes"].duplicate()
+	var gv := "hp"
+	var g_fresh: String = CR.reforge(cw, cp, int(g["uid"]), gv)
+	check(one_swapped.call(gb, g["affixes"], gv, g_fresh), "золота річ: замінено одну властивість (%s → %s), решта ті самі" % [gv, g_fresh])
+	check(str(g.get("unique", "")) == gid and Uniques.is_unique(g) and Uniques.power_id(g) == str(Uniques.DEFS[gid]["power"]), "золота річ лишилась золотою, з особливою силою")
+	var def_aff: Dictionary = Uniques.DEFS[gid]["affixes"]
+	var check_renew := func(it: Dictionary, levels: int, want_lvl: int, label: String) -> void:
+		var pre: Dictionary = it["affixes"].duplicate()
+		var pre_keep := {}
+		for k in it:
+			if not k in ["ilvl", "base", "affixes", "spent"]:
+				pre_keep[k] = it[k]
+		var gold0: int = int(cp.gold)
+		var spent0: int = int(it.get("spent", 0))
+		var cost: Dictionary = CR.renew_cost(it, want_lvl)
+		var ok: bool = CR.renew(cw, cp, int(it["uid"]), levels)
+		check(ok and int(it["ilvl"]) == want_lvl and gold0 - int(cp.gold) == int(cost["gold"]) and int(it["spent"]) - spent0 == int(cost["gold"]), "%s: рівень %d, гроші списано рівно раз (%d грн)" % [label, want_lvl, int(cost["gold"])])
+		check(it["affixes"].keys() == pre.keys() and not it["affixes"].has(gv), "%s: набір властивостей той самий, прибрана перекуванням не вернулась" % label)
+		check(float(it["affixes"][g_fresh]) >= float(pre[g_fresh]), "%s: перекована властивість не нижча (%.3f → %.3f)" % [label, float(pre[g_fresh]), float(it["affixes"][g_fresh])])
+		var def_ok := true
+		for a in it["affixes"]:
+			if def_aff.has(a):
+				def_ok = def_ok and is_equal_approx(float(it["affixes"][a]), Uniques.value(a, want_lvl, float(def_aff[a])))
+		check(def_ok, "%s: властивості з опису дорівнюють Uniques.value нового рівня" % label)
+		var keep_ok := var_to_str(it["base"]) == var_to_str(Uniques.make(gid, want_lvl)["base"])
+		for k in pre_keep:
+			keep_ok = keep_ok and it.has(k) and var_to_str(it[k]) == var_to_str(pre_keep[k])
+		check(keep_ok, "%s: головний показник нового рівня, заточка й решта речі як були" % label)
+	check_renew.call(g, 1, 41, "золота річ, оновлення на один рівень")
+	check_renew.call(g, 0, 99, "золота річ, оновлення до свого рівня")
+	# без перекування оновлення дає те саме, що й раніше
+	var g2: Dictionary = Uniques.make(gid, 40)
+	cp.add_item(g2)
+	CR.renew(cw, cp, int(g2["uid"]), 1)
+	var same1: bool = var_to_str(g2["affixes"]) == var_to_str(Uniques.make(gid, 41)["affixes"]) and var_to_str(g2["base"]) == var_to_str(Uniques.make(gid, 41)["base"])
+	CR.renew(cw, cp, int(g2["uid"]))
+	var same2: bool = var_to_str(g2["affixes"]) == var_to_str(Uniques.make(gid, 99)["affixes"]) and var_to_str(g2["base"]) == var_to_str(Uniques.make(gid, 99)["base"])
+	check(same1 and same2, "золота річ без перекування після оновлення та сама, що Uniques.make на тому ж рівні")
+	# ---- Стеля досвіду й гривень ----
+	var plain_ids := []
+	for id in Uniques.ORDER:
+		var D: Dictionary = Uniques.DEFS[id]
+		if str(D["slot"]) != "weapon" and not D["affixes"].has("xp") and not D["affixes"].has("gold"):
+			plain_ids.append(id)
+	var cap_hits := 0
+	var cap_over := 0
+	seed(11)
+	for n in 12:
+		var cpn = new_cp.call()
+		var src: Dictionary = Uniques.make(str(plain_ids[n % plain_ids.size()]), 1 + n) if n % 3 != 2 else Sets.make(set_id, "amulet", 1 + n)
+		cpn.add_item(src)
+		var got := ""
+		for k in 60:
+			var keys: Array = src["affixes"].keys()
+			got = CR.reforge(cw, cpn, int(src["uid"]), str(keys[keys.size() - 1]))
+			if got in ["xp", "gold"]:
+				break
+		if not got in ["xp", "gold"]:
+			continue
+		cap_hits += 1
+		if float(src["affixes"][got]) > cap + 1e-9:
+			cap_over += 1
+		if n % 2 == 0:
+			src["affixes"][got] = cap + 5.0  # стара річ із завеликим значенням
+		CR.renew(cw, cpn, int(src["uid"]), 1)
+		CR.renew(cw, cpn, int(src["uid"]))
+		if float(src["affixes"][got]) * top > 16.7 + 1e-6:
+			cap_over += 1
+	check(cap_hits >= 6 and cap_over == 0, "перекування на досвід чи гривні й оновлення (%d речей) не дають більше 16,7%% при +10" % cap_hits)
+	# ---- Збереження ----
+	var gs: Dictionary = Uniques.make(gid, 50)
+	cp.add_item(gs)
+	var gs_fresh: String = CR.reforge(cw, cp, int(gs["uid"]), "vit")
+	var gs_aff: String = var_to_str(gs["affixes"])
+	SaveSystem.save({"player": cp.to_dict(), "world": cw.to_dict(), "meta": {"playtime": 0.0}}, TEST_SAVE)
+	var ld: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	var lp = _new_player()
+	lp.from_dict(ld.get("player", {}))
+	var lg: Dictionary = lp.find_item(int(gs["uid"]))
+	check(gs_fresh != "" and not lg.is_empty() and var_to_str(lg["affixes"]) == gs_aff and str(lg.get("unique", "")) == gid, "перекована золота річ пережила збереження й завантаження без змін")
+	SaveSystem.delete(TEST_SAVE)
+	# ---- Кузня на екрані ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "kleinody"]:
+		gw.hints[k] = true
+	gp.level = 60
+	gp.gold = 10000000
+	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	gw.camp["buildings"] = {"kuznia": 3}
+	var ui_set: Dictionary = Sets.make(set_id, "belt", 50)
+	var ui_gold: Dictionary = Uniques.make(gid, 50)
+	gp.add_item(ui_set)
+	gp.add_item(ui_gold)
+	game.enter_camp()
+	await _frames(2)
+	var open_forge := func() -> bool:
+		for tc in game.hud.screen_root.find_children("*", "TabContainer", true, false):
+			for i in tc.get_tab_count():
+				if tc.get_tab_title(i) == "Кузня":
+					game.camp_tab = i
+					tc.current_tab = i
+					return true
+		return false
+	var reforge_buttons := func() -> int:
+		var n := 0
+		for b in game.hud.screen_root.find_children("*", "Button", true, false):
+			if b.is_visible_in_tree() and str(b.text).begins_with("↻ "):
+				n += 1
+		return n
+	check(open_forge.call(), "на хуторі є вкладка «Кузня»")
+	await _frames(2)
+	for it in [ui_set, ui_gold]:
+		game.camp_do("select", int(it["uid"]))
+		await _frames(2)
+		open_forge.call()
+		await _frames(2)
+		var nb: int = reforge_buttons.call()
+		check(nb == it["affixes"].size(), "кузня: у %s є кнопки перекування (%d)" % ["наборної речі" if it.has("set") else "золотої речі", nb])
+	# ---- Довідник ----
+	var all_text := ""
+	var forge_txt := ""
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			all_text += str(e["text"]) + "\n"
+			if str(e["title"]) == "Кування":
+				forge_txt = str(e["text"])
+	check(not "не перековуються" in all_text and not "сталі властивості" in all_text and "золотої й наборної теж" in forge_txt and not "—" in forge_txt, "довідник: золоті й наборні речі перековуються")
 	game.queue_free()
 	await _frames(3)
 	SaveSystem.delete(TEST_SAVE)

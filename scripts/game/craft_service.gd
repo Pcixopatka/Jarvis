@@ -69,11 +69,10 @@ static func reforge_cost(item: Dictionary) -> Dictionary:
 	return {"gold": 20 + 8 * int(item["ilvl"]) * (1 + int(item["rarity"])), "herbs": 3, "trophy": 1}
 
 
-## Золоті речі й речі наборів не перековуються: їхні властивості сталі. Раніше золота річ брала гроші,
-## а при оновленні вертала старі властивості, а наборна отримувала властивість не зі свого набору.
+## Перековуються всі речі з властивостями, золоті й наборні теж. Наборна лишається в наборі,
+## а золота при оновленні зберігає перекований бонус (див. Uniques.rescale).
 static func can_reforge(world, item: Dictionary) -> bool:
-	return CampService.level(world, "kuznia") >= 2 and not item["affixes"].is_empty() \
-		and not item.has("unique") and not item.has("set")
+	return CampService.level(world, "kuznia") >= 2 and not item["affixes"].is_empty()
 
 
 ## Нова властивість замість обраної (із тих, яких у речі ще немає). Повертає id нової або "".
@@ -142,7 +141,7 @@ static func renew(world, player, uid: int, levels: int = 0) -> bool:
 	_pay(player, cost)
 	it["spent"] = int(it.get("spent", 0)) + int(cost["gold"])
 	if it.has("unique"):
-		# золота річ не перекидає властивості: вони сталі, росте лише сила
+		# золота річ: властивості з опису дістають силу нового рівня, перекована не зникає
 		load("res://scripts/data/uniques.gd").rescale(it, target)
 		player.recalc()
 		return true
