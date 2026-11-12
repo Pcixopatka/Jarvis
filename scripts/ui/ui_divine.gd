@@ -32,6 +32,11 @@ static func _wrap(text: String, size: int, col: Color) -> Label:
 	return l
 
 
+## Підпис перемикача авто-бафів Німба на картці дару.
+static func auto_label(p) -> String:
+	return "Авто-бафи: так" if bool(p.auto_buffs) else "Авто-бафи: ні"
+
+
 ## Клітинка гнізда: яскрава, коли дар вдягнено; бліда, коли ні.
 static func _cell(icon_id: String, cb: Callable, on: bool, selected: bool, px: int) -> Button:
 	var b := Button.new()
@@ -105,6 +110,8 @@ static func detail(game, slot: String) -> Control:
 			acts.add_child(UI.button("Зняти" if on else "Вдягнути", game.char_do.bind("divine_toggle", id), Vector2(150, 46), 18))
 			if on and D.get("shop", false):
 				acts.add_child(UI.button("Відкрити крамницю", game.char_do.bind("trader", null), Vector2(210, 46), 16))
+			if on and D.get("auto_buffs", false):
+				acts.add_child(UI.button(auto_label(p), game.char_do.bind("auto_buffs", null), Vector2(210, 46), 16))
 			box.add_child(acts)
 			box.add_child(_wrap("Вдягнено" if on else "Куплено для всього роду, зараз знято", 14, UI.GOOD if on else UI.MUTED))
 		else:

@@ -80,6 +80,19 @@ static func kind(id: String) -> String:
 	return "buff" if str(Classes.act(id).get("type", "")) in ["buff", "summon"] else "attack"
 
 
+## Лікувальні вміння з коду: вертають героєві здоров'я одразу чи за кілька секунд.
+const HEALS := ["first_aid", "herb", "zhyvytsia"]
+
+
+## Чи вертає вміння здоров'я героєві. Вміння за даними лікує, якщо в описі дії є "heal"
+## (одразу) чи загоєння "regen_pct" (за час). Хто й лікує, і підсилює, теж лікувальний.
+static func heals(id: String) -> bool:
+	if id in HEALS:
+		return true
+	var A: Dictionary = Classes.act(id)
+	return A.has("heal") or A.get("fx", {}).has("regen_pct")
+
+
 ## Таблиця цифр для рангу r (r може бути 0 — «ще не вивчено», тоді показуємо ранг 1).
 ## p — герой (щоб перевести множники в шкоду/здоров'я). Повертає [["назва", "значення"], ...].
 static func stats(id: String, r: int, p) -> Array:

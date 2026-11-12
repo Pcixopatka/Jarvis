@@ -247,7 +247,9 @@ func _process(delta: float) -> void:
 	if state == State.PLAYING:
 		meta["playtime"] = float(meta.get("playtime", 0.0)) + delta
 		if auto_on and combat.active and AutoService.block_reason(world, combat, combat.loc_id) == "":
-			AutoService.drive(self)
+			AutoService.drive(self)  # автобій сам тисне всі вміння, тож авто-бафи Німба тоді мовчать
+		elif combat.active and not get_tree().paused:
+			DivineService.auto_buff_tick(player, combat, delta)
 		AdRewards.tick(world, delta)
 		for gone in player.tick_buffs(delta):  # страви й зілля сили діють за часом бою
 			_buff_gone(gone)
@@ -2597,6 +2599,9 @@ func char_do(action: String, arg) -> void:
 			else:
 				DivineService.equip(world, player, str(arg))
 			Audio.play("item", 0.05)
+		"auto_buffs":
+			# перемикач авто-бафів Німба на картці дару: окремо для кожного героя
+			player.auto_buffs = not player.auto_buffs
 		"divine_shop":
 			# некуплений дар: веде в крамницю на вкладку «Божі дари»
 			shop_tab = _shop_tab_index("Божі дари")

@@ -9,6 +9,7 @@ var color := Color(0.8, 0.2, 0.2)
 var held := false
 var cooldown_ratio := 0.0  # 0 — готово, 1 — щойно використано
 var icon: Texture2D = null  # значок вміння (піксельний); підпис тоді дрібніший, під ним
+var auto_mark := false  # позначка «авто» над кнопкою: баф вмикається сам (авто-бафи Німба)
 var _touch_index := -1
 
 
@@ -38,6 +39,12 @@ func set_cooldown(ratio: float) -> void:
 		queue_redraw()
 
 
+func set_auto(on: bool) -> void:
+	if on != auto_mark:
+		auto_mark = on
+		queue_redraw()
+
+
 func _draw() -> void:
 	var ready := cooldown_ratio <= 0.0
 	var base := color if ready else color.darkened(0.55)
@@ -56,7 +63,21 @@ func _draw() -> void:
 		var fs2 := int(radius * 0.24)
 		draw_string_outline(font, Vector2(-radius, radius * 0.78), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs2, 3, Color(0, 0, 0, 0.7))
 		draw_string(font, Vector2(-radius, radius * 0.78), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs2, Color.WHITE)
+		_draw_auto(font)
 		return
 	var fs := int(radius * 0.36)
 	draw_string_outline(font, Vector2(-radius, fs * 0.35), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs, 4, Color(0, 0, 0, 0.7))
 	draw_string(font, Vector2(-radius, fs * 0.35), label, HORIZONTAL_ALIGNMENT_CENTER, w, fs, Color.WHITE)
+	_draw_auto(font)
+
+
+## Золота плашка «авто» на верхньому краї кружка: над значком, не затуляє ні його, ні сектор відліку.
+func _draw_auto(font: Font) -> void:
+	if not auto_mark:
+		return
+	var fs := 12
+	var tw := 34.0
+	var r := Rect2(Vector2(-tw / 2.0, -radius - 9.0), Vector2(tw, 15.0))
+	draw_rect(r, Color(0.12, 0.09, 0.04, 0.9))
+	draw_rect(r, Color(1.0, 0.82, 0.4), false, 1.5)
+	draw_string(font, Vector2(r.position.x, r.position.y + 12.0), "авто", HORIZONTAL_ALIGNMENT_CENTER, tw, fs, Color(1.0, 0.86, 0.45))

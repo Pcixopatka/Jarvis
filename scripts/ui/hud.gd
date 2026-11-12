@@ -23,6 +23,7 @@ const WorldMap := preload("res://scripts/ui/world_map.gd")
 const JoystickScript := preload("res://scripts/ui/joystick.gd")
 const ActionButtonScript := preload("res://scripts/ui/action_button.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
+const DivineService := preload("res://scripts/game/divine_service.gd")
 
 var ui_root: Control
 var stats_box: Control
@@ -538,6 +539,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 			btn_mana.label = ml
 			btn_mana.queue_redraw()
 		player.sync_panel()
+		var auto_marks: bool = DivineService.auto_buffs_on(player)
 		for id in skill_buttons:
 			var b = skill_buttons[id]
 			var ai: int = player.panel["attack"].find(id)
@@ -547,6 +549,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 				b.position = attack_slots[ai] if ai >= 0 else buff_slots[bi]
 				var no_mana: bool = player.mana < player.skill_cost(id)
 				b.set_cooldown(1.0 if no_mana and player.skill_timers.get(id, 0.0) <= 0.0 else player.skill_ready_ratio(id))
+				b.set_auto(auto_marks and bi >= 0)
 	var pts: int = player.unspent_points() + ChallengeService.ready_count(world, player)
 	if pts > 0:
 		_pulse += maxf(delta, 0.016) * 5.0

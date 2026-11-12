@@ -153,6 +153,7 @@ func _run() -> void:
 	await _suite_pet_fetch()
 	await _suite_salvage_confirm()
 	await _suite_scroll_keep()
+	await _suite_auto_buffs()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -16000,6 +16001,262 @@ func _suite_scroll_keep() -> void:
 		Aud.set_music(music0)
 	game.combat.pickup_filter = filter0.duplicate()
 	game._save_settings()
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_auto_buffs() -> void:
+	suite("Авто-бафи Німба")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var DS = load("res://scripts/game/divine_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var SI = load("res://scripts/data/skill_info.gd")
+	var Div = load("res://scripts/data/divine.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var UDiv = load("res://scripts/ui/ui_divine.gd")
+	var Cls = load("res://scripts/data/classes.gd")
+	var AS = load("res://scripts/game/auto_service.gd")
+	# ---- Лікувальні вміння: усі бафи, що вертають здоров'я ----
+	var heal_ids := []
+	for id in Cls.actives():
+		if SI.kind(id) == "buff" and SI.heals(id):
+			heal_ids.append(id)
+	for id in ["first_aid", "herb", "zhyvytsia", "zamova_krovi", "tsiliushche_kolo", "khoruhva", "stiika_tsilytelia"]:
+		check(id in heal_ids, "лікувальний баф: %s" % id)
+	for id in ["battle_cry", "mur", "navala", "kulia", "shield", "sokil", "dukh", "pidniaty"]:
+		check(not SI.heals(id), "не лікувальний: %s" % id)
+	for id in Cls.actives():
+		if SI.kind(id) == "buff" and (Cls.act(id).has("heal") or Cls.act(id).get("fx", {}).has("regen_pct")):
+			check(id in heal_ids, "баф за даними з лікуванням визнано лікувальним: %s" % id)
+	# ---- Тексти ----
+	var nl: Array = Div.DEFS["nimb"]["lines"]
+	check(nl.size() == 3 and "авто-бафи" in str(nl[2]) and ("%d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in str(nl[2]), "у Німба третій рядок про авто-бафи з порогом лікування")
+	check(int(Div.DEFS["nimb"]["price"]) == 1200 and is_equal_approx(float(Div.DEFS["nimb"]["xp"]), 0.15) and is_equal_approx(float(Div.DEFS["nimb"]["gold"]), 0.15), "ціна й інші властивості Німба ті самі")
+	var art := ""
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			if str(e["title"]) == "Божі дари":
+				art = str(e["text"])
+	check("авто-бафи" in art and "Авто-бафи: так" in art and ("нижче %d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in art and "Перша допомога" in art and "Замовляння крові" in art and "гетьманському огляді" in art, "довідник описує авто-бафи: коли вмикаються, поріг лікування, перемикач")
+	check(not ("—" in str(nl[2])), "новий рядок без довгого тире")
+	# ---- Гра ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "duel", "dungeon", "potion", "mana_potion", "res"]:
+		gw.hints[k] = true
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	gp.change_class("cossack")
+	gp.change_class("kharakternyk")
+	game._sync_class()
+	gp.level = 30
+	gp.stats["vit"] = 200
+	gp.stats["spi"] = 100
+	var buffs := ["battle_cry", "mur", "khoruhva", "first_aid", "zamova_krovi"]
+	gp.skills = {"whirl": 1}
+	for id in buffs:
+		gp.skills[id] = 1
+	gp.panel = {"attack": ["whirl", "", ""], "buff": buffs.duplicate()}
+	gp.recalc()
+	check(not DS.has_auto_buffs(gp) and not DS.auto_buffs_on(gp), "без Німба авто-бафів нема")
+	SH.state(gw)["coins"] = 100000
+	check(DS.buy(gw, gp, "nimb") and DS.wears(gp, "nimb") and gp.auto_buffs and DS.auto_buffs_on(gp), "Німб куплено й вдягнено: авто-бафи ввімкнено одразу")
+	var c = game.combat
+	var reset := func(hp_part: float = 1.0) -> void:
+		for id in buffs + ["whirl"]:
+			gp.skill_timers[id] = 0.0
+		gp.buffs.clear()
+		gp.recalc()
+		gp.mana = gp.max_mana
+		gp.hp = gp.max_hp * hp_part
+		gp.invuln = 999.0
+	var tick := func() -> void:  # одна перевірка авто-бафів просто зараз
+		gp.auto_buff_t = 0.0
+		DS.auto_buff_tick(gp, c, 0.0)
+	var fired := func(id: String) -> bool:
+		return float(gp.skill_timers.get(id, 0.0)) > 0.0
+	var no_mana_texts := func() -> int:
+		var n := 0
+		for t in c.effects.get_children():
+			if not t.is_queued_for_deletion() and str(t.get("text")) == "Бракує наснаги":
+				n += 1
+		return n
+	var spawn_near := func() -> void:
+		c.spawn_enemy("upyr", 1, false, gp.global_position + Vector2(260, 0))
+		c.enemies_dirty()
+		for e in c.enemies_now():
+			e.stun = 999.0
+	game.enter_location("wild_field")
+	await _frames(4)
+	c.spawn_timer = 9999.0
+	_clear_enemies(game)
+	await _frames(2)
+	# 2. Нечисті нема: бафи сплять
+	reset.call()
+	await _frames(40)
+	var none_fired := true
+	for id in buffs:
+		none_fired = none_fired and not fired.call(id)
+	check(none_fired and gp.mana >= gp.max_mana - 0.01, "нечисті нема: жоден баф не ввімкнувся, наснага ціла")
+	# 1. Нечисть поруч: бафи вмикаються самі
+	spawn_near.call()
+	reset.call()
+	var m0: float = gp.mana
+	var waited := 0
+	while waited < 40 and not fired.call("battle_cry"):
+		await _frames(1)
+		waited += 1
+	check(fired.call("battle_cry") and fired.call("mur") and gp.mana < m0 - gp.skill_cost("battle_cry"), "нечисть поруч: Клич і Мур увімкнулись самі, наснага зменшилась")
+	# 6. Атаки не чіпає, лікування при повному здоров'ї мовчить
+	check(not fired.call("whirl"), "атака з комірок атак сама не вмикається")
+	check(not fired.call("first_aid") and not fired.call("zamova_krovi") and not fired.call("khoruhva"), "здоров'я повне: лікувальні бафи мовчать")
+	# 11. Позначка «авто» на кнопках бафів
+	var hud = game.hud
+	check(hud.skill_buttons["battle_cry"].auto_mark and hud.skill_buttons["zamova_krovi"].auto_mark and not hud.skill_buttons["whirl"].auto_mark, "позначка «авто» є на кнопках бафів і нема на атаці")
+	# 4. Лікування: понад 60% мовчить, нижче вмикається
+	reset.call(DS.AUTO_HEAL_AT + 0.1)
+	tick.call()
+	check(fired.call("battle_cry") and not fired.call("first_aid") and not fired.call("zamova_krovi") and not fired.call("khoruhva"), "здоров'я %d%%: лікування мовчить, підсилення вмикається" % roundi((DS.AUTO_HEAL_AT + 0.1) * 100.0))
+	reset.call(DS.AUTO_HEAL_AT - 0.4)  # Перша допомога лікує 20%: і після неї здоров'я нижче порога
+	var hp_low: float = gp.hp
+	tick.call()
+	check(fired.call("first_aid") and fired.call("zamova_krovi") and fired.call("khoruhva") and gp.hp > hp_low, "здоров'я нижче %d%%: Перша допомога, Замовляння крові (лікування за даними) й Хоругва ввімкнулись" % roundi(DS.AUTO_HEAL_AT * 100.0))
+	# 7. Порядок комірок і запас наснаги
+	reset.call()
+	gp.mana = gp.skill_cost("battle_cry") + gp.skill_cost("mur") + 1.0
+	tick.call()
+	check(fired.call("battle_cry") and fired.call("mur") and gp.mana < 2.0, "вмикається все, на що вистачає наснаги, без запасу")
+	reset.call()
+	gp.mana = gp.skill_cost("battle_cry") + 1.0
+	tick.call()
+	check(fired.call("battle_cry") and not fired.call("mur"), "наснаги на один: вмикається лівий (Клич у першій комірці)")
+	gp.panel["buff"] = ["mur", "battle_cry", "khoruhva", "first_aid", "zamova_krovi"]
+	reset.call()
+	gp.mana = gp.skill_cost("battle_cry") + 1.0
+	tick.call()
+	check(fired.call("mur") and not fired.call("battle_cry"), "переставили: тепер лівий Мур, він і вмикається")
+	gp.panel["buff"] = buffs.duplicate()
+	# 5. Бракує наснаги: авто мовчить, ручний дотик каже
+	reset.call()
+	gp.mana = 1.0
+	var t0: int = no_mana_texts.call()
+	tick.call()
+	await _frames(1)
+	check(not fired.call("battle_cry") and not fired.call("mur") and no_mana_texts.call() == t0, "наснаги бракує: авто-бафи нічого не вмикають і не кажуть «Бракує наснаги»")
+	gp.mana = 1.0
+	gp.use_skill("battle_cry")
+	await _frames(1)
+	check(not fired.call("battle_cry") and no_mana_texts.call() > t0, "ручний дотик без наснаги, як і раніше, каже «Бракує наснаги»")
+	# 6. Ручний дотик по бафу працює
+	reset.call()
+	gp.auto_buffs = false
+	gp.use_skill("mur")
+	check(fired.call("mur"), "ручний дотик по бафу вмикає його")
+	# 3. Перемикач вимкнено: нічого; ввімкнули: вмикається
+	reset.call()
+	await _frames(40)
+	check(not fired.call("battle_cry") and not fired.call("mur") and not DS.auto_buffs_on(gp), "перемикач вимкнено: бафи самі не вмикаються")
+	check(not hud.skill_buttons["battle_cry"].auto_mark, "перемикач вимкнено: позначки «авто» нема")
+	gp.auto_buffs = true
+	await _frames(40)
+	check(fired.call("battle_cry") and fired.call("mur") and hud.skill_buttons["battle_cry"].auto_mark, "перемикач ввімкнули: бафи знову вмикаються самі, позначка є")
+	# 3, 9. Німб знято: поведінка як без нього
+	DS.unequip(gw, gp, "halo")
+	reset.call()
+	await _frames(40)
+	check(not fired.call("battle_cry") and not fired.call("mur") and not hud.skill_buttons["battle_cry"].auto_mark, "Німб знято: бафи самі не вмикаються, позначки нема")
+	gp.use_skill("battle_cry")
+	check(fired.call("battle_cry"), "без Німба ручний дотик працює, як раніше")
+	DS.equip(gw, gp, "nimb")
+	reset.call()
+	await _frames(40)
+	check(fired.call("battle_cry") and DS.auto_buffs_on(gp), "Німб вдягли знову: бафи вмикаються")
+	# Не щокадру
+	var tq: float = gp.auto_buff_t
+	check(tq > 0.0 and tq <= DS.AUTO_STEP, "перевірка йде раз на %.2f с, не щокадру" % DS.AUTO_STEP)
+	# 10. Разом з автобоєм: авто-бафи мовчать, тисне автобій
+	gw.cleared["wild_field"] = AS.MIN_CLEARS
+	reset.call()
+	game.toggle_auto()
+	await _frames(2)
+	gp.auto_buff_t = 0.5
+	await _frames(20)
+	check(game.auto_on and is_equal_approx(gp.auto_buff_t, 0.5), "з автобоєм авто-бафи не перевіряються: вміння тисне лише автобій")
+	await _frames(60)
+	check(gp.alive and fired.call("battle_cry"), "з автобоєм бій іде, бафи вмикає автобій, нічого не падає")
+	game.toggle_auto()
+	await _frames(2)
+	check(not game.auto_on, "автобій вимкнено")
+	# 8. Збереження
+	gp.auto_buffs = false
+	var d: Dictionary = gp.to_dict()
+	check(d.has("auto_buffs") and d["auto_buffs"] == false, "перемикач пишеться в збереження героя")
+	var p2 = _new_player()
+	p2.from_dict(d)
+	check(p2.auto_buffs == false, "вимкнений перемикач переживає to_dict/from_dict")
+	var old: Dictionary = d.duplicate(true)
+	old.erase("auto_buffs")
+	var p3 = _new_player()
+	p3.auto_buffs = false
+	p3.from_dict(old)
+	check(p3.auto_buffs == true, "старе збереження без поля: авто-бафи ввімкнено")
+	gp.auto_buffs = true
+	p2.free()
+	p3.free()
+	# 5. Герць
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	game.start_duel(true)
+	await _frames(4)
+	check(c.is_duel(), "вийшли на вільний герць")
+	reset.call()
+	var duel_ok := false
+	for i in 30:
+		await _frames(10)
+		gp.invuln = 999.0
+		if fired.call("battle_cry"):
+			duel_ok = true
+			break
+	check(duel_ok, "у герці авто-бафи теж діють")
+	game.enter_map()
+	await _frames(2)
+	# Картка Німба з перемикачем
+	game.open_character()
+	await _frames(2)
+	game.char_do("select", UDiv.sel_of("halo"))
+	await _frames(2)
+	await _reveal_tabs(game)
+	var find_btn := func(text: String) -> Button:
+		for b in game.hud.screen_root.find_children("*", "Button", true, false):
+			if not b.is_queued_for_deletion() and b.text == text:
+				return b
+		return null
+	check(find_btn.call("Авто-бафи: так") != null, "на картці Німба кнопка «Авто-бафи: так»")
+	game.char_do("auto_buffs", null)
+	await _frames(2)
+	await _reveal_tabs(game)
+	check(not gp.auto_buffs and find_btn.call("Авто-бафи: ні") != null, "дотик вимикає: кнопка «Авто-бафи: ні»")
+	game.char_do("auto_buffs", null)
+	check(gp.auto_buffs, "другий дотик вмикає знову")
+	game.char_do("divine_toggle", "nimb")
+	await _frames(2)
+	await _reveal_tabs(game)
+	check(find_btn.call("Авто-бафи: так") == null and find_btn.call("Авто-бафи: ні") == null, "Німб знято: перемикача на картці нема")
+	game.close_character()
+	await _frames(2)
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

@@ -130,6 +130,8 @@ var u_pow := {}
 var divine := {}  # вдягнені божі дари: {гніздо: id} (див. Divine), зберігається
 var divine_fx := {}  # що вони дають: {"bag", "stats", "pickup", "shop", "fx"} (виставляє DivineService, у збереження не йде)
 var bag_divine := 0  # місця в торбі від чумацької мажі (не зберігається)
+var auto_buffs := true  # перемикач авто-бафів Німба (DivineService.auto_buff_tick), зберігається
+var auto_buff_t := 0.0  # скільки ще чекати до наступної перевірки авто-бафів (не зберігається)
 var pet := ""  # улюбленець, якого герой бере з собою (див. Pets), зберігається
 var pet_fx := {}  # хист цього улюбленця: {"pickup"|"travel"|"xp"|"res": частка} (виставляє PetService, у збереження не йде)
 var costume := ""  # вдягнене вбрання з крамниці: лише вигляд (див. Costumes), зберігається
@@ -450,7 +452,7 @@ func to_dict() -> Dictionary:
 		"stat_points": stat_points, "skill_points": skill_points, "perk_points": perk_points,
 		"gold": gold, "inventory": inventory, "equipment": equipment, "next_uid": next_uid, "potions": potions, "mana_potions": mana_potions,
 		"resources": resources, "trip_buffs": trip_buffs, "rank": rank, "job": job, "job_level": job_level, "job_xp": job_xp,
-		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "costume": costume, "pet": pet, "divine": divine, "u_luck": u_luck, "art_luck": art_luck,
+		"stat_gifts": stat_gifts, "skill_gifts": skill_gifts, "stones": stones, "panel": panel, "costume": costume, "pet": pet, "divine": divine, "auto_buffs": auto_buffs, "u_luck": u_luck, "art_luck": art_luck,
 		"souls": souls, "soul_luck": soul_luck, "soul_found": soul_found,
 		"valor": valor, "valor_xp": valor_xp, "valor_spent": valor_spent, "nick": nick}
 
@@ -464,6 +466,7 @@ func from_dict(d: Dictionary) -> void:
 			set(k, d[k])
 	# ім'я зі збереження проходить ті самі правила, що й ввід: зіпсоване чи недопустиме стає порожнім
 	nick = NameService.from_save(d.get("nick", ""))
+	auto_buffs = bool(d.get("auto_buffs", true))  # старе збереження без перемикача: авто-бафи ввімкнено
 	# Ціна рівня могла змінитися між версіями: частка пройденого шляху до наступного рівня лишається тією самою
 	var want: int = Data.xp_for_level(level)
 	if xp_next != want:
