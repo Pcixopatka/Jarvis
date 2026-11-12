@@ -172,6 +172,7 @@ func _run() -> void:
 	await _suite_class_skills_fight()
 	await _suite_mechanics()
 	await _suite_party_mechanics()
+	await _suite_hero_mechanics()
 	await _suite_valor_cap()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
@@ -1570,19 +1571,19 @@ func _suite_mage_battle() -> void:
 	check(p.skill_timers["fireball"] <= 0.0, "без наснаги закляття не вийде")
 	p.mana = p.max_mana
 	p.use_skill("shield")
-	check(p.ward_hp > 0.0, "щит-оберіг")
+	check(p.mech("skill/shield").ward_hp > 0.0, "щит-оберіг")
 	p.invuln = 0.0
 	var hp3: float = p.hp
 	p.take_damage(5.0, null)
 	check(p.hp == hp3, "оберіг поглинає удар")
-	p.ward_hp = 0.0
+	p.mech("skill/shield").ward_hp = 0.0
 	p.hp = p.max_hp * 0.3
 	p.invuln = 5.0  # упир поруч не повинен заважати перевірці лікування
 	var hp4: float = p.hp
 	p.use_skill("herb")
 	for i in 60:
 		await process_frame
-	check(p.hp > hp4 + p.max_hp * 0.03 and p.herb_timer > 0.0, "цілюща трава лікує в часі")
+	check(p.hp > hp4 + p.max_hp * 0.03 and p.mech("skill/herb").t > 0.0, "цілюща трава лікує в часі")
 	# Заряджене закляття
 	var e2 = _moves_dummy(game, "mavka")
 	e2.global_position = p.global_position + Vector2(200, 0)
@@ -1614,7 +1615,7 @@ func _suite_mage_battle() -> void:
 	for i in 40:
 		plain += p._roll(1.0)[0]
 	p.use_skill("battle_cry")
-	check(p.cry_timer > 0.0, "бойовий клич")
+	check(p.mech("skill/battle_cry").t > 0.0, "бойовий клич")
 	var loud := 0.0
 	for i in 40:
 		loud += p._roll(1.0)[0]
@@ -1752,7 +1753,7 @@ func _suite_spec_battle() -> void:
 	p.take_damage(100.0, null)
 	check(hp0 - p.hp < 100.0 * (1.0 - p.armor) * 0.7, "Стіна зменшує шкоду")
 	p.invuln = 99.0
-	p.stina_timer = 0.0
+	p.mech("skill/stina").t = 0.0
 	var b = _moves_dummy(game, "upyr")
 	var bh: float = b.hp
 	p.mana = p.max_mana
@@ -1773,9 +1774,9 @@ func _suite_spec_battle() -> void:
 	p.mana = p.max_mana
 	p.use_skill("tin")
 	var seer = _moves_dummy(game, "upyr")
-	check(p.tin_timer > 0.0 and seer._pick_target() != p, "Тінь: вороги не бачать")
+	check(p.mech("skill/tin").t > 0.0 and seer._pick_target() != p, "Тінь: вороги не бачать")
 	var r: Array = p._roll(1.0)
-	check(r[1] and p.tin_timer == 0.0, "удар із Тіні — гарантований крит")
+	check(r[1] and p.mech("skill/tin").t == 0.0, "удар із Тіні — гарантований крит")
 	var t = _moves_dummy(game, "upyr")
 	t.global_position = p.global_position + Vector2(120, 0)
 	p.mana = p.max_mana
@@ -1824,8 +1825,8 @@ func _suite_spec_battle() -> void:
 	p.equip(sb["uid"])
 	p.mana = p.max_mana
 	p.use_skill("vovk")
-	check(p.wolf_timer > 0.0, "Вовча подоба")
-	p.wolf_timer = 0.0
+	check(p.mech("skill/vovk").t > 0.0, "Вовча подоба")
+	p.mech("skill/vovk").t = 0.0
 	p.invuln = 0.0
 	p.mana = p.max_mana
 	p.use_skill("kulia")
@@ -1840,7 +1841,7 @@ func _suite_spec_battle() -> void:
 	var z2h: float = z2.hp
 	p.hit(z1, 50.0, Vector2.ZERO, false)
 	check(z2.hp < z2h, "замовлена шабля перескакує блискавкою")
-	p.zamova_timer = 0.0
+	p.mech("skill/zamova").t = 0.0
 	p.mana = p.max_mana
 	p.use_skill("vidvid")
 	check(z1.stun > 1.0 and z1.statuses.has("weak"), "Відвід очей: заціпеніння й слабкість")
@@ -1905,7 +1906,7 @@ func _suite_volkhv_specs() -> void:
 	p.use_skill("ochyshchennia")
 	p.add_status("burn", 5.0, 3.0)
 	check(p.statuses.is_empty(), "Очищення знімає стани й не дає новим")
-	p.cleanse_timer = 0.0
+	p.mech("skill/ochyshchennia").t = 0.0
 	p.mana = p.max_mana
 	p.use_skill("oberih_zahonu")
 	p.invuln = 0.0
@@ -1913,7 +1914,7 @@ func _suite_volkhv_specs() -> void:
 	p.take_damage(100.0, null)
 	check(h1 - p.hp < 100.0 * (1.0 - p.armor) * 0.8, "Оберіг загону зменшує шкоду")
 	p.invuln = 99.0
-	p.zahyst_timer = 0.0
+	p.mech("skill/oberih_zahonu").t = 0.0
 	var cn = game.combat.companion_nodes[0]
 	cn.take_damage(cn.max_hp * 5.0)
 	check(not cn.alive and game.world.companions[0]["downed"], "побратим упав")
@@ -1945,8 +1946,8 @@ func _suite_volkhv_specs() -> void:
 	p.use_skill("burya")
 	for i in 70:
 		await process_frame
-	check(e2.hp < e2h and p.burya_timer > 0.0, "Буря б'є блискавками")
-	p.burya_timer = 0.0
+	check(e2.hp < e2h and p.mech("skill/burya").t > 0.0, "Буря б'є блискавками")
+	p.mech("skill/burya").t = 0.0
 	# Мольфар
 	p.change_class("molfar")
 	var e3 = _moves_dummy(game, "upyr")
@@ -7322,14 +7323,14 @@ func _suite_uniques_game() -> void:
 	wear.call("shablia_sirka")
 	var e1 = foe.call(60.0)
 	p.hit(e1, e1.max_hp * 10.0, Vector2.ZERO, false)
-	check(e1.dead and p.u_stacks == 1 and p.u_stack_t > 5.0, "Звитяга: убитий ворог дає заряд")
-	p.u_stacks = 10
+	check(e1.dead and p.mech("power/zvytiaha").stacks == 1 and p.mech("power/zvytiaha").t > 5.0, "Звитяга: убитий ворог дає заряд")
+	p.mech("power/zvytiaha").stacks = 10
 	p.crit_chance = 0.0
 	var boosted: float = p._roll(1.0)[0]
 	check(boosted > p.damage * 0.9 * 1.29, "десять зарядів Звитяги: +30% шкоди")
-	p.u_stack_t = 0.01
+	p.mech("power/zvytiaha").t = 0.01
 	await _frames(3)
-	check(p.u_stacks == 0, "Звитяга спадає, коли час минув")
+	check(p.mech("power/zvytiaha").stacks == 0, "Звитяга спадає, коли час минув")
 	# Перунова блискавка
 	_clear_enemies(game)
 	wear.call("shablia_bohdana")
@@ -7337,7 +7338,7 @@ func _suite_uniques_game() -> void:
 	var eb = foe.call(160.0)
 	var hp_b: float = eb.hp
 	for i in 60:
-		p.u_chain_cd = 0.0
+		p.mech("power/perun").cd = 0.0
 		p.hit(ea, 1.0, Vector2.ZERO, true)
 		if eb.hp < hp_b:
 			break
@@ -7349,15 +7350,15 @@ func _suite_uniques_game() -> void:
 	var far = foe.call(900.0)
 	var hp_w: float = ew.hp
 	var hp_f: float = far.hp
-	p._unique_wave()
-	check(ew.hp < hp_w and is_equal_approx(far.hp, hp_f) and p.u_wave_cd > 0.0, "Громовий удар б'є всіх довкола, далеких не дістає")
+	p.mech("power/hrim").on_finisher()
+	check(ew.hp < hp_w and is_equal_approx(far.hp, hp_f) and p.mech("power/hrim").cd > 0.0, "Громовий удар б'є всіх довкола, далеких не дістає")
 	# Пластунський випад
 	wear.call("vovcha_kuchma")
 	p.crit_chance = 0.0
 	p.dodge_timer = 0.0
 	p.dodge()
-	check(p.u_vypad_t > 1.0 and p._roll(1.0)[1], "після перекиду кожен удар критичний")
-	p.u_vypad_t = 0.0
+	check(p.mech("power/vypad").t > 1.0 and p._roll(1.0)[1], "після перекиду кожен удар критичний")
+	p.mech("power/vypad").t = 0.0
 	check(not p._roll(1.0)[1], "без перекиду — як завжди")
 	# Покрова
 	_clear_enemies(game)
@@ -7365,13 +7366,13 @@ func _suite_uniques_game() -> void:
 	p.invuln = 0.0
 	p.hp = p.max_hp * 0.4
 	await _frames(2)
-	check(p.u_ward_t > 0.0 and p.u_ward_cd > 10.0, "Покрова вмикається, коли здоров'я нижче половини")
+	check(p.mech("power/pokrova").t > 0.0 and p.mech("power/pokrova").cd > 10.0, "Покрова вмикається, коли здоров'я нижче половини")
 	p.invuln = 0.0
 	p.hp = p.max_hp
 	var h0: float = p.hp
 	p.take_damage(100.0, null)
 	var with_ward: float = h0 - p.hp
-	p.u_ward_t = 0.0
+	p.mech("power/pokrova").t = 0.0
 	p.invuln = 0.0
 	p.hp = p.max_hp
 	p.take_damage(100.0, null)
@@ -7382,10 +7383,10 @@ func _suite_uniques_game() -> void:
 	wear.call("shapka_nalyvaika")
 	var ey = foe.call(260.0)
 	var hp_y: float = ey.hp
-	p.u_yadro_t = 0.05
+	p.mech("power/yadro").t = 0.05
 	p.invuln = 5.0
 	await _frames(6)
-	check(ey.hp < hp_y and p.u_yadro_t > 3.0, "Вогняне ядро саме падає на найближчого ворога")
+	check(ey.hp < hp_y and p.mech("power/yadro").t > 3.0, "Вогняне ядро саме падає на найближчого ворога")
 	# Відлуння
 	p.change_class("volkhv")
 	wear.call("posokh_molfara")
@@ -18743,3 +18744,229 @@ func _suite_valor_cap() -> void:
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
+
+
+func _suite_hero_mechanics() -> void:
+	suite("Механіки героя: уміння, шаблони дії, сили, зброя")
+	var HM = load("res://scripts/mechanics/hero_mechanic.gd")
+	var SM = load("res://scripts/mechanics/skill_mechanic.gd")
+	var AM = load("res://scripts/mechanics/act_mechanic.gd")
+	var PM = load("res://scripts/mechanics/power_mechanic.gd")
+	var WM = load("res://scripts/mechanics/weapon_mechanic.gd")
+	var Loader = load("res://scripts/mechanics/loader.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	# Посилання кожної родини ведуть на файл від основи родини, і кожен файл комусь потрібен
+	var refs := {"skill": [], "act": [], "power": [], "weapon": []}
+	var bad := []
+	for id in GameDB.ids("skills"):
+		var n: Dictionary = GameDB.row("skills", id)
+		if not n.get("active", false):
+			continue
+		if n.has("act"):
+			var ar := "act/" + str(n["act"]["type"])
+			if not ar in refs["act"]:
+				refs["act"].append(ar)
+			if AM.script_of(str(n["act"]["type"])) == null:
+				bad.append(ar)
+		else:
+			var ref := str(n.get("mechanic", ""))
+			refs["skill"].append(ref)
+			if ref != "skill/" + str(id) or SM.script_of(ref) == null or not Loader.extends_base(SM.script_of(ref), HM.HERO_BASE):
+				bad.append("%s → %s" % [id, ref])
+	for id in GameDB.ids("powers"):
+		var ref := str(GameDB.power(id).get("mechanic", ""))
+		refs["power"].append(ref)
+		if ref != "power/" + str(id) or PM.script_of(ref) == null:
+			bad.append("%s → %s" % [id, ref])
+	for id in GameDB.ids("weapons"):
+		var ref := str(GameDB.weapon(id).get("mechanic", ""))
+		refs["weapon"].append(ref)
+		if ref != "weapon/" + str(id) or WM.script_of(ref) == null:
+			bad.append("%s → %s" % [id, ref])
+	check(bad.is_empty() and refs["skill"].size() == 33 and refs["act"].size() == 7 and refs["power"].size() == 7 and refs["weapon"].size() == 7, "33 уміння з власною дією, 7 шаблонів, 7 сил і 7 видів зброї: кожне посилання веде на файл від основи своєї родини%s" % ("" if bad.is_empty() else ": " + str(bad)))
+	var orphans := []
+	for f in refs:
+		var listed: Array = refs[f].duplicate()
+		listed.sort()
+		if GameDB.mechanic_files(f) != listed:
+			orphans.append(f)
+	check(orphans.is_empty(), "сиріт нема: кожен файл у skill/, act/, power/, weapon/ потрібен якомусь запису%s" % ("" if orphans.is_empty() else ": " + str(orphans)))
+	var acts: Array = GameDB.ACT_SCHEMA["fields"]["type"]["values"].map(func(t): return "act/" + t)
+	acts.sort()
+	check(acts == GameDB.mechanic_files("act"), "перелік шаблонів у схемі збігається з файлами act/")
+	check(SM.script_of("power/hrim") == null and PM.script_of("skill/whirl") == null and WM.script_of("skill/whirl") == null and AM.script_of("../skill/whirl") == null and load("res://scripts/mechanics/companion_mechanic.gd").script_of("weapon/mace") == null and SM.script_of("skill/nema_takoho") == null, "механіка чужої родини чи неіснуючий файл не підходить")
+	check(GameDB.MECHANIC_BASES["skill"] == SM.BASE_PATH and GameDB.MECHANIC_BASES["act"] == AM.BASE_PATH and GameDB.MECHANIC_BASES["power"] == PM.BASE_PATH and GameDB.MECHANIC_BASES["weapon"] == WM.BASE_PATH, "родини героя записано в GameDB.MECHANIC_BASES")
+	# Хуки: рушій бачить лише написані
+	var hb := func(ref: String, base: String) -> int: return HM.hooks_of(Loader.script_of(ref, base), base)
+	check(hb.call("skill/tin", SM.BASE_PATH) == (1 << HM.TICK) | (1 << HM.ON_ROLL) | (1 << HM.AGGRO) | (1 << HM.TINT) | (1 << HM.CAST) and hb.call("skill/whirl", SM.BASE_PATH) == (1 << HM.TICK_LATE) | (1 << HM.CAST) | (1 << HM.COOLDOWN) and hb.call("skill/vyly", SM.BASE_PATH) == (1 << HM.CAST) and hb.call("power/vidlunnia", PM.BASE_PATH) == (1 << HM.ON_CAST) and hb.call("weapon/sabre", WM.BASE_PATH) == 0 and hb.call("weapon/mace", WM.BASE_PATH) == (1 << HM.FINISHER_HIT) | (1 << HM.DAMAGE_MULT), "рушій бачить лише хуки, які механіка написала")
+	# Герой без вивчених активних умінь не має механік умінь і нічого не платить щокадру
+	var bare = PlayerScript.new()
+	bare.skills = {}
+	bare._ready()
+	var skill_m := 0
+	for ref in bare._mechs:
+		skill_m += 1 if str(ref).begins_with("skill/") or str(ref).begins_with("act/") or str(ref).begins_with("power/") else 0
+	var busy := 0
+	for i in HM.EVENTS:
+		busy += bare._hooks[i].size()
+	check(skill_m == 0 and busy == 0 and bare.weapon_mech != null and bare.weapon_mech.ref == "weapon/sabre", "герой без вивчених умінь і золота: механік умінь і сил нема, жоден хук не кличеться, у руках — механіка шаблі")
+	bare.skills = {"vyly": 2, "hardy": 1, "first_aid": 1, "pidsichka": 1}
+	bare.recalc()
+	var tick_free: bool = bare._hooks[HM.TICK].is_empty() and bare._hooks[HM.ON_HIT].is_empty()
+	var m1 = bare.mech("skill/vyly")
+	bare.recalc()
+	check(m1 != null and is_same(m1, bare.mech("skill/vyly")) and bare.mech("skill/first_aid") != null and bare.mech("act/cone") != null and bare._by_skill.get("hardy") == null and tick_free, "механіки з'являються, коли вміння вивчено, раз (перерахунок не створює нових); удар вилами не важить щокадру")
+	var card_bad := []
+	for id in GameDB.ids("skills"):
+		var n: Dictionary = GameDB.row("skills", id)
+		if n.get("active", false) and bare.SkillInfo.stats(str(id), 1, bare).is_empty() and not str(n.get("act", {}).get("type", "")) == "summon":
+			card_bad.append(id)
+	check(card_bad.is_empty(), "кожне активне вміння має цифри картки з механіки%s" % ("" if card_bad.is_empty() else ": " + str(card_bad)))
+	bare.free()
+	# Хибні посилання ловить перевірка
+	var raw_s = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("skills")))
+	raw_s["vyly"]["mechanic"] = "skill/nema_takoho"
+	raw_s["whirl"]["mechanic"] = "power/hrim"
+	raw_s["taran"]["mechanic"] = "skill/taran"
+	raw_s["first_aid"].erase("mechanic")
+	var miss := _missed(GameDB.validate("skills", raw_s), ["skills/vyly: «mechanic» посилається на res://scripts/mechanics/skill/nema_takoho.gd, а такого файлу нема", "skills/whirl: «mechanic» має бути \"skill/<файл>\"", "skills/taran: «mechanic» і «act» разом", "skills/first_aid: уміння з коду потребує «mechanic»", "механіка res://scripts/mechanics/skill/vyly.gd нікому не потрібна", "механіка res://scripts/mechanics/skill/first_aid.gd нікому не потрібна"])
+	check(miss.is_empty(), "перевірка ловить хибні посилання вмінь і сиріт%s" % ("" if miss.is_empty() else ": не впіймала " + str(miss)))
+	var raw_p = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("powers")))
+	raw_p["hrim"]["mechanic"] = "power/nema_takoho"
+	raw_p["perun"]["mechanic"] = "weapon/sabre"
+	raw_p["yadro"].erase("mechanic")
+	miss = _missed(GameDB.validate("powers", raw_p), ["powers/hrim: «mechanic» посилається на res://scripts/mechanics/power/nema_takoho.gd", "powers/perun: «mechanic» має бути \"power/<файл>\"", "powers/yadro: немає обов'язкового поля «mechanic»", "механіка res://scripts/mechanics/power/hrim.gd нікому не потрібна"])
+	check(miss.is_empty(), "перевірка ловить хибні посилання сил%s" % ("" if miss.is_empty() else ": не впіймала " + str(miss)))
+	var raw_w = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("weapons")))
+	raw_w["mace"]["mechanic"] = "weapon/nema_takoho"
+	raw_w["bow"].erase("shot_range")
+	raw_w["staff"]["stat"] = "agi"
+	miss = _missed(GameDB.validate("weapons", raw_w), ["weapons/mace: «mechanic» посилається на res://scripts/mechanics/weapon/nema_takoho.gd", "механіка res://scripts/mechanics/weapon/mace.gd нікому не потрібна", "weapons/bow: зброя дальнього бою («ranged») потребує «shot_range»", "weapons/staff: «stat» «agi» не згоджується з «agi»"])
+	check(miss.is_empty(), "перевірка ловить хибні посилання й правила зброї%s" % ("" if miss.is_empty() else ": не впіймала " + str(miss)))
+	check(Data.weapon_stat("staff") == "spi" and Data.weapon_stat("bow") == "agi" and Data.weapon_stat("mace") == "str", "яка характеристика дає силу удару — дані запису зброї")
+	# Справжній бій: кожна механіка створюється й діє без помилок скриптів
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full"]:
+		game.world.hints[k] = true
+	var gp = game.player
+	var Classes = gp.Classes
+	game.enter_location("wild_field")
+	await _frames(4)
+	_clear_enemies(game)
+	var c = game.combat
+	c.spawn_timer = 1.0e9
+	var spot: Vector2 = c.arena.get_center()
+	var foes := func():
+		_clear_enemies(game)
+		for k in 3:
+			c.spawn_enemy("upyr", 20, false, spot + Vector2(110 + 50 * k, -30 + 30 * k))
+			var e = c._last_enemy()
+			e.max_hp = 1.0e6
+			e.hp = e.max_hp
+			e.damage = 1.0
+	var used := {}
+	var cast_bad := []
+	for cls in ["zaporozhets", "plastun", "kharakternyk", "samopalnyk", "sahaidachnyk", "opryshok", "sokolnyk", "znakhar", "perun_zhrets", "molfar"]:
+		gp.job = cls
+		game._sync_class()
+		gp.level = 60
+		gp.skills = {}
+		for lc in Classes.lineage(cls):
+			for br in Classes.tree(lc):
+				for n in br["nodes"]:
+					gp.skills[n["id"]] = int(n["max"])
+		gp.recalc()
+		for id in gp.learned_actives():
+			foes.call()
+			for x in c.companion_nodes:
+				x.queue_free()
+			c.companion_nodes.clear()
+			c._spawn_companions([{"type": "dzhura", "downed": false, "level": 20, "xp": 0, "index": 0}])
+			var cn = c.companion_nodes[0]
+			cn.alive = false  # повалений: його підніме знахар
+			cn.visible = false
+			cn.hp = 0.0
+			gp.global_position = spot
+			gp.alive = true
+			gp.hp = gp.max_hp * 0.5
+			gp.mana = gp.max_mana
+			gp.skill_timers[id] = 0.0
+			gp.use_skill(id)
+			if float(gp.skill_timers.get(id, 0.0)) <= 0.0:
+				cast_bad.append("%s/%s" % [cls, id])
+			used[id] = true
+			await _frames(20)
+	var ac := 0
+	for id in Classes.actives():
+		ac += 1 if used.has(id) else 0
+	check(cast_bad.is_empty() and ac == Classes.actives().size(), "кожне активне вміння (%d) спрацювало в бою своєю механікою%s" % [ac, "" if cast_bad.is_empty() else ": " + str(cast_bad)])
+	# Кожна сила золотої речі й кожен вид зброї: серія, завершальний, заряджений удар, перекид, уміння
+	gp.job = "zaporozhets"
+	game._sync_class()
+	gp.recalc()
+	var pow_bad := []
+	for pid in GameDB.ids("powers"):
+		var uid := ""
+		for u in GameDB.ids("golden"):
+			if uid == "" and str(GameDB.row("golden", u)["power"]) == pid:
+				uid = str(u)
+		var it: Dictionary = Uniques.make(uid, 40)
+		gp.assign_uid(it)
+		gp.equipment[it["slot"]] = it
+		gp.recalc()
+		foes.call()
+		gp.global_position = spot
+		gp.hp = gp.max_hp * 0.3
+		gp.invuln = 0.0
+		for k in 4:
+			gp.attack_timer = 0.0
+			gp.attack()
+			await _frames(3)
+		gp.charged_strike(1.0)
+		gp.dodge_timer = 0.0
+		gp.dodge()
+		gp.skill_timers["zemnyi"] = 0.0
+		gp.mana = gp.max_mana
+		gp.use_skill("zemnyi")
+		await _frames(150)
+		if gp.mech("power/" + pid) == null or not gp.u_pow.has(pid):
+			pow_bad.append(pid)
+		gp.equipment.erase(it["slot"])
+	check(pow_bad.is_empty(), "кожна сила золотої речі має свою механіку в бою%s" % ("" if pow_bad.is_empty() else ": " + str(pow_bad)))
+	var wpn_bad := []
+	for w in GameDB.ids("weapons"):
+		var it: Dictionary = Data.gen_item(40, 2, "weapon", str(w))
+		gp.assign_uid(it)
+		gp.equipment["weapon"] = it
+		gp.recalc()
+		foes.call()
+		gp.global_position = spot
+		var hp0 := 0.0
+		for e in c.enemies_now():
+			hp0 += e.hp
+		for k in 4:
+			gp.attack_timer = 0.0
+			gp.combo_timer = 1.0
+			gp.attack()
+			await _frames(12)
+		gp.charged_strike(1.0)
+		await _frames(30)
+		var hp1 := 0.0
+		for e in c.enemies_now():
+			hp1 += e.hp
+		if gp.weapon_mech == null or gp.weapon_mech.ref != "weapon/" + str(w) or hp1 >= hp0:
+			wpn_bad.append(w)
+	check(wpn_bad.is_empty(), "кожен вид зброї б'є своєю механікою: серія й заряджений удар%s" % ("" if wpn_bad.is_empty() else ": " + str(wpn_bad)))
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)

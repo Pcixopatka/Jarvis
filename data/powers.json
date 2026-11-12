@@ -3,42 +3,49 @@
 		"num": 4501,
 		"name": "Громовий удар",
 		"text": "Завершальний удар серії й повний заряджений удар гримлять на всі боки: {pct}% шкоди всім довкола, нечисть ціпеніє на {stun} с.",
-		"params": {"radius": "int", "pct": "pct", "stun": "float"}
+		"params": {"radius": "int", "pct": "pct", "stun": "float"},
+		"mechanic": "power/hrim"
 	},
 	"zvytiaha": {
 		"num": 4502,
 		"name": "Звитяга",
 		"text": "Кожен убитий ворог додає {dmg}% шкоди на {dur} с, до {max} разів.",
-		"params": {"dmg": "pct", "max": "int", "dur": "int"}
+		"params": {"dmg": "pct", "max": "int", "dur": "int"},
+		"mechanic": "power/zvytiaha"
 	},
 	"pokrova": {
 		"num": 4503,
 		"name": "Покрова",
 		"text": "Коли здоров'я падає нижче {threshold}%, на {dur} с шкода по тобі менша на {ward}%. Не частіше ніж раз на {cd} с.",
-		"params": {"threshold": "pct", "ward": "pct", "dur": "int", "cd": "int"}
+		"params": {"threshold": "pct", "ward": "pct", "dur": "int", "cd": "int"},
+		"mechanic": "power/pokrova"
 	},
 	"vypad": {
 		"num": 4504,
 		"name": "Пластунський випад",
 		"text": "{window} с після перекиду кожен твій удар критичний і на {bonus}% сильніший.",
-		"params": {"window": "float", "bonus": "pct"}
+		"params": {"window": "float", "bonus": "pct"},
+		"mechanic": "power/vypad"
 	},
 	"vidlunnia": {
 		"num": 4505,
 		"name": "Відлуння",
 		"text": "Кожне вміння з шансом {chance}% перезаряджається вдвічі швидше.",
-		"params": {"chance": "pct"}
+		"params": {"chance": "pct"},
+		"mechanic": "power/vidlunnia"
 	},
 	"perun": {
 		"num": 4506,
 		"name": "Перунова блискавка",
 		"text": "Критичний удар із шансом {chance}% б'є блискавкою ще {jumps} ворогів: по {pct}% шкоди.",
-		"params": {"chance": "pct", "jumps": "int", "pct": "pct", "icd": "float"}
+		"params": {"chance": "pct", "jumps": "int", "pct": "pct", "icd": "float"},
+		"mechanic": "power/perun"
 	},
 	"yadro": {
 		"num": 4507,
 		"name": "Вогняне ядро",
 		"text": "Кожні {period} с на найближчого ворога падає ядро й б'є всіх поруч так, як ти за {sec} с бою. Ще й підпалює.",
-		"params": {"period": "int", "sec": "float", "r": "int"}
+		"params": {"period": "int", "sec": "float", "r": "int"},
+		"mechanic": "power/yadro"
 	}
 }

@@ -159,8 +159,9 @@ func _attach_mechanic(k: String) -> void:
 ## Найближчий союзник (козак або супутник).
 func _pick_target():
 	var pl = combat.player
+	var ag: int = pl.aggro()  # уміння героя: Козацька стіна (1) чи Тінь (−1)
 	# Козацька стіна: усі довкола б'ють лише запорожця
-	if pl.alive and pl.stina_timer > 0.0 and global_position.distance_to(pl.global_position) < 520.0:
+	if pl.alive and ag > 0 and global_position.distance_to(pl.global_position) < 520.0:
 		return pl
 	if rams_gate and combat.gate != null and is_instance_valid(combat.gate) and combat.gate.alive:
 		if not (pl.alive and global_position.distance_to(pl.global_position) < 110.0):
@@ -168,7 +169,7 @@ func _pick_target():
 	var best = null
 	var best_d := INF
 	for a in combat.allies():
-		if a == pl and pl.tin_timer > 0.0:
+		if a == pl and ag < 0:
 			continue  # пластуна в Тіні не видно
 		var d: float = global_position.distance_squared_to(a.global_position)
 		if d < best_d:

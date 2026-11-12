@@ -8,7 +8,8 @@
 		"arc": 1.0,
 		"kb": 1.0,
 		"hint": "Збалансована",
-		"basic": true
+		"basic": true,
+		"mechanic": "weapon/sabre"
 	},
 	"mace": {
 		"num": 4102,
@@ -19,7 +20,8 @@
 		"arc": 1.1,
 		"kb": 1.8,
 		"hint": "Повільна, б'є сильно і далеко відкидає",
-		"basic": true
+		"basic": true,
+		"mechanic": "weapon/mace"
 	},
 	"pike": {
 		"num": 4103,
@@ -30,7 +32,8 @@
 		"arc": 0.55,
 		"kb": 1.2,
 		"hint": "Довгий, але вузький удар",
-		"basic": true
+		"basic": true,
+		"mechanic": "weapon/pike"
 	},
 	"staff": {
 		"num": 4104,
@@ -41,7 +44,10 @@
 		"arc": 1.0,
 		"kb": 0.5,
 		"hint": "Волхвів: б'є іскрами здалеку, сила — від Характерництва",
-		"ranged": true
+		"ranged": true,
+		"shot_range": 430.0,
+		"stat": "spi",
+		"mechanic": "weapon/staff"
 	},
 	"pishchal": {
 		"num": 4105,
@@ -53,7 +59,9 @@
 		"kb": 1.2,
 		"hint": "Самопальника: куля пробиває ворогів, сила — від Спритності",
 		"ranged": true,
-		"agi": true
+		"shot_range": 480.0,
+		"agi": true,
+		"mechanic": "weapon/pishchal"
 	},
 	"bow": {
 		"num": 4106,
@@ -65,7 +73,9 @@
 		"kb": 0.6,
 		"hint": "Стрільців: швидкі стріли здалеку, сила — від Спритності",
 		"ranged": true,
-		"agi": true
+		"shot_range": 460.0,
+		"agi": true,
+		"mechanic": "weapon/bow"
 	},
 	"pistols": {
 		"num": 4107,
@@ -77,6 +87,8 @@
 		"kb": 0.8,
 		"hint": "Стрільців: два стволи, б'ють часто й зблизька, сила — від Спритності",
 		"ranged": true,
-		"agi": true
+		"shot_range": 330.0,
+		"agi": true,
+		"mechanic": "weapon/pistols"
 	}
 }

@@ -1,16 +1,17 @@
 extends Node2D
-## Зони чарів волхвів і дух-помічник:
-##   grad   — град у колі: удари раз на 0.3 с + холод
-##   tuman  — туман: вороги всередині сповільнені й ослаблені
-##   otruta — отруйна хмара знахаря: зараза з'їдає ворогів
-##   spirit — дух мольфара: летить біля героя й стріляє вогниками
+## Зона вміння чи помічник, яких поставив герой. Що зона робить, вирішує механіка, що її поставила
+## (mech.zone_tick, scripts/mechanics/): град, туман, отруйна хмара, дух мольфара, сокіл, зона вміння за
+## даними. Тут — лише час життя й вигляд за родом (kind):
+##   grad   — град у колі;      tuman  — туман;          otruta — отруйна хмара знахаря;
+##   spirit — дух мольфара;     falcon — сокіл;          skill  — зона вміння за даними (колір color)
 
 var combat
+var mech  # механіка, що поставила зону (HeroMechanic): її zone_tick кличеться щокадру
 var kind := "grad"
 var radius := 140.0
 var duration := 3.0
-var damage := 10.0  # за удар (grad, spirit) або за секунду (otruta)
-## Зона вміння за даними (kind == "skill"): як часто б'є, який стан накладає, якого кольору
+var damage := 10.0  # за удар (grad, spirit, skill, falcon) або за секунду (otruta)
+## Зона вміння за даними (skill) і сокіл (falcon): як часто б'є, який стан накладає, якого кольору
 var tick := 0.5
 var status := ""
 var status_dur := 1.5
@@ -27,59 +28,8 @@ func _process(delta: float) -> void:
 	if _t >= duration:
 		queue_free()
 		return
-	match kind:
-		"spirit":
-			var p = combat.player
-			var target: Vector2 = p.global_position + Vector2(cos(_t * 2.0) * 50.0, -60.0 + sin(_t * 3.0) * 10.0)
-			global_position = global_position.lerp(target, minf(1.0, delta * 6.0))
-			if _tick <= 0.0:
-				_tick = 0.8
-				var e = combat.nearest_enemy(global_position, 520.0)
-				if e:
-					combat.spawn_spark(global_position, (e.global_position - global_position).normalized(), damage, false)
-		"falcon":
-			# Сокіл кружляє над героєм, а на удар пірнає до ворога
-			var hero = combat.player
-			var home: Vector2 = hero.global_position + Vector2(cos(_t * 2.4) * 70.0, -80.0 + sin(_t * 4.8) * 14.0)
-			if _dive > 0.0:
-				_dive -= delta
-				global_position = global_position.lerp(_dive_to, minf(1.0, delta * 14.0))
-			else:
-				global_position = global_position.lerp(home, minf(1.0, delta * 5.0))
-			if _tick <= 0.0:
-				_tick = tick
-				var prey = combat.nearest_enemy(hero.global_position, 560.0)
-				if prey:
-					_dive = 0.25
-					_dive_to = prey.global_position + Vector2(0, -10)
-					hero.hit(prey, damage, Vector2.ZERO, false)
-					if status != "" and not prey.dead:
-						hero.Status.apply(prey, status, status_dur)
-					combat.fx.burst(prey.global_position, color, 6, 160, 4, 0.25)
-		_:
-			if _tick <= 0.0:
-				_tick = 0.3 if kind == "grad" else (tick if kind == "skill" else 0.5)
-				for e in combat.enemies_now():
-					if e.dead or global_position.distance_to(e.global_position) > radius + e.radius:
-						continue
-					match kind:
-						"grad":
-							combat.player.hit(e, damage, Vector2.ZERO, false)
-							if not e.dead:
-								combat.player.Status.apply(e, "chill", 1.5)
-						"tuman":
-							combat.player.Status.apply(e, "chill", 1.0)
-							combat.player.Status.apply(e, "weak", 1.0)
-						"otruta":
-							combat.player.Status.apply(e, "plague", 2.0, damage)
-						"skill":
-							if damage > 0.0:
-								combat.player.hit(e, damage, Vector2.ZERO, false)
-							if status != "" and not e.dead:
-								combat.player.Status.apply(e, status, status_dur, damage * 0.2 if status in ["bleed", "burn", "plague"] else 0.0)
-				if kind == "grad":
-					for i in 4:
-						combat.fx.burst(global_position + Vector2.from_angle(randf() * TAU) * randf() * radius, Color(0.85, 0.95, 1.0), 3, 120, 3, 0.25)
+	if mech != null:
+		mech.zone_tick(self, delta)
 	queue_redraw()
 
 

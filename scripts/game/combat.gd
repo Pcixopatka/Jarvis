@@ -1761,7 +1761,7 @@ func last_projectile():
 
 
 ## Пастка пластуна. max_count — скільки пасток може стояти одночасно (старі зникають).
-func spawn_trap(pos: Vector2, dmg: float, crit: bool, max_count: int) -> void:
+func spawn_trap(pos: Vector2, dmg: float, crit: bool, max_count: int) -> Node2D:
 	var traps := effects.get_children().filter(func(n): return n.get_script() == TrapScript and n.kind == "trap" and not n.is_queued_for_deletion())
 	while traps.size() >= max_count:
 		traps.pop_front().queue_free()
@@ -1771,9 +1771,10 @@ func spawn_trap(pos: Vector2, dmg: float, crit: bool, max_count: int) -> void:
 	t.damage = dmg
 	t.crit = crit
 	effects.add_child(t)
+	return t
 
 
-## Зона чарів волхва (grad / tuman / otruta) або дух-помічник (spirit).
+## Зона вміння чи помічник героя (див. zone.gd); що вона робить, каже механіка, яка її ставить (z.mech).
 func spawn_zone(kind: String, pos: Vector2, r: float, dur: float, dmg: float) -> Node2D:
 	var z = ZoneScript.new()
 	z.combat = self
@@ -1802,7 +1803,7 @@ func revive_companions(pct: float) -> int:
 
 
 ## Бочка пороху: вибухає за мить.
-func spawn_barrel(pos: Vector2, dmg: float, crit: bool, blast: float, burn: float) -> void:
+func spawn_barrel(pos: Vector2, dmg: float, crit: bool, blast: float, burn: float) -> Node2D:
 	var t = TrapScript.new()
 	t.combat = self
 	t.kind = "barrel"
@@ -1812,6 +1813,7 @@ func spawn_barrel(pos: Vector2, dmg: float, crit: bool, blast: float, burn: floa
 	t.blast = blast
 	t.burn = burn
 	effects.add_child(t)
+	return t
 
 
 ## Іскра волхва: самонавідна ціль уже обрана, летить швидко, б'є одного.

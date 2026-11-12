@@ -345,6 +345,13 @@ static func is_ranged(type: String) -> bool:
 	return bool(GameDB.weapon(type).get("ranged", false))
 
 
+## Яка характеристика дає силу удару цією зброєю: «stat» запису, а без нього — Спритність для «agi»,
+## інакше Сила ("str", "agi", "spi").
+static func weapon_stat(type: String) -> String:
+	var W: Dictionary = GameDB.weapon(type)
+	return str(W.get("stat", "agi" if bool(W.get("agi", false)) else "str"))
+
+
 ## Зброя, сила якої йде від Спритності.
 static func is_agi(type: String) -> bool:
 	return bool(GameDB.weapon(type).get("agi", false))

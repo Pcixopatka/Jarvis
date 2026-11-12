@@ -143,6 +143,16 @@ static func params(id: String) -> Dictionary:
 	return GameDB.golden(id)["params"]
 
 
+## Механіка сили pid (запис powers.json: «mechanic», "power/<id>"); порожньо — сила нічого не робить.
+static func power_mechanic(pid: String) -> String:
+	return str(GameDB.power(pid).get("mechanic", ""))
+
+
+## Сталий номер сили pid (черговість її механіки серед інших).
+static func power_num(pid: String) -> int:
+	return int(GameDB.power(pid).get("num", 0))
+
+
 static func power_name(id: String) -> String:
 	return str(GameDB.power(str(GameDB.golden(id)["power"]))["name"])
 

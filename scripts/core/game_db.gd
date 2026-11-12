@@ -179,9 +179,12 @@ const WEAPON_SCHEMA := {
 	"arc": {"type": "float", "required": true},  # ширина дуги
 	"kb": {"type": "float", "required": true},  # відкидання
 	"hint": {"type": "string", "required": true},  # підказка в картці речі
-	"ranged": {"type": "bool"},  # б'є снарядами, дальність стала (Player.recalc)
+	"ranged": {"type": "bool"},  # б'є снарядами, дальність стала («shot_range»)
+	"shot_range": {"type": "float"},  # дальність удару тим, що б'є снарядами (замість 95 × «range»)
 	"agi": {"type": "bool"},  # сила від Спритності (стрільці)
+	"stat": {"type": "enum", "values": ["str", "agi", "spi"]},  # що дає силу удару; без поля — «agi» → Спритність, інакше Сила
 	"basic": {"type": "bool"},  # падає, коли гра не задала зброї під клас (Data.weapon_pool порожній)
+	"mechanic": {"type": "string", "required": true},  # як б'є: "weapon/<вид>" у scripts/mechanics/ (див. WeaponMechanic)
 }
 
 ## Основа обладунку: назва звичайної речі неозброєної клітинки («Кучма», «Черес»).
@@ -221,6 +224,7 @@ const POWER_SCHEMA := {
 	"name": {"type": "string", "required": true},
 	"text": {"type": "string", "required": true},  # {параметр} підставляється з речі
 	"params": {"type": "map", "required": true, "of": {"type": "enum", "values": ["int", "float", "pct"]}},  # pct — частка, у тексті відсотки
+	"mechanic": {"type": "string", "required": true},  # що робить у бою: "power/<id>" у scripts/mechanics/ (див. PowerMechanic)
 }
 
 ## Ступінь золотої речі (1..6).
@@ -550,7 +554,8 @@ const SKILL_SCHEMA := {
 	"heals": {"type": "bool"},  # вертає героєві здоров'я (авто-бафи Німба лікують лише пораненого)
 	"scales": {"type": "string"},  # картка вміння: від чого росте сила («—» — ні від чого)
 	"what": {"type": "string"},  # картка вміння: що робить, без цифр
-	"act": ACT_SCHEMA,  # активне за даними; без нього дію пише код (Player.use_skill)
+	"mechanic": {"type": "string"},  # активне з власною дією: "skill/<id>" у scripts/mechanics/ (див. SkillMechanic)
+	"act": ACT_SCHEMA,  # активне за даними: дію робить шаблон act/<type> у scripts/mechanics/ (див. ActMechanic)
 	"fx": FX_MAP,  # пасивне: бонуси за кожен ранг
 	"when": {"type": "record", "fields": {  # пасивне діє лише за умови
 		"weapon": {"type": "list", "required": true, "of": {"type": "string"}},  # з такою зброєю в руках
@@ -679,6 +684,10 @@ const MECHANIC_BASES := {
 	"boss": "res://scripts/mechanics/mechanic.gd",
 	"companion": "res://scripts/mechanics/companion_mechanic.gd",
 	"pet": "res://scripts/mechanics/pet_mechanic.gd",
+	"skill": "res://scripts/mechanics/skill_mechanic.gd",
+	"act": "res://scripts/mechanics/act_mechanic.gd",
+	"power": "res://scripts/mechanics/power_mechanic.gd",
+	"weapon": "res://scripts/mechanics/weapon_mechanic.gd",
 }
 
 ## Гнізда божих дарів, у яких лежать супутники, що ходять за героєм у бою (Хованець, скакун, мажа).
@@ -1176,9 +1185,15 @@ static func _item_rules(name: String, rows: Dictionary) -> Array:
 					if str(e).strip_edges() == "":
 						out.append("%s: порожнє прізвисько в «epithets»" % where)
 			"weapons":
-				_positive(R, ["dmg", "cd", "range", "arc", "kb"], where, out)
+				_positive(R, ["dmg", "cd", "range", "arc", "kb", "shot_range"], where, out)
 				if R.get("agi", false) and not R.get("ranged", false):
 					out.append("%s: «agi» лише в зброї дальнього бою («ranged»)" % where)
+				if R.get("ranged", false) != R.has("shot_range"):
+					out.append("%s: зброя дальнього бою («ranged») потребує «shot_range», і лише вона" % where)
+				if R.has("stat") and R.get("agi", false) != (str(R["stat"]) == "agi"):
+					out.append("%s: «stat» «%s» не згоджується з «agi»" % [where, R["stat"]])
+				if R.has("mechanic") and not _is_mechanic_ref(str(R["mechanic"]), "weapon"):
+					out.append("%s: «mechanic» має бути \"weapon/<файл>\", а не «%s»" % [where, R["mechanic"]])
 			"bonuses":
 				if R.has("text") and not "%s" in str(R["text"]):
 					out.append("%s: «text» має містити %%s (число)" % where)
@@ -1201,6 +1216,8 @@ static func _item_rules(name: String, rows: Dictionary) -> Array:
 			"powers":
 				if R.get("params", _EMPTY).is_empty():
 					out.append("%s: «params» порожні" % where)
+				if R.has("mechanic") and not _is_mechanic_ref(str(R["mechanic"]), "power"):
+					out.append("%s: «mechanic» має бути \"power/<файл>\", а не «%s»" % [where, R["mechanic"]])
 				for k in _placeholders(str(R.get("text", ""))):
 					if not R.get("params", _EMPTY).has(k):
 						out.append("%s: у тексті {%s}, а такого параметра в «params» нема" % [where, k])
@@ -1413,9 +1430,20 @@ static func _item_links(name: String, rows: Dictionary) -> Array:
 				for w in row("classes", cls).get("weapons", []):
 					if not rows.has(w):
 						out.append("клас %s носить зброю «%s», якої нема у weapons.json" % [cls, w])
+			var wused := {}
+			for id in rows:
+				if rows[id].has("mechanic"):
+					_mechanic_ref("weapons/" + id, "mechanic", str(rows[id]["mechanic"]), wused, out)
+			out.append_array(_mechanic_orphans(["weapon"], wused, "weapons.json"))
 			for w in load("res://scripts/data/costumes.gd").WEAPONS:
 				if not rows.has(w):
 					out.append("Costumes.WEAPONS: зброї «%s» нема у weapons.json" % w)
+		"powers":
+			var pused := {}
+			for id in rows:
+				if rows[id].has("mechanic"):
+					_mechanic_ref("powers/" + id, "mechanic", str(rows[id]["mechanic"]), pused, out)
+			out.append_array(_mechanic_orphans(["power"], pused, "powers.json"))
 		"armors":
 			var have := {}
 			for id in rows:
@@ -1653,7 +1681,7 @@ static func _mechanic_orphans(folders: Array, used: Dictionary, file: String) ->
 	return out
 
 
-## Файли механік у теці (mob, boss, companion, pet) як посилання ("mob/chort"). Лише для перевірки й
+## Файли механік у теці (mob, boss, companion, pet, skill, act, power, weapon) як посилання ("mob/chort"). Лише для перевірки й
 ## інструментів: у збірці теки містять .gdc і .remap, тож гра механік так не шукає.
 static func mechanic_files(folder: String) -> Array:
 	var out := []
@@ -1940,7 +1968,7 @@ const _CLASS_TEXTS := ["name", "desc", "text", "address", "where", "mentor", "la
 ## Характеристики героя, які знає код (Player.stats і Player.recalc), у порядку екрана героя.
 const STAT_IDS := ["str", "agi", "vit", "spi"]
 ## Поля активного вміння, яких пасивне не має.
-const _ACTIVE_ONLY := ["cost", "cd", "label", "color", "kind", "heals", "scales", "what", "act"]
+const _ACTIVE_ONLY := ["cost", "cd", "label", "color", "kind", "heals", "scales", "what", "act", "mechanic"]
 
 
 ## Правила таблиць класів і вмінь, що не залежать від інших таблиць.
@@ -2029,10 +2057,14 @@ static func _class_rules(name: String, rows: Dictionary) -> Array:
 							out.append("%s: «act.status» — секунд має бути більше нуля" % where)
 						if str(A.get("type", "")) == "buff" and A.has("at"):
 							out.append("%s: «act.at» не має сенсу для підсилення" % where)
+						if R.has("mechanic"):
+							out.append("%s: «mechanic» і «act» разом: дію робить або механіка вміння, або шаблон" % where)
 					else:
-						for k in ["what", "scales"]:
+						for k in ["what", "scales", "mechanic"]:
 							if not R.has(k):
-								out.append("%s: уміння з коду потребує «%s» для картки" % [where, k])
+								out.append("%s: уміння з коду потребує «%s» (картка, механіка)" % [where, k])
+					if R.has("mechanic") and not _is_mechanic_ref(str(R["mechanic"]), "skill"):
+						out.append("%s: «mechanic» має бути \"skill/<файл>\", а не «%s»" % [where, R["mechanic"]])
 				else:
 					for k in _ACTIVE_ONLY:
 						if R.has(k):
@@ -2170,6 +2202,7 @@ static func _class_links(name: String, rows: Dictionary) -> Array:
 			var Index = load("res://scripts/data/sound_index.gd")
 			var classes: Dictionary = table("classes")
 			var nodes := {}  # клас → {id уміння: найвищий ранг}
+			var sused := {}  # посилання на механіки вмінь і шаблонів дії
 			for id in rows:
 				var c := str(rows[id].get("class", ""))
 				if not nodes.has(c):
@@ -2211,6 +2244,11 @@ static func _class_links(name: String, rows: Dictionary) -> Array:
 						out.append("%s: «act.%s» — нема вміння «%s» у дереві класу" % [where, k, A[k]])
 				if not Icons.INDEX.has(sid):
 					out.append("%s: уміння «%s» без значка (tools/pixel/skill_icons.py → SkillIconIndex.INDEX)" % [where, sid])
+				if R.has("mechanic"):
+					_mechanic_ref(where, "mechanic", str(R["mechanic"]), sused, out)
+				if A.has("type"):
+					_mechanic_ref(where, "act.type", "act/" + str(A["type"]), sused, out)
+			out.append_array(_mechanic_orphans(["skill", "act"], sused, "skills.json"))
 		"perks":
 			var branches: Array = ids("perk_branches")
 			var last := {}  # гілка → останній ярус у файлі
