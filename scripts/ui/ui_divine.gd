@@ -114,11 +114,8 @@ static func detail(game, slot: String) -> Control:
 				acts.add_child(UI.button(auto_label(p), game.char_do.bind("auto_buffs", null), Vector2(210, 46), 16))
 			box.add_child(acts)
 			box.add_child(_wrap("Вдягнено" if on else "Куплено для всього роду, зараз знято", 14, UI.GOOD if on else UI.MUTED))
-		elif DivineService.on_sale:
-			box.add_child(UI.button("До крамниці • %d %s" % [int(D["price"]), Shop.COIN_SHORT], game.char_do.bind("divine_shop", id), Vector2(260, 46), 16))
 		else:
-			# купівлю дарів вимкнено (Divine.ON_SALE): дар видно, але замість кнопки до крамниці напис
-			box.add_child(_wrap("Зараз не продається", 16, UI.MUTED))
+			box.add_child(UI.button("До крамниці • %d %s" % [int(D["price"]), Shop.COIN_SHORT], game.char_do.bind("divine_shop", id), Vector2(260, 46), 16))
 		v.add_child(panel)
 	return v
 
@@ -137,7 +134,7 @@ static func shop_page(game) -> Control:
 			picked = id
 		var have: bool = DivineService.owned(w, id)
 		grid.add_child(UI.goods_cell(UI.icon(str(D["icon"]), UShop.CELL), DIVINE_COLOR if DivineService.wears(p, id) else CARD_LINE.lightened(0.2),
-			game.shop_do.bind("select", key), key == game.shop_sel, UShop.CELL, "" if have or not DivineService.on_sale else UI.num(DivineService.price(id)), "", have))
+			game.shop_do.bind("select", key), key == game.shop_sel, UShop.CELL, "" if have else UI.num(DivineService.price(id)), "", have))
 	var det := VBoxContainer.new()
 	det.add_theme_constant_override("separation", 6)
 	if picked == "":
@@ -158,15 +155,14 @@ static func shop_page(game) -> Control:
 		if have:
 			det.add_child(UI.button("Зняти" if on else "Вдягнути", game.shop_do.bind("divine", picked), Vector2(UShop.BTN_W, 60), 20))
 			det.add_child(_wrap("Вдягнено" if on else "Куплено для роду, зараз знято", 14, UI.GOOD if on else UI.MUTED))
-		elif not DivineService.on_sale:
-			# купівлю дарів вимкнено (Divine.ON_SALE): дар можна роздивитись, але не купити
-			det.add_child(UI.button("Зараз не продається", game.shop_do.bind("divine", picked), Vector2(UShop.BTN_W, 60), 20, false))
+		elif not DivineService.on_sale:  # купівлю дарів вимкнено (Divine.ON_SALE): ціну видно, кнопка не працює
+			det.add_child(UI.button("Зараз не продається • %s %s" % [UI.num(DivineService.price(picked)), Shop.COIN_SHORT], game.shop_do.bind("divine", picked), Vector2(UShop.BTN_W, 60), 18, false))
 		else:
 			var why: String = DivineService.block_reason(w, picked)
 			det.add_child(UShop._buy_button(game, "divine:" + picked, DivineService.price(picked), why, game.shop_do.bind("divine", picked)))
 			if why != "":
 				det.add_child(_wrap(why, 14, UI.BAD))
-	return UShop._page("Божі дари вдягаються у власні гнізда на екрані героя, поруч зі спорядженням, і місця в торбі не займають. Купуються раз на весь рід, а вдягає їх кожен герой окремо. Галочка означає, що дар уже куплено.%s" % ("" if DivineService.on_sale else " Зараз дари не продаються: їх можна лише роздивитись, а куплені вдягаються, як раніше."), grid, det)
+	return UShop._page("Божі дари вдягаються у власні гнізда на екрані героя, поруч зі спорядженням, і місця в торбі не займають. Купуються раз на весь рід, а вдягає їх кожен герой окремо. Галочка означає, що дар уже куплено.", grid, det)
 
 
 ## Крамниця Хованця: та сама крамниця, що й у місті (товари, зілля, продаж поодинці, гуртом і

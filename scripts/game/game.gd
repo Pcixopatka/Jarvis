@@ -2603,11 +2603,7 @@ func char_do(action: String, arg) -> void:
 			# перемикач авто-бафів Німба на картці дару: окремо для кожного героя
 			player.auto_buffs = not player.auto_buffs
 		"divine_shop":
-			# некуплений дар: веде в крамницю на вкладку «Божі дари», поки дари продаються
-			if not DivineService.on_sale:
-				hud.show_banner("Божі дари зараз не продаються", UI.BAD)
-				_build_character()
-				return
+			# некуплений дар: веде в крамницю на вкладку «Божі дари»
 			shop_tab = _shop_tab_index("Божі дари")
 			open_shop(_build_character)
 			return
@@ -3472,7 +3468,7 @@ func shop_do(action: String, arg) -> void:
 			elif DivineService.block_reason(world, did) != "":
 				shop_confirm = ""
 				if not DivineService.on_sale:
-					hud.show_banner("Божі дари зараз не продаються", UI.BAD)
+					hud.show_banner(ShopService.OFF_TEXT, UI.BAD)
 			elif shop_confirm != "divine:" + did:
 				shop_confirm = "divine:" + did
 			else:

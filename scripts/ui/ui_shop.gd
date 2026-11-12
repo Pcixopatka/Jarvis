@@ -17,7 +17,6 @@ const Costumes := preload("res://scripts/data/costumes.gd")
 const CostumeService := preload("res://scripts/game/costume_service.gd")
 const QuickService := preload("res://scripts/game/quick_service.gd")
 const AdRewards := preload("res://scripts/game/ad_rewards.gd")
-const DivineService := preload("res://scripts/game/divine_service.gd")
 
 const CARD_BG := Color(0.14, 0.11, 0.09)
 const CARD_LINE := Color(0.45, 0.36, 0.22)
@@ -65,12 +64,6 @@ static func _note(game) -> Control:
 static func _packs(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	if not ShopService.coins_on_sale:
-		# купівлю червінців вимкнено (Shop.COINS_ON_SALE): лише рахунок і пояснення, без наборів і цін
-		v.add_child(_wrap("На рахунку роду %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))], 22, COIN_COLOR))
-		v.add_child(_wrap(ShopService.PACKS_OFF_TEXT, 17, UI.TEXT))
-		v.add_child(_wrap("Червінці спільні для всіх твоїх героїв і не зникають. Усе рідкісне з крамниці можна здобути й у грі без жодної покупки.", 15, UI.MUTED))
-		return v
 	v.add_child(_wrap("Червінці купують за справжні гроші. Вони спільні для всіх твоїх героїв і не зникають. За них продається все рідкісне: золоті речі, речі наборів, артефакти й душі. Усе це можна здобути й у грі без жодної покупки.", 16, UI.TEXT))
 	v.add_child(_note(game))
 	var grid := UI.grid(2)
@@ -90,7 +83,10 @@ static func _packs(game) -> Control:
 		h.add_child(col)
 		col.add_child(_wrap(str(p["name"]), 21, UI.GOLD))
 		col.add_child(_wrap("%s червінців%s" % [UI.num(int(p["coins"])), ("   •   на %d%% більше за ті самі гроші" % int(p["bonus"])) if int(p["bonus"]) > 0 else ""], 17, COIN_COLOR))
-		h.add_child(UI.button("Купити\n%s" % str(p["price"]), game.shop_do.bind("pack", str(p["id"])), Vector2(170, 64), 18))
+		if ShopService.coins_on_sale:
+			h.add_child(UI.button("Купити\n%s" % str(p["price"]), game.shop_do.bind("pack", str(p["id"])), Vector2(170, 64), 18))
+		else:  # купівлю червінців вимкнено (Shop.COINS_ON_SALE): ціну видно, кнопка не працює
+			h.add_child(UI.button("%s\n%s" % [ShopService.OFF_TEXT, str(p["price"])], game.shop_do.bind("pack", str(p["id"])), Vector2(170, 64), 15, false))
 		grid.add_child(panel)
 	return v
 

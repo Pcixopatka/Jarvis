@@ -17,7 +17,7 @@ const PerilService := preload("res://scripts/game/peril_service.gd")
 
 ## Чи продаються червінці зараз. Типове значення в Shop.COINS_ON_SALE; тести можуть перемкнути.
 static var coins_on_sale: bool = Shop.COINS_ON_SALE
-const PACKS_OFF_TEXT := "Купівлю червінців тимчасово вимкнено. Червінці, які вже є, лишаються й витрачаються, як раніше."
+const OFF_TEXT := "Зараз не продається"
 
 
 static func state(world) -> Dictionary:
@@ -47,7 +47,7 @@ static func pack(id: String) -> Dictionary:
 ## Чому набір зараз не купити (порожньо: можна).
 static func pack_block_reason(id: String) -> String:
 	if not coins_on_sale:
-		return PACKS_OFF_TEXT
+		return OFF_TEXT
 	if pack(id).is_empty():
 		return "Такого набору нема"
 	return ""
