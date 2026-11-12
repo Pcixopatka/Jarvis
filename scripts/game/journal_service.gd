@@ -33,15 +33,16 @@ static func sections(world, player) -> Array:
 	var ss: Dictionary = StoryService.state(world)
 	var finished: bool = str(ss["stage"]) == "done"
 	var chapters := []
-	for i in Story.CHAPTERS.size():
-		chapters.append({"title": str(Story.CHAPTERS[i]["title"]),
+	for i in Story.chapter_count():
+		chapters.append({"title": Story.chapter_title(i),
 			"state": "done" if finished or i < int(ss["chapter"]) else ("now" if i == int(ss["chapter"]) else "ahead")})
 	# Після Кремля історія триває: кроки «Попелу за вітром» ідуть у тому самому списку розділів
 	var SagaS = StoryService.SagaService
 	if finished:
 		var saga_done: int = SagaS.done_count(world)
-		for i in SagaS.Saga.STEPS.size():
-			chapters.append({"title": "%s. %s" % [SagaS.Saga.TITLE, SagaS.Saga.STEPS[i]["title"]],
+		var saga_steps: Array = SagaS.Saga.steps()
+		for i in saga_steps.size():
+			chapters.append({"title": "%s. %s" % [SagaS.Saga.title(), saga_steps[i]["title"]],
 				"state": "done" if i < saga_done else ("now" if i == saga_done and SagaS.unlocked(world) else "ahead")})
 	var story: String = StoryService.objective_line(world)
 	var story_rows := []
@@ -69,7 +70,7 @@ static func sections(world, player) -> Array:
 		rows.append(_row("%s: %s" % [lr["title"], lr["text"]], Data.place_name(lplace) if lplace != "" else "", "", str(lr["reward"]),
 			bool(lr["back"]), "Оповідач чекає з нагородою", lplace))
 	if not rows.is_empty():
-		out.append({"title": "Перекази (%d із %d розказано)" % [LegendS.done_count(world), LegendS.Legends.ORDER.size()], "rows": rows, "empty": ""})
+		out.append({"title": "Перекази (%d із %d розказано)" % [LegendS.done_count(world), LegendS.Legends.order().size()], "rows": rows, "empty": ""})
 	# Завдання міст
 	rows = []
 	for q in world.quests:

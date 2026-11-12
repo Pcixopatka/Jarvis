@@ -1,0 +1,147 @@
+{
+	"kill": {
+		"num": 8951,
+		"stat": "kill",
+		"goal": [300, 500],
+		"text": "Здолай %d ворогів за тиждень"
+	},
+	"boss": {
+		"num": 8952,
+		"stat": "boss",
+		"goal": [3, 5],
+		"text": "Здолай босів: %d"
+	},
+	"elite": {
+		"num": 8953,
+		"stat": "elite",
+		"goal": [15, 25],
+		"text": "Здолай %d еліт"
+	},
+	"sharpen": {
+		"num": 8954,
+		"stat": "sharpen",
+		"goal": [3, 5],
+		"text": "Вдало нагостри зброю %d разів"
+	},
+	"harvest": {
+		"num": 8955,
+		"stat": "harvest",
+		"goal": [4, 8],
+		"text": "Збери врожаїв на городі: %d",
+		"need": "garden",
+		"where": "Город на хуторі"
+	},
+	"expedition": {
+		"num": 8956,
+		"stat": "expedition",
+		"goal": [3, 5],
+		"text": "Зустрінь супутників із власних походів: %d",
+		"need": "party",
+		"where": "Корчма: відправ супутника в похід"
+	},
+	"travel": {
+		"num": 8957,
+		"stat": "travel",
+		"goal": [4, 6],
+		"text": "Переживи %d пригод у дорозі"
+	},
+	"defense": {
+		"num": 8958,
+		"stat": "defense",
+		"goal": [1, 2],
+		"text": "Відстой облоги: %d",
+		"group": "event",
+		"need": "defense",
+		"where": "Облога з'явиться на мапі червоним кільцем"
+	},
+	"bounty": {
+		"num": 8959,
+		"stat": "bounty",
+		"goal": [2, 3],
+		"text": "Закрий оголошень розшуку: %d",
+		"group": "event",
+		"need": "bounty",
+		"where": "Вкладка «Розшук» у місті"
+	},
+	"duel": {
+		"num": 8960,
+		"stat": "duel",
+		"goal": [3, 5],
+		"text": "Виграй герців на майдані: %d",
+		"group": "event",
+		"need": "duel",
+		"where": "Майдан на Січі: турнір або вільний герць"
+	},
+	"trail": {
+		"num": 8961,
+		"stat": "trail",
+		"goal": [2, 3],
+		"text": "Пройди стежок слідів до знахідки: %d",
+		"group": "event",
+		"need": "trail",
+		"where": "Сліди в диких місцевостях"
+	},
+	"escort": {
+		"num": 8962,
+		"stat": "escort",
+		"goal": [2, 3],
+		"text": "Проведи мандрівників через дикі місця: %d",
+		"group": "event",
+		"need": "escort",
+		"where": "Завдання на супровід у місті"
+	},
+	"vigil_min": {
+		"num": 8963,
+		"stat": "vigil_min",
+		"goal": [8, 12],
+		"text": "Простій на Козацькій варті хвилин: %d",
+		"group": "event",
+		"need": "vigil",
+		"where": "Сторожова могила на мапі"
+	},
+	"event": {
+		"num": 8964,
+		"stat": "event",
+		"goal": [2, 3],
+		"text": "Прийди на поміч у подіях світу: %d",
+		"group": "event",
+		"need": "event",
+		"where": "Події з'являються на мапі після походів"
+	},
+	"tower_floor": {
+		"num": 8965,
+		"stat": "tower_floor",
+		"goal": [6, 10],
+		"text": "Пройди поверхів Башти Кощія: %d",
+		"group": "event",
+		"need": "tower",
+		"where": "Башта Кощія на мапі"
+	},
+	"depth_clear": {
+		"num": 8966,
+		"stat": "depth_clear",
+		"goal": [3, 5],
+		"text": "Пройди глибин зарази: %d",
+		"group": "event",
+		"need": "depth",
+		"where": "Глибини зарази на мапі"
+	},
+	"ring": {
+		"num": 8967,
+		"stat": "ring",
+		"goal": [5, 8],
+		"text": "Здолай чудовиськ у Колі Кожум'яки: %d",
+		"group": "event",
+		"need": "ring",
+		"where": "Змієві вали на мапі"
+	},
+	"muster": {
+		"num": 8968,
+		"stat": "muster",
+		"goal": [2, 3],
+		"text": "Виграй сутичок на гетьманському огляді: %d",
+		"group": "event",
+		"need": "muster",
+		"where": "Вкладка «Огляд» у Чигирині"
+	}
+}

@@ -73,7 +73,7 @@ func _ready() -> void:
 func _show_line() -> void:
 	var line: Array = lines[_i]
 	var npc: String = line[0]
-	var info: Dictionary = Story.NPCS.get(npc, {"name": npc, "role": ""})
+	var info: Dictionary = Story.npc(npc, {"name": npc, "role": ""})
 	_portrait.npc = npc
 	_portrait.queue_redraw()
 	_name.text = info["name"] + (("  •  " + info["role"]) if info["role"] != "" else "")

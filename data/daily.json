@@ -1,0 +1,157 @@
+{
+	"kill": {
+		"num": 8901,
+		"stat": "kill",
+		"goal": [30, 60],
+		"text": "Здолай %d ворогів"
+	},
+	"kill_zarazhenyi": {
+		"num": 8902,
+		"stat": "kill:zarazhenyi",
+		"goal": [10, 25],
+		"text": "Здолай %d заражених"
+	},
+	"elite": {
+		"num": 8903,
+		"stat": "elite",
+		"goal": [2, 4],
+		"text": "Здолай %d еліт"
+	},
+	"field": {
+		"num": 8904,
+		"stat": "field",
+		"goal": [1, 2],
+		"text": "Очисти місцевості: %d"
+	},
+	"dungeon": {
+		"num": 8905,
+		"stat": "dungeon",
+		"goal": [1, 1],
+		"text": "Пройди печеру до боса"
+	},
+	"parry": {
+		"num": 8906,
+		"stat": "parry",
+		"goal": [3, 6],
+		"text": "Відбий %d ударів парируванням"
+	},
+	"charged": {
+		"num": 8907,
+		"stat": "charged",
+		"goal": [3, 6],
+		"text": "Влуч зарядженим ударом %d разів"
+	},
+	"meat": {
+		"num": 8908,
+		"stat": "meat",
+		"goal": [3, 6],
+		"text": "Добудь %d м'яса на полюванні",
+		"need": "hunt",
+		"where": "Мисливські угіддя на мапі"
+	},
+	"ryba": {
+		"num": 8909,
+		"stat": "ryba",
+		"goal": [2, 5],
+		"text": "Налови %d риби",
+		"need": "fish",
+		"where": "Рибальська тоня на мапі"
+	},
+	"dice_win": {
+		"num": 8910,
+		"stat": "dice_win",
+		"goal": [1, 2],
+		"text": "Виграй партій у кості: %d",
+		"need": "tavern",
+		"where": "Шинок у місті"
+	},
+	"cook": {
+		"num": 8911,
+		"stat": "cook",
+		"goal": [1, 1],
+		"text": "Звари страву в казані на хуторі",
+		"need": "hunt",
+		"where": "Казан на хуторі"
+	},
+	"vigil_min": {
+		"num": 8912,
+		"stat": "vigil_min",
+		"goal": [2, 4],
+		"text": "Простій на Козацькій варті хвилин: %d",
+		"group": "event",
+		"need": "vigil",
+		"where": "Сторожова могила на мапі"
+	},
+	"duel": {
+		"num": 8913,
+		"stat": "duel",
+		"goal": [1, 2],
+		"text": "Виграй герців на майдані: %d",
+		"group": "event",
+		"need": "duel",
+		"where": "Майдан на Січі: турнір або вільний герць"
+	},
+	"bounty": {
+		"num": 8914,
+		"stat": "bounty",
+		"goal": [1, 1],
+		"text": "Закрий оголошення з дошки розшуку",
+		"group": "event",
+		"need": "bounty",
+		"where": "Вкладка «Розшук» у місті"
+	},
+	"escort": {
+		"num": 8915,
+		"stat": "escort",
+		"goal": [1, 1],
+		"text": "Проведи мандрівника через дику місцевість",
+		"group": "event",
+		"need": "escort",
+		"where": "Завдання на супровід у місті"
+	},
+	"event": {
+		"num": 8916,
+		"stat": "event",
+		"goal": [1, 1],
+		"text": "Прийди на поміч: відбий набіг, валку чи полон",
+		"group": "event",
+		"need": "event",
+		"where": "Подія з'явиться на мапі після походу"
+	},
+	"trail": {
+		"num": 8917,
+		"stat": "trail",
+		"goal": [1, 1],
+		"text": "Пройди стежку слідів до знахідки",
+		"group": "event",
+		"need": "trail",
+		"where": "Сліди будуть у першій же дикій місцевості"
+	},
+	"tower_floor": {
+		"num": 8918,
+		"stat": "tower_floor",
+		"goal": [2, 4],
+		"text": "Пройди поверхів Башти Кощія: %d",
+		"group": "event",
+		"need": "tower",
+		"where": "Башта Кощія на мапі"
+	},
+	"depth_clear": {
+		"num": 8919,
+		"stat": "depth_clear",
+		"goal": [1, 2],
+		"text": "Пройди глибин зарази: %d",
+		"group": "event",
+		"need": "depth",
+		"where": "Глибини зарази на мапі"
+	},
+	"ring": {
+		"num": 8920,
+		"stat": "ring",
+		"goal": [1, 3],
+		"text": "Здолай чудовиськ у Колі Кожум'яки: %d",
+		"group": "event",
+		"need": "ring",
+		"where": "Змієві вали на мапі"
+	}
+}

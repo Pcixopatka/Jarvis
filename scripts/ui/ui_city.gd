@@ -357,7 +357,7 @@ static func _path_tab(game) -> Control:
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var talked: bool = PS.talked(w, cls)
 		var rep: String = game.Paths.rep(cls)
-		var rep_name: String = game.StoryService.Story.NPCS[rep]["name"]
+		var rep_name: String = game.StoryService.Story.npc_name(rep)
 		card.add_child(UI.button(("Поговорити з: " if not talked else "Ще раз: ") + rep_name, _do(game, "path_talk", cls), Vector2(0, 54), 16))
 		var key: String = "path_choose:" + cls
 		var t: String = ("Обрати: %s" % game.Paths.card(cls)["title"]) if game.confirm_action != key else "Точно? Натисни ще раз"
@@ -444,7 +444,7 @@ static func _mentors(game, city: String) -> Control:
 		row.add_theme_constant_override("separation", 12)
 		var col := VBoxContainer.new()
 		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var mentor: Dictionary = game.StoryService.Story.NPCS[info["mentor"]]
+		var mentor: Dictionary = game.StoryService.Story.npc(info["mentor"])
 		col.add_child(UI.label("%s  •  наставник: %s" % [info["name"], mentor["name"]], 22, UI.GOLD if p.job == spec else UI.TEXT, false))
 		if game.Paths.has_card(spec):
 			col.add_child(class_card(game, spec))

@@ -1,0 +1,31 @@
+{
+	"prolog": {
+		"num": 8451,
+		"title": "Пролог. Попіл рідного села"
+	},
+	"zaraza": {
+		"num": 8452,
+		"title": "Розділ I. Чорна зараза",
+		"cleanse": ["wild_field", "rapids", "black_forest", "zmii_cave", "ridne_selo"]
+	},
+	"chaklun": {
+		"num": 8453,
+		"title": "Розділ II. Чаклун з Брянських лісів",
+		"cleanse": ["polissia", "bilovezha", "crypt", "bryansk_forest", "chaklun_lair"]
+	},
+	"karpaty": {
+		"num": 8454,
+		"title": "Розділ III. Карпатська варта",
+		"cleanse": ["kamianets_walls", "chornohora", "dovbush_cave", "koshchii_tower"]
+	},
+	"pivnich": {
+		"num": 8455,
+		"title": "Розділ IV. Похід на Північ",
+		"cleanse": ["smolensk_road", "mozhaisk"]
+	},
+	"kreml": {
+		"num": 8456,
+		"title": "Розділ V. Кремль",
+		"cleanse_all": true
+	}
+}

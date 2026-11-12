@@ -1,5 +1,5 @@
 extends RefCounted
-## «Попіл за вітром» (див. Saga): продовження сюжету після Кремля. Стан — world.saga:
+## «Попіл за вітром» (див. Saga, data/saga.json): продовження сюжету після Кремля. Стан — world.saga:
 ## {"step": номер кроку, "stage": "offer" (піти до оповідача) / "active" (іти на боса) /
 ## "turnin" (повернутися) / "done"}. Розмови, зірку на мапі й рядок у журналі показує StoryService:
 ## коли головний сюжет завершено, він питає цю службу.
@@ -15,9 +15,10 @@ static func state(world) -> Dictionary:
 	return world.saga
 
 
-## Чи відкрите продовження: рівень героя досить високий (головний сюжет перевіряє StoryService).
+## Чи відкрите продовження: рівень героя досить високий («min_level» лінії «saga» в quest_lines.json).
+## Що головну історію пройдено («after» лінії), перевіряє StoryService: до її кінця він сюди не питає.
 static func unlocked(world) -> bool:
-	return int(world.hero_level) >= Saga.MIN_LEVEL or int(state(world)["step"]) > 0 or str(state(world)["stage"]) != "offer"
+	return int(world.hero_level) >= Saga.min_level() or int(state(world)["step"]) > 0 or str(state(world)["stage"]) != "offer"
 
 
 static func finished(world) -> bool:
@@ -26,16 +27,16 @@ static func finished(world) -> bool:
 
 static func current(world) -> Dictionary:
 	var s := state(world)
-	if s["stage"] == "done" or int(s["step"]) >= Saga.STEPS.size():
+	if s["stage"] == "done" or int(s["step"]) >= Saga.steps().size():
 		return {}
-	return Saga.STEPS[int(s["step"])]
+	return Saga.steps()[int(s["step"])]
 
 
 static func title(world) -> String:
 	var st := current(world)
 	if st.is_empty():
 		return ""
-	return "%s. %s" % [Saga.TITLE, st["title"]]
+	return "%s. %s" % [Saga.title(), st["title"]]
 
 
 ## Що сказати в цьому місті: {"kind": "saga_start"/"saga_end", "lines": сирі репліки} або {}.
@@ -105,10 +106,10 @@ static func _complete(world, player) -> Array:
 		if not player.add_item(it):
 			player.inventory.append(it)  # сюжетну нагороду не губимо навіть із повною торбою
 		msgs.append({"text": "Отримано: %s" % Data.item_title(it), "big": false})
-	msgs.push_front({"text": "%s: «%s» завершено!" % [Saga.TITLE, st["title"]], "big": true})
+	msgs.push_front({"text": "%s: «%s» завершено!" % [Saga.title(), st["title"]], "big": true})
 	s["step"] = int(s["step"]) + 1
 	s["stage"] = "offer"
-	if int(s["step"]) >= Saga.STEPS.size():
+	if int(s["step"]) >= Saga.steps().size():
 		s["stage"] = "done"
 		msgs.append({"text": "Попіл розвіяно. Вітер над світом чистий!", "big": true})
 	return msgs
@@ -122,7 +123,7 @@ static func objective_line(world) -> String:
 	var st := current(world)
 	match str(s["stage"]):
 		"offer":
-			return "★ Поговори: %s (%s)" % [Story.NPCS[st["giver"]]["name"], Data.place_name(str(st["city"]))]
+			return "★ Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(str(st["city"]))]
 		"turnin":
 			return "★ Повертайся: %s" % Data.place_name(str(st["city"]))
 	return "★ " + str(st["objective"]["text"])
@@ -132,7 +133,7 @@ static func objective_line(world) -> String:
 static func teaser(world) -> String:
 	if finished(world) or unlocked(world):
 		return ""
-	return "Історія триває: «%s» відкриється з %d-го рівня героя." % [Saga.TITLE, Saga.MIN_LEVEL]
+	return "Історія триває: «%s» відкриється з %d-го рівня героя." % [Saga.title(), Saga.min_level()]
 
 
 ## Куди веде продовження (id міста чи печери) — для зірки на мапі.
@@ -146,4 +147,4 @@ static func target(world) -> String:
 
 ## Скільки кроків пройдено.
 static func done_count(world) -> int:
-	return Saga.STEPS.size() if finished(world) else int(state(world)["step"])
+	return Saga.steps().size() if finished(world) else int(state(world)["step"])

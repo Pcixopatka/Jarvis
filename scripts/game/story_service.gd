@@ -9,6 +9,12 @@ const Data := preload("res://scripts/data/data.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const SagaService := preload("res://scripts/game/saga_service.gd")
 
+## Постійні наслідки виборів, які гра вміє (крім знижки міста «discount_<місто>»): хто їх читає —
+## CampService.apply_effects (зілля, опір заразі), Game (Кощій смертний).
+const EFFECTS := ["potion_max", "plague_resist", "koshchii_mortal"]
+## Звання, які може дати нагорода («rank»).
+const RANKS := ["hetman"]
+
 ## Клас героя — для звертань у розмовах («козаче» / «волхве»). Виставляє гра.
 static var hero_class := "cossack"
 
@@ -25,14 +31,14 @@ static func current(world) -> Dictionary:
 	var s := state(world)
 	if s["stage"] == "done":
 		return {}
-	return Story.CHAPTERS[s["chapter"]]["steps"][s["step"]]
+	return Story.steps(int(s["chapter"]))[s["step"]]
 
 
 static func chapter_title(world) -> String:
 	var s := state(world)
 	if s["stage"] == "done":
 		return SagaService.title(world) if SagaService.unlocked(world) else ""  # після Кремля — «Попіл за вітром»
-	return Story.CHAPTERS[s["chapter"]]["title"]
+	return Story.chapter_title(int(s["chapter"]))
 
 
 static func _skip_empty_start(world) -> void:
@@ -83,23 +89,19 @@ static func _skip_conditional(world) -> void:
 	var guard := 0
 	while s["stage"] != "done" and guard < 50:
 		guard += 1
-		var st: Dictionary = Story.CHAPTERS[s["chapter"]]["steps"][s["step"]]
+		var st: Dictionary = Story.steps(int(s["chapter"]))[s["step"]]
 		if not st.has("if") or chose(world, st["if"]):
 			return
 		s["step"] += 1
-		if s["step"] >= Story.CHAPTERS[s["chapter"]]["steps"].size():
+		if s["step"] >= Story.steps(int(s["chapter"])).size():
 			s["chapter"] += 1
 			s["step"] = 0
-			if s["chapter"] >= Story.CHAPTERS.size():
+			if s["chapter"] >= Story.chapter_count():
 				s["stage"] = "done"
 
 
 static func _find_step(id: String) -> Dictionary:
-	for ch in Story.CHAPTERS:
-		for st in ch["steps"]:
-			if st["id"] == id:
-				return st
-	return {}
+	return Story.step(id)
 
 
 ## Постійні наслідки всіх зроблених виборів: {"discount_kyiv": 0.2, "potion_max": 1, ...}.
@@ -125,15 +127,15 @@ static func effect(world, key: String) -> float:
 static func chronicle(world) -> Array:
 	var out := []
 	var made: Dictionary = world.story.get("choices", {})
-	for ch in Story.CHAPTERS:
-		for st in ch["steps"]:
-			var key: String = "trial" if st["id"] == "choose" else st["id"]  # вибір дороги зберігається як trial
+	for i in Story.chapter_count():
+		for st in Story.steps(i):
+			var key: String = Story.choice_key(st)  # вибір дороги зберігається як trial («choice_key»)
 			if not made.has(key) or st.get("choices", []).is_empty():
 				continue
 			var choices: Array = st["choices"]
 			var ci := int(made[key])
 			if ci >= 0 and ci < choices.size():
-				out.append({"chapter": ch["title"], "text": choices[ci].get("memo", choices[ci]["text"])})
+				out.append({"chapter": Story.chapter_title(i), "text": choices[ci].get("memo", choices[ci]["text"])})
 	return out
 
 
@@ -233,18 +235,19 @@ static func _complete(world, player, choice: int) -> Array:
 
 static func _advance(world, msgs: Array) -> void:
 	var s: Dictionary = world.story
-	var steps: Array = Story.CHAPTERS[s["chapter"]]["steps"]
+	var steps: Array = Story.steps(int(s["chapter"]))
 	s["step"] += 1
 	s["progress"] = 0
 	s["stage"] = "offer"
 	if s["step"] >= steps.size():
-		msgs.append({"text": "%s — завершено!" % Story.CHAPTERS[s["chapter"]]["title"], "big": true})
-		if PlagueService.CHAPTER_CLEANSE.has(int(s["chapter"])) or int(s["chapter"]) >= PlagueService.FINAL_CHAPTER:
+		var ch: Dictionary = Story.chapter(int(s["chapter"]))
+		msgs.append({"text": "%s — завершено!" % ch["title"], "big": true})
+		if ch.has("cleanse") or ch.get("cleanse_all", false):
 			PlagueService.on_chapter_done(world, int(s["chapter"]))
 			msgs.append({"text": "Зараза відступає з цілого краю!", "big": true})
 		s["chapter"] += 1
 		s["step"] = 0
-		if s["chapter"] >= Story.CHAPTERS.size():
+		if s["chapter"] >= Story.chapter_count():
 			s["stage"] = "done"
 			return
 	_skip_conditional(world)
@@ -257,10 +260,10 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 	if r.has("class"):
 		player.change_class(r["class"])
 		hero_class = r["class"]
-		msgs.append({"text": {"cossack": "Ти — козак Запорозького війська!", "volkhv": "Ти — волхв Карпатського кола!", "strilets": "Ти — стрілець сердюцької сотні!"}.get(r["class"], ""), "big": true})
+		msgs.append({"text": str(r.get("banner", "")), "big": true})
 	if r.has("rank"):
 		player.rank = r["rank"]
-		msgs.append({"text": "Тебе обрано гетьманом України!", "big": true})
+		msgs.append({"text": str(r.get("banner", "")), "big": true})
 	if r.has("skills"):
 		for id in r["skills"]:
 			player.skills[id] = maxi(player.sk(id), int(r["skills"][id]))
@@ -299,7 +302,7 @@ static func objective_line(world) -> String:
 		return SagaService.objective_line(world)
 	match s["stage"]:
 		"offer":
-			return "★ Поговори: %s (%s)" % [Story.NPCS[st["giver"]]["name"], Data.place_name(st["city"])]
+			return "★ Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(st["city"])]
 		"turnin":
 			return "★ Повертайся: %s" % Data.place_name(st["turn_in"])
 	var obj: Dictionary = st["objective"]

@@ -6,6 +6,7 @@ extends RefCounted
 ## а сюжетні перемоги очищають цілі краї.
 
 const Data := preload("res://scripts/data/data.gd")
+const Story := preload("res://scripts/data/story.gd")
 
 const MAX_LEVEL := 3
 const NAMES := ["", "слабка", "сильна", "чорна"]
@@ -15,14 +16,6 @@ const SOURCE_RANGE := 4.0  # градусів: місцевості ближче
 const NEIGHBOR_RANGE := 3.6  # з якої відстані перекидається від сусіда
 const SPREAD_CHANCE := 0.22
 const MAX_SPREAD_PER_TRIP := 2
-## Які краї очищає завершення розділу (номер розділу в Story.CHAPTERS)
-const CHAPTER_CLEANSE := {
-	1: ["wild_field", "rapids", "black_forest", "zmii_cave", "ridne_selo"],
-	2: ["polissia", "bilovezha", "crypt", "bryansk_forest", "chaklun_lair"],
-	3: ["kamianets_walls", "chornohora", "dovbush_cave", "koshchii_tower"],
-	4: ["smolensk_road", "mozhaisk"],
-}
-const FINAL_CHAPTER := 5  # Путіноїд повалений — зараза зникає всюди
 
 
 static func state(world) -> Dictionary:
@@ -96,14 +89,16 @@ static func cleanse(world, loc: String, amount: int = 1) -> int:
 	return lvl
 
 
-## Розділ сюжету завершено: цілий край очищено, а тиск зарази слабшає.
+## Розділ сюжету (номер у data/story_chapters.json) завершено: цілий край очищено («cleanse» розділу),
+## а тиск зарази слабшає; після розділу з «cleanse_all» (Путіноїд повалений) зараза зникає всюди.
 static func on_chapter_done(world, chapter: int) -> void:
 	var s := state(world)
-	if chapter >= FINAL_CHAPTER:
+	var ch: Dictionary = Story.chapter(chapter)
+	if ch.get("cleanse_all", false):
 		s["levels"] = {}
 		s["pressure"] = 0.0
 		return
-	for id in CHAPTER_CLEANSE.get(chapter, []):
+	for id in ch.get("cleanse", []):
 		set_level(world, id, 0)
 	s["pressure"] = maxf(0.3, float(s.get("pressure", 1.0)) - 0.15)
 

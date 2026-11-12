@@ -11,9 +11,10 @@ const DIR := "res://data/"
 ## color (масив [r, g, b] або [r, g, b, a] із часток 0..1, стає Color), record (вкладений запис
 ## зі своїми "fields"), vector (масив [x, y] із двох чисел, стає Vector2: довгота й широта на мапі),
 ## enum (рядок із переліку "values"), list (масив значень, кожне за описом "of";
-## "size" — точна довжина; "items" — опис кожного місця окремо, як у [стан, секунд]), map (об'єкт
-## {рядковий ключ: значення за описом "of"}; порядок ключів зберігається), rank (число вміння на ранзі:
-## одне число або [основа, приріст за ранг]; стає float чи [float, float]).
+## "size" — точна довжина; "sizes" — дозволені довжини; "items" — опис кожного місця окремо, як у [стан, секунд]),
+## map (об'єкт {рядковий ключ: значення за описом "of"}; порядок ключів зберігається), rank (число вміння на
+## ранзі: одне число або [основа, приріст за ранг]; стає float чи [float, float]), number (число, що буває і
+## цілим, і дробовим: ціле стає int, решта — float).
 ## Порядок полів у схемі — порядок ключів у файлі (див. tools/data_format.gd).
 const MOB_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер запису (1001...): ніколи не змінюється й не віддається іншому
@@ -57,6 +58,7 @@ const MOB_SCHEMA := {
 		"tier": {"type": "int"},  # ступінь золотих речей (без нього — за рівнем лігва, див. LootService)
 		"phase2": {"type": "bool"},  # лютішає на половині здоров'я (тоді рушій кличе phase2 механіки)
 		"mechanic": {"type": "string"},  # механіка боса: "boss/<файл>" у scripts/mechanics/
+		"stones": {"type": "list", "of": {"type": "string"}},  # камені долі за першу перемогу (StoneService.NAMES)
 		"wiki": {"type": "record", "fields": {
 			"text": {"type": "string", "required": true},
 			"tip": {"type": "string", "required": true},
@@ -88,7 +90,7 @@ const COMPANION_SCHEMA := {
 	"mechanic": {"type": "string"},  # як б'ється: "companion/<файл>" у scripts/mechanics/
 }
 
-## Репліка розмови: [мовець, текст]; мовець — id із Story.NPCS.
+## Репліка розмови: [мовець, текст]; мовець — id із speakers.json.
 const LINE := {"type": "list", "size": 2, "of": {"type": "string"}}
 const DIALOGUE := {"type": "list", "required": true, "of": LINE}
 
@@ -492,7 +494,7 @@ const CLASS_SCHEMA := {
 	"skill_mult": {"type": "float"},  # множник сили вмінь (класи з посохом, див. docs/balance.md)
 	"address": {"type": "string", "required": true},  # як до героя звертаються: «козаче»
 	"where": {"type": "string"},  # місто посвяти й наставника (cities.json)
-	"mentor": {"type": "string"},  # наставник спеціалізації (Story.NPCS)
+	"mentor": {"type": "string"},  # наставник спеціалізації (speakers.json)
 	"branches": {"type": "list", "required": true, "of": {"type": "string"}},  # назви гілок дерева вмінь; «branch» уміння — номер у цьому списку від 1
 	"desc": {"type": "string", "required": true},
 }
@@ -612,8 +614,186 @@ const PATH_SCHEMA := {
 	"skills": {"type": "list", "required": true, "of": {"type": "string"}},
 	"next": {"type": "list", "required": true, "of": {"type": "string"}},
 	"for": {"type": "string", "required": true},
-	"rep": {"type": "string"},  # картка вибору дороги: представник на Січі (Story.NPCS); порядок файлу — порядок карток
+	"rep": {"type": "string"},  # картка вибору дороги: представник на Січі (speakers.json); порядок файлу — порядок карток
 	"talk": {"type": "list", "of": LINE},  # його розповідь про дорогу
+}
+
+# ---------- Завдання й історія ----------
+
+## Мовець у розмовах: ім'я й роль під іменем (портрет малює код за id).
+const SPEAKER_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8501...)
+	"name": {"type": "string", "required": true},
+	"role": {"type": "string", "required": true},  # «кошовий отаман»; "" — без ролі
+}
+
+## Репліка розмови завдання: [мовець, текст] або [мовець, текст, "крок=вибір"] — тоді її чути лише після такого вибору.
+const QUEST_LINE := {"type": "list", "sizes": [2, 3], "of": {"type": "string"}}
+const QUEST_DIALOGUE := {"type": "list", "required": true, "of": QUEST_LINE}
+
+## Мета кроку завдання. Які типи бере кожна таблиця, — QUEST_OBJECTIVES.
+const OBJECTIVE_SCHEMA := {"type": "record", "required": true, "fields": {
+	"type": {"type": "enum", "required": true, "values": ["clear", "dungeon", "kill", "fetch", "visit", "job", "choose", "elite"]},
+	"enemy": {"type": "string"},  # kill, fetch: кого бити (mobs.json; мусить водитися в «loc»)
+	"count": {"type": "int"},  # kill, fetch, job, elite: скільки
+	"loc": {"type": "string"},  # де: поле (clear), печера (dungeon), місто (visit, choose), місце для зірки (kill, fetch, job)
+	"item": {"type": "string"},  # fetch: що здобути
+	"chance": {"type": "float"},  # fetch: шанс на кожного переможеного
+	"text": {"type": "string", "required": true},  # рядок у журналі й на банері
+}}
+
+## Річ у нагороду: Data.gen_item(ilvl, rarity, slot, type) з іменем і заточкою.
+const REWARD_ITEM := {"type": "record", "fields": {
+	"slot": {"type": "string", "required": true},  # клітинка (gear_slots.json)
+	"type": {"type": "string"},  # вид зброї (weapons.json), лише для зброї
+	"rarity": {"type": "int", "required": true},  # rank із rarities.json
+	"ilvl": {"type": "int"},  # рівень речі (у переказах його нема: річ рівня героя)
+	"up": {"type": "int"},  # заточка
+	"name": {"type": "string", "required": true},
+}}
+
+## Нагорода. Які поля читає служба кожної таблиці, — QUEST_REWARDS.
+const REWARD_FIELDS := {
+	"gold": {"type": "int"},
+	"gold_lvl": {"type": "int"},  # гривень за кожен рівень героя (перекази)
+	"xp": {"type": "int"},
+	"trophy": {"type": "int"},  # трофеї (ресурс CampData.TROPHY)
+	"rank": {"type": "string"},  # звання героя (StoryService.RANKS)
+	"class": {"type": "string"},  # новий клас героя (classes.json)
+	"banner": {"type": "string"},  # напис на банері, коли змінились клас чи звання
+	"skills": {"type": "map", "of": {"type": "int"}},  # уміння (skills.json) → ранг у подарунок
+	"stats": {"type": "map", "of": {"type": "int"}},  # характеристика (GameDB.STAT_IDS) → +очок у подарунок
+	"loyalty": {"type": "map", "of": {"type": "int"}},  # місто → очки лояльності
+	"item": REWARD_ITEM,
+}
+const REWARD_SCHEMA := {"type": "record", "fields": REWARD_FIELDS}
+
+## Розділ історії (порядок файлу — порядок розділів; номер розділу в збереженні — місце в цьому файлі).
+const STORY_CHAPTER_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8451...)
+	"title": {"type": "string", "required": true},
+	"cleanse": {"type": "list", "of": {"type": "string"}},  # місця, з яких іде зараза, коли розділ пройдено
+	"cleanse_all": {"type": "bool"},  # розділ пройдено — зараза зникає всюди
+}
+
+## Крок історії. Порядок файлу — порядок історії; номер кроку в збереженні — місце серед кроків свого розділу.
+const STORY_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8601...)
+	"chapter": {"type": "string", "required": true},  # розділ (story_chapters.json)
+	"line": {"type": "string", "required": true},  # лінія завдань (quest_lines.json, «story»)
+	"after": {"type": "string"},  # що пройдено перед ним: попередній крок у файлі (див. docs/data.md)
+	"if": {"type": "string"},  # "ключ=вибір": крок лише для тих, хто так обрав (гілка)
+	"giver": {"type": "string", "required": true},  # хто дає крок (speakers.json)
+	"city": {"type": "string", "required": true},  # де з ним говорити; "" — крок без розмови на початку
+	"intro": {"type": "list", "of": QUEST_LINE},  # вступ нової гри (лише перший крок)
+	"start": QUEST_DIALOGUE,  # розмова на початку; [] — крок починається сам
+	"objective": OBJECTIVE_SCHEMA,
+	"turn_in": {"type": "string", "required": true},  # куди повертатися; "" — крок завершується сам
+	"end": QUEST_DIALOGUE,  # розмова наприкінці
+	"choices": {"type": "list", "of": {"type": "record", "fields": {  # вибір наприкінці розмови
+		"text": {"type": "string", "required": true},
+		"reply": {"type": "string"},  # відповідь мовця на вибір
+		"class": {"type": "string"},  # вибір дороги: клас, який обирають на екрані «Дорога» (PathService)
+		"reward": REWARD_SCHEMA,
+		"effects": {"type": "map", "of": {"type": "number"}},  # постійні наслідки (StoryService.EFFECTS, discount_<місто>)
+		"memo": {"type": "string"},  # запис у «Літопис»
+	}}},
+	"choice_key": {"type": "string"},  # під яким ключем вибір лежить у збереженні (story.choices); без поля — id кроку
+	"reward": {"type": "record", "required": true, "fields": REWARD_FIELDS},
+	"bonus": {"type": "list", "of": {"type": "record", "fields": {  # нагорода за давніший вибір
+		"if": {"type": "string", "required": true},
+		"reward": {"type": "record", "required": true, "fields": REWARD_FIELDS},
+	}}},
+}
+
+## Лінія завдань: історія, переказ чи сага. Умови, з якими лінія відкривається, — тут.
+const QUEST_LINE_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8701...)
+	"kind": {"type": "enum", "required": true, "values": ["story", "legend", "saga"]},
+	"title": {"type": "string"},
+	"land": {"type": "string"},  # переказ: край, звідки він
+	"source": {"type": "string"},  # переказ: звідки взято
+	"min_level": {"type": "int"},  # з якого рівня героя лінія відкривається
+	"after": {"type": "string"},  # який крок має бути пройдено (сага: останній крок історії)
+}
+
+## Крок переказу чи саги (спільний вигляд кроку лінії; порядок файлу — порядок кроків у лінії).
+const LINE_STEP_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (перекази 9251..., сага 8801...)
+	"line": {"type": "string", "required": true},  # лінія (quest_lines.json)
+	"after": {"type": "string"},  # попередній крок лінії
+	"title": {"type": "string", "required": true},
+	"giver": {"type": "string", "required": true},  # оповідач (speakers.json)
+	"city": {"type": "string", "required": true},  # де він (cities.json)
+	"start": QUEST_DIALOGUE,
+	"objective": OBJECTIVE_SCHEMA,
+	"end": QUEST_DIALOGUE,
+	"reward": {"type": "record", "required": true, "fields": REWARD_FIELDS},
+}
+
+## Крок «Шляху козака»: умова (одна з WayService.CHECKS), нагорода й куди веде порада.
+const WAY_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (8851...)
+	"title": {"type": "string", "required": true},
+	"how": {"type": "string", "required": true},
+	"check": {"type": "record", "required": true, "fields": {
+		"stat": {"type": "string"},  # лічильник (ChallengeService.STATS) не менший за «n»
+		"n": {"type": "int"},
+		"or": {"type": "string"},  # другий лічильник, що додається до першого
+		"equip": {"type": "int"},  # вдягнено стільки клітинок
+		"spent": {"type": "enum", "values": ["stat", "skill", "perk"]},  # вкладено хоч одне очко
+		"quests": {"type": "int"},  # узято чи здано завдання міста
+		"loyalty": {"type": "int"},  # є лояльність міста
+		"companions": {"type": "int"},  # стільки в загоні
+		"camp": {"type": "int"},  # будівель на хуторі
+		"tier": {"type": "int"},  # ступінь класу (1 — дорога, 2 — спеціалізація)
+	}},
+	"reward": {"type": "record", "required": true, "fields": {
+		"gold": {"type": "int"},
+		"potions": {"type": "int"},
+		"mana": {"type": "int"},
+		"res": {"type": "map", "of": {"type": "int"}},  # ресурс (CampData.RESOURCES) → скільки
+		"trophy": {"type": "int"},
+		"item": {"type": "int"},  # річ рівня героя такої рідкості (rank)
+		"stone": {"type": "string"},  # камінь долі (StoneService.NAMES)
+	}},
+	"go": {"type": "record", "required": true, "fields": {
+		"place": {"type": "string"},  # id міста чи місця або WayService.GO_PLACES
+		"tab": {"type": "int"},  # вкладка екрана героя
+	}},
+}
+
+## Шаблон виклику дня чи тижня.
+const CHALLENGE_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (день 8901..., тиждень 8951...)
+	"stat": {"type": "string", "required": true},  # лічильник (ChallengeService.STATS)
+	"goal": {"type": "list", "required": true, "size": 2, "of": {"type": "int"}},  # [найменше, найбільше]
+	"text": {"type": "string", "required": true},  # %d — мета
+	"group": {"type": "enum", "values": ["base", "event"]},  # event — події й заняття; без поля — base
+	"need": {"type": "string"},  # що має бути відкрито (ChallengeService.NEEDS)
+	"where": {"type": "string"},  # підказка, куди йти
+}
+
+## Досягнення.
+const ACHIEVEMENT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (9001...)
+	"name": {"type": "string", "required": true},
+	"desc": {"type": "string", "required": true},
+	"stat": {"type": "string", "required": true},  # лічильник (ChallengeService.STATS)
+	"goal": {"type": "int", "required": true},
+	"gold": {"type": "int", "required": true},
+}
+
+## Випробування спеціалізації в наставника. Ключ — id класу-спеціалізації.
+const SPEC_TRIAL_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (9201...)
+	"start": DIALOGUE,
+	"objective": OBJECTIVE_SCHEMA,
+	"end": DIALOGUE,
+	"item": {"type": "record", "required": true, "fields": {  # зброя від наставника
+		"type": {"type": "string", "required": true},  # вид зброї (weapons.json)
+		"name": {"type": "string", "required": true},
+	}},
 }
 
 ## Таблиці бази: назва → файл і схема. Нова таблиця (уміння, речі...) додається сюди одним рядком,
@@ -659,6 +839,17 @@ const TABLES := {
 	"base_stats": {"file": "base_stats.json", "schema": BASE_STAT_SCHEMA},
 	"valor_lines": {"file": "valor_lines.json", "schema": VALOR_LINE_SCHEMA},
 	"paths": {"file": "paths.json", "schema": PATH_SCHEMA},
+	"speakers": {"file": "speakers.json", "schema": SPEAKER_SCHEMA},
+	"story_chapters": {"file": "story_chapters.json", "schema": STORY_CHAPTER_SCHEMA},
+	"story": {"file": "story.json", "schema": STORY_SCHEMA},
+	"quest_lines": {"file": "quest_lines.json", "schema": QUEST_LINE_SCHEMA},
+	"legend_steps": {"file": "legend_steps.json", "schema": LINE_STEP_SCHEMA},
+	"saga": {"file": "saga.json", "schema": LINE_STEP_SCHEMA},
+	"way": {"file": "way.json", "schema": WAY_SCHEMA},
+	"daily": {"file": "daily.json", "schema": CHALLENGE_SCHEMA},
+	"weekly": {"file": "weekly.json", "schema": CHALLENGE_SCHEMA},
+	"achievements": {"file": "achievements.json", "schema": ACHIEVEMENT_SCHEMA},
+	"spec_trials": {"file": "spec_trials.json", "schema": SPEC_TRIAL_SCHEMA},
 }
 
 ## Проміжки сталих номерів за таблицями: [перший, останній]. Номер запису мусить лежати у своєму
@@ -674,7 +865,9 @@ const NUM_RANGES := {
 	"lands": [6401, 6499], "biomes": [6501, 6599], "elite_affixes": [6601, 6699],
 	"classes": [7001, 7099], "skills": [7101, 7999], "effects": [8001, 8089], "perk_branches": [8091, 8099],
 	"perks": [8101, 8199], "base_stats": [8201, 8249], "valor_lines": [8251, 8299], "paths": [8301, 8399],
-	"job_tiers": [8401, 8449],
+	"job_tiers": [8401, 8449], "story_chapters": [8451, 8499], "speakers": [8501, 8599], "story": [8601, 8699],
+	"quest_lines": [8701, 8749], "saga": [8801, 8849], "way": [8851, 8899], "daily": [8901, 8949], "weekly": [8951, 8999],
+	"achievements": [9001, 9199], "spec_trials": [9201, 9249], "legend_steps": [9251, 9499],
 }
 const BOSS_NUM_RANGE := [2001, 2999]  # boss.num у mobs.json
 
@@ -764,7 +957,7 @@ static func _read(name: String, probs: Array) -> Dictionary:
 
 ## Таблиці, записи яких після завантаження мають поле «id» (у файлі його не пишуть): назва → поле, з
 ## якого його взяти ("" — ключ запису). Вміння: ранги зберігаються під «skill», якщо воно є, інакше під ключем.
-const ID_FIELD := {"skills": "skill", "perks": "", "base_stats": ""}
+const ID_FIELD := {"skills": "skill", "perks": "", "base_stats": "", "story": "", "legend_steps": "", "saga": "", "way": "", "achievements": ""}
 
 
 ## Що таблиця доводить до ладу після схеми, поки записи ще не заморожено.
@@ -889,6 +1082,12 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 		"float":
 			if v is float or v is int:
 				return float(v)
+		"number":
+			# Число, що буває і цілим, і дробовим (наслідки вибору: +1 зілля, 0.25 знижки): ціле лишається цілим
+			if v is int:
+				return v
+			if v is float:
+				return int(v) if v == floorf(v) and absf(v) < 9.0e15 else v
 		"color":
 			if v is Array and (v.size() == 3 or v.size() == 4):
 				var ok := true
@@ -928,6 +1127,10 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 				if size >= 0 and v.size() != size:
 					probs.append("%s: має бути %d значень, а не %d" % [where, size, v.size()])
 					return null
+				# "sizes" — дозволені довжини (репліка завдання: [мовець, текст] чи з умовою третім)
+				if f.has("sizes") and not v.size() in f["sizes"]:
+					probs.append("%s: має бути %s значень, а не %d" % [where, " чи ".join(f["sizes"].map(func(x): return str(x))), v.size()])
+					return null
 				var out := []
 				for i in v.size():
 					var x = _value(v[i], items[i] if not items.is_empty() else f["of"], "%s[%d]" % [where, i], probs)
@@ -948,7 +1151,7 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 
 
 static func _type_name(t: String) -> String:
-	return {"string": "рядком", "bool": "true або false", "int": "цілим числом", "float": "числом", "record": "об'єктом {...}",
+	return {"string": "рядком", "bool": "true або false", "int": "цілим числом", "float": "числом", "number": "числом", "record": "об'єктом {...}",
 		"enum": "рядком", "list": "масивом [...]", "map": "об'єктом {...}", "vector": "масивом [x, y]", "rank": "числом"}.get(t, t)
 
 
@@ -1038,6 +1241,9 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 				out.append_array(_unique_nums(name, rows))
 			elif CLASS_TABLES.has(name):
 				out.append_array(_class_rules(name, rows))
+				out.append_array(_unique_nums(name, rows))
+			elif QUEST_TABLES.has(name):
+				out.append_array(_quest_rules(name, rows))
 				out.append_array(_unique_nums(name, rows))
 	return out
 
@@ -1374,6 +1580,8 @@ static func _links(name: String, rows: Dictionary) -> Array:
 				out.append_array(_world_links(name, rows))
 			elif CLASS_TABLES.has(name):
 				out.append_array(_class_links(name, rows))
+			elif QUEST_TABLES.has(name):
+				out.append_array(_quest_links(name, rows))
 	return out
 
 
@@ -1602,8 +1810,14 @@ static func _mob_links(rows: Dictionary) -> Array:
 		need.call(b, "Коло Кожум'яки", "boss")
 	for b in BossS.POOL:
 		need.call(b, "Боси дня й тижня", "boss")
-	for k in load("res://scripts/game/stone_service.gd").FIRST_KILL:
-		need.call(k, "камінь за першу перемогу", "boss")
+	var stone_names: Dictionary = load("res://scripts/game/stone_service.gd").NAMES
+	for id in rows:
+		var B: Dictionary = rows[id].get("boss", _EMPTY)
+		if B.has("stones") and B["stones"].is_empty():
+			out.append("mobs/%s: «boss.stones» порожні (без каменів поле не пишуть)" % id)
+		for st in B.get("stones", []):
+			if not stone_names.has(st):
+				out.append("mobs/%s: «boss.stones» — нема каменя «%s» (StoneService.NAMES)" % [id, st])
 	# Речі, що посилаються на нечисть (ті самі перевірки є й у самих таблицях речей, див. _item_links)
 	for u in ids("golden"):
 		for b in row("golden", u).get("bosses", []):
@@ -1713,11 +1927,7 @@ static func _companion_links(rows: Dictionary) -> Array:
 
 static func _hero_links(rows: Dictionary) -> Array:
 	var out := []
-	var Story = load("res://scripts/data/story.gd")
-	var steps := {}  # id кроку сюжету → скільки в нього виборів
-	for ch in Story.CHAPTERS:
-		for st in ch["steps"]:
-			steps[st["id"]] = st.get("choices", []).size()
+	var keys := _choice_keys(table("story"))  # ключ вибору → [місце кроку, скільки виборів]
 	for id in rows:
 		var R: Dictionary = rows[id]
 		var where: String = "heroes/" + id
@@ -1728,19 +1938,19 @@ static func _hero_links(rows: Dictionary) -> Array:
 		var j: Dictionary = R.get("join", _EMPTY)
 		if j.has("city") and not _has_row("cities", j["city"]):
 			out.append("%s: «join.city» — невідоме місто «%s»" % [where, j["city"]])
-		if j.has("after") and not steps.has(j["after"]):
+		if j.has("after") and not _has_row("story", j["after"]):
 			out.append("%s: «join.after» — нема кроку сюжету «%s»" % [where, j["after"]])
 		if j.has("if"):
 			var parts: PackedStringArray = str(j["if"]).split("=")
 			if parts.size() != 2 or not parts[1].is_valid_int():
 				out.append("%s: «join.if» має бути \"крок=номер вибору\", а не «%s»" % [where, j["if"]])
-			elif not steps.has(parts[0]) or int(parts[1]) < 0 or int(parts[1]) >= int(steps[parts[0]]):
+			elif not keys.has(parts[0]) or int(parts[1]) < 0 or int(parts[1]) >= int(keys[parts[0]][1]):
 				out.append("%s: «join.if» — нема кроку «%s» із вибором %s" % [where, parts[0], parts[1]])
 		var dl := _hero_dialogues(R)
 		for k in dl:
 			for i in dl[k].size():
-				if not Story.NPCS.has(dl[k][i][0]):
-					out.append("%s: «%s[%d]» — мовця «%s» нема в Story.NPCS" % [where, k, i, dl[k][i][0]])
+				if not _has_row("speakers", dl[k][i][0]):
+					out.append("%s: «%s[%d]» — мовця «%s» нема в speakers.json" % [where, k, i, dl[k][i][0]])
 		var o: Dictionary = R.get("quest", _EMPTY).get("objective", _EMPTY)
 		if o.has("loc"):
 			var L: Dictionary = row("places", str(o["loc"]))
@@ -2143,7 +2353,6 @@ static func _class_links(name: String, rows: Dictionary) -> Array:
 	var out := []
 	match name:
 		"classes":
-			var Story = load("res://scripts/data/story.gd")
 			var from := {}  # клас → хто веде до нього («next»)
 			for id in rows:
 				for x in rows[id].get("next", []):
@@ -2180,8 +2389,8 @@ static func _class_links(name: String, rows: Dictionary) -> Array:
 						out.append("клас %s носить зброю «%s», якої нема у weapons.json" % [id, w])
 				if R.has("where") and not _has_row("cities", R["where"]):
 					out.append("%s: «where» — нема міста «%s» у cities.json" % [where, R["where"]])
-				if R.has("mentor") and not Story.NPCS.has(R["mentor"]):
-					out.append("%s: «mentor» — нема «%s» у Story.NPCS" % [where, R["mentor"]])
+				if R.has("mentor") and not _has_row("speakers", R["mentor"]):
+					out.append("%s: «mentor» — нема «%s» у speakers.json" % [where, R["mentor"]])
 				var used := {}
 				for s in ids("skills"):
 					if str(row("skills", s).get("class", "")) == id:
@@ -2309,22 +2518,483 @@ static func _class_links(name: String, rows: Dictionary) -> Array:
 			if rows.keys() != STAT_IDS:
 				out.append("base_stats: характеристики %s, а код знає %s (GameDB.STAT_IDS): нова характеристика потребує коду в Player (stats, recalc)" % [str(rows.keys()), str(STAT_IDS)])
 		"paths":
-			var Story = load("res://scripts/data/story.gd")
 			var first: Array = row("classes", "peasant").get("next", [])
 			for id in rows:
 				var R: Dictionary = rows[id]
 				if not _has_row("classes", id):
 					out.append("paths/%s: нема класу «%s» у classes.json" % [id, id])
-				if R.has("rep") and not Story.NPCS.has(R["rep"]):
-					out.append("paths/%s: «rep» — нема «%s» у Story.NPCS" % [id, R["rep"]])
+				if R.has("rep") and not _has_row("speakers", R["rep"]):
+					out.append("paths/%s: «rep» — нема «%s» у speakers.json" % [id, R["rep"]])
 				for i in R.get("talk", []).size():
-					if not Story.NPCS.has(R["talk"][i][0]):
-						out.append("paths/%s: «talk[%d]» — мовця «%s» нема в Story.NPCS" % [id, i, R["talk"][i][0]])
+					if not _has_row("speakers", R["talk"][i][0]):
+						out.append("paths/%s: «talk[%d]» — мовця «%s» нема в speakers.json" % [id, i, R["talk"][i][0]])
 				if R.has("rep") != (id in first):
 					out.append("paths/%s: картку вибору дороги («rep», «talk») мають саме класи з «next» Селянина %s" % [id, str(first)])
 			for c in first:
 				if not rows.has(c):
 					out.append("paths: клас «%s» обирають на Січі, а картки дороги в paths.json нема" % c)
+	return out
+
+
+# ---------- Завдання й історія: правила й посилання ----------
+
+## Таблиці завдань: їхні правила — _quest_rules, посилання — _quest_links.
+const QUEST_TABLES := ["speakers", "story_chapters", "story", "quest_lines", "legend_steps", "saga", "way", "daily", "weekly", "achievements", "spec_trials"]
+## Рядкові поля записів завдань, які не можуть бути порожні («city», «turn_in» і «role» бувають порожні навмисно).
+const _QUEST_TEXTS := ["name", "title", "how", "desc", "land", "source", "text", "where", "need", "stat", "giver", "chapter", "line", "after", "if", "choice_key"]
+## Які типи мети вміє служба кожної таблиці.
+const QUEST_OBJECTIVES := {
+	"story": ["clear", "dungeon", "kill", "fetch", "visit", "job", "choose"],
+	"legend_steps": ["clear", "dungeon", "kill", "fetch"],
+	"saga": ["dungeon"],
+	"spec_trials": ["clear", "dungeon", "kill", "elite"],
+}
+## Які поля нагороди читає служба кожної таблиці (нагорода кроку, вибору й бонусу) і чи річ має свій рівень («ilvl»).
+const QUEST_REWARDS := {
+	"story": {"keys": ["gold", "xp", "rank", "class", "banner", "skills", "stats", "loyalty", "item"], "ilvl": true},
+	"legend_steps": {"keys": ["gold_lvl", "trophy", "item"], "ilvl": false},
+	"saga": {"keys": ["gold", "trophy", "xp", "item"], "ilvl": true},
+}
+## Яка лінія (kind у quest_lines.json) у кроків кожної таблиці.
+const QUEST_LINE_KIND := {"story": "story", "legend_steps": "legend", "saga": "saga"}
+
+
+## Правила таблиць завдань, що не залежать від інших таблиць.
+static func _quest_rules(name: String, rows: Dictionary) -> Array:
+	var out := []
+	var prev_in_line := {}  # лінія → останній крок у файлі
+	var stats := {}
+	var keys := rows.keys()
+	for i in keys.size():
+		var id: String = keys[i]
+		var R: Dictionary = rows[id]
+		var where := "%s/%s" % [name, id]
+		_not_blank(R, _QUEST_TEXTS, where, out)
+		for k in R:
+			if R[k] is bool and not R[k]:
+				out.append("%s: «%s» пишеться лише як true" % [where, k])
+		if QUEST_OBJECTIVES.has(name) and R.has("objective"):
+			_objective_rules(where, R["objective"], QUEST_OBJECTIVES[name], out)
+		for k in ["start", "end", "intro"]:
+			for j in R.get(k, []).size():
+				var ln: Array = R[k][j]
+				if str(ln[0]).strip_edges() == "" or str(ln[1]).strip_edges() == "":
+					out.append("%s: «%s[%d]»: порожній мовець чи текст" % [where, k, j])
+				if ln.size() > 2 and not _is_cond(str(ln[2])):
+					out.append("%s: «%s[%d]»: умова має бути \"ключ=номер вибору\", а не «%s»" % [where, k, j, ln[2]])
+		if QUEST_LINE_KIND.has(name):
+			# Крок лінії: «after» — попередній крок тієї самої лінії у файлі (так рушій іде кроками сьогодні)
+			var ln_id := str(R.get("line", ""))
+			var want: String = str(prev_in_line.get(ln_id, ""))
+			if str(R.get("after", "")) != want:
+				out.append("%s: «after» має бути %s: рушій веде лінію «%s» кроками в порядку файлу" % [where, ("«%s»" % want) if want != "" else "відсутнім (перший крок лінії)", ln_id])
+			prev_in_line[ln_id] = id
+			var RW: Dictionary = QUEST_REWARDS[name]
+			_reward_rules(where + ".reward", R.get("reward", _EMPTY), RW["keys"], RW["ilvl"], out)
+			if R.has("start") and R["start"].is_empty() and name != "story":
+				out.append("%s: «start» порожній: оповідачеві нема що сказати" % where)
+			if R.has("end") and R["end"].is_empty() and name != "story":
+				out.append("%s: «end» порожній" % where)
+		match name:
+			"speakers":
+				pass
+			"story_chapters":
+				if R.has("cleanse") and R["cleanse"].is_empty():
+					out.append("%s: «cleanse» порожній" % where)
+				if R.has("cleanse") and R.get("cleanse_all", false):
+					out.append("%s: «cleanse» разом із «cleanse_all»: зараза й так зникає всюди" % where)
+			"story":
+				if str(R.get("city", "")) == "" and not R.get("start", []).is_empty():
+					out.append("%s: «city» порожнє, а розмова «start» є: її ніде почути" % where)
+				if R.has("intro") and i > 0:
+					out.append("%s: «intro» читає лише перший крок (вступ нової гри)" % where)
+				if R.has("if") and not _is_cond(str(R["if"])):
+					out.append("%s: «if» має бути \"ключ=номер вибору\", а не «%s»" % [where, R["if"]])
+				if R.has("choice_key") and R.get("choices", []).is_empty():
+					out.append("%s: «choice_key» без «choices»" % where)
+				var with_class := 0
+				for j in R.get("choices", []).size():
+					var C: Dictionary = R["choices"][j]
+					var cw := "%s.choices[%d]" % [where, j]
+					_not_blank(C, ["text", "reply", "memo", "class"], cw, out)
+					_reward_rules(cw + ".reward", C.get("reward", _EMPTY), QUEST_REWARDS["story"]["keys"], true, out)
+					with_class += 1 if C.has("class") else 0
+				if with_class > 0 and with_class != R["choices"].size():
+					out.append("%s: «class» мають або всі вибори (вибір дороги), або жоден" % where)
+				for j in R.get("bonus", []).size():
+					var B: Dictionary = R["bonus"][j]
+					if not _is_cond(str(B.get("if", ""))):
+						out.append("%s.bonus[%d]: «if» має бути \"ключ=номер вибору\"" % [where, j])
+					_reward_rules("%s.bonus[%d].reward" % [where, j], B.get("reward", _EMPTY), QUEST_REWARDS["story"]["keys"], true, out)
+			"quest_lines":
+				var kind := str(R.get("kind", ""))
+				var need: Array = {"story": [], "legend": ["title", "land", "source", "min_level"], "saga": ["title", "min_level", "after"]}.get(kind, [])
+				var allow: Array = {"story": ["title"], "legend": need, "saga": need}.get(kind, [])
+				for k in need:
+					if not R.has(k):
+						out.append("%s: лінії «%s» потрібне «%s»" % [where, kind, k])
+				for k in ["title", "land", "source", "min_level", "after"]:
+					if R.has(k) and not k in allow:
+						out.append("%s: лінія «%s» не має «%s» (рушій його не читає)" % [where, kind, k])
+				_positive(R, ["min_level"], where, out)
+			"way":
+				var C: Dictionary = R.get("check", _EMPTY)
+				var main := []
+				for k in C:
+					if not k in ["n", "or"]:
+						main.append(k)
+				if main.size() != 1:
+					out.append("%s: «check» має бути рівно одна умова з %s, а тут %s" % [where, str(load("res://scripts/game/way_service.gd").CHECKS), str(main)])
+				if C.has("stat") != C.has("n"):
+					out.append("%s: «check.stat» і «check.n» ідуть разом" % where)
+				if C.has("or") and not C.has("stat"):
+					out.append("%s: «check.or» буває лише з «stat»" % where)
+				_positive(C, ["n", "equip", "quests", "loyalty", "companions", "camp", "tier"], where + ".check", out)
+				_positive(R.get("reward", _EMPTY), ["gold", "potions", "mana", "trophy"], where + ".reward", out, true)
+				for r in R.get("reward", _EMPTY).get("res", _EMPTY):
+					if int(R["reward"]["res"][r]) <= 0:
+						out.append("%s: «reward.res.%s» має бути більшим за нуль" % [where, r])
+				var G: Dictionary = R.get("go", _EMPTY)
+				if G.has("place") == G.has("tab"):
+					out.append("%s: «go» — або «place», або «tab»" % where)
+			"daily", "weekly":
+				var g: Array = R.get("goal", [])
+				if g.size() == 2 and (int(g[0]) < 1 or int(g[0]) > int(g[1])):
+					out.append("%s: «goal» має бути [найменше ≥ 1, найбільше ≥ найменшого]" % where)
+				if g.size() == 2 and int(g[0]) != int(g[1]) and not "%d" in str(R.get("text", "")):
+					out.append("%s: мета буває різна, а в «text» нема %%d" % where)
+				var st := str(R.get("stat", ""))
+				if stats.has(st):
+					out.append("%s: лічильник «%s» уже має «%s» (з двох однакових випаде лише один)" % [where, st, stats[st]])
+				stats[st] = id
+			"achievements":
+				_positive(R, ["goal"], where, out)
+				_positive(R, ["gold"], where, out, true)
+	return out
+
+
+## Умова "ключ=номер вибору" (ключ — id кроку чи його «choice_key»).
+static func _is_cond(cond: String) -> bool:
+	var parts := cond.split("=")
+	return parts.size() == 2 and _is_id(parts[0]) and parts[1].is_valid_int() and int(parts[1]) >= 0
+
+
+## Мета кроку: тип, який служба вміє, і поля, які цей тип читає.
+static func _objective_rules(where: String, o: Dictionary, types: Array, out: Array) -> void:
+	var t := str(o.get("type", ""))
+	if not t in types:
+		out.append("%s: мета «%s» — служба вміє лише %s" % [where, t, str(types)])
+		return
+	var reads: Dictionary = {"clear": ["loc"], "dungeon": ["loc"], "visit": ["loc"], "choose": ["loc"], "job": ["count", "loc"],
+		"kill": ["enemy", "count", "loc"], "fetch": ["enemy", "count", "item", "chance", "loc"], "elite": ["count"]}
+	for k in reads[t]:
+		if not o.has(k):
+			out.append("%s: мета «%s» потребує «objective.%s»" % [where, t, k])
+	for k in ["enemy", "count", "loc", "item", "chance"]:
+		if o.has(k) and not k in reads[t]:
+			out.append("%s: мета «%s» не читає «objective.%s»" % [where, t, k])
+	if o.has("count") and int(o["count"]) < 1:
+		out.append("%s: «objective.count» має бути від 1" % where)
+	if o.has("chance") and (float(o["chance"]) <= 0.0 or float(o["chance"]) > 1.0):
+		out.append("%s: «objective.chance» має бути від 0 до 1" % where)
+	_not_blank(o, ["enemy", "loc", "item", "text"], where + ".objective", out)
+
+
+## Нагорода: лише ті поля, які служба читає; числа не від'ємні; клас і звання з написом.
+static func _reward_rules(where: String, r: Dictionary, allowed: Array, ilvl: bool, out: Array) -> void:
+	for k in r:
+		if not k in allowed:
+			out.append("%s: служба не читає «%s» (читає %s)" % [where, k, str(allowed)])
+	_positive(r, ["gold", "gold_lvl", "xp", "trophy"], where, out, true)
+	for m in ["skills", "stats", "loyalty"]:
+		for k in r.get(m, _EMPTY):
+			if int(r[m][k]) <= 0:
+				out.append("%s: «%s.%s» має бути більшим за нуль" % [where, m, k])
+	if r.has("class") and r.has("rank"):
+		out.append("%s: «class» і «rank» разом: банер один" % where)
+	if (r.has("class") or r.has("rank")) != r.has("banner"):
+		out.append("%s: «banner» пишуть тоді й лише тоді, коли є «class» чи «rank»" % where)
+	_not_blank(r, ["class", "rank", "banner"], where, out)
+	if r.has("item"):
+		var it: Dictionary = r["item"]
+		_not_blank(it, ["slot", "type", "name"], where + ".item", out)
+		if it.has("ilvl") != ilvl:
+			out.append("%s.item: «ilvl» %s" % [where, "потрібен" if ilvl else "не пишуть: річ рівня героя"])
+		_positive(it, ["ilvl"], where + ".item", out)
+		_positive(it, ["up", "rarity"], where + ".item", out, true)
+
+
+## Ключ вибору → [місце кроку у файлі, скільки виборів]: так умови "ключ=вибір" знаходять свій крок.
+static func _choice_keys(steps: Dictionary) -> Dictionary:
+	var out := {}
+	var keys := steps.keys()
+	for i in keys.size():
+		var R: Dictionary = steps[keys[i]]
+		if not R.get("choices", []).is_empty():
+			out[str(R.get("choice_key", keys[i]))] = [i, R["choices"].size()]
+	return out
+
+
+## Умова "ключ=вибір": крок із такими виборами є (і, якщо at ≥ 0, стоїть у файлі раніше за місце at).
+static func _cond_problem(cond: String, keys: Dictionary, at: int) -> String:
+	if not _is_cond(cond):
+		return "умова має бути \"ключ=номер вибору\", а не «%s»" % cond
+	var parts := cond.split("=")
+	if not keys.has(parts[0]):
+		return "умова «%s» — нема кроку з виборами під ключем «%s»" % [cond, parts[0]]
+	if int(parts[1]) >= int(keys[parts[0]][1]):
+		return "умова «%s» — у кроку «%s» лише %d вибори" % [cond, parts[0], int(keys[parts[0]][1])]
+	if at >= 0 and int(keys[parts[0]][0]) >= at:
+		return "умова «%s» — вибір «%s» робиться пізніше" % [cond, parts[0]]
+	return ""
+
+
+## Розмова: мовці є в speakers.json, умови реплік — справжні вибори.
+static func _dialogue_links(where: String, field: String, lines: Array, keys: Dictionary, at: int, out: Array) -> void:
+	for j in lines.size():
+		if not _has_row("speakers", lines[j][0]):
+			out.append("%s: «%s[%d]» — мовця «%s» нема в speakers.json" % [where, field, j, lines[j][0]])
+		if lines[j].size() > 2:
+			var p := _cond_problem(str(lines[j][2]), keys, at)
+			if p != "":
+				out.append("%s: «%s[%d]»: %s" % [where, field, j, p])
+
+
+## Мета: місце є й підходить меті, ворог водиться там, місто — справжнє місто.
+static func _objective_links(where: String, o: Dictionary, out: Array) -> void:
+	var t := str(o.get("type", ""))
+	if o.has("enemy") and not has_mob(str(o["enemy"])):
+		out.append("%s: «objective.enemy» посилається на нечисть «%s», якої немає в mobs.json" % [where, o["enemy"]])
+	if not o.has("loc"):
+		return
+	var loc := str(o["loc"])
+	if t in ["visit", "choose"]:
+		if not _has_row("cities", loc):
+			out.append("%s: «objective.loc» — нема міста «%s» у cities.json" % [where, loc])
+		return
+	var L: Dictionary = row("places", loc)
+	if L.is_empty():
+		if not (t == "job" and _has_row("cities", loc)):
+			out.append("%s: «objective.loc» — нема місця «%s» у places.json" % [where, loc])
+		return
+	if t == "clear" and str(L.get("type", "")) != "field":
+		out.append("%s: «%s» — печера, її проходять метою «dungeon», а не «clear»" % [where, loc])
+	if t == "dungeon" and str(L.get("type", "")) != "dungeon":
+		out.append("%s: «%s» — не печера" % [where, loc])
+	if o.has("enemy") and not o["enemy"] in L.get("enemies", []):
+		out.append("%s: «%s» не водиться в «%s»" % [where, o["enemy"], loc])
+
+
+## Нагорода: клас, уміння, характеристики, міста, звання й річ — ті, що є в грі.
+static func _reward_links(where: String, r: Dictionary, out: Array) -> void:
+	if r.has("class") and not _has_row("classes", r["class"]):
+		out.append("%s: «class» — нема класу «%s» у classes.json" % [where, r["class"]])
+	if r.has("rank") and not str(r["rank"]) in load("res://scripts/game/story_service.gd").RANKS:
+		out.append("%s: «rank» — звання «%s» гра не знає (StoryService.RANKS)" % [where, r["rank"]])
+	var skills := {}
+	if r.has("skills"):
+		for s in ids("skills"):
+			skills[str(row("skills", s).get("skill", s))] = true
+	for k in r.get("skills", _EMPTY):
+		if not skills.has(k):
+			out.append("%s: «skills» — нема вміння «%s» у skills.json" % [where, k])
+	for k in r.get("stats", _EMPTY):
+		if not k in STAT_IDS:
+			out.append("%s: «stats» — нема характеристики «%s» (GameDB.STAT_IDS)" % [where, k])
+	for k in r.get("loyalty", _EMPTY):
+		if not _has_row("cities", k):
+			out.append("%s: «loyalty» — нема міста «%s» у cities.json" % [where, k])
+	if r.has("item"):
+		_reward_item_links(where + ".item", r["item"], out)
+
+
+## Річ у нагороду: клітинка вдягається, вид зброї — лише для зброї, рідкість і заточка — ті, що є.
+static func _reward_item_links(where: String, it: Dictionary, out: Array) -> void:
+	var slot := str(it.get("slot", ""))
+	if not slot in _worn_slots():
+		out.append("%s: «slot» — «%s» не клітинка спорядження" % [where, slot])
+	if it.has("type"):
+		if not _has_row("weapons", it["type"]):
+			out.append("%s: «type» — нема зброї «%s» у weapons.json" % [where, it["type"]])
+		if slot != "weapon":
+			out.append("%s: «type» пишуть лише для зброї" % where)
+	var rank := int(it.get("rarity", -1))
+	var lad := ladder("rarities", "rank")
+	if rank < 0 or rank >= lad.size() or lad[rank].is_empty():
+		out.append("%s: «rarity» %d — нема такої рідкості в rarities.json" % [where, rank])
+	if int(it.get("up", 0)) > int(load("res://scripts/data/data.gd").MAX_UPGRADE):
+		out.append("%s: «up» більша за найвищу заточку (Data.MAX_UPGRADE)" % where)
+
+
+## Посилання таблиць завдань на інші таблиці й на код гри.
+static func _quest_links(name: String, rows: Dictionary) -> Array:
+	var out := []
+	match name:
+		"speakers":
+			for id in load("res://scripts/data/story.gd").CODE_SPEAKERS:
+				if not rows.has(id):
+					out.append("speakers: нема мовця «%s», а код гри його знає (Story.CODE_SPEAKERS)" % id)
+		"story_chapters":
+			var used := {}
+			for s in ids("story"):
+				used[str(row("story", s).get("chapter", ""))] = true
+			for id in rows:
+				if not used.has(id):
+					out.append("story_chapters/%s: у розділі нема жодного кроку (story.json)" % id)
+				for p in rows[id].get("cleanse", []):
+					if not _has_row("places", p):
+						out.append("story_chapters/%s: «cleanse» — нема місця «%s» у places.json" % [id, p])
+		"story":
+			var chapters: Array = ids("story_chapters")
+			var keys := _choice_keys(rows)
+			var order := rows.keys()
+			var at := -1  # місце розділу останнього кроку
+			for i in order.size():
+				var id: String = order[i]
+				var R: Dictionary = rows[id]
+				var where: String = "story/" + id
+				var ci := chapters.find(str(R.get("chapter", "")))
+				if ci < 0:
+					out.append("%s: «chapter» — нема розділу «%s» у story_chapters.json" % [where, R.get("chapter", "")])
+				elif ci != at and ci != at + 1:
+					out.append("%s: розділ «%s» не на своєму місці: кроки йдуть розділ за розділом у порядку story_chapters.json" % [where, R["chapter"]])
+				else:
+					at = ci
+				if str(row("quest_lines", str(R.get("line", ""))).get("kind", "")) != "story":
+					out.append("%s: «line» — «%s» не лінія історії в quest_lines.json" % [where, R.get("line", "")])
+				if not _has_row("speakers", R.get("giver", "")):
+					out.append("%s: «giver» — нема мовця «%s» у speakers.json" % [where, R.get("giver", "")])
+				for k in ["city", "turn_in"]:
+					if str(R.get(k, "")) != "" and not _has_row("cities", R[k]):
+						out.append("%s: «%s» — нема міста «%s» у cities.json" % [where, k, R[k]])
+				for k in ["intro", "start", "end"]:
+					_dialogue_links(where, k, R.get(k, []), keys, i, out)
+				if R.has("if"):
+					var p := _cond_problem(str(R["if"]), keys, i)
+					if p != "":
+						out.append("%s: «if»: %s" % [where, p])
+				_objective_links(where, R.get("objective", _EMPTY), out)
+				_reward_links(where + ".reward", R.get("reward", _EMPTY), out)
+				var first: Array = row("classes", "peasant").get("next", [])
+				for j in R.get("choices", []).size():
+					var C: Dictionary = R["choices"][j]
+					var cw := "%s.choices[%d]" % [where, j]
+					_reward_links(cw + ".reward", C.get("reward", _EMPTY), out)
+					if C.has("class") and not str(C["class"]) in first:
+						out.append("%s: «class» — «%s» не обирають на Січі («next» Селянина %s)" % [cw, C["class"], str(first)])
+					var SS = load("res://scripts/game/story_service.gd")
+					for k in C.get("effects", _EMPTY):
+						var ok: bool = k in SS.EFFECTS or (str(k).begins_with("discount_") and _has_row("cities", str(k).trim_prefix("discount_")))
+						if not ok:
+							out.append("%s: «effects» — наслідку «%s» гра не знає (StoryService.EFFECTS, discount_<місто>)" % [cw, k])
+				for j in R.get("bonus", []).size():
+					var B: Dictionary = R["bonus"][j]
+					var p := _cond_problem(str(B.get("if", "")), keys, i)
+					if p != "":
+						out.append("%s.bonus[%d]: %s" % [where, j, p])
+					_reward_links("%s.bonus[%d].reward" % [where, j], B.get("reward", _EMPTY), out)
+			var seen := {}
+			for id in rows:
+				if not rows[id].get("choices", []).is_empty():
+					var k := str(rows[id].get("choice_key", id))
+					if seen.has(k):
+						out.append("story/%s: вибір під ключем «%s» уже записує «%s»" % [id, k, seen[k]])
+					seen[k] = id
+			if not rows.is_empty() and at != chapters.size() - 1:
+				out.append("story: не всі розділи story_chapters.json мають кроки")
+		"quest_lines":
+			for need in [[load("res://scripts/data/story.gd").LINE, "story"], [load("res://scripts/data/saga.gd").LINE, "saga"]]:
+				if str(rows.get(need[0], _EMPTY).get("kind", "")) != need[1]:
+					out.append("quest_lines: нема лінії «%s» з «kind» «%s», а код гри її знає" % need)
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var kind := str(R.get("kind", ""))
+				if R.has("after") and not (_has_row("story", R["after"]) or _has_row("legend_steps", R["after"]) or _has_row("saga", R["after"])):
+					out.append("quest_lines/%s: «after» — нема кроку «%s»" % [id, R["after"]])
+				var table_of: String = {"story": "story", "legend": "legend_steps", "saga": "saga"}.get(kind, "")
+				var n := 0
+				for s in (ids(table_of) if table_of != "" else []):
+					n += 1 if str(row(table_of, s).get("line", "")) == id else 0
+				if n == 0:
+					out.append("quest_lines/%s: у лінії нема жодного кроку (%s.json)" % [id, table_of])
+		"legend_steps", "saga":
+			var story_keys := _choice_keys(table("story"))
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "%s/%s" % [name, id]
+				if str(row("quest_lines", str(R.get("line", ""))).get("kind", "")) != QUEST_LINE_KIND[name]:
+					out.append("%s: «line» — «%s» не лінія «%s» у quest_lines.json" % [where, R.get("line", ""), QUEST_LINE_KIND[name]])
+				if not _has_row("speakers", R.get("giver", "")):
+					out.append("%s: «giver» — нема мовця «%s» у speakers.json" % [where, R.get("giver", "")])
+				if not _has_row("cities", R.get("city", "")):
+					out.append("%s: «city» — нема міста «%s» у cities.json" % [where, R.get("city", "")])
+				for k in ["start", "end"]:
+					_dialogue_links(where, k, R.get(k, []), story_keys, -1, out)
+				_objective_links(where, R.get("objective", _EMPTY), out)
+				_reward_links(where + ".reward", R.get("reward", _EMPTY), out)
+		"way":
+			var WS = load("res://scripts/game/way_service.gd")
+			var CS = load("res://scripts/game/challenge_service.gd")
+			var Camp = load("res://scripts/data/camp_data.gd")
+			var Acts = load("res://scripts/data/activities.gd")
+			var last_tab: int = load("res://scripts/ui/ui_character.gd").TAB_CHALLENGES
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "way/" + id
+				var C: Dictionary = R.get("check", _EMPTY)
+				for k in ["stat", "or"]:
+					if C.has(k) and not CS.is_stat(str(C[k])):
+						out.append("%s: «check.%s» — лічильника «%s» гра не рахує (ChallengeService.STATS)" % [where, k, C[k]])
+				if C.has("tier") and not _tier_exists("job_tiers", int(C["tier"])):
+					out.append("%s: «check.tier» %d — нема такого ступеня в job_tiers.json" % [where, int(C["tier"])])
+				var W: Dictionary = R.get("reward", _EMPTY)
+				for r in W.get("res", _EMPTY):
+					if not Camp.RESOURCES.has(r):
+						out.append("%s: «reward.res» — невідомий ресурс «%s» (CampData.RESOURCES)" % [where, r])
+				if W.has("item"):
+					var lad := ladder("rarities", "rank")
+					if int(W["item"]) < 0 or int(W["item"]) >= lad.size() or lad[int(W["item"])].is_empty():
+						out.append("%s: «reward.item» %d — нема такої рідкості в rarities.json" % [where, int(W["item"])])
+				if W.has("stone") and not load("res://scripts/game/stone_service.gd").NAMES.has(W["stone"]):
+					out.append("%s: «reward.stone» — нема каменя «%s» (StoneService.NAMES)" % [where, W["stone"]])
+				var G: Dictionary = R.get("go", _EMPTY)
+				if G.has("place"):
+					var p := str(G["place"])
+					if not (p in WS.GO_PLACES or _has_row("cities", p) or _has_row("places", p) or p == Camp.CAMP_ID or Acts.SPOTS.has(p)):
+						out.append("%s: «go.place» — нема міста, місця чи заняття «%s» (і це не %s)" % [where, p, str(WS.GO_PLACES)])
+				if G.has("tab") and (int(G["tab"]) < 0 or int(G["tab"]) > last_tab):
+					out.append("%s: «go.tab» %d — у екрана героя вкладки 0–%d" % [where, int(G["tab"]), last_tab])
+		"daily", "weekly":
+			var CS = load("res://scripts/game/challenge_service.gd")
+			for id in rows:
+				var R: Dictionary = rows[id]
+				if R.has("stat") and not CS.is_stat(str(R["stat"])):
+					out.append("%s/%s: «stat» — лічильника «%s» гра не рахує (ChallengeService.STATS)" % [name, id, R["stat"]])
+				if R.has("need") and not str(R["need"]) in CS.NEEDS:
+					out.append("%s/%s: «need» — «%s» не з переліку ChallengeService.NEEDS" % [name, id, R["need"]])
+		"achievements":
+			var CS = load("res://scripts/game/challenge_service.gd")
+			for id in rows:
+				if rows[id].has("stat") and not CS.is_stat(str(rows[id]["stat"])):
+					out.append("achievements/%s: «stat» — лічильника «%s» гра не рахує (ChallengeService.STATS)" % [id, rows[id]["stat"]])
+		"spec_trials":
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "spec_trials/" + id
+				var C: Dictionary = row("classes", id)
+				if C.is_empty() or not C.has("parent"):
+					out.append("%s: «%s» — не спеціалізація в classes.json (нема «parent»)" % [where, id])
+				var wt := str(R.get("item", _EMPTY).get("type", ""))
+				if not _has_row("weapons", wt):
+					out.append("%s: «item.type» — нема зброї «%s» у weapons.json" % [where, wt])
+				elif not C.is_empty() and not wt in C.get("weapons", []):
+					out.append("%s: «item.type» — «%s» не зброя класу «%s»" % [where, wt, id])
+				for k in ["start", "end"]:
+					_dialogue_links(where, k, R.get(k, []), {}, -1, out)
+				_objective_links(where, R.get("objective", _EMPTY), out)
+			for c in ids("classes"):
+				if row("classes", c).has("parent") and not rows.has(c):
+					out.append("classes/%s: спеціалізація без випробування в spec_trials.json: її не можна обрати" % c)
 	return out
 
 

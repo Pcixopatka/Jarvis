@@ -44,13 +44,10 @@ static func _step_done(world, step_id: String) -> bool:
 	var s := StoryService.state(world)
 	if s["stage"] == "done":
 		return true
-	var Story = StoryService.Story
-	for ci in Story.CHAPTERS.size():
-		var steps: Array = Story.CHAPTERS[ci]["steps"]
-		for si in steps.size():
-			if steps[si]["id"] == step_id:
-				return ci < int(s["chapter"]) or (ci == int(s["chapter"]) and si < int(s["step"]))
-	return false
+	var at: Vector2i = StoryService.Story.position(step_id)
+	if at.x < 0:
+		return false
+	return at.x < int(s["chapter"]) or (at.x == int(s["chapter"]) and at.y < int(s["step"]))
 
 
 ## Хто чекає на зустріч у цьому місті.

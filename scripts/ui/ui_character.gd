@@ -390,12 +390,12 @@ static func _challenges(game) -> Control:
 	for i in c["weekly"].size():
 		v.add_child(_challenge_row(game, c["weekly"][i], true, i))
 	var A = CS.A
-	v.add_child(UI.label("Досягнення: %d / %d" % [c["ach"].size(), A.ACHIEVEMENTS.size()], 24, UI.GOLD, false))
+	v.add_child(UI.label("Досягнення: %d / %d" % [c["ach"].size(), A.achievements().size()], 24, UI.GOLD, false))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 24)
 	grid.add_theme_constant_override("v_separation", 6)
-	for a in A.ACHIEVEMENTS:
+	for a in A.achievements():
 		var got: bool = c["ach"].has(a["id"])
 		var cur: int = int(w.stats.get(a["stat"], 0))
 		var text: String = ("✔ " if got else "") + a["name"]

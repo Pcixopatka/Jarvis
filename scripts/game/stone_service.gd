@@ -3,7 +3,7 @@ extends RefCounted
 ##   Камінь забуття — скидає характеристики, Загартування й вміння нинішнього класу (очки повертаються).
 ##   Алатир-камінь — змінює дорогу на сусідню того самого ступеня (Козак ↔ Волхв, Запорожець → Пластун…);
 ##     вміння старої дороги забуваються з поверненням очок, майстерність лишається.
-## Падають рідко з босів; перша перемога над сюжетним босом дає камінь гарантовано.
+## Падають рідко з босів; перша перемога над сюжетним босом дає камінь гарантовано («boss.stones» у data/mobs.json).
 ## Подарунки сюжету (присяга, вміння за посвяту) не скидаються — див. player.stat_gifts / skill_gifts.
 
 const Classes := preload("res://scripts/data/classes.gd")
@@ -11,10 +11,12 @@ const Data := preload("res://scripts/data/data.gd")
 
 const NAMES := {"zabuttia": "Камінь забуття", "alatyr": "Алатир-камінь"}
 const CHANCE := {"zabuttia": 0.12, "alatyr": 0.06}
-## Перша перемога над цим босом — гарантований камінь
-const FIRST_KILL := {"zmii": ["zabuttia"], "chaklun": ["zabuttia"], "koshchii": ["alatyr"], "putinoid": ["alatyr", "zabuttia"],
-	"baba_yaha": ["zabuttia"], "solovei": ["alatyr"], "lykho": ["zabuttia"], "oprychnyk": ["alatyr"],
-	"vidma": ["zabuttia"], "vii": ["alatyr"]}
+const GameDB := preload("res://scripts/core/game_db.gd")
+
+
+## Камені, які гарантовано дає перша перемога над цим босом («boss.stones»; порожньо — жодного).
+static func first_kill(kind: String) -> Array:
+	return GameDB.mob(kind).get("boss", {}).get("stones", [])
 
 
 static func count(player, id: String) -> int:
@@ -28,8 +30,8 @@ static func grant(player, id: String, n: int = 1) -> void:
 ## Бос переможений. first — це перша перемога над таким босом. Повертає повідомлення.
 static func on_boss(player, kind: String, first: bool) -> Array:
 	var got := []
-	if first and FIRST_KILL.has(kind):
-		got.append_array(FIRST_KILL[kind])
+	if first and not first_kill(kind).is_empty():
+		got.append_array(first_kill(kind))
 	else:
 		for id in CHANCE:
 			if randf() < CHANCE[id] * (1.0 + float(player.art.get("stone", 0.0))):

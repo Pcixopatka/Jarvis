@@ -1,157 +1,45 @@
 extends RefCounted
-## Шаблони щоденних і тижневих викликів та постійні досягнення.
-## stat — лічильник із world.stats (kill, kill:<вид>, elite, boss, boss:<вид>, field, dungeon, parry,
-## charged, defense, travel, sharpen, bond, level — найвищий рівень, hetman, kleinod — куплені ступені клейнодів,
-## vigil_min — хвилини на варті, tower_floor — пройдені поверхи Башти, depth_clear — пройдені глибини).
-
+## Виклики дня й тижня та постійні досягнення. Шаблони викликів — data/daily.json і data/weekly.json,
+## досягнення — data/achievements.json (поля — docs/data.md). Правила — у ChallengeService.
+## stat — лічильник із world.stats (перелік тих, що гра рахує, — ChallengeService.STATS і STAT_PREFIXES).
+##
 ## Виклик має групу: "base" (бій і господарство; за замовчуванням) або "event" — проходження подій і занять:
 ## варта, герць, розшук, супровід, події світу, сліди, Башта, Глибини. Щодня й щотижня частина викликів
 ## обов'язково з групи подій (DAILY_EVENTS / WEEKLY_EVENTS).
-## need — що має бути відкрито гравцеві, щоб виклик міг випасти (див. ChallengeService.available);
-## where — підказка, куди йти.
-const DAILY := [
-	{"stat": "kill", "goal": [30, 60], "text": "Здолай %d ворогів"},
-	{"stat": "kill:zarazhenyi", "goal": [10, 25], "text": "Здолай %d заражених"},
-	{"stat": "elite", "goal": [2, 4], "text": "Здолай %d еліт"},
-	{"stat": "field", "goal": [1, 2], "text": "Очисти місцевості: %d"},
-	{"stat": "dungeon", "goal": [1, 1], "text": "Пройди печеру до боса"},
-	{"stat": "parry", "goal": [3, 6], "text": "Відбий %d ударів парируванням"},
-	{"stat": "charged", "goal": [3, 6], "text": "Влуч зарядженим ударом %d разів"},
-	{"stat": "meat", "goal": [3, 6], "text": "Добудь %d м'яса на полюванні", "need": "hunt", "where": "Мисливські угіддя на мапі"},
-	{"stat": "ryba", "goal": [2, 5], "text": "Налови %d риби", "need": "fish", "where": "Рибальська тоня на мапі"},
-	{"stat": "dice_win", "goal": [1, 2], "text": "Виграй партій у кості: %d", "need": "tavern", "where": "Шинок у місті"},
-	{"stat": "cook", "goal": [1, 1], "text": "Звари страву в казані на хуторі", "need": "hunt", "where": "Казан на хуторі"},
-	# ---- події й заняття ----
-	{"stat": "vigil_min", "goal": [2, 4], "text": "Простій на Козацькій варті хвилин: %d", "group": "event", "need": "vigil", "where": "Сторожова могила на мапі"},
-	{"stat": "duel", "goal": [1, 2], "text": "Виграй герців на майдані: %d", "group": "event", "need": "duel", "where": "Майдан на Січі: турнір або вільний герць"},
-	{"stat": "bounty", "goal": [1, 1], "text": "Закрий оголошення з дошки розшуку", "group": "event", "need": "bounty", "where": "Вкладка «Розшук» у місті"},
-	{"stat": "escort", "goal": [1, 1], "text": "Проведи мандрівника через дику місцевість", "group": "event", "need": "escort", "where": "Завдання на супровід у місті"},
-	{"stat": "event", "goal": [1, 1], "text": "Прийди на поміч: відбий набіг, валку чи полон", "group": "event", "need": "event", "where": "Подія з'явиться на мапі після походу"},
-	{"stat": "trail", "goal": [1, 1], "text": "Пройди стежку слідів до знахідки", "group": "event", "need": "trail", "where": "Сліди будуть у першій же дикій місцевості"},
-	{"stat": "tower_floor", "goal": [2, 4], "text": "Пройди поверхів Башти Кощія: %d", "group": "event", "need": "tower", "where": "Башта Кощія на мапі"},
-	{"stat": "depth_clear", "goal": [1, 2], "text": "Пройди глибин зарази: %d", "group": "event", "need": "depth", "where": "Глибини зарази на мапі"},
-	{"stat": "ring", "goal": [1, 3], "text": "Здолай чудовиськ у Колі Кожум'яки: %d", "group": "event", "need": "ring", "where": "Змієві вали на мапі"},
-]
-const WEEKLY := [
-	{"stat": "kill", "goal": [300, 500], "text": "Здолай %d ворогів за тиждень"},
-	{"stat": "boss", "goal": [3, 5], "text": "Здолай босів: %d"},
-	{"stat": "elite", "goal": [15, 25], "text": "Здолай %d еліт"},
-	{"stat": "sharpen", "goal": [3, 5], "text": "Вдало нагостри зброю %d разів"},
-	{"stat": "harvest", "goal": [4, 8], "text": "Збери врожаїв на городі: %d", "need": "garden", "where": "Город на хуторі"},
-	{"stat": "expedition", "goal": [3, 5], "text": "Зустрінь супутників із власних походів: %d", "need": "party", "where": "Корчма: відправ супутника в похід"},
-	{"stat": "travel", "goal": [4, 6], "text": "Переживи %d пригод у дорозі"},
-	# ---- події й заняття ----
-	{"stat": "defense", "goal": [1, 2], "text": "Відстой облоги: %d", "group": "event", "need": "defense", "where": "Облога з'явиться на мапі червоним кільцем"},
-	{"stat": "bounty", "goal": [2, 3], "text": "Закрий оголошень розшуку: %d", "group": "event", "need": "bounty", "where": "Вкладка «Розшук» у місті"},
-	{"stat": "duel", "goal": [3, 5], "text": "Виграй герців на майдані: %d", "group": "event", "need": "duel", "where": "Майдан на Січі: турнір або вільний герць"},
-	{"stat": "trail", "goal": [2, 3], "text": "Пройди стежок слідів до знахідки: %d", "group": "event", "need": "trail", "where": "Сліди в диких місцевостях"},
-	{"stat": "escort", "goal": [2, 3], "text": "Проведи мандрівників через дикі місця: %d", "group": "event", "need": "escort", "where": "Завдання на супровід у місті"},
-	{"stat": "vigil_min", "goal": [8, 12], "text": "Простій на Козацькій варті хвилин: %d", "group": "event", "need": "vigil", "where": "Сторожова могила на мапі"},
-	{"stat": "event", "goal": [2, 3], "text": "Прийди на поміч у подіях світу: %d", "group": "event", "need": "event", "where": "Події з'являються на мапі після походів"},
-	{"stat": "tower_floor", "goal": [6, 10], "text": "Пройди поверхів Башти Кощія: %d", "group": "event", "need": "tower", "where": "Башта Кощія на мапі"},
-	{"stat": "depth_clear", "goal": [3, 5], "text": "Пройди глибин зарази: %d", "group": "event", "need": "depth", "where": "Глибини зарази на мапі"},
-	{"stat": "ring", "goal": [5, 8], "text": "Здолай чудовиськ у Колі Кожум'яки: %d", "group": "event", "need": "ring", "where": "Змієві вали на мапі"},
-	{"stat": "muster", "goal": [2, 3], "text": "Виграй сутичок на гетьманському огляді: %d", "group": "event", "need": "muster", "where": "Вкладка «Огляд» у Чигирині"},
-]
+## need — що має бути відкрито гравцеві, щоб виклик міг випасти (ChallengeService.NEEDS, available);
+## where — підказка, куди йти. Порядок шаблонів у файлі важить: з нього кидається, що випаде сьогодні.
+
+const GameDB := preload("res://scripts/core/game_db.gd")
+
+## Скільки викликів щодня й щотижня і скільки з них про події й заняття (правила, не записи).
 const DAILY_COUNT := 4
 const DAILY_EVENTS := 2  # скільки з них про події й заняття
 const WEEKLY_COUNT := 3
 const WEEKLY_EVENTS := 2
 
-const ACHIEVEMENTS := [
-	{"id": "first_blood", "name": "Перша кров", "desc": "Здолай першого ворога", "stat": "kill", "goal": 1, "gold": 20},
-	{"id": "kills_100", "name": "Гроза нечисті", "desc": "Здолай 100 ворогів", "stat": "kill", "goal": 100, "gold": 100},
-	{"id": "kills_1000", "name": "Козацька слава", "desc": "Здолай 1000 ворогів", "stat": "kill", "goal": 1000, "gold": 600},
-	{"id": "kills_5000", "name": "Легенда степу", "desc": "Здолай 5000 ворогів", "stat": "kill", "goal": 5000, "gold": 2500},
-	{"id": "elite_10", "name": "Мисливець на еліту", "desc": "Здолай 10 еліт", "stat": "elite", "goal": 10, "gold": 200},
-	{"id": "elite_100", "name": "Жах еліти", "desc": "Здолай 100 еліт", "stat": "elite", "goal": 100, "gold": 1500},
-	{"id": "zmii", "name": "Змієборець", "desc": "Здолай Триголового Змія", "stat": "boss:zmii", "goal": 1, "gold": 150},
-	{"id": "koshchii", "name": "Смерть Кощієва", "desc": "Здолай Кощія Безсмертного", "stat": "boss:koshchii", "goal": 1, "gold": 800},
-	{"id": "putinoid", "name": "Кінець упиря-царя", "desc": "Здолай Путіноїда в Кремлі", "stat": "boss:putinoid", "goal": 1, "gold": 3000},
-	{"id": "parry_50", "name": "Сталеве зап'ястя", "desc": "Відбий 50 ударів парируванням", "stat": "parry", "goal": 50, "gold": 300},
-	{"id": "charged_50", "name": "Козацький удар", "desc": "50 разів влуч зарядженим ударом", "stat": "charged", "goal": 50, "gold": 300},
-	{"id": "defense_5", "name": "Оборонець", "desc": "Відстой 5 облог", "stat": "defense", "goal": 5, "gold": 600},
-	{"id": "travel_10", "name": "Чумацький шлях", "desc": "Переживи 10 пригод у дорозі", "stat": "travel", "goal": 10, "gold": 250},
-	{"id": "sharpen_10", "name": "Майстер точила", "desc": "10 разів вдало нагостри зброю", "stat": "sharpen", "goal": 10, "gold": 250},
-	{"id": "craft_10", "name": "Ковальська справа", "desc": "Викуй у своїй кузні 10 речей", "stat": "craft", "goal": 10, "gold": 400},
-	{"id": "spec", "name": "Майстер свого діла", "desc": "Пройди посвяту в спеціалізацію", "stat": "spec", "goal": 1, "gold": 1500},
-	{"id": "bond_3", "name": "Побратими навіки", "desc": "Пройди особисті історії двох побратимів", "stat": "bond", "goal": 2, "gold": 1000},
-	{"id": "level_10", "name": "Бувалий козак", "desc": "Досягни 10 рівня", "stat": "level", "goal": 10, "gold": 300},
-	{"id": "level_20", "name": "Сивий вояка", "desc": "Досягни 20 рівня", "stat": "level", "goal": 20, "gold": 1200},
-	{"id": "depth_10", "name": "У надрах", "desc": "Пройди 10-ту глибину зарази", "stat": "depth", "goal": 10, "gold": 3000},
-	{"id": "depth_25", "name": "Корені зла", "desc": "Пройди 25-ту глибину зарази", "stat": "depth", "goal": 25, "gold": 10000},
-	{"id": "depth_50", "name": "Без дна", "desc": "Пройди 50-ту глибину зарази", "stat": "depth", "goal": 50, "gold": 30000},
-	{"id": "peril_1", "name": "За край мапи", "desc": "Здолай першого надважкого боса", "stat": "peril_bosses", "goal": 1, "gold": 15000},
-	{"id": "peril_3", "name": "Тричі за межу", "desc": "Здолай трьох надважких босів", "stat": "peril_bosses", "goal": 3, "gold": 40000},
-	{"id": "peril_5", "name": "Кінець світу відкладено", "desc": "Здолай усіх п'ятьох надважких босів", "stat": "peril_bosses", "goal": 5, "gold": 100000},
-	{"id": "legend_1", "name": "Слухач переказів", "desc": "Розкажи до кінця перший переказ", "stat": "legend", "goal": 1, "gold": 5000},
-	{"id": "legend_6", "name": "Збирач переказів", "desc": "Розкажи до кінця шість переказів", "stat": "legend", "goal": 6, "gold": 40000},
-	{"id": "legend_12", "name": "Жива книга", "desc": "Розкажи до кінця всі дванадцять переказів", "stat": "legend", "goal": 12, "gold": 150000},
-	{"id": "saga_1", "name": "Перший вогник", "desc": "Заверши перший крок «Попелу за вітром»", "stat": "saga", "goal": 1, "gold": 30000},
-	{"id": "saga_5", "name": "Чистий вітер", "desc": "Заверши «Попіл за вітром»: здолай лихо всіх п'яти земель", "stat": "saga", "goal": 5, "gold": 250000},
-	{"id": "pet_1", "name": "Вірний друг", "desc": "Візьми на хутір першого улюбленця", "stat": "pet_level", "goal": 1, "gold": 3000},
-	{"id": "pet_20", "name": "Повна стайня", "desc": "Вигодуй усіх чотирьох улюбленців до найвищого ступеня", "stat": "pet_level", "goal": 20, "gold": 100000},
-	{"id": "boss_day_1", "name": "Ранкова розминка", "desc": "Переможи боса дня", "stat": "boss_day", "goal": 1, "gold": 2000},
-	{"id": "boss_day_10", "name": "Десять ранків", "desc": "Переможи 10 босів дня", "stat": "boss_day", "goal": 10, "gold": 12000},
-	{"id": "boss_day_50", "name": "Гроза лігв", "desc": "Переможи 50 босів дня", "stat": "boss_day", "goal": 50, "gold": 60000},
-	{"id": "boss_week_1", "name": "Тижнева здобич", "desc": "Переможи боса тижня", "stat": "boss_week", "goal": 1, "gold": 8000},
-	{"id": "boss_week_10", "name": "Десять тижнів слави", "desc": "Переможи 10 босів тижня", "stat": "boss_week", "goal": 10, "gold": 80000},
-	{"id": "peril_runs_25", "name": "Свій у чужих горах", "desc": "Пройди надважкі печери 25 разів", "stat": "peril", "goal": 25, "gold": 50000},
-	{"id": "valor_10", "name": "Звитяжець", "desc": "Здобудь 10 звитяг після останнього рівня", "stat": "valor", "goal": 10, "gold": 20000},
-	{"id": "valor_50", "name": "Живий переказ", "desc": "Здобудь 50 звитяг після останнього рівня", "stat": "valor", "goal": 50, "gold": 80000},
-	{"id": "set_full", "name": "Повний стрій", "desc": "Вдягни всі шість речей одного набору", "stat": "set_full", "goal": 1, "gold": 50000},
-	{"id": "trade_1", "name": "Перший торг", "desc": "Продай 10 одиниць краму", "stat": "trade_sold", "goal": 10, "gold": 200},
-	{"id": "trade_profit", "name": "Чумак", "desc": "Заробити на торгівлі крамом 5000 грн зиску", "stat": "trade_profit", "goal": 5000, "gold": 1500},
-	{"id": "trade_profit_2", "name": "Багатий купець", "desc": "Заробити на торгівлі крамом 50000 грн зиску", "stat": "trade_profit", "goal": 50000, "gold": 8000},
-	{"id": "ambush_3", "name": "Валку не чіпай", "desc": "Відбий 3 напади на свою валку", "stat": "ambush", "goal": 3, "gold": 800},
-	{"id": "hunt_1", "name": "Перша здобич", "desc": "Добудь м'ясо на полюванні", "stat": "meat", "goal": 1, "gold": 200},
-	{"id": "hunt_50", "name": "Вправний мисливець", "desc": "Добудь на полюванні 50 м'яса", "stat": "meat", "goal": 50, "gold": 1500},
-	{"id": "fish_30", "name": "Рибалка з діда-прадіда", "desc": "Налови 30 риби", "stat": "ryba", "goal": 30, "gold": 1200},
-	{"id": "fish_som", "name": "Вусатий велетень", "desc": "Спіймай сома", "stat": "som", "goal": 1, "gold": 600},
-	{"id": "cook_5", "name": "Кашовар", "desc": "Звари в казані 5 страв", "stat": "cook", "goal": 5, "gold": 500},
-	{"id": "dice_1", "name": "Легка рука", "desc": "Виграй партію в кості", "stat": "dice_win", "goal": 1, "gold": 150},
-	{"id": "dice_25", "name": "Гравець", "desc": "Виграй 25 партій у кості", "stat": "dice_win", "goal": 25, "gold": 1500},
-	{"id": "dice_12", "name": "Дванадцять!", "desc": "Виграй партію, викинувши рівно дванадцять", "stat": "dice_12", "goal": 1, "gold": 400},
-	{"id": "rumor_5", "name": "Вуха шинку", "desc": "Почуй 5 чуток", "stat": "rumor", "goal": 5, "gold": 500},
-	{"id": "trail_1", "name": "Слідопит", "desc": "Пройди стежку слідів до знахідки", "stat": "trail", "goal": 1, "gold": 200},
-	{"id": "trail_20", "name": "Око пластуна", "desc": "Пройди 20 стежок слідів", "stat": "trail", "goal": 20, "gold": 2000},
-	{"id": "trail_den_5", "name": "Гроза лігв", "desc": "Розори 5 лігв нечисті", "stat": "trail:den", "goal": 5, "gold": 1200},
-	{"id": "harvest_1", "name": "Перший урожай", "desc": "Збери врожай на городі", "stat": "harvest", "goal": 1, "gold": 150},
-	{"id": "harvest_30", "name": "Господар", "desc": "Збери 30 врожаїв на городі", "stat": "harvest", "goal": 30, "gold": 2000},
-	{"id": "borshch", "name": "Справжній борщ", "desc": "Звари борщ із власної городини", "stat": "cook:borshch", "goal": 1, "gold": 400},
-	{"id": "expedition_1", "name": "Гінці повернулись", "desc": "Дочекайся супутника з власного походу", "stat": "expedition", "goal": 1, "gold": 200},
-	{"id": "expedition_25", "name": "Отаман загону", "desc": "Зустрінь супутників із 25 походів", "stat": "expedition", "goal": 25, "gold": 2500},
-	{"id": "glory_rank_2", "name": "Ім'я на вустах", "desc": "Здобудь 120 слави (ранг «Бувалець»)", "stat": "glory", "goal": 120, "gold": 1000},
-	{"id": "glory_rank_4", "name": "Отаманська слава", "desc": "Здобудь 700 слави (ранг «Отаман»)", "stat": "glory", "goal": 700, "gold": 6000},
-	{"id": "holiday_tokens", "name": "Святковий настрій", "desc": "Збери 100 жетонів сезонних свят", "stat": "holiday_token", "goal": 100, "gold": 1500},
-	{"id": "holiday_top", "name": "Свято вдалося", "desc": "Забери найвищу нагороду сезонного свята", "stat": "holiday_top", "goal": 1, "gold": 2000},
-	{"id": "vidma", "name": "Кінець шабашу", "desc": "Здолай Відьму з Лисої гори", "stat": "boss:vidma", "goal": 1, "gold": 700},
-	{"id": "vii", "name": "Не глянув", "desc": "Здолай Вія в Проклятій церкві", "stat": "boss:vii", "goal": 1, "gold": 1800},
-	{"id": "escort_1", "name": "Надійний провідник", "desc": "Проведи мандрівника через дику місцевість", "stat": "escort", "goal": 1, "gold": 200},
-	{"id": "escort_15", "name": "Дорога без страху", "desc": "Проведи 15 мандрівників", "stat": "escort", "goal": 15, "gold": 1800},
-	{"id": "escort_clean", "name": "Ані подряпини", "desc": "Доведи мандрівника так, щоб його жодного разу не зачепили", "stat": "escort_clean", "goal": 1, "gold": 500},
-	{"id": "vii_blind", "name": "Повіки впали", "desc": "Осліпи Вія: здолай обох повікарів, доки він не глянув", "stat": "vii_blind", "goal": 1, "gold": 600},
-	{"id": "vigil_5", "name": "Вартовий", "desc": "Вистій на варті 5 хвилин", "stat": "vigil", "goal": 5, "gold": 1500},
-	{"id": "vigil_8", "name": "Нічна сторожа", "desc": "Вистій на варті 8 хвилин", "stat": "vigil", "goal": 8, "gold": 5000},
-	{"id": "bounty_1", "name": "Перша голова", "desc": "Закрий оголошення з дошки розшуку", "stat": "bounty", "goal": 1, "gold": 300},
-	{"id": "bounty_10", "name": "Мисливець за головами", "desc": "Закрий 10 оголошень розшуку", "stat": "bounty", "goal": 10, "gold": 2500},
-	{"id": "duel_1", "name": "Перша кров на майдані", "desc": "Виграй коло в герці", "stat": "duel", "goal": 1, "gold": 300},
-	{"id": "duel_champion", "name": "Чемпіон Січі", "desc": "Виграй турнір на майдані", "stat": "duel_champion", "goal": 1, "gold": 2000},
-	{"id": "duel_champion_5", "name": "Лицар майдану", "desc": "Стань чемпіоном майдану 5 разів", "stat": "duel_champion", "goal": 5, "gold": 8000},
-	{"id": "event_5", "name": "На поміч!", "desc": "Відбий 5 подій: набіги, валки, полон", "stat": "event", "goal": 5, "gold": 800},
-	{"id": "sich_siege", "name": "Січ стоїть", "desc": "Відбий велику облогу Січі", "stat": "event:sich_siege", "goal": 1, "gold": 2500},
-	{"id": "tower_5", "name": "Перший супербос", "desc": "Пройди 5-й поверх Башти Кощія", "stat": "tower", "goal": 5, "gold": 1500},
-	{"id": "tower_20", "name": "Вище хмар", "desc": "Пройди 20-й поверх Башти Кощія", "stat": "tower", "goal": 20, "gold": 6000},
-	{"id": "tower_50", "name": "До самого неба", "desc": "Пройди 50-й поверх Башти Кощія", "stat": "tower", "goal": 50, "gold": 25000},
-	{"id": "ring_1", "name": "Кожум'яччина наука", "desc": "Пройди всі три кола на Змієвих валах", "stat": "ring_clear", "goal": 1, "gold": 1500},
-	{"id": "ring_10", "name": "Гроза чудовиськ", "desc": "Пройди Коло Кожум'яки 10 разів", "stat": "ring_clear", "goal": 10, "gold": 8000},
-	{"id": "ring_fast", "name": "Швидше за змія", "desc": "Пройди Коло Кожум'яки менш ніж за півтори хвилини бою", "stat": "ring_fast", "goal": 1, "gold": 3000},
-	{"id": "muster_1", "name": "Гурт на гурт", "desc": "Виграй сутичку на гетьманському огляді", "stat": "muster", "goal": 1, "gold": 400},
-	{"id": "muster_champion", "name": "Гетьманова ласка", "desc": "Виграй увесь гетьманський огляд", "stat": "muster_champion", "goal": 1, "gold": 2500},
-	{"id": "muster_champion_5", "name": "Найкраща ватага", "desc": "Виграй гетьманський огляд 5 разів", "stat": "muster_champion", "goal": 5, "gold": 9000},
-	{"id": "duel_streak_5", "name": "Не збити з ніг", "desc": "Виграй 5 вільних герців поспіль", "stat": "duel_streak", "goal": 5, "gold": 2000},
-	{"id": "kleinod_1", "name": "Перший клейнод", "desc": "Здобудь перший клейнод роду на хуторі", "stat": "kleinod", "goal": 1, "gold": 1000},
-	{"id": "kleinod_14", "name": "Військова скарбниця", "desc": "Оздоб клейноди роду на 14 ступенів", "stat": "kleinod", "goal": 14, "gold": 10000},
-	{"id": "kleinod_35", "name": "Клейноди Війська Запорозького", "desc": "Доведи всі сім клейнодів до досконалості", "stat": "kleinod", "goal": 35, "gold": 50000},
-	{"id": "hetman", "name": "Гетьман", "desc": "Пройди всю історію", "stat": "hetman", "goal": 1, "gold": 5000},
-]
+static var _lists := {}  # таблиця → [записи в порядку файлу]
+
+
+static func _list(name: String) -> Array:
+	if not _lists.has(name):
+		var out := []
+		for id in GameDB.ids(name):
+			out.append(GameDB.row(name, id))
+		out.make_read_only()
+		_lists[name] = out
+	return _lists[name]
+
+
+## Шаблони щоденних викликів у порядку файлу (лише для читання).
+static func daily() -> Array:
+	return _list("daily")
+
+
+## Шаблони тижневих викликів.
+static func weekly() -> Array:
+	return _list("weekly")
+
+
+## Досягнення в порядку показу; кожне має «id».
+static func achievements() -> Array:
+	return _list("achievements")

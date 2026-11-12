@@ -2,7 +2,8 @@ extends RefCounted
 ## Щоденні й тижневі виклики та досягнення. Усе живиться одним лічильником подій record().
 ## Стан: world.stats {лічильник: значення} і world.challenges:
 ##   {"day": "2026-11-09", "week": "2026-W45", "daily": [...], "weekly": [...], "ach": {id: true}}
-## Виклик: {"stat", "text", "goal", "progress", "claimed", "group", "where"}.
+## Виклик: {"stat", "text", "goal", "progress", "claimed", "group", "where"}. Шаблони викликів і досягнення —
+## data/daily.json, data/weekly.json, data/achievements.json (Achievements).
 ## Частина викликів щодня й щотижня — про події й заняття (група "event"); випадає лише те,
 ## що гравцеві вже відкрито, а гра подбає, щоб таке було де виконати (див. pending і служби подій).
 
@@ -13,6 +14,20 @@ const Camp := preload("res://scripts/data/camp_data.gd")
 ## Версія складу викликів: змінилась — сьогоднішні й тижневі перескладаються (розпочаті лишаються).
 const Clock := preload("res://scripts/core/clock.gd")
 const VERSION := 2
+
+## Лічильники world.stats, які гра рахує (усі виклики record() у коді). Лише на них можуть посилатися
+## виклики, досягнення й «Шлях козака» (перевіряє GameDB). Новий лічильник — виклик record() у коді й рядок тут.
+const STATS := ["ambush", "bond", "boss", "boss_day", "boss_week", "bounty", "bounty_kill", "charged", "cook", "craft",
+	"defense", "depth", "depth_clear", "dice", "dice_12", "dice_win", "duel", "duel_champion", "duel_free", "duel_streak", "dungeon",
+	"elite", "enchant", "escort", "escort_clean", "event", "expedition", "expedition_sent", "fair", "field", "fishing",
+	"glory", "harvest", "hetman", "holiday_reward", "holiday_token", "holiday_top", "hunt", "kill", "kleinod", "legend",
+	"legend_step", "level", "meat", "muster", "muster_champion", "parry", "peril", "peril_bosses", "pet_level", "plant",
+	"ring", "ring_clear", "ring_fast", "rumor", "ryba", "saga", "set_full", "sharpen", "som", "spec", "tower",
+	"tower_floor", "trade_profit", "trade_sold", "trail", "travel", "valor", "vigil", "vigil_min", "vii_blind"]
+## Лічильники «префікс:id»: kill:<нечисть>, boss:<бос>, trail:<вид сліду>, cook:<страва>, event:<подія>.
+const STAT_PREFIXES := ["kill", "boss", "trail", "cook", "event"]
+## Що може просити виклик («need»): заняття, яке available() уміє перевірити.
+const NEEDS := ["vigil", "duel", "bounty", "ring", "muster", "tower", "depth", "hunt", "fish", "tavern", "escort", "trail", "event", "defense", "garden", "party"]
 
 ## Для тестів можна підмінити «сьогодні» (unix-час); 0 — справжній годинник.
 static var now_override := 0
@@ -40,11 +55,11 @@ static func state(world, player = null) -> Dictionary:
 	if c.get("day", "") != day_key(t) or fresh:
 		var old: Array = c.get("daily", []) if c.get("day", "") == day_key(t) else []
 		c["day"] = day_key(t)
-		c["daily"] = _keep_started(old, _generate(A.DAILY, A.DAILY_COUNT, A.DAILY_EVENTS, hash(c["day"]), world, player), A.DAILY_COUNT)
+		c["daily"] = _keep_started(old, _generate(A.daily(), A.DAILY_COUNT, A.DAILY_EVENTS, hash(c["day"]), world, player), A.DAILY_COUNT)
 	if c.get("week", "") != week_key(t) or fresh:
 		var old_w: Array = c.get("weekly", []) if c.get("week", "") == week_key(t) else []
 		c["week"] = week_key(t)
-		c["weekly"] = _keep_started(old_w, _generate(A.WEEKLY, A.WEEKLY_COUNT, A.WEEKLY_EVENTS, hash(c["week"]), world, player), A.WEEKLY_COUNT)
+		c["weekly"] = _keep_started(old_w, _generate(A.weekly(), A.WEEKLY_COUNT, A.WEEKLY_EVENTS, hash(c["week"]), world, player), A.WEEKLY_COUNT)
 	c["v"] = VERSION
 	if not c.has("ach"):
 		c["ach"] = {}
@@ -70,7 +85,30 @@ static func _keep_started(old: Array, fresh: Array, n: int) -> Array:
 	return base
 
 
-## Чи відкрите гравцеві те, чого просить виклик. need: "" — завжди; інакше назва заняття.
+## Чи лічильник з тих, що гра рахує (STATS чи «префікс:id» з відомим id).
+static func is_stat(key: String) -> bool:
+	if key in STATS:
+		return true
+	var parts := key.split(":")
+	if parts.size() != 2 or not parts[0] in STAT_PREFIXES:
+		return false
+	var GameDB = load("res://scripts/core/game_db.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	match parts[0]:
+		"kill":
+			return GameDB.has_mob(parts[1])
+		"boss":
+			return GameDB.has_boss(parts[1])
+		"trail":
+			return Acts.TRAIL_KINDS.has(parts[1])
+		"cook":
+			return Acts.RECIPES.has(parts[1])
+		"event":
+			return parts[1] in load("res://scripts/game/event_service.gd").BATTLE_KINDS
+	return false
+
+
+## Чи відкрите гравцеві те, чого просить виклик. need: "" — завжди; інакше назва заняття (NEEDS).
 static func available(need: String, world, player = null) -> bool:
 	if need == "":
 		return true
@@ -182,7 +220,7 @@ static func record(world, player, stat: String, amount: int = 1) -> Array:
 					ch["progress"] = mini(int(ch["goal"]), int(ch["progress"]) + amount)
 					if int(ch["progress"]) >= int(ch["goal"]):
 						msgs.append("Виклик виконано: %s — забери нагороду!" % ch["text"])
-	for a in A.ACHIEVEMENTS:
+	for a in A.achievements():
 		if c["ach"].has(a["id"]) or a["stat"] != stat:
 			continue
 		if int(world.stats.get(stat, 0)) >= int(a["goal"]):

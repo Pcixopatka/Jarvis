@@ -106,7 +106,7 @@ static func _value(v, f: Dictionary, depth: int, inline_only: bool) -> String:
 		var pad := "\t".repeat(depth + 1)
 		return "[\n" + pad + (",\n" + pad).join(parts) + "\n" + "\t".repeat(depth) + "]"
 	if v is float or v is int:
-		if t == "int" and v == floorf(v):
+		if t in ["int", "number"] and v == floorf(v):
 			return str(int(v))
 		if t == "float" or v is float:
 			return var_to_str(float(v))  # точне подання: прочитане назад дає те саме число

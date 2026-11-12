@@ -1,5 +1,5 @@
 extends RefCounted
-## «Шлях козака»: правила ланцюжка перших цілей. Кроки — у WayData.
+## «Шлях козака»: правила ланцюжка перших цілей. Кроки — data/way.json (WayData).
 ## (PathService — це інше: вибір дороги Козак, Стрілець чи Волхв.)
 ## Герой іде кроками по черзі: виконав умову, забрав нагороду, побачив наступний.
 ## Бувалий герой, у якого багато вже зроблено, забирає все готове одним дотиком.
@@ -9,6 +9,10 @@ const Path := preload("res://scripts/data/way_data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 
 const TAB_JOURNAL := 1
+## Умови, які вміє is_done (у кроці рівно одна; «stat» ще з «n» і, можливо, «or»).
+const CHECKS := ["stat", "equip", "spent", "quests", "loyalty", "companions", "camp", "tier"]
+## Особливі місця для поради («go.place»), які go() шукає сам; решта — id міста, місця чи заняття.
+const GO_PLACES := ["city", "spot", "dungeon"]
 
 
 static func _svc(name: String):
@@ -22,7 +26,7 @@ static func state(world) -> Dictionary:
 
 
 static func total() -> int:
-	return Path.STEPS.size()
+	return Path.steps().size()
 
 
 ## Номер нинішнього кроку (0..total). total — шлях пройдено.
@@ -36,7 +40,7 @@ static func finished(world) -> bool:
 
 ## Нинішній крок або порожній словник, коли шлях пройдено.
 static func current(world) -> Dictionary:
-	return {} if finished(world) else Path.STEPS[index(world)]
+	return {} if finished(world) else Path.steps()[index(world)]
 
 
 # ======================= Умови =======================
@@ -107,7 +111,7 @@ static func ready(world, player) -> bool:
 static func ready_count(world, player) -> int:
 	var n := 0
 	for i in range(index(world), total()):
-		if not is_done(Path.STEPS[i], world, player):
+		if not is_done(Path.steps()[i], world, player):
 			break
 		n += 1
 	return n

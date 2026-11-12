@@ -1065,7 +1065,7 @@ func hall_rows(city: String) -> Array:
 		out.append(_hall_row("hero", "", hd["lines"], str(wants.get(str(hd["kind"]), "Хоче поговорити")), str(hd["kind"]) == "end"))
 	for ld in LegendService.city_dialogues(world, city):
 		var line: String = str(ld["line"])
-		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.LINES[line]["title"], LegendService.current(world, line)["title"]], str(ld["kind"]) == "legend_end"))
+		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.line(line)["title"], LegendService.current(world, line)["title"]], str(ld["kind"]) == "legend_end"))
 	return out
 
 
@@ -1079,7 +1079,7 @@ func _hall_npc(lines: Array) -> String:
 
 func _hall_row(kind: String, line: String, lines: Array, what: String, ready: bool) -> Dictionary:
 	var npc := _hall_npc(lines)
-	var info: Dictionary = StoryService.Story.NPCS.get(npc, {"name": "Гонець", "role": ""})
+	var info: Dictionary = StoryService.Story.npc(npc, {"name": "Гонець", "role": ""})
 	return {"kind": kind, "line": line, "npc": npc, "name": str(info["name"]), "role": str(info.get("role", "")), "what": what, "ready": ready}
 
 
@@ -1164,7 +1164,7 @@ func _start_trial(spec: String) -> void:
 	if not SpecService.start(world, player, spec):
 		return
 	var dlg = DialogueScript.new()
-	dlg.setup(SpecService.TRIALS[spec]["start"], [])
+	dlg.setup(SpecService.trial(spec)["start"], [])
 	dlg.finished.connect(func(_c):
 		hud.close_dialogue()
 		hud.show_banner("◆ " + SpecService.objective(world)["text"], UI.GOLD)
