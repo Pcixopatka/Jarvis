@@ -7656,6 +7656,65 @@ func _suite_souls() -> void:
 	for n in game.hud.screen_root.find_children("*", "Label", true, false):
 		labels += n.text + "\n"
 	check("Пом'яник душ" in labels and "Душа мавки  ×1 у торбинці" in labels and "ще не знайдено" in labels and texts.call().any(func(t): return str(t) == "Душі: 2"), "Пом'яник: що в торбинці й чого ще нема")
+	# Блок «Вселити»: кожна душа з торбинки рівно один раз, кількість на кнопці, опис не обрізаний
+	var UiSouls = load("res://scripts/ui/ui_souls.gd")
+	var nop := func(_a: String, _b): return func(): pass
+	var sock_w: Dictionary = Data.gen_item(40, 2, "weapon", "sabre")
+	sock_w["sock"] = 1
+	gp.add_item(sock_w)
+	var ins_texts := func(blk: Control) -> Array:
+		var out := []
+		for b in blk.find_children("*", "Button", true, false):
+			if str(b.text).begins_with("Вселити"):
+				out.append(str(b.text))
+		return out
+	gp.souls = {"mavka": 2, "chort": 2}
+	var blk: Control = UiSouls.block(gp, sock_w, nop, true)
+	var it2: Array = ins_texts.call(blk)
+	blk.free()
+	check(it2.size() == 2 and it2.all(func(t): return " ×2\n" in t) and it2.any(func(t): return t.begins_with("Вселити: Душа мавки ×2")), "по дві душі двох видів: дві кнопки «Вселити», не чотири, на кожній «×2»: %s" % str(it2))
+	gp.souls = {"mavka": 1, "chort": 1}
+	blk = UiSouls.block(gp, sock_w, nop, true)
+	var it1: Array = ins_texts.call(blk)
+	blk.free()
+	check(it1.size() == 2 and not it1.any(func(t): return "×" in t), "по одній душі: без позначки кількості")
+	gp.souls = {"stara_dusha_x": 1, "mavka": 1}
+	blk = UiSouls.block(gp, sock_w, nop, true)
+	var itu: Array = ins_texts.call(blk)
+	blk.free()
+	check(itu.size() == 2 and itu.filter(func(t): return t.begins_with("Вселити: Душа невідомої нечисті\n")).size() == 1 and itu[0].begins_with("Вселити: Душа мавки"), "незнайома душа з торбинки показана один раз, після знайомих: %s" % str(itu))
+	check(SS.insert_block(gp, sock_w, "stara_dusha_x") == "" and SS.insert(gp, sock_w["uid"], "stara_dusha_x") and SS.soul_in(sock_w) == "stara_dusha_x", "незнайому душу можна вселити, гра не падає")
+	SS.strip(gp, sock_w)
+	check(soul_sec.any(func(e): return str(e["title"]) == "Вселити й вийняти" and "на кнопці «Вселити» видно скільки" in str(e["text"])), "довідник: кількість однакових душ видно на кнопці")
+	# усі душі гри: і опис, і причина відмови переносяться, назва лишається в першому рядку
+	var sock_b: Dictionary = Data.gen_item(40, 2, "boots")
+	sock_b["sock"] = 1
+	gp.add_item(sock_b)
+	game.hud.open_overlay()
+	var probes := []
+	for id in Souls.ORDER:
+		gp.souls = {id: 2}
+		for itx in [sock_w, sock_b]:
+			var pb: Control = UiSouls.block(gp, itx, nop, true)
+			game.hud.overlay_box.add_child(pb)
+			probes.append(pb)
+	await _frames(2)
+	var fit_bad := []
+	var tallest := 0.0
+	for pb in probes:
+		for b in pb.find_children("*", "Button", true, false):
+			if not str(b.text).begins_with("Вселити"):
+				continue
+			var font: Font = b.get_theme_font("font")
+			var sb: StyleBox = b.get_theme_stylebox("normal")
+			var first_w: float = font.get_string_size(str(b.text).split("\n")[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + sb.get_minimum_size().x
+			var full_w: float = font.get_string_size(str(b.text).split("\n")[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			tallest = maxf(tallest, b.get_combined_minimum_size().y) if full_w > UiSouls.WIDTH - sb.get_minimum_size().x else tallest
+			if b.clip_text or b.autowrap_mode == TextServer.AUTOWRAP_OFF or b.get_combined_minimum_size().x > UiSouls.WIDTH + 0.5 or first_w > UiSouls.WIDTH:
+				fit_bad.append(str(b.text).replace("\n", " / "))
+	check(probes.size() == Souls.ORDER.size() * 2 and fit_bad.is_empty(), "кнопки «Вселити» всіх %d душ вміщаються в %d, назва в першому рядку, текст не обрізаний: %s" % [Souls.ORDER.size(), UiSouls.WIDTH, str(fit_bad)])
+	check(tallest > 68.0, "довгий опис переноситься, і кнопка вищає (%.0f)" % tallest)
+	game.hud.close_overlay()  # прибирає й проби
 	game.close_character()
 	game.queue_free()
 	await _frames(2)

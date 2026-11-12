@@ -43,22 +43,35 @@ static func block(player, item: Dictionary, do: Callable, at_smith: bool, cost_m
 		else:
 			v.add_child(_wrapped("Вийняти душу може коваль або своя кузня.", 15, UI.MUTED))
 		return v
-	# порожнє гніздо: душі з торбинки, що сюди стають
+	# порожнє гніздо: душі з торбинки, що сюди стають. Спершу в усталеному порядку,
+	# потім ті з торбинки, яких у ньому нема (старі чи незнайомі id); кожна один раз.
 	var any := false
-	for id in SoulService.known() + player.souls.keys():
-		if int(player.souls.get(id, 0)) <= 0 or (not id in Souls.ORDER and id in SoulService.known()):
+	var ids: Array = SoulService.known()
+	for id in player.souls.keys():
+		if not id in ids:
+			ids.append(id)
+	for id in ids:
+		var have: int = int(player.souls.get(id, 0))
+		if have <= 0:
 			continue
 		if any and v.get_child_count() > 40:
 			break
 		var why2: String = SoulService.insert_block(player, item, id)
-		var b := UI.button("Вселити: %s\n%s" % [SoulService.soul_name(id), SoulService.fx_text(id) if why2 == "" else why2], do.call("soul_in", [uid, id]), Vector2(WIDTH, 68), 15, why2 == "")
+		var b := UI.button(insert_text(player, item, id), do.call("soul_in", [uid, id]), Vector2(WIDTH, 68), 15, why2 == "")
 		b.add_theme_color_override("font_color", SoulService.color(id))
-		b.clip_text = true
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART  # довгий опис іде на другий рядок, кнопка вищає
 		v.add_child(b)
 		any = true
 	if not any:
 		v.add_child(_wrapped("Гніздо порожнє, а душ у торбинці нема. Душі вкрай рідко лишає вбита нечисть.", 15, UI.MUTED))
 	return v
+
+
+## Підпис кнопки «Вселити»: назва душі (і скільки їх, коли більше однієї), нижче опис або чому не можна.
+static func insert_text(player, item: Dictionary, id: String) -> String:
+	var have: int = int(player.souls.get(id, 0))
+	var why: String = SoulService.insert_block(player, item, id)
+	return "Вселити: %s%s\n%s" % [SoulService.soul_name(id), " ×%d" % have if have > 1 else "", SoulService.fx_text(id) if why == "" else why]
 
 
 ## Усі бонуси душ, що діють зараз, одним рядком.
