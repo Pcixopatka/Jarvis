@@ -17,6 +17,7 @@ const Costumes := preload("res://scripts/data/costumes.gd")
 const CostumeService := preload("res://scripts/game/costume_service.gd")
 const QuickService := preload("res://scripts/game/quick_service.gd")
 const AdRewards := preload("res://scripts/game/ad_rewards.gd")
+const DivineService := preload("res://scripts/game/divine_service.gd")
 
 const CARD_BG := Color(0.14, 0.11, 0.09)
 const CARD_LINE := Color(0.45, 0.36, 0.22)
@@ -28,7 +29,8 @@ static func build(game) -> Control:
 	var pages := [["Червінці", func(): return _packs(game)]]
 	for kind in Shop.KINDS:
 		pages.append([Shop.KIND_NAMES[kind], (func(): return _sets(game)) if kind == "set" else _goods.bind(game, kind)])
-	pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
+	if DivineService.on_sale:  # поки дари не продаються, вкладки нема (Game._shop_tab_index рахує так само)
+		pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
 	pages.append(["Вбрання", func(): return _costumes(game)])
 	pages.append(["Універсал", func(): return _premium(game)])
 	var title := "Крамниця   •   %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))]
@@ -64,6 +66,12 @@ static func _note(game) -> Control:
 static func _packs(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
+	if not ShopService.coins_on_sale:
+		# купівлю червінців вимкнено (Shop.COINS_ON_SALE): лише рахунок і пояснення, без наборів і цін
+		v.add_child(_wrap("На рахунку роду %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))], 22, COIN_COLOR))
+		v.add_child(_wrap(ShopService.PACKS_OFF_TEXT, 17, UI.TEXT))
+		v.add_child(_wrap("Червінці спільні для всіх твоїх героїв і не зникають. Усе рідкісне з крамниці можна здобути й у грі без жодної покупки.", 15, UI.MUTED))
+		return v
 	v.add_child(_wrap("Червінці купують за справжні гроші. Вони спільні для всіх твоїх героїв і не зникають. За них продається все рідкісне: золоті речі, речі наборів, артефакти й душі. Усе це можна здобути й у грі без жодної покупки.", 16, UI.TEXT))
 	v.add_child(_note(game))
 	var grid := UI.grid(2)

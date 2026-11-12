@@ -856,7 +856,9 @@ func _shop_tab_index(title: String) -> int:
 	var names := ["Червінці"]
 	for kind in ShopService.Shop.KINDS:
 		names.append(str(ShopService.Shop.KIND_NAMES[kind]))
-	names.append_array(["Божі дари", "Вбрання", "Універсал"])
+	if DivineService.on_sale:
+		names.append("Божі дари")  # поки дари не продаються, вкладки нема (як і в UiShop.build)
+	names.append_array(["Вбрання", "Універсал"])
 	return maxi(0, names.find(title))
 
 
@@ -2603,7 +2605,11 @@ func char_do(action: String, arg) -> void:
 			# перемикач авто-бафів Німба на картці дару: окремо для кожного героя
 			player.auto_buffs = not player.auto_buffs
 		"divine_shop":
-			# некуплений дар: веде в крамницю на вкладку «Божі дари»
+			# некуплений дар: веде в крамницю на вкладку «Божі дари», поки дари продаються
+			if not DivineService.on_sale:
+				hud.show_banner("Божі дари зараз не продаються", UI.BAD)
+				_build_character()
+				return
 			shop_tab = _shop_tab_index("Божі дари")
 			open_shop(_build_character)
 			return
@@ -3467,6 +3473,8 @@ func shop_do(action: String, arg) -> void:
 				save_game()
 			elif DivineService.block_reason(world, did) != "":
 				shop_confirm = ""
+				if not DivineService.on_sale:
+					hud.show_banner("Божі дари зараз не продаються", UI.BAD)
 			elif shop_confirm != "divine:" + did:
 				shop_confirm = "divine:" + did
 			else:
@@ -3508,9 +3516,13 @@ func shop_do(action: String, arg) -> void:
 					Audio.play("quest", 0.0)
 					hud.show_banner("%s діє %d днів%s" % [PremiumService.NAME, PremiumService.days_left(world), ("\nПлатня за сьогодні: +%d червінців" % pay) if pay > 0 else ""], UI.GOLD)
 		"pack":
-			var p: Dictionary = ShopService.pack(str(arg))
-			if p.is_empty():
+			var why: String = ShopService.pack_block_reason(str(arg))
+			if why != "":
+				# купівлю червінців вимкнено (ShopService.coins_on_sale): Billing не кличемо
+				hud.show_banner(why, UI.BAD)
+				hud.set_screen(UiShop.build(self), "shop")
 				return
+			var p: Dictionary = ShopService.pack(str(arg))
 			Billing.purchase(str(p["id"]), "%s: %s червінців" % [p["name"], UI.num(int(p["coins"]))], str(p["price"]), func(paid: bool):
 				if paid:
 					var n: int = ShopService.grant_pack(world, str(p["id"]))

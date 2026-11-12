@@ -15,6 +15,10 @@ const Classes := preload("res://scripts/data/classes.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
 
+## Чи продаються червінці зараз. Типове значення в Shop.COINS_ON_SALE; тести можуть перемкнути.
+static var coins_on_sale: bool = Shop.COINS_ON_SALE
+const PACKS_OFF_TEXT := "Купівлю червінців тимчасово вимкнено. Червінці, які вже є, лишаються й витрачаються, як раніше."
+
 
 static func state(world) -> Dictionary:
 	var s: Dictionary = world.shop
@@ -40,10 +44,20 @@ static func pack(id: String) -> Dictionary:
 	return {}
 
 
-## Оплату набору підтверджено: зарахувати червінці. Повертає, скільки зараховано (0 — такого набору нема).
+## Чому набір зараз не купити (порожньо: можна).
+static func pack_block_reason(id: String) -> String:
+	if not coins_on_sale:
+		return PACKS_OFF_TEXT
+	if pack(id).is_empty():
+		return "Такого набору нема"
+	return ""
+
+
+## Оплату набору підтверджено: зарахувати червінці. Повертає, скільки зараховано
+## (0, коли такого набору нема або купівлю червінців вимкнено).
 static func grant_pack(world, id: String) -> int:
 	var p := pack(id)
-	if p.is_empty():
+	if p.is_empty() or not coins_on_sale:
 		return 0
 	var s := state(world)
 	var n: int = int(p["coins"])

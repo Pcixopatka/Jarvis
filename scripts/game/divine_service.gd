@@ -12,9 +12,26 @@ const AUTO_STEP := 0.25  # як часто перевіряти (с): чотир
 const AUTO_NEAR := 600.0  # нечисть ближча за це (приблизно пів екрана телефона) вважається «поруч»
 const AUTO_HEAL_AT := 0.6  # лікувальні вміння вмикаються самі лише нижче цієї частки здоров'я
 
+## Чи продаються дари зараз. Типове значення в Divine.ON_SALE; тести можуть перемкнути.
+static var on_sale: bool = Divine.ON_SALE
+const OFF_TEXT := "зараз не продається"
+
 
 static func owned(world, id: String) -> bool:
 	return bool(world.shop.get("divine", {}).get(id, false))
+
+
+## Чи є в роду хоч один дар.
+static func owns_any(world) -> bool:
+	for id in Divine.ORDER:
+		if owned(world, id):
+			return true
+	return false
+
+
+## Чи показувати гнізда дарів на екрані героя: коли дари продаються або хоч один уже куплено.
+static func shown(world) -> bool:
+	return on_sale or owns_any(world)
 
 
 static func worn(player, slot: String) -> String:
@@ -35,6 +52,8 @@ static func block_reason(world, id: String) -> String:
 		return "такого дару нема"
 	if owned(world, id):
 		return "уже куплено"
+	if not on_sale:
+		return OFF_TEXT
 	var coins: int = int(world.shop.get("coins", 0))
 	if coins < price(id):
 		return "бракує %d %s" % [price(id) - coins, Shop.COIN_SHORT]

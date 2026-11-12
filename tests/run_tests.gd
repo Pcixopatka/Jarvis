@@ -29,6 +29,9 @@ var _suite = ""
 func _initialize() -> void:
 	# Свята за календарем вимкнено: тести мають однаково проходити будь-якого дня року
 	load("res://scripts/game/holiday_service.gd").forced = "none"
+	# Купівлю червінців і божих дарів власник тимчасово вимкнув (Shop.COINS_ON_SALE, Divine.ON_SALE).
+	# Набори перевіряють справжню купівлю, тож тут продаж увімкнено; вимкнений стан перевіряє _suite_sale_off.
+	_set_sale(true)
 	CityService = load("res://scripts/game/city_service.gd")
 	PlayerScript = load("res://scripts/entities/player.gd")
 	StoryService = load("res://scripts/game/story_service.gd")
@@ -154,10 +157,18 @@ func _run() -> void:
 	await _suite_salvage_confirm()
 	await _suite_scroll_keep()
 	await _suite_auto_buffs()
+	await _suite_sale_off()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
+
+
+## Увімкнути чи вимкнути продаж червінців і божих дарів (робочі значення служб). Довідник збирається заново.
+func _set_sale(on: bool) -> void:
+	load("res://scripts/game/shop_service.gd").coins_on_sale = on
+	load("res://scripts/game/divine_service.gd").on_sale = on
+	load("res://scripts/game/wiki_service.gd")._cache = []
 
 
 func check(cond: bool, msg: String) -> void:
@@ -16257,6 +16268,219 @@ func _suite_auto_buffs() -> void:
 	check(find_btn.call("Авто-бафи: так") == null and find_btn.call("Авто-бафи: ні") == null, "Німб знято: перемикача на картці нема")
 	game.close_character()
 	await _frames(2)
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Купівлю червінців і божих дарів вимкнено (Shop.COINS_ON_SALE, Divine.ON_SALE): куплене лишається й діє,
+## нового не купити, решта крамниці працює. Наприкінці продаж знову ввімкнено, як чекають інші набори.
+func _suite_sale_off() -> void:
+	suite("Продаж червінців і дарів вимкнено")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Shop = load("res://scripts/data/shop.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var Div = load("res://scripts/data/divine.gd")
+	var DS = load("res://scripts/game/divine_service.gd")
+	var CS = load("res://scripts/game/costume_service.gd")
+	var Cost = load("res://scripts/data/costumes.gd")
+	var UD = load("res://scripts/ui/ui_divine.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var billing = root.get_node("Billing")
+	var was_instant: bool = billing.instant
+	billing.instant = true  # якби Billing таки покликали, оплата пройшла б одразу й тест це побачив би
+	# 1. Типові значення в даних
+	check(Shop.COINS_ON_SALE == false and Div.ON_SALE == false, "у даних обидва продажі вимкнено (тимчасове рішення власника)")
+	# ---- Гра: рід купив мажу, поки дари продавались ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "duel", "dungeon", "potion", "mana_potion", "res", "depths_open"]:
+		gw.hints[k] = true
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.level = 30
+	gp.recalc()
+	game.enter_map()
+	await _frames(2)
+	var labels := func() -> Array:
+		var out := []
+		if game.hud.screen_root != null and is_instance_valid(game.hud.screen_root):
+			for l in game.hud.screen_root.find_children("*", "Label", true, false):
+				if not l.is_queued_for_deletion():
+					out.append(l.text)
+		return out
+	var buttons := func() -> Array:
+		var out := []
+		if game.hud.screen_root != null and is_instance_valid(game.hud.screen_root):
+			for b in game.hud.screen_root.find_children("*", "Button", true, false):
+				if not b.is_queued_for_deletion():
+					out.append(b.text)
+		return out
+	var tab_titles := func() -> Array:
+		var out := []
+		var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+		for i in tc.get_tab_count():
+			out.append(tc.get_tab_title(i))
+		return out
+	var open_tab := func(title: String) -> void:
+		var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+		for i in tc.get_tab_count():
+			if tc.get_tab_title(i) == title:
+				tc.current_tab = i
+	_set_sale(false)
+	# 4. Рід без жодного дару: блоку на екрані героя нема
+	game.open_character()
+	await _frames(2)
+	await _reveal_tabs(game)
+	check(not ("Божі дари" in labels.call()) and not DS.shown(gw), "без жодного дару блоку «Божі дари» на екрані героя нема")
+	game.char_do("select", UD.sel_of("relic"))
+	await _frames(2)
+	await _reveal_tabs(game)
+	check(not ("Гніздо «Реліквія»" in labels.call()), "без жодного дару картки гнізда теж нема")
+	game.close_character()
+	await _frames(2)
+	# ---- 2. Червінці ----
+	SH.state(gw)["coins"] = 500
+	var paid0: int = billing.purchases
+	game.open_shop(game.enter_map)
+	await _frames(2)
+	var b0: int = game.hud.banner_count
+	game.shop_do("pack", "coins_1200")
+	await _frames(3)
+	check(SH.coins(gw) == 500 and int(SH.state(gw)["paid"]) == 0, "набір червінців не купується: рахунок той самий")
+	check(billing.purchases == paid0 and not billing.is_busy(), "Billing не покликано")
+	check(game.hud.banner_count > b0 and "тимчасово вимкнено" in game.hud.banner.text, "гравцеві пояснено: %s" % game.hud.banner.text.replace("\n", " "))
+	check(SH.grant_pack(gw, "coins_100") == 0 and SH.coins(gw) == 500 and SH.pack_block_reason("coins_100") != "", "служба теж не зараховує набір")
+	game.shop_tab = game._shop_tab_index("Червінці")
+	game.shop_do("select", "")
+	await _frames(2)
+	open_tab.call("Червінці")
+	await _frames(1)
+	var bt: Array = buttons.call()
+	var lt: Array = labels.call()
+	var pack_btn := false
+	var hryvni := false
+	for t in bt + lt:
+		pack_btn = pack_btn or str(t).begins_with("Купити")
+		hryvni = hryvni or " грн" in str(t)
+	var off_note := false
+	var balance := false
+	for t in lt:
+		off_note = off_note or "Купівлю червінців тимчасово вимкнено" in str(t)
+		balance = balance or ("500" in str(t) and "На рахунку" in str(t))
+	check(not pack_btn and not hryvni, "на вкладці «Червінці» нема кнопок наборів і цін у гривнях")
+	check(off_note and balance, "на вкладці «Червінці» є напис про вимкнення й рахунок")
+	# ---- 3. Божі дари: не купуються ----
+	var tabs: Array = tab_titles.call()
+	check(not ("Божі дари" in tabs) and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Вбрання", "Універсал"], "у крамниці нема вкладки «Божі дари»: %s" % str(tabs))
+	check(tabs[game._shop_tab_index("Вбрання")] == "Вбрання" and tabs[game._shop_tab_index("Універсал")] == "Універсал" and tabs[game._shop_tab_index("Душі")] == "Душі", "_shop_tab_index і вкладки крамниці узгоджені")
+	SH.state(gw)["coins"] = 100000
+	check(not DS.buy(gw, gp, "molot") and SH.coins(gw) == 100000 and not DS.owned(gw, "molot"), "дар не купується навіть із повним рахунком, червінці цілі")
+	check(DS.block_reason(gw, "molot") == DS.OFF_TEXT and "не продається" in DS.block_reason(gw, "molot"), "block_reason: дар зараз не продається")
+	game.shop_do("divine", "molot")
+	game.shop_do("divine", "molot")
+	await _frames(2)
+	check(not DS.owned(gw, "molot") and SH.coins(gw) == 100000 and game.shop_confirm == "" and "не продаються" in game.hud.banner.text, "два дотики в крамниці дару не купують, гравцеві пояснено")
+	# ---- 6. Інші товари за червінці купуються ----
+	var cid: String = str(Cost.ORDER[0])
+	game.shop_tab = game._shop_tab_index("Вбрання")
+	game.shop_do("costume", cid)
+	game.shop_do("costume", cid)
+	await _frames(2)
+	check(CS.owned(gw, cid) and SH.coins(gw) == 100000 - CS.price(cid), "вбрання за червінці купується, як раніше")
+	game.close_shop()
+	await _frames(2)
+	# ---- 5. Куплене раніше діє й переживає збереження ----
+	var bag0: int = gp.bag_size()
+	_set_sale(true)
+	check(DS.buy(gw, gp, "mazha"), "мажу куплено, поки дари продавались")
+	_set_sale(false)
+	check(DS.owned(gw, "mazha") and DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]), "куплена мажа діє і з вимкненим продажем: торба більша")
+	game.save_game()
+	check(game.load_game(), "гра завантажилась")
+	gw = game.world
+	gp = game.player
+	check(DS.owned(gw, "mazha") and DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]), "мажа переживає збереження")
+	game.enter_location("wild_field")
+	await _frames(4)
+	var cart := false
+	for n in game.combat.find_children("*", "", true, false):
+		if n.get("kind") == "mazha":
+			cart = true
+	check(cart and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]), "у бою мажа котиться за героєм, торба більша")
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	# ---- 4. Рід з одним даром: блок є ----
+	game.open_character()
+	await _frames(2)
+	await _reveal_tabs(game)
+	check("Божі дари" in labels.call() and DS.shown(gw), "з купленим даром блок «Божі дари» є")
+	game.char_do("select", UD.sel_of("cart"))
+	await _frames(2)
+	await _reveal_tabs(game)
+	check("Зняти" in buttons.call(), "на картці мажі кнопка «Зняти»")
+	game.char_do("divine_toggle", "mazha")
+	await _frames(2)
+	await _reveal_tabs(game)
+	check(not DS.wears(gp, "mazha") and "Вдягнути" in buttons.call(), "мажу знято, кнопка «Вдягнути»")
+	game.char_do("divine_toggle", "mazha")
+	await _frames(2)
+	check(DS.wears(gp, "mazha"), "мажу вдягнено знову")
+	game.char_do("select", UD.sel_of("relic"))
+	await _frames(2)
+	await _reveal_tabs(game)
+	var to_shop := false
+	for t in buttons.call():
+		to_shop = to_shop or str(t).begins_with("До крамниці")
+	check("Зараз не продається" in labels.call() and not to_shop, "на некупленому дарі напис «Зараз не продається», кнопки «До крамниці» нема")
+	game.char_do("divine_shop", "molot")
+	await _frames(2)
+	check(not game.shop_open and game.state == game.State.CHARACTER and "не продаються" in game.hud.banner.text, "char_do(\"divine_shop\") крамниці не відкриває")
+	game.close_character()
+	await _frames(2)
+	# ---- 8. Довідник ----
+	var article := func(title: String) -> String:
+		for sec in WS.sections():
+			for e in sec["entries"]:
+				if str(e["title"]) == title:
+					return str(e["text"])
+		return ""
+	var shop_txt: String = article.call("Крамниця")
+	var div_txt: String = article.call("Божі дари")
+	check("тимчасово вимкнено" in shop_txt and not ("наборами від" in shop_txt), "довідник: червінці зараз не продаються")
+	check("не продаються" in div_txt and "Куплені дари лишаються" in div_txt and not ("за червінці продається" in div_txt) and not ("%d червінців" % DS.price("molot") in div_txt), "довідник: дари зараз не продаються, куплене лишається")
+	check(not ("—" in shop_txt.substr(0, 400)) and not ("—" in div_txt.substr(0, 400)), "нові тексти довідника без довгого тире")
+	# ---- 7. Перемикачі ввімкнено: усе як раніше ----
+	_set_sale(true)
+	shop_txt = article.call("Крамниця")
+	div_txt = article.call("Божі дари")
+	check("наборами від" in shop_txt and "за червінці продається" in div_txt, "з увімкненим продажем довідник каже про купівлю")
+	var c0: int = SH.coins(gw)
+	game.open_shop(game.enter_map)
+	await _frames(2)
+	tabs = tab_titles.call()
+	check("Божі дари" in tabs and tabs[game._shop_tab_index("Божі дари")] == "Божі дари" and tabs[game._shop_tab_index("Універсал")] == "Універсал", "з увімкненим продажем вкладка «Божі дари» є")
+	game.shop_do("pack", "coins_1200")
+	await _frames(3)
+	check(SH.coins(gw) == c0 + 1200 and billing.purchases == paid0 + 1, "з увімкненим продажем набір червінців купується")
+	check(DS.buy(gw, gp, "molot") and DS.owned(gw, "molot"), "з увімкненим продажем дар купується")
+	game.close_shop()
+	await _frames(2)
+	billing.instant = was_instant
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

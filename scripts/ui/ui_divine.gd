@@ -114,8 +114,12 @@ static func detail(game, slot: String) -> Control:
 				acts.add_child(UI.button(auto_label(p), game.char_do.bind("auto_buffs", null), Vector2(210, 46), 16))
 			box.add_child(acts)
 			box.add_child(_wrap("Вдягнено" if on else "Куплено для всього роду, зараз знято", 14, UI.GOOD if on else UI.MUTED))
-		else:
+		elif DivineService.on_sale:
 			box.add_child(UI.button("До крамниці • %d %s" % [int(D["price"]), Shop.COIN_SHORT], game.char_do.bind("divine_shop", id), Vector2(260, 46), 16))
+		else:
+			# купівлю дарів вимкнено (Divine.ON_SALE): некуплений дар тьмяний, без кнопки до крамниці
+			panel.modulate = Color(1, 1, 1, 0.55)
+			box.add_child(_wrap("Зараз не продається", 16, UI.MUTED))
 		v.add_child(panel)
 	return v
 
