@@ -22,7 +22,7 @@ static func owned(world, id: String) -> bool:
 
 static func owned_count(world) -> int:
 	var n := 0
-	for id in Pets.ORDER:
+	for id in Pets.ids():
 		if owned(world, id):
 			n += 1
 	return n
@@ -56,7 +56,7 @@ static func cost_text(cost: Dictionary) -> String:
 ## Купити улюбленця або нагодувати до наступного ступеня. Куплений одразу йде з героєм, якщо той ще сам.
 static func upgrade(world, player, id: String) -> bool:
 	var cost := next_cost(world, id)
-	if not Pets.DEFS.has(id) or not can_pay(player, cost):
+	if not Pets.is_stable(id) or not can_pay(player, cost):
 		return false
 	player.gold -= int(cost["gold"])
 	for r in cost:
@@ -83,7 +83,7 @@ static func fx(world, player) -> Dictionary:
 	var id: String = str(player.pet)
 	if id == "" or not owned(world, id):
 		return {}
-	return {str(Pets.DEFS[id]["stat"]): Pets.value(id, level(world, id))}
+	return {Pets.stat(id): Pets.value(id, level(world, id))}
 
 
 static func apply(world, player) -> void:

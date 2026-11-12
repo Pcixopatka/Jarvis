@@ -73,6 +73,12 @@ static func _record(rec: Dictionary, fields: Dictionary, depth: int, force_multi
 
 static func _value(v, f: Dictionary, depth: int, inline_only: bool) -> String:
 	var t: String = f.get("type", "")
+	if t == "map" and v is Dictionary:
+		# Словник з довільними ключами: кожне значення за описом "of", ключі в порядку файлу
+		var fields := {}
+		for k in v:
+			fields[k] = f.get("of", {})
+		f = {"type": "record", "fields": fields}
 	if v is Dictionary:
 		if inline_only:
 			var parts := PackedStringArray()
@@ -90,9 +96,15 @@ static func _value(v, f: Dictionary, depth: int, inline_only: bool) -> String:
 		return _record(v, f.get("fields", {}), depth)
 	if v is Array:
 		var parts := PackedStringArray()
+		var of: Dictionary = {"type": "float"} if t == "color" else f.get("of", {})
 		for x in v:
-			parts.append(_value(x, {"type": "float"} if t == "color" else {}, depth + 1, true))
-		return "[" + ", ".join(parts) + "]"
+			parts.append(_value(x, of, depth + 1, true))
+		var one := "[" + ", ".join(parts) + "]"
+		if inline_only or one.length() + depth * 4 <= INLINE:
+			return one
+		# Довгий масив (розмова): елемент на рядок
+		var pad := "\t".repeat(depth + 1)
+		return "[\n" + pad + (",\n" + pad).join(parts) + "\n" + "\t".repeat(depth) + "]"
 	if v is float or v is int:
 		if t == "int" and v == floorf(v):
 			return str(int(v))

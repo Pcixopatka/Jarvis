@@ -216,8 +216,8 @@ static func _basics() -> Array:
 	var PetD = load("res://scripts/data/pets.gd")
 	var PetS = _svc("pet_service")
 	var pet_lines := []
-	for pid in PetD.ORDER:
-		pet_lines.append("%s: %s, на найвищому ступені %s. Купити: %s." % [PetD.DEFS[pid]["name"], PetD.text(pid, 1), PetD.text(pid, PetD.MAX_LEVEL), PetS.cost_text(PetD.cost(pid, 1))])
+	for pid in PetD.ids():
+		pet_lines.append("%s: %s, на найвищому ступені %s. Купити: %s." % [PetD.pet_name(pid), PetD.text(pid, 1), PetD.text(pid, PetD.MAX_LEVEL), PetS.cost_text(PetD.cost(pid, 1))])
 	out.append(_e("Улюбленці", "помічники з хутора", "На хуторі є вкладка «Стайня». Там за гривні й ресурси беруть улюбленців, а потім годують: ступенів %d, кожен наступний коштує стільки ж, помножене на свій номер. Улюбленці спільні для роду, а з собою герой бере одного. Сили в бою вони не додають. Пес, кіт і ворон ходять за героєм у бою, кінь чекає на узліссі. Пес Сірко бігає до здобичі, що лежить поруч, але до тієї, якої зараз не взяти (повний запас зілля, повна торба, фільтр автопідбору), не біжить і лишається біля героя.\n• %s" % [PetD.MAX_LEVEL, "\n• ".join(pet_lines)]))
 	var Div = load("res://scripts/data/divine.gd")
 	var DivS = _svc("divine_service")
@@ -753,21 +753,20 @@ static func _skills() -> Array:
 
 ## Найманці з корчми й побратими з історіями.
 static func _party() -> Array:
-	var Heroes = load("res://scripts/data/heroes.gd")
 	var Gfx = load("res://scripts/world/gfx.gd")
 	var out := []
 	var first := true
-	for id in Data.COMPANIONS:
-		var C: Dictionary = Data.COMPANIONS[id]
+	for id in GameDB.companion_ids():
+		var C: Dictionary = GameDB.companion(id)
 		var icon := {"sprite": "comp_" + id} if Gfx.has("comp_" + id) else {}
-		out.append(_e(str(C["name"]), "найманець • %d грн • лояльність від «%s»" % [int(C["cost"]), Data.LOYALTY_NAMES[int(C["loyalty"])]], _line(C["desc"]) + " Наймають у корчмі міста. Ціна росте з рівнем героя, знижка міста діє. Одного виду можна мати лише одного.", icon, "Найманці" if first else ""))
+		out.append(_e(str(C["name"]), "найманець • %d грн • лояльність від «%s»" % [int(C["hire"]["cost"]), Data.LOYALTY_NAMES[int(C["hire"]["loyalty"])]], _line(C["desc"]) + " Наймають у корчмі міста. Ціна росте з рівнем героя, знижка міста діє. Одного виду можна мати лише одного.", icon, "Найманці" if first else ""))
 		first = false
 	first = true
-	for id in Heroes.HEROES:
-		var H: Dictionary = Heroes.HEROES[id]
+	for id in GameDB.hero_ids():
+		var H: Dictionary = GameDB.hero(id)
 		var icon2 := {"sprite": "comp_" + id} if Gfx.has("comp_" + id) else {}
 		var text := str(H["bio"]) + " Де зустріти: %s. Іде в загін безкоштовно. Дружба росте за кожного ворога, здоланого разом; від %d дружби дає особисте завдання: «%s». Після нього стає сильнішим." % [str(Data.CITIES.get(str(H["join"]["city"]), {}).get("name", "у місті")), int(H["quest_bond"]), str(H["quest"]["objective"]["text"])]
-		out.append(_e(str(H["name"]), "побратим • б'ється як %s • сила ×%s" % [str(Data.COMPANIONS[H["base"]]["name"]).to_lower(), _num(float(H["mult"]))], text, icon2, "Побратими" if first else ""))
+		out.append(_e(str(H["name"]), "побратим • б'ється як %s • сила ×%s" % [str(GameDB.companion(H["base"])["name"]).to_lower(), _num(float(H["mult"]))], text, icon2, "Побратими" if first else ""))
 		first = false
 	return out
 

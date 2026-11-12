@@ -1,15 +1,14 @@
 extends Node2D
-## Улюбленець, що ходить за героєм у бою: пес, кіт або ворон (див. Pets.FOLLOWERS). Лише для ока:
-## у бійку не лізе, шкоди не завдає й не отримує. Пес ще й бігає до здобичі, що лежить поруч.
-## Чумацька мажа не йде сама: герой тягне її за голоблі (_pull_cart).
+## Улюбленець, що ходить за героєм у бою: пес, кіт, ворон, а з божих дарів — Хованець, скакун і мажа
+## (записи з «mechanic» у data/pets.json). Лише для ока: у бійку не лізе, шкоди не завдає й не отримує.
+## Що саме він робить — де стоїть, чи бігає до здобичі, як їде мажа — у його механіці
+## (scripts/mechanics/pet/<id>.gd); тут спільне: біг до місця й до здобичі.
 ## Малюється кодом із дрібних прямокутників, як піксельний спрайт.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
+const PetMechanic := preload("res://scripts/mechanics/pet_mechanic.gd")
 const OUTLINE := Color(0.106, 0.078, 0.125)
 const SPEED := 420.0
-const CART_LEN := 46.0  # довжина голобель: на стільки мажа позаду героя
-const CART_RISE := 26.0  # коли мажа «вище» за героя на екрані, вона стоїть далі, щоб не лізти йому на голову
-const CART_TURN := 5.0  # рад/с: як швидко мажа розвертається, коли герой суне просто на неї
-const HITCH := Vector2(0, 8)  # де герой тримає голоблі (від його середини)
 
 var combat
 var player
@@ -20,8 +19,10 @@ var _moving := false
 var _fetch_t := 0.0
 var _goal := Vector2.ZERO
 var _t := 0.0
-var _hero_was := Vector2.ZERO  # де герой був минулого кадру (для мажі)
-var _hitch := Vector2.ZERO  # кінець голобель у місцевих координатах мажі
+var _hitch := Vector2.ZERO  # кінець голобель у місцевих координатах мажі (ставить її механіка)
+var mechanic  # механіка улюбленця (PetMechanic), своя в кожного
+var _mh := 0  # хуки, які механіка написала (біти PetMechanic.MOVE)
+var _fetches := false  # бігає до здобичі (пес, Хованець)
 
 
 func setup(combat_node, hero, pet_kind: String) -> void:
@@ -29,27 +30,24 @@ func setup(combat_node, hero, pet_kind: String) -> void:
 	player = hero
 	kind = pet_kind
 	z_index = 0
+	mechanic = PetMechanic.create(str(GameDB.pet(kind).get("mechanic", "")), self)
+	_mh = PetMechanic.hooks_of(mechanic.get_script())
+	_fetches = mechanic.fetches()
 
 
 func _process(delta: float) -> void:
 	if player == null or not is_instance_valid(player):
 		return
 	_t += delta
-	if kind == "mazha":
-		_pull_cart(delta)
+	if _mh & PetMechanic.MOVE:
+		mechanic.move(delta)  # мажу тягне герой
 		queue_redraw()
 		return
 	# З мажею за спиною улюбленці тримаються збоку й нижче, щоб не лізти під голоблі
 	var carted: bool = str(player.divine.get("cart", "")) == "mazha"
-	var home: Vector2 = player.position - player.facing * (22.0 if carted else 46.0) + Vector2(0, 42 if carted else 22)
-	if kind == "voron":
-		home = player.position + Vector2(-player.facing.x * 30.0, -8.0)
-	elif kind == "khovanets":
-		home = player.position + Vector2((1.0 if player.facing.x >= 0.0 else -1.0) * 34.0, 30.0) if carted else player.position - player.facing * 30.0 + Vector2(34.0, 26.0)
-	elif kind == "skakun":
-		home = player.position - player.facing * 44.0 + Vector2(-40.0, 18.0)
+	var home: Vector2 = mechanic.home(carted)
 	_goal = home
-	if kind in ["pes", "khovanets"]:
+	if _fetches:
 		_fetch_t -= delta
 		if _fetch_t <= 0.0:
 			_fetch_t = 0.3
@@ -73,39 +71,6 @@ func _process(delta: float) -> void:
 
 
 var _fetch = null
-
-
-## Довжина голобель у напрямку dir (від героя до мажі). Спрайт героя високий, тож угору треба більше місця.
-static func cart_len(dir: Vector2) -> float:
-	return CART_LEN + CART_RISE * maxf(0.0, -dir.y)
-
-
-## Мажу тягне герой: вона причеплена голоблями до його пояса й сама не їде. Стоїть герой, стоїть і мажа.
-## Рушив, і мажа котиться слідом рівно на довжину голобель та повертає за ним, як справжній причіп.
-func _pull_cart(delta: float) -> void:
-	var hitch: Vector2 = player.position + HITCH
-	var back: Vector2 = position - hitch
-	var dist := back.length()
-	var step: Vector2 = player.position - _hero_was
-	_hero_was = player.position
-	if dist < 0.01 or dist > 400.0 or step.length() > 300.0:
-		back = -player.facing if player.facing.length() > 0.01 else Vector2.LEFT  # герой перейшов далеко: мажа одразу за спиною
-		dist = back.length()
-	var dir := back / dist
-	if step.length() > 0.05:
-		# Герой суне просто на мажу: вона об'їжджає його збоку й стає позаду, а не їде задом наперед
-		var want: Vector2 = -step.normalized()
-		var ang := dir.angle_to(want)
-		if absf(ang) > PI * 0.55:
-			dir = dir.rotated((signf(ang) if absf(ang) < PI - 0.02 else 1.0) * minf(absf(ang), CART_TURN * delta))
-	var old := position
-	position = hitch + dir * cart_len(dir)
-	var rolled := position.distance_to(old)
-	_moving = rolled > 0.15
-	_step += rolled * 0.16
-	_hitch = hitch - position
-	if absf(_hitch.x) > 6.0:
-		_face = signf(_hitch.x)
 
 
 func _nearest_pickup():

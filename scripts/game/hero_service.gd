@@ -2,14 +2,15 @@ extends RefCounted
 ## Побратими без інтерфейсу. Стан — world.heroes:
 ##   {id: {"met": bool, "bond": int, "quest": "none"/"offer"/"active"/"turnin"/"done", "progress": int}}
 ## Запис у загоні (world.companions) має поле "hero": id — так побратим відрізняється від найманця.
+## Самі побратими (ім'я, сила, розмови, особисте завдання) — у data/heroes.json (див. docs/data.md).
 
-const Heroes := preload("res://scripts/data/heroes.gd")
-const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
 
+## Запис побратима (лише для читання); для невідомого id — порожній.
 static func info(id: String) -> Dictionary:
-	return Heroes.HEROES.get(id, {})
+	return GameDB.hero(id)
 
 
 static func st(world, id: String) -> Dictionary:
@@ -28,7 +29,7 @@ static func in_party(world, id: String) -> bool:
 ## Ім'я учасника загону: побратима — на ймення, найманця — за родом служби.
 static func member_name(c: Dictionary) -> String:
 	var h := info(c.get("hero", ""))
-	return h["name"] if not h.is_empty() else Data.COMPANIONS[c["type"]]["name"]
+	return h["name"] if not h.is_empty() else GameDB.companion(c["type"])["name"]
 
 
 ## Наскільки побратим сильніший за звичайного найманця того ж типу.
@@ -63,8 +64,8 @@ static func can_meet(world, id: String, city: String) -> bool:
 
 ## Розмова, яка чекає в місті: {"hero", "kind": "meet"/"quest"/"end", "lines", "choices"} або {}.
 static func city_dialogue(world, city: String) -> Dictionary:
-	for id in Heroes.HEROES:
-		var h: Dictionary = Heroes.HEROES[id]
+	for id in GameDB.hero_ids():
+		var h: Dictionary = info(id)
 		var s := st(world, id)
 		if can_meet(world, id, city):
 			return {"hero": id, "kind": "meet", "lines": h["meet"], "choices": [
@@ -120,7 +121,7 @@ static func join(world, player, id: String) -> Array:
 ## Побратими, яких уже зустріли, але вони не в загоні (для корчми).
 static func waiting(world) -> Array:
 	var out := []
-	for id in Heroes.HEROES:
+	for id in GameDB.hero_ids():
 		if st(world, id)["met"] and not in_party(world, id):
 			out.append(id)
 	return out
@@ -162,11 +163,11 @@ static func on_event(world, type: String, arg: String) -> Array:
 ## Рядки особистих завдань для списку цілей.
 static func objective_lines(world) -> Array:
 	var out := []
-	for id in Heroes.HEROES:
+	for id in GameDB.hero_ids():
 		var s := st(world, id)
 		if not in_party(world, id):
 			continue
-		var h: Dictionary = Heroes.HEROES[id]
+		var h: Dictionary = info(id)
 		match s["quest"]:
 			"active":
 				var obj: Dictionary = h["quest"]["objective"]
@@ -182,7 +183,7 @@ static func objective_lines(world) -> Array:
 ## Куди веде особисте завдання (для позначки на мапі) — перша активна мета.
 static func targets(world) -> Array:
 	var out := []
-	for id in Heroes.HEROES:
+	for id in GameDB.hero_ids():
 		if in_party(world, id) and st(world, id)["quest"] == "active":
 			out.append(info(id)["quest"]["objective"]["loc"])
 	return out

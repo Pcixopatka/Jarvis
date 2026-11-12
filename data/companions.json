@@ -1,0 +1,55 @@
+{
+	"dzhura": {
+		"num": 3001,
+		"name": "Джура",
+		"desc": "Молодий козак із шаблею.\nБ'ється пліч-о-пліч.",
+		"hire": {"cost": 120, "loyalty": 0},
+		"stats": {
+			"hp": 90.0,
+			"hp_lvl": 15.0,
+			"dmg": 8.0,
+			"dmg_lvl": 2.0,
+			"range": 55.0,
+			"cd": 0.7,
+			"speed": 250.0
+		},
+		"color": [0.2, 0.45, 0.75],
+		"mechanic": "companion/dzhura"
+	},
+	"strilets": {
+		"num": 3002,
+		"name": "Стрілець",
+		"desc": "Влучно стріляє з рушниці\nз безпечної відстані.",
+		"hire": {"cost": 250, "loyalty": 1},
+		"stats": {
+			"hp": 60.0,
+			"hp_lvl": 10.0,
+			"dmg": 14.0,
+			"dmg_lvl": 3.0,
+			"range": 420.0,
+			"cd": 1.6,
+			"speed": 230.0
+		},
+		"color": [0.3, 0.5, 0.25],
+		"mechanic": "companion/strilets"
+	},
+	"znakhar": {
+		"num": 3003,
+		"name": "Знахарка",
+		"desc": "Лікує козака й загін\nцілющими травами.",
+		"hire": {"cost": 400, "loyalty": 2},
+		"stats": {
+			"hp": 55.0,
+			"hp_lvl": 9.0,
+			"dmg": 5.0,
+			"dmg_lvl": 1.0,
+			"heal": 10.0,
+			"heal_lvl": 2.5,
+			"range": 300.0,
+			"cd": 1.4,
+			"speed": 240.0
+		},
+		"color": [0.85, 0.85, 0.9],
+		"mechanic": "companion/znakhar"
+	}
+}

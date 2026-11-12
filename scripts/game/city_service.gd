@@ -5,6 +5,7 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 const Party := preload("res://scripts/game/party.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 const SHOP_SIZE := 6
 const BUY_MARKUP := 4.0
@@ -35,12 +36,12 @@ static func hire_price(world, player: Player, city: String, type: String) -> int
 	if load("res://scripts/game/event_service.gd").free_hire(world):
 		return 0  # звільнений бранець чи побратим пораненого — задарма
 	var feast: float = 1.0 - load("res://scripts/game/holiday_service.gd").bonus("hire")  # у День Державності до війська пристають охочіше
-	return int(Data.COMPANIONS[type]["cost"] * (1.0 - world.discount(city)) * (1.0 + 0.3 * (player.level - 1)) * feast)
+	return int(GameDB.companion(type)["hire"]["cost"] * (1.0 - world.discount(city)) * (1.0 + 0.3 * (player.level - 1)) * feast)
 
 
 static func can_hire(world, player: Player, city: String, type: String) -> bool:
-	var info: Dictionary = Data.COMPANIONS[type]
-	return world.loyalty_level(city) >= info["loyalty"] \
+	var info: Dictionary = GameDB.companion(type)
+	return world.loyalty_level(city) >= info["hire"]["loyalty"] \
 		and player.gold >= hire_price(world, player, city, type) \
 		and world.companions.size() < party_size(world) \
 		and not world.has_companion(type)

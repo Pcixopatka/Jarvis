@@ -3782,7 +3782,7 @@ func camp_do(action: String, arg) -> void:
 			var was: int = PetService.level(world, str(arg))
 			if PetService.upgrade(world, player, str(arg)):
 				Audio.play("quest", 0.0)
-				var PD: Dictionary = player.Pets.DEFS[str(arg)]
+				var PD: Dictionary = player.Pets.def(str(arg))
 				hud.show_banner(("%s тепер живе на хуторі" % PD["name"]) if was == 0 else "%s: ступінь %d. %s" % [PD["name"], was + 1, player.Pets.text(str(arg), was + 1).capitalize()], UI.GOLD)
 				_record("pet_level")
 		"pet_pick":

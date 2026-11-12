@@ -13,8 +13,7 @@ extends RefCounted
 ## Як додати боса чи прийом — docs/data.md.
 
 const Status := preload("res://scripts/game/status.gd")
-const DIR := "res://scripts/mechanics/"
-const BASE_PATH := DIR + "mechanic.gd"
+const BASE_PATH := "res://scripts/mechanics/mechanic.gd"
 
 ## Хуки, які рушій кличе лише тоді, коли механіка їх написала (біт на кожен).
 const SETUP := 1
@@ -162,56 +161,29 @@ func cast_illusions(target) -> void:
 
 
 # ---------- Завантаження (рушій і перевірка бази) ----------
+# Кеш і пошук хуків спільні з механіками загону й улюбленців (loader.gd).
 
-static var _scripts := {}  # посилання → скрипт механіки (null — нема такого файлу)
-static var _hooks := {}  # скрипт → біти хуків, які він написав
+const Loader := preload("res://scripts/mechanics/loader.gd")
 
 
 ## Шлях до файлу механіки за посиланням із запису ("boss/koshchii" → res://scripts/mechanics/boss/koshchii.gd).
 static func path_of(ref: String) -> String:
-	return DIR + ref + ".gd"
+	return Loader.path_of(ref)
 
 
-## Скрипт механіки за посиланням; вантажиться раз на всю гру. Шлях до .gd працює й у збірці для
-## телефона: там скрипти лежать як .gdc, і Godot сам іде за переадресуванням (.remap). Тому теки
-## ніколи не переглядаємо під час гри — лише вантажимо за посиланням із запису.
+## Скрипт механіки нечисті за посиланням; вантажиться раз на всю гру (null — нема файлу чи не механіка).
 static func script_of(ref: String) -> Script:
-	if not _scripts.has(ref):
-		var s: Script = null
-		if ref != "" and ResourceLoader.exists(path_of(ref)):
-			s = load(path_of(ref)) as Script
-		if s != null and not extends_base(s):
-			s = null
-		_scripts[ref] = s
-	return _scripts[ref]
+	return Loader.script_of(ref, BASE_PATH)
 
 
-## Чи скрипт — механіка (його ланцюг предків доходить до цього файлу).
+## Чи скрипт — механіка нечисті (його ланцюг предків доходить до цього файлу).
 static func extends_base(s: Script) -> bool:
-	while s != null:
-		if s.resource_path == BASE_PATH:
-			return true
-		s = s.get_base_script()
-	return false
+	return Loader.extends_base(s, BASE_PATH)
 
 
 ## Біти хуків, які написав скрипт механіки чи його предки (крім самої основи).
 static func hooks_of(s: Script) -> int:
-	if s == null:
-		return 0
-	if not _hooks.has(s):
-		var bits := 0
-		var cur := s
-		while cur != null and cur.resource_path != BASE_PATH:
-			# Перелік методів скрипту: спершу власні, далі всіх предків
-			var own: Array = cur.get_script_method_list()
-			var base := cur.get_base_script()
-			var n_base: int = base.get_script_method_list().size() if base != null else 0
-			for i in own.size() - n_base:
-				bits |= int(HOOKS.get(own[i]["name"], 0))
-			cur = base
-		_hooks[s] = bits
-	return _hooks[s]
+	return Loader.hooks_of(s, BASE_PATH, HOOKS)
 
 
 ## Чи механіка за посиланням пише хук (наприклад, "ability").

@@ -997,13 +997,12 @@ func _spawn_pet() -> void:
 	if is_duel():
 		return
 	var kinds := []
-	if str(player.pet) in Pets.FOLLOWERS:
+	if Pets.follows(str(player.pet)):
 		kinds.append(str(player.pet))
-	# божі дари, які видно в бою: Хованець бігає поруч, чумацька мажа котиться за спиною
-	if str(player.divine.get("pet", "")) in ["khovanets", "skakun"]:
-		kinds.append(str(player.divine["pet"]))
-	if str(player.divine.get("cart", "")) == "mazha":
-		kinds.append("mazha")
+	# божі дари, які видно в бою: Хованець чи скакун бігає поруч, чумацька мажа котиться за спиною
+	for slot in ["pet", "cart"]:
+		if Pets.gift_follows(str(player.divine.get(slot, "")), slot):
+			kinds.append(str(player.divine[slot]))
 	for i in kinds.size():
 		var pet = PetScript.new()
 		pet.setup(self, player, str(kinds[i]))
@@ -1193,7 +1192,7 @@ func _companion_states() -> Array:
 	for c in companion_nodes:
 		if is_instance_valid(c):
 			out.append({"type": c.type, "downed": not c.alive, "index": c.index, "level": c.level,
-				"hero": c.hero, "mult": c.mult, "name": c.display_name, "color": c.info["color"]})
+				"hero": c.hero, "mult": c.mult, "name": c.display_name, "color": c.color})
 	out.sort_custom(func(a, b): return a["index"] < b["index"])
 	return out
 

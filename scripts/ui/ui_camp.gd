@@ -640,7 +640,7 @@ static func _pets(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	var cur: String = str(p.pet)
-	var head := "З героєм зараз: %s." % (str(Pets.DEFS[cur]["name"]) if cur != "" else "нікого")
+	var head := "З героєм зараз: %s." % (Pets.pet_name(cur) if cur != "" else "нікого")
 	var hl := UI.label("Улюбленці живуть на хуторі й служать усьому роду. Кожен герой бере з собою одного. Сили в бою вони не додають: це помічники в дорозі й господарстві. %s" % head, 17, UI.MUTED, false)
 	hl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(hl)
@@ -648,8 +648,8 @@ static func _pets(game) -> Control:
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 10)
 	v.add_child(grid)
-	for id in Pets.ORDER:
-		var D: Dictionary = Pets.DEFS[id]
+	for id in Pets.ids():
+		var D: Dictionary = Pets.def(id)
 		var lvl: int = PetService.level(w, id)
 		var panel := PanelContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL

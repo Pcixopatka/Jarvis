@@ -9,7 +9,9 @@ const DIR := "res://data/"
 
 ## Схема запису: поле → {"type": ..., "required": true}. Типи: string, int, float, bool,
 ## color (масив [r, g, b] або [r, g, b, a] із часток 0..1, стає Color), record (вкладений запис
-## зі своїми "fields"). Порядок полів у схемі — порядок ключів у файлі (див. tools/data_format.gd).
+## зі своїми "fields"), enum (рядок із переліку "values"), list (масив значень, кожне за описом "of";
+## "size" — точна довжина), map (об'єкт {рядковий ключ: значення за описом "of"}; порядок ключів
+## зберігається). Порядок полів у схемі — порядок ключів у файлі (див. tools/data_format.gd).
 const MOB_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер запису (1001...): ніколи не змінюється й не віддається іншому
 	"name": {"type": "string"},  # ім'я в однині; без нього нечисть не з'являється на мапі й у завданнях
@@ -56,11 +58,101 @@ const MOB_SCHEMA := {
 	}},
 }
 
+## Найманець із корчми (джура, стрілець, знахарка): ім'я, ціна, сила 1-го рівня, механіка бою.
+const COMPANION_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (3001...)
+	"name": {"type": "string", "required": true},
+	"desc": {"type": "string", "required": true},  # опис у корчмі ("\n" — розрив рядка)
+	"hire": {"type": "record", "required": true, "fields": {
+		"cost": {"type": "int", "required": true},  # ціна найму в гривнях до знижки й мірки рівня героя
+		"loyalty": {"type": "int", "required": true},  # потрібна лояльність міста: номер у Data.LOYALTY_NAMES
+	}},
+	"stats": {"type": "record", "required": true, "fields": {
+		"hp": {"type": "float", "required": true},  # здоров'я на 1-му рівні (далі росте за еталоном, див. Party.stats)
+		"hp_lvl": {"type": "float"},  # приріст за рівень зі старої формули; зараз гра його не читає
+		"dmg": {"type": "float", "required": true},
+		"dmg_lvl": {"type": "float"},  # так само не читається
+		"heal": {"type": "float"},  # лікування на 1-му рівні (знахарка)
+		"heal_lvl": {"type": "float"},  # так само не читається
+		"range": {"type": "float", "required": true},  # дальність удару
+		"cd": {"type": "float", "required": true},  # с між ударами
+		"speed": {"type": "float", "required": true},
+	}},
+	"color": {"type": "color", "required": true},
+	"mechanic": {"type": "string"},  # як б'ється: "companion/<файл>" у scripts/mechanics/
+}
+
+## Репліка розмови: [мовець, текст]; мовець — id із Story.NPCS.
+const LINE := {"type": "list", "size": 2, "of": {"type": "string"}}
+const DIALOGUE := {"type": "list", "required": true, "of": LINE}
+
+## Побратим: іменний супутник з історією. Б'ється як найманець свого base, але сильніший.
+const HERO_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (3101...)
+	"name": {"type": "string", "required": true},
+	"base": {"type": "string", "required": true},  # рід служби: id із companions.json
+	"mult": {"type": "float", "required": true},  # у скільки разів сильніший за найманця
+	"color": {"type": "color", "required": true},
+	"bio": {"type": "string", "required": true},
+	"join": {"type": "record", "required": true, "fields": {  # де й коли зустріти
+		"city": {"type": "string", "required": true},  # місто (Data.CITIES)
+		"after": {"type": "string", "required": true},  # крок сюжету, який уже пройдено
+		"if": {"type": "string"},  # "крок=номер вибору"
+	}},
+	"meet": DIALOGUE,  # розмова при зустрічі
+	"quest_bond": {"type": "int", "required": true},  # від якої дружби дає особисте завдання
+	"quest": {"type": "record", "required": true, "fields": {
+		"start": DIALOGUE,
+		"objective": {"type": "record", "required": true, "fields": {
+			"type": {"type": "enum", "required": true, "values": ["kill", "fetch", "clear", "dungeon"]},
+			"enemy": {"type": "string"},  # kill, fetch: кого бити (mobs.json)
+			"count": {"type": "int"},  # kill, fetch: скільки
+			"loc": {"type": "string", "required": true},  # місце (Data.LOCATIONS)
+			"item": {"type": "string"},  # fetch: що здобути
+			"chance": {"type": "float"},  # fetch: шанс на кожного переможеного
+			"text": {"type": "string", "required": true},
+		}},
+		"end": DIALOGUE,
+	}},
+	"bonded": {"type": "float", "required": true},  # множник сили після особистого завдання
+}
+
+## Улюбленець стайні (пес, кіт, ворон, кінь) або супутник із божого дару (Хованець, скакун, мажа).
+const PET_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (3201...)
+	"name": {"type": "string"},  # улюбленець стайні; у дару ім'я — з самого дару (Divine)
+	"desc": {"type": "string"},
+	"stable": {"type": "record", "fields": {  # є в улюбленців стайні: хист, ступені, ціна
+		"stat": {"type": "enum", "required": true, "values": ["pickup", "travel", "xp", "res"]},
+		"base": {"type": "float", "required": true},  # надбавка на 1-му ступені (частка)
+		"per": {"type": "float", "required": true},  # приріст за кожен наступний ступінь
+		"text": {"type": "string", "required": true},  # опис хисту з %d (відсотки)
+		"gold": {"type": "int", "required": true},  # ціна 1-го ступеня; ступінь N коштує в N разів більше
+		"res": {"type": "map", "required": true, "of": {"type": "int"}},  # ресурси 1-го ступеня
+	}},
+	"gift": {"type": "bool"},  # супутник із божого дару з тим самим id (Divine.DEFS)
+	"mechanic": {"type": "string"},  # що робить у бою: "pet/<файл>"; без нього в бій не йде (кінь)
+}
+
 ## Таблиці бази: назва → файл і схема. Нова таблиця (уміння, речі...) додається сюди одним рядком,
 ## а її власні правила й перехресні посилання — у _rules() і _links().
 const TABLES := {
 	"mobs": {"file": "mobs.json", "schema": MOB_SCHEMA},
+	"companions": {"file": "companions.json", "schema": COMPANION_SCHEMA},
+	"heroes": {"file": "heroes.json", "schema": HERO_SCHEMA},
+	"pets": {"file": "pets.json", "schema": PET_SCHEMA},
 }
+
+## Основи механік за родинами: тека в scripts/mechanics/ → скрипт-основа.
+const MECHANIC_BASES := {
+	"mob": "res://scripts/mechanics/mechanic.gd",
+	"boss": "res://scripts/mechanics/mechanic.gd",
+	"companion": "res://scripts/mechanics/companion_mechanic.gd",
+	"pet": "res://scripts/mechanics/pet_mechanic.gd",
+}
+
+## Гнізда божих дарів, у яких лежать супутники, що ходять за героєм у бою (Хованець, скакун, мажа).
+const PET_GIFT_SLOTS := ["pet", "cart"]
 
 const _EMPTY := {}
 
@@ -241,12 +333,39 @@ static func _value(v, f: Dictionary, where: String, probs: Array):
 		"record":
 			if v is Dictionary:
 				return _normalize(v, f["fields"], where, probs)
+		"enum":
+			if v is String:
+				if v in f["values"]:
+					return v
+				probs.append("%s: «%s» — не з переліку %s" % [where, v, str(f["values"])])
+				return null
+		"list":
+			if v is Array:
+				if f.has("size") and v.size() != int(f["size"]):
+					probs.append("%s: має бути %d значень, а не %d" % [where, int(f["size"]), v.size()])
+					return null
+				var out := []
+				for i in v.size():
+					var x = _value(v[i], f["of"], "%s[%d]" % [where, i], probs)
+					if x == null:
+						return null
+					out.append(x)
+				return out
+		"map":
+			if v is Dictionary:
+				var out := {}
+				for k in v:
+					var x = _value(v[k], f["of"], "%s.%s" % [where, k], probs)
+					if x != null:
+						out[k] = x
+				return out
 	probs.append("%s: має бути %s, а не %s" % [where, _type_name(t), _type_name_of(v)])
 	return null
 
 
 static func _type_name(t: String) -> String:
-	return {"string": "рядком", "bool": "true або false", "int": "цілим числом", "float": "числом", "record": "об'єктом {...}"}.get(t, t)
+	return {"string": "рядком", "bool": "true або false", "int": "цілим числом", "float": "числом", "record": "об'єктом {...}",
+		"enum": "рядком", "list": "масивом [...]", "map": "об'єктом {...}"}.get(t, t)
 
 
 static func _type_name_of(v) -> String:
@@ -291,7 +410,112 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 					out.append("mobs/%s: «mechanic» має бути \"mob/<файл>\", а не «%s»" % [id, R["mechanic"]])
 				if R.has("boss") and R["boss"].has("mechanic") and not _is_mechanic_ref(R["boss"]["mechanic"], "boss"):
 					out.append("mobs/%s: «boss.mechanic» має бути \"boss/<файл>\", а не «%s»" % [id, R["boss"]["mechanic"]])
-			out.append_array(_unique_nums(rows))
+			out.append_array(_unique_nums(name, rows))
+		"companions":
+			for id in rows:
+				var R: Dictionary = rows[id]
+				_not_blank(R, ["name", "desc"], "companions/" + id, out)
+				var st: Dictionary = R.get("stats", {})
+				for k in ["hp", "dmg", "range", "cd", "speed"]:
+					if st.has(k) and float(st[k]) <= 0.0:
+						out.append("companions/%s: «stats.%s» має бути більшим за нуль" % [id, k])
+				for k in ["hp_lvl", "dmg_lvl", "heal", "heal_lvl"]:
+					if st.has(k) and float(st[k]) < 0.0:
+						out.append("companions/%s: «stats.%s» не може бути від'ємним" % [id, k])
+				if int(R.get("hire", {}).get("cost", 0)) < 0:
+					out.append("companions/%s: «hire.cost» не може бути від'ємним" % id)
+				if R.has("mechanic") and not _is_mechanic_ref(R["mechanic"], "companion"):
+					out.append("companions/%s: «mechanic» має бути \"companion/<файл>\", а не «%s»" % [id, R["mechanic"]])
+			out.append_array(_unique_nums(name, rows))
+		"heroes":
+			for id in rows:
+				out.append_array(_hero_rules("heroes/" + id, rows[id]))
+			out.append_array(_unique_nums(name, rows))
+		"pets":
+			for id in rows:
+				out.append_array(_pet_rules("pets/" + id, rows[id]))
+			out.append_array(_unique_nums(name, rows))
+	return out
+
+
+static func _not_blank(R: Dictionary, keys: Array, where: String, out: Array) -> void:
+	for k in keys:
+		if R.has(k) and str(R[k]).strip_edges() == "":
+			out.append("%s: «%s» порожнє" % [where, k])
+
+
+## Розмови побратима: назва → масив реплік.
+static func _hero_dialogues(R: Dictionary) -> Dictionary:
+	var q: Dictionary = R.get("quest", _EMPTY)
+	return {"meet": R.get("meet", []), "quest.start": q.get("start", []), "quest.end": q.get("end", [])}
+
+
+static func _hero_rules(where: String, R: Dictionary) -> Array:
+	var out := []
+	_not_blank(R, ["name", "bio"], where, out)
+	if R.has("mult") and float(R["mult"]) <= 0.0:
+		out.append("%s: «mult» має бути більшим за нуль" % where)
+	if R.has("bonded") and R.has("mult") and float(R["bonded"]) < float(R["mult"]):
+		out.append("%s: «bonded» менший за «mult», а після особистого завдання побратим має сильнішати" % where)
+	if R.has("quest_bond") and int(R["quest_bond"]) <= 0:
+		out.append("%s: «quest_bond» має бути більшим за нуль" % where)
+	var dl := _hero_dialogues(R)
+	for k in dl:
+		var lines: Array = dl[k]
+		if lines.is_empty() and (k == "meet" and R.has("meet") or R.get("quest", _EMPTY).has(k.trim_prefix("quest."))):
+			out.append("%s: розмова «%s» порожня" % [where, k])
+		for i in lines.size():
+			if str(lines[i][0]).strip_edges() == "" or str(lines[i][1]).strip_edges() == "":
+				out.append("%s: «%s[%d]»: порожній мовець чи текст" % [where, k, i])
+	var o: Dictionary = R.get("quest", _EMPTY).get("objective", _EMPTY)
+	var ot := str(o.get("type", ""))
+	if ot in ["kill", "fetch"]:
+		if not o.has("enemy") or not o.has("count"):
+			out.append("%s: мета «%s» потребує «enemy» і «count»" % [where, ot])
+		elif int(o["count"]) < 1:
+			out.append("%s: «quest.objective.count» має бути від 1" % where)
+	if ot == "fetch":
+		if not o.has("item") or not o.has("chance"):
+			out.append("%s: мета «fetch» потребує «item» і «chance»" % where)
+		elif float(o["chance"]) <= 0.0 or float(o["chance"]) > 1.0:
+			out.append("%s: «quest.objective.chance» має бути від 0 до 1" % where)
+	for k in ["enemy", "count", "item", "chance"]:
+		if o.has(k) and not (ot == "fetch" or (ot == "kill" and k in ["enemy", "count"])):
+			out.append("%s: мета «%s» не читає «%s»" % [where, ot, k])
+	return out
+
+
+static func _pet_rules(where: String, R: Dictionary) -> Array:
+	var out := []
+	if R.has("stable") == R.has("gift"):
+		out.append("%s: має бути або «stable» (улюбленець стайні), або «gift» (супутник із божого дару)" % where)
+	if R.has("gift") and not bool(R["gift"]):
+		out.append("%s: «gift» пишеться лише як true" % where)
+	if R.has("stable"):
+		for k in ["name", "desc"]:
+			if not R.has(k):
+				out.append("%s: улюбленцю стайні потрібне «%s»" % [where, k])
+		_not_blank(R, ["name", "desc"], where, out)
+		var D: Dictionary = R["stable"]
+		if D.has("text") and not "%d" in str(D["text"]):
+			out.append("%s: «stable.text» має містити %%d (відсотки хисту)" % where)
+		if D.has("base") and float(D["base"]) <= 0.0:
+			out.append("%s: «stable.base» має бути більшим за нуль" % where)
+		if D.has("per") and float(D["per"]) < 0.0:
+			out.append("%s: «stable.per» не може бути від'ємним" % where)
+		if D.has("gold") and int(D["gold"]) <= 0:
+			out.append("%s: «stable.gold» має бути більшим за нуль" % where)
+		for r in D.get("res", _EMPTY):
+			if int(D["res"][r]) <= 0:
+				out.append("%s: «stable.res.%s» має бути більшим за нуль" % [where, r])
+	if R.has("gift"):
+		for k in ["name", "desc"]:
+			if R.has(k):
+				out.append("%s: у супутника з дару «%s» береться з самого дару (Divine.DEFS), тут його не пишуть" % [where, k])
+		if not R.has("mechanic"):
+			out.append("%s: супутник із дару без «mechanic» у бою нічого не робить" % where)
+	if R.has("mechanic") and not _is_mechanic_ref(R["mechanic"], "pet"):
+		out.append("%s: «mechanic» має бути \"pet/<файл>\", а не «%s»" % [where, R["mechanic"]])
 	return out
 
 
@@ -299,8 +523,8 @@ static func _is_mechanic_ref(ref: String, folder: String) -> bool:
 	return ref.begins_with(folder + "/") and _is_id(ref.substr(folder.length() + 1))
 
 
-## Номери записів не повторюються: серед нечисті й окремо серед босів.
-static func _unique_nums(rows: Dictionary) -> Array:
+## Номери записів не повторюються в межах таблиці (а в нечисті — ще й окремо серед босів).
+static func _unique_nums(name: String, rows: Dictionary) -> Array:
 	var out := []
 	var seen := {}
 	var seen_boss := {}
@@ -309,9 +533,9 @@ static func _unique_nums(rows: Dictionary) -> Array:
 		if R.has("num"):
 			var n := int(R["num"])
 			if n <= 0:
-				out.append("mobs/%s: «num» має бути додатним" % id)
+				out.append("%s/%s: «num» має бути додатним" % [name, id])
 			elif seen.has(n):
-				out.append("mobs/%s: номер %d уже має «%s»" % [id, n, seen[n]])
+				out.append("%s/%s: номер %d уже має «%s»" % [name, id, n, seen[n]])
 			else:
 				seen[n] = id
 		if R.has("boss") and R["boss"].has("num"):
@@ -331,6 +555,12 @@ static func _links(name: String, rows: Dictionary) -> Array:
 	match name:
 		"mobs":
 			out.append_array(_mob_links(rows))
+		"companions":
+			out.append_array(_companion_links(rows))
+		"heroes":
+			out.append_array(_hero_links(rows))
+		"pets":
+			out.append_array(_pet_links(rows))
 	return out
 
 
@@ -417,39 +647,49 @@ static func _mob_links(rows: Dictionary) -> Array:
 	return out
 
 
-## Механіки (scripts/mechanics/): кожне посилання веде на файл, що походить від Mechanic, і кожен файл
-## у mob/ і boss/ має запис, який на нього посилається (без сиріт). Лише для перевірки: під час гри
-## теки не переглядаються.
+## Механіки нечисті: кожне посилання веде на файл, що походить від Mechanic, і кожен файл у mob/ і
+## boss/ має запис, який на нього посилається (без сиріт).
 static func _mechanic_links(rows: Dictionary) -> Array:
 	var out := []
-	var M = load("res://scripts/mechanics/mechanic.gd")
 	var used := {}
 	for id in rows:
 		var R: Dictionary = rows[id]
-		var refs := []
 		if R.has("mechanic"):
-			refs.append(["mechanic", str(R["mechanic"])])
+			_mechanic_ref("mobs/" + id, "mechanic", str(R["mechanic"]), used, out)
 		if R.has("boss") and R["boss"].has("mechanic"):
-			refs.append(["boss.mechanic", str(R["boss"]["mechanic"])])
-		for pair in refs:
-			var ref: String = pair[1]
-			used[ref] = true
-			var path: String = M.path_of(ref)
-			if not ResourceLoader.exists(path):
-				out.append("mobs/%s: «%s» посилається на %s, а такого файлу нема" % [id, pair[0], path])
-				continue
-			var s = load(path)
-			if not s is Script or not M.extends_base(s):
-				out.append("mobs/%s: %s — не механіка (має походити від %s)" % [id, path, M.BASE_PATH])
-	for folder in ["mob", "boss"]:
-		for ref in mechanic_files(folder):
-			if not used.has(ref):
-				out.append("механіка %s нікому не потрібна: жоден запис mobs.json на неї не посилається" % M.path_of(ref))
+			_mechanic_ref("mobs/" + id, "boss.mechanic", str(R["boss"]["mechanic"]), used, out)
+	out.append_array(_mechanic_orphans(["mob", "boss"], used, "mobs.json"))
 	return out
 
 
-## Файли механік у теці (mob чи boss) як посилання ("mob/chort"). Лише для перевірки й інструментів:
-## у збірці теки містять .gdc і .remap, тож гра механік так не шукає.
+## Одне посилання на механіку: файл є й походить від основи своєї теки (MECHANIC_BASES).
+## Лише для перевірки: під час гри теки не переглядаються.
+static func _mechanic_ref(where: String, field: String, ref: String, used: Dictionary, out: Array) -> void:
+	used[ref] = true
+	var Loader = load("res://scripts/mechanics/loader.gd")
+	var path: String = Loader.path_of(ref)
+	if not ResourceLoader.exists(path):
+		out.append("%s: «%s» посилається на %s, а такого файлу нема" % [where, field, path])
+		return
+	var base: String = MECHANIC_BASES.get(ref.get_slice("/", 0), "")
+	var s = load(path)
+	if base == "" or not s is Script or not Loader.extends_base(s, base):
+		out.append("%s: %s — не механіка (має походити від %s)" % [where, path, base])
+
+
+## Файли механік у теках, на які не посилається жоден запис таблиці (сироти).
+static func _mechanic_orphans(folders: Array, used: Dictionary, file: String) -> Array:
+	var out := []
+	var Loader = load("res://scripts/mechanics/loader.gd")
+	for folder in folders:
+		for ref in mechanic_files(folder):
+			if not used.has(ref):
+				out.append("механіка %s нікому не потрібна: жоден запис %s на неї не посилається" % [Loader.path_of(ref), file])
+	return out
+
+
+## Файли механік у теці (mob, boss, companion, pet) як посилання ("mob/chort"). Лише для перевірки й
+## інструментів: у збірці теки містять .gdc і .remap, тож гра механік так не шукає.
 static func mechanic_files(folder: String) -> Array:
 	var out := []
 	var dir := "res://scripts/mechanics/" + folder
@@ -460,6 +700,96 @@ static func mechanic_files(folder: String) -> Array:
 			if not ref in out:
 				out.append(ref)
 	out.sort()
+	return out
+
+
+static func _companion_links(rows: Dictionary) -> Array:
+	var out := []
+	var Data = load("res://scripts/data/data.gd")
+	var used := {}
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var lv := int(R.get("hire", _EMPTY).get("loyalty", 0))
+		if lv < 0 or lv >= Data.LOYALTY_NAMES.size():
+			out.append("companions/%s: «hire.loyalty» має бути від 0 до %d (Data.LOYALTY_NAMES)" % [id, Data.LOYALTY_NAMES.size() - 1])
+		if R.has("mechanic"):
+			_mechanic_ref("companions/" + id, "mechanic", str(R["mechanic"]), used, out)
+	out.append_array(_mechanic_orphans(["companion"], used, "companions.json"))
+	return out
+
+
+static func _hero_links(rows: Dictionary) -> Array:
+	var out := []
+	var Data = load("res://scripts/data/data.gd")
+	var Story = load("res://scripts/data/story.gd")
+	var steps := {}  # id кроку сюжету → скільки в нього виборів
+	for ch in Story.CHAPTERS:
+		for st in ch["steps"]:
+			steps[st["id"]] = st.get("choices", []).size()
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var where: String = "heroes/" + id
+		if R.has("base") and not table("companions").has(R["base"]):
+			out.append("%s: «base» посилається на найманця «%s», якого немає в companions.json" % [where, R["base"]])
+		if table("companions").has(id):
+			out.append("%s: id збігається з найманцем (вигляд comp_<id> був би спільний)" % where)
+		var j: Dictionary = R.get("join", _EMPTY)
+		if j.has("city") and not Data.CITIES.has(j["city"]):
+			out.append("%s: «join.city» — невідоме місто «%s»" % [where, j["city"]])
+		if j.has("after") and not steps.has(j["after"]):
+			out.append("%s: «join.after» — нема кроку сюжету «%s»" % [where, j["after"]])
+		if j.has("if"):
+			var parts: PackedStringArray = str(j["if"]).split("=")
+			if parts.size() != 2 or not parts[1].is_valid_int():
+				out.append("%s: «join.if» має бути \"крок=номер вибору\", а не «%s»" % [where, j["if"]])
+			elif not steps.has(parts[0]) or int(parts[1]) < 0 or int(parts[1]) >= int(steps[parts[0]]):
+				out.append("%s: «join.if» — нема кроку «%s» із вибором %s" % [where, parts[0], parts[1]])
+		var dl := _hero_dialogues(R)
+		for k in dl:
+			for i in dl[k].size():
+				if not Story.NPCS.has(dl[k][i][0]):
+					out.append("%s: «%s[%d]» — мовця «%s» нема в Story.NPCS" % [where, k, i, dl[k][i][0]])
+		var o: Dictionary = R.get("quest", _EMPTY).get("objective", _EMPTY)
+		if o.has("loc"):
+			var L: Dictionary = Data.LOCATIONS.get(o["loc"], _EMPTY)
+			if L.is_empty():
+				out.append("%s: «quest.objective.loc» — нема місця «%s»" % [where, o["loc"]])
+			else:
+				var ot := str(o.get("type", ""))
+				if ot == "clear" and str(L.get("type", "")) == "dungeon":
+					out.append("%s: «%s» — печера, її проходять метою «dungeon», а не «clear»" % [where, o["loc"]])
+				if ot == "dungeon" and str(L.get("type", "")) != "dungeon":
+					out.append("%s: «%s» — не печера" % [where, o["loc"]])
+				if o.has("enemy") and not o["enemy"] in L.get("enemies", []):
+					out.append("%s: «%s» не водиться в «%s»" % [where, o["enemy"], o["loc"]])
+		if o.has("enemy") and not has_mob(str(o["enemy"])):
+			out.append("%s: «quest.objective.enemy» посилається на нечисть «%s», якої немає в mobs.json" % [where, o["enemy"]])
+	return out
+
+
+static func _pet_links(rows: Dictionary) -> Array:
+	var out := []
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var Divine = load("res://scripts/data/divine.gd")
+	var used := {}
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var where: String = "pets/" + id
+		for r in R.get("stable", _EMPTY).get("res", _EMPTY):
+			if not Camp.RESOURCES.has(r) and r != Camp.TROPHY:
+				out.append("%s: «stable.res» — невідомий ресурс «%s» (див. CampData.RESOURCES)" % [where, r])
+		if R.has("gift"):
+			if not Divine.DEFS.has(id):
+				out.append("%s: божого дару «%s» нема в Divine.DEFS" % [where, id])
+			elif not str(Divine.DEFS[id]["slot"]) in PET_GIFT_SLOTS:
+				out.append("%s: дар «%s» лежить у гнізді «%s», а супутники бувають лише в %s" % [where, id, Divine.DEFS[id]["slot"], str(PET_GIFT_SLOTS)])
+		if R.has("mechanic"):
+			_mechanic_ref(where, "mechanic", str(R["mechanic"]), used, out)
+	# Кожен дар-супутник (гнізда «Супутник» і «Віз») має запис, інакше в бою його не видно
+	for d in Divine.DEFS:
+		if str(Divine.DEFS[d]["slot"]) in PET_GIFT_SLOTS and not rows.has(d):
+			out.append("божий дар «%s» (гніздо «%s») не має запису в pets.json, тож у бою його не видно" % [d, Divine.DEFS[d]["slot"]])
+	out.append_array(_mechanic_orphans(["pet"], used, "pets.json"))
 	return out
 
 
@@ -481,26 +811,32 @@ static func mob_ids() -> Array:
 
 ## Вид нечисті за сталим номером запису ("" — такого нема).
 static func mob_by_num(n: int) -> String:
-	return str(_num_index("num").get(n, ""))
+	return by_num("mobs", n)
 
 
 ## Вид нечисті за сталим номером її боса ("" — такого нема).
 static func boss_by_num(n: int) -> String:
-	return str(_num_index("boss_num").get(n, ""))
+	return str(_num_index("mobs", "boss").get(n, ""))
 
 
+## Id запису таблиці за його сталим номером ("" — такого нема).
+static func by_num(name: String, n: int) -> String:
+	return str(_num_index(name, "").get(n, ""))
 
-static func _num_index(which: String) -> Dictionary:
-	if not _nums.has(which):
+
+## Покажчик номер → id: за «num» запису, а sub — за «num» його вкладеного запису (боса).
+static func _num_index(name: String, sub: String) -> Dictionary:
+	var key := name + "/" + sub
+	if not _nums.has(key):
 		var idx := {}
-		for id in mob_ids():
-			var R: Dictionary = mob(id)
-			var n = R.get("num") if which == "num" else R.get("boss", _EMPTY).get("num")
+		for id in ids(name):
+			var R: Dictionary = row(name, id)
+			var n = R.get("num") if sub == "" else R.get(sub, _EMPTY).get("num")
 			if n != null and not idx.has(n):
 				idx[n] = id
 		idx.make_read_only()
-		_nums[which] = idx
-	return _nums[which]
+		_nums[key] = idx
+	return _nums[key]
 
 
 ## Види, що бувають іменними босами (мають запис «boss»).
@@ -564,3 +900,35 @@ static func mob_wiki(id: String) -> Dictionary:
 
 static func boss_wiki(id: String) -> Dictionary:
 	return mob(id).get("boss", _EMPTY).get("wiki", _EMPTY)
+
+
+# ---------- Загін і улюбленці ----------
+
+## Найманець (див. COMPANION_SCHEMA); для невідомого — порожній запис.
+static func companion(id: String) -> Dictionary:
+	return table("companions").get(id, _EMPTY)
+
+
+## Найманці в порядку файлу (так їх показує корчма й довідник).
+static func companion_ids() -> Array:
+	return ids("companions")
+
+
+## Побратим (див. HERO_SCHEMA); для невідомого — порожній запис.
+static func hero(id: String) -> Dictionary:
+	return table("heroes").get(id, _EMPTY)
+
+
+## Побратими в порядку файлу.
+static func hero_ids() -> Array:
+	return ids("heroes")
+
+
+## Улюбленець або супутник із дару (див. PET_SCHEMA); для невідомого — порожній запис.
+static func pet(id: String) -> Dictionary:
+	return table("pets").get(id, _EMPTY)
+
+
+## Усі записи pets.json у порядку файлу (і стайня, і дари).
+static func pet_ids() -> Array:
+	return ids("pets")

@@ -1,15 +1,21 @@
 class_name Companion
 extends Node2D
-## Супутник козака: джура (ближній бій), стрілець (рушниця) або знахарка (лікування).
+## Супутник козака: найманець (джура, стрілець, знахарка) чи побратим. Числа — у data/companions.json,
+## а як саме рід служби б'ється — у його механіці (scripts/mechanics/companion/<рід>.gd). Тут спільне:
+## рух за героєм, вибір цілі, перезарядка удару, рани й вигляд.
 
-const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
+const CompanionMechanic := preload("res://scripts/mechanics/companion_mechanic.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 const Party := preload("res://scripts/game/party.gd")
 const OFFSETS := [Vector2(-70, 40), Vector2(70, 40), Vector2(-60, -55), Vector2(60, -55)]  # строй загону
 
 var combat: Combat
 var type := "dzhura"
-var info := {}
+var info := {}  # запис найманця з бази (лише для читання, спільний для всіх)
+var color := Color.WHITE  # колір цього супутника: побратим має свій
+var mechanic  # механіка роду служби (CompanionMechanic), своя в кожного
+var _mh := 0  # хуки, які механіка написала (біти CompanionMechanic.TICK...)
 var index := 0  # місце в загоні (для зсуву під час руху)
 var level := 1
 var heal_amount := 0.0
@@ -18,7 +24,6 @@ var max_hp := 90.0
 var hp := 90.0
 var damage := 8.0
 var attack_cd := 0.0
-var heal_cd := 2.0
 var alive := true
 var dead := false  # для сумісності з перевірками ворогів
 var flash := 0.0
@@ -36,12 +41,13 @@ var display_name := ""
 func setup(t: String, lvl: int, idx: int, data: Dictionary = {}) -> void:
 	type = t
 	index = idx
-	info = Data.COMPANIONS[t].duplicate()
+	info = GameDB.companion(t)
 	hero = data.get("hero", "")
 	mult = float(data.get("mult", 1.0))
 	display_name = data.get("name", info["name"])
-	if data.has("color"):
-		info["color"] = data["color"]
+	color = data.get("color", info["color"])
+	mechanic = CompanionMechanic.create(str(info.get("mechanic", "")), self)
+	_mh = CompanionMechanic.hooks_of(mechanic.get_script())
 	set_level(lvl)
 	hp = max_hp
 
@@ -60,29 +66,24 @@ func _process(delta: float) -> void:
 	if not alive:
 		return
 	attack_cd = maxf(0.0, attack_cd - delta)
-	heal_cd = maxf(0.0, heal_cd - delta)
 	flash = maxf(0.0, flash - delta)
 	swing = maxf(0.0, swing - delta)
 	var p = combat.player
 	var target: Node2D = combat.nearest_enemy(global_position, 450.0)
 	var dest: Vector2 = p.global_position + OFFSETS[index % OFFSETS.size()]
-	var reach: float = info["range"]
+	var reach: float = info["stats"]["range"]
 
 	if target and p.global_position.distance_to(target.global_position) < 500.0:
 		var to := target.global_position - global_position
 		facing = to.normalized()
-		if type == "dzhura":
-			dest = target.global_position - facing * 30.0
-		else:
-			# Стрілець і знахарка тримаються на відстані
-			dest = target.global_position - facing * minf(reach * 0.8, to.length())
+		dest = mechanic.approach(target, to)  # джура впритул, решта на відстані
 		if to.length() <= reach + target.radius and attack_cd <= 0.0:
 			_attack(target)
 
 	var move := dest - global_position
 	anim_moving = move.length() > 12.0
 	if move.length() > 12.0:
-		var spd: float = info["speed"] * (1.4 if move.length() > 300.0 else 1.0)
+		var spd: float = info["stats"]["speed"] * (1.4 if move.length() > 300.0 else 1.0)
 		position += move.normalized() * minf(spd * delta, move.length())
 		walk += delta * 12.0
 		if not target:
@@ -90,32 +91,16 @@ func _process(delta: float) -> void:
 	if global_position.distance_to(p.global_position) > 900.0:
 		global_position = p.global_position + Vector2(-60, 40)
 
-	if type == "znakhar" and heal_cd <= 0.0:
-		heal_cd = 4.0
-		var amount: float = heal_amount
-		for a in combat.allies():
-			if a == self:
-				hp = minf(max_hp, hp + amount)
-			elif a.hp < a.max_hp:
-				a.heal(amount)
-		combat.float_text(global_position + Vector2(0, -40), "Зілля!", Color(0.5, 1.0, 0.5))
+	if _mh & CompanionMechanic.TICK:
+		mechanic.tick(delta)  # знахарка лікує
 	queue_redraw()
 
 
 func _attack(target) -> void:
-	attack_cd = info["cd"]
+	attack_cd = info["stats"]["cd"]
 	swing = 0.2
 	var dir: Vector2 = (target.global_position - global_position).normalized()
-	match type:
-		"dzhura":
-			target.take_damage(damage * randf_range(0.9, 1.1), dir * 160.0, false)
-		"strilets":
-			combat.spawn_bullet(global_position + dir * 20.0, dir, damage, false)
-			var shot = combat.last_projectile()
-			if shot != null:
-				shot.ally = true  # влучання рахується побратимові, а не героєві
-		"znakhar":
-			target.take_damage(damage, dir * 60.0, false)
+	mechanic.attack(target, dir)
 
 
 func heal(amount: float, _show: bool = true) -> void:
@@ -144,7 +129,7 @@ func sprite_id() -> String:
 
 
 func _draw() -> void:
-	var col: Color = info.get("color", Color.WHITE)
+	var col: Color = color
 	if flash > 0.0:
 		col = Color(1, 0.5, 0.5)
 	var side := 1.0 if facing.x >= 0.0 else -1.0

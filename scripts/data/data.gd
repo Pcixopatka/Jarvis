@@ -816,17 +816,7 @@ const LOYALTY_DISCOUNT := [0.0, 0.05, 0.1, 0.2]
 const MAX_ACTIVE_QUESTS := 5
 const MAX_COMPANIONS := 2
 
-const COMPANIONS := {
-	"dzhura": {"name": "Джура", "desc": "Молодий козак із шаблею.\nБ'ється пліч-о-пліч.", "cost": 120, "loyalty": 0,
-		"hp": 90.0, "hp_lvl": 15.0, "dmg": 8.0, "dmg_lvl": 2.0, "range": 55.0, "cd": 0.7, "speed": 250.0,
-		"color": Color(0.2, 0.45, 0.75)},
-	"strilets": {"name": "Стрілець", "desc": "Влучно стріляє з рушниці\nз безпечної відстані.", "cost": 250, "loyalty": 1,
-		"hp": 60.0, "hp_lvl": 10.0, "dmg": 14.0, "dmg_lvl": 3.0, "range": 420.0, "cd": 1.6, "speed": 230.0,
-		"color": Color(0.3, 0.5, 0.25)},
-	"znakhar": {"name": "Знахарка", "desc": "Лікує козака й загін\nцілющими травами.", "cost": 400, "loyalty": 2,
-		"hp": 55.0, "hp_lvl": 9.0, "dmg": 5.0, "dmg_lvl": 1.0, "range": 300.0, "cd": 1.4, "speed": 240.0,
-		"heal": 10.0, "heal_lvl": 2.5, "color": Color(0.85, 0.85, 0.9)},
-}
+## Найманці (ім'я, ціна, сила, механіка бою) — у data/companions.json (див. GameDB).
 
 
 static func loyalty_level(points: int) -> int:

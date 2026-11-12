@@ -669,8 +669,8 @@ static func _tavern(game, city: String) -> Control:
 			v.add_child(row)
 	v.add_child(UI.label("Найняти", 24, UI.GOLD, false))
 	var lvl: int = w.loyalty_level(city)
-	for type in Data.COMPANIONS:
-		var info: Dictionary = Data.COMPANIONS[type]
+	for type in GameDB.companion_ids():
+		var info: Dictionary = GameDB.companion(type)
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
 		var col := VBoxContainer.new()
@@ -679,7 +679,7 @@ static func _tavern(game, city: String) -> Control:
 		var st: Dictionary = game.Party.stats(type, start_lvl)
 		col.add_child(UI.label("%s — рівень %d • здоров'я %d, шкода %d" % [info["name"], start_lvl, st["hp"], st["dmg"]], 22, UI.TEXT, false))
 		col.add_child(UI.label(info["desc"].replace("\n", " "), 16, UI.MUTED, false))
-		var need: int = info["loyalty"]
+		var need: int = info["hire"]["loyalty"]
 		if lvl < need:
 			col.add_child(UI.label("Потрібна лояльність міста: %s" % Data.LOYALTY_NAMES[need], 16, UI.BAD, false))
 		row.add_child(col)

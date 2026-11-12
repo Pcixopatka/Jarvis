@@ -1,0 +1,72 @@
+{
+	"pes": {
+		"num": 3201,
+		"name": "Пес Сірко",
+		"desc": "Вірний пес бігає за героєм і зносить до нього монети, речі й ресурси здалеку.",
+		"stable": {
+			"stat": "pickup",
+			"base": 0.4,
+			"per": 0.2,
+			"text": "радіус збору здобичі +%d%%",
+			"gold": 15000,
+			"res": {"trophy": 20, "herbs": 100}
+		},
+		"mechanic": "pet/pes"
+	},
+	"kit": {
+		"num": 3202,
+		"name": "Кіт Воркіт",
+		"desc": "Кіт приносить удачу: з ним наука йде швидше.",
+		"stable": {
+			"stat": "xp",
+			"base": 0.03,
+			"per": 0.02,
+			"text": "досвід +%d%%",
+			"gold": 20000,
+			"res": {"trophy": 30, "herbs": 200}
+		},
+		"mechanic": "pet/kit"
+	},
+	"voron": {
+		"num": 3203,
+		"name": "Ворон Карк",
+		"desc": "Ворон здалеку бачить, де лежить добро, і каже про це господареві.",
+		"stable": {
+			"stat": "res",
+			"base": 0.2,
+			"per": 0.15,
+			"text": "ресурси з нечисті падають на %d%% частіше",
+			"gold": 30000,
+			"res": {"trophy": 40, "iron": 300}
+		},
+		"mechanic": "pet/voron"
+	},
+	"kin": {
+		"num": 3204,
+		"name": "Кінь Гнідко",
+		"desc": "Добрий кінь скорочує дорогу. У бій героя не супроводжує: чекає на узліссі.",
+		"stable": {
+			"stat": "travel",
+			"base": 0.3,
+			"per": 0.15,
+			"text": "дорога мапою швидша на %d%%",
+			"gold": 40000,
+			"res": {"trophy": 50, "wood": 300}
+		}
+	},
+	"khovanets": {
+		"num": 3205,
+		"gift": true,
+		"mechanic": "pet/khovanets"
+	},
+	"skakun": {
+		"num": 3206,
+		"gift": true,
+		"mechanic": "pet/skakun"
+	},
+	"mazha": {
+		"num": 3207,
+		"gift": true,
+		"mechanic": "pet/mazha"
+	}
+}

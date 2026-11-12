@@ -43,6 +43,7 @@ func _run() -> void:
 	var t0 = Time.get_ticks_msec()
 	_suite_data()
 	_suite_game_db()
+	_suite_party_db()
 	_suite_player()
 	_suite_save()
 	_suite_city()
@@ -165,6 +166,7 @@ func _run() -> void:
 	await _suite_artifact_bag_icon()
 	await _suite_stun_arena()
 	await _suite_mechanics()
+	await _suite_party_mechanics()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -864,7 +866,7 @@ func _suite_heroes() -> void:
 	HS.join(w, p, d2["hero"])
 	check(w.companions.size() == 2 and HS.waiting(w).is_empty(), "покликали з корчми")
 	check(not w.has_companion("dzhura") and not w.has_companion("znakhar"), "побратими не займають місце найманців")
-	check(HS.member_name(w.companions[0]) != Data.COMPANIONS[w.companions[0]["type"]]["name"], "побратима звуть на ймення")
+	check(HS.member_name(w.companions[0]) != GameDB.companion(w.companions[0]["type"])["name"], "побратима звуть на ймення")
 	check(HS.power(w, "petro") > 1.0, "побратим сильніший за найманця")
 	var w2 = WorldState.new()
 	w2.story = {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 1}}
@@ -10108,7 +10110,6 @@ func _suite_events_wiki() -> void:
 		rules_ok = rules_ok and WS.SLOT_MAIN.has(Data.SLOT_PRIMARY[sl])
 	check(rules_ok, "стани, властивості еліт і речей — усі з назвами")
 	# Вміння, Загартування, найманці, побратими й досягнення: усе з таблиць гри є в довіднику
-	var Heroes = load("res://scripts/data/heroes.gd")
 	var Ach = load("res://scripts/data/achievements.gd")
 	var has_title := func(name: String) -> bool:
 		if titles.has(name):
@@ -10128,12 +10129,12 @@ func _suite_events_wiki() -> void:
 			for perk in tier:
 				if not has_title.call(str(perk["name"])):
 					lost.append(perk["name"])
-	for id in Data.COMPANIONS:
-		if not has_title.call(str(Data.COMPANIONS[id]["name"])):
-			lost.append(Data.COMPANIONS[id]["name"])
-	for id in Heroes.HEROES:
-		if not has_title.call(str(Heroes.HEROES[id]["name"])):
-			lost.append(Heroes.HEROES[id]["name"])
+	for id in GameDB.companion_ids():
+		if not has_title.call(str(GameDB.companion(id)["name"])):
+			lost.append(GameDB.companion(id)["name"])
+	for id in GameDB.hero_ids():
+		if not has_title.call(str(GameDB.hero(id)["name"])):
+			lost.append(GameDB.hero(id)["name"])
 	for a in Ach.ACHIEVEMENTS:
 		if not has_title.call(str(a["name"])):
 			lost.append(a["name"])
@@ -12823,17 +12824,17 @@ func _suite_pets() -> void:
 	# ---- Дані ----
 	var data_ok := true
 	var stats := {}
-	for id in Pets.ORDER:
-		var D: Dictionary = Pets.DEFS[id]
+	for id in Pets.ids():
+		var D: Dictionary = Pets.def(id)["stable"]
 		stats[D["stat"]] = true
-		data_ok = data_ok and str(D["name"]) != "" and "%d" in str(D["text"]) and Pets.value(id, Pets.MAX_LEVEL) > Pets.value(id, 1) and Pets.value(id, 1) > 0.0 and int(Pets.cost(id, 2)["gold"]) == 2 * int(Pets.cost(id, 1)["gold"])
+		data_ok = data_ok and Pets.pet_name(id) != "" and "%d" in str(D["text"]) and Pets.value(id, Pets.MAX_LEVEL) > Pets.value(id, 1) and Pets.value(id, 1) > 0.0 and int(Pets.cost(id, 2)["gold"]) == 2 * int(Pets.cost(id, 1)["gold"])
 		for r in D["res"]:
 			data_ok = data_ok and (CampD.RESOURCES.has(r) or r == CampD.TROPHY)
-	check(data_ok and Pets.ORDER.size() == Pets.DEFS.size() and stats.size() == 4, "чотири улюбленці з різним хистом, ціни ростуть зі ступенем")
+	check(data_ok and Pets.ids() == ["pes", "kit", "voron", "kin"] and stats.size() == 4, "чотири улюбленці з різним хистом, ціни ростуть зі ступенем")
 	var goal_ok := false
 	for a in Ach.ACHIEVEMENTS:
 		if str(a["id"]) == "pet_20":
-			goal_ok = int(a["goal"]) == Pets.ORDER.size() * Pets.MAX_LEVEL
+			goal_ok = int(a["goal"]) == Pets.ids().size() * Pets.MAX_LEVEL
 	check(goal_ok, "досягнення «Повна стайня» рахує всіх улюбленців і ступені")
 	# ---- Купівля, годування, вибір ----
 	var w = WorldState.new()
@@ -12874,8 +12875,8 @@ func _suite_pets() -> void:
 		if str(e["title"]) == "Улюбленці":
 			art = str(e["text"])
 	var art_ok := art != ""
-	for id in Pets.ORDER:
-		art_ok = art_ok and str(Pets.DEFS[id]["name"]) in art and str(int(Pets.DEFS[id]["gold"])) in art
+	for id in Pets.ids():
+		art_ok = art_ok and Pets.pet_name(id) in art and str(int(Pets.cost(id, 1)["gold"])) in art
 	check(art_ok, "довідник описує всіх улюбленців із цінами")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
@@ -13800,10 +13801,10 @@ func _suite_divine() -> void:
 			kinds.append(n.kind)
 	check("khovanets" in kinds and "mazha" in kinds, "Хованець і мажа йдуть за героєм у бою: %s" % str(kinds))
 	# мажу тягне герой: вона на голоблях, сама не їде
-	var PetS = game.combat.PetScript
+	var PetS = load("res://scripts/mechanics/pet/mazha.gd")  # голоблі й довжина — у механіці мажі
 	var cart = null
 	for n in game.combat.entities.get_children():
-		if n.get_script() == PetS and n.kind == "mazha":
+		if n.get_script() == game.combat.PetScript and n.kind == "mazha":
 			cart = n
 	_clear_enemies(game)
 	await _frames(3)
@@ -17739,3 +17740,221 @@ func _suite_mechanics() -> void:
 	_clear_enemies(game)
 	game.queue_free()
 	await _frames(2)
+
+
+## Шукає в переліку проблем кожен очікуваний шматок; повертає ті, яких не знайшлося.
+func _missed(found: Array, expect: Array) -> Array:
+	var out := []
+	for x in expect:
+		var hit := false
+		for p in found:
+			hit = hit or x in str(p)
+		if not hit:
+			out.append(x)
+	return out
+
+
+func _suite_party_db() -> void:
+	suite("База: загін і улюбленці")
+	var Pets = load("res://scripts/data/pets.gd")
+	check(GameDB.companion_ids() == ["dzhura", "strilets", "znakhar"] and GameDB.hero_ids() == ["petro", "yaryna", "oksana"] and GameDB.pet_ids() == ["pes", "kit", "voron", "kin", "khovanets", "skakun", "mazha"], "три найманці, три побратими, чотири улюбленці й три супутники з дарів у порядку файлу")
+	# Числа: цілі цілі, дробові дробові, колір — Color
+	var types_ok := true
+	for id in GameDB.companion_ids():
+		var C: Dictionary = GameDB.companion(id)
+		types_ok = types_ok and typeof(C["num"]) == TYPE_INT and typeof(C["hire"]["cost"]) == TYPE_INT and typeof(C["hire"]["loyalty"]) == TYPE_INT and typeof(C["color"]) == TYPE_COLOR
+		for k in C["stats"]:
+			types_ok = types_ok and typeof(C["stats"][k]) == TYPE_FLOAT
+	for id in GameDB.hero_ids():
+		var H: Dictionary = GameDB.hero(id)
+		var o: Dictionary = H["quest"]["objective"]
+		types_ok = types_ok and typeof(H["num"]) == TYPE_INT and typeof(H["quest_bond"]) == TYPE_INT and typeof(H["mult"]) == TYPE_FLOAT and typeof(H["bonded"]) == TYPE_FLOAT and typeof(H["color"]) == TYPE_COLOR
+		types_ok = types_ok and (not o.has("count") or typeof(o["count"]) == TYPE_INT) and (not o.has("chance") or typeof(o["chance"]) == TYPE_FLOAT)
+		types_ok = types_ok and typeof(H["meet"][0]) == TYPE_ARRAY and typeof(H["meet"][0][1]) == TYPE_STRING
+	for id in GameDB.pet_ids():
+		var R: Dictionary = GameDB.pet(id)
+		types_ok = types_ok and typeof(R["num"]) == TYPE_INT
+		if R.has("stable"):
+			types_ok = types_ok and typeof(R["stable"]["gold"]) == TYPE_INT and typeof(R["stable"]["base"]) == TYPE_FLOAT and typeof(R["stable"]["per"]) == TYPE_FLOAT
+			for r in R["stable"]["res"]:
+				types_ok = types_ok and typeof(R["stable"]["res"][r]) == TYPE_INT
+	check(types_ok, "цілі поля загону й улюбленців цілі, дробові дробові, колір — Color")
+	var o2: Dictionary = GameDB.hero("oksana")["quest"]["objective"]
+	check("%d/%d" % [3, o2["count"]] == "3/20" and {20: true}.has(o2["count"]) and Pets.cost("pes", 2)["trophy"] / 3 == 13 and "%d" % GameDB.companion("dzhura")["hire"]["cost"] == "120", "цілі з JSON поводяться як цілі: %d, ключ словника, ділення")
+	# Номери сталі, унікальні, пошук за номером
+	var pinned := {"companions": {"dzhura": 3001, "strilets": 3002, "znakhar": 3003}, "heroes": {"petro": 3101, "yaryna": 3102, "oksana": 3103},
+		"pets": {"pes": 3201, "kit": 3202, "voron": 3203, "kin": 3204, "khovanets": 3205, "skakun": 3206, "mazha": 3207}}
+	var nums_ok := true
+	for t in pinned:
+		var seen := {}
+		for id in GameDB.ids(t):
+			var n: int = GameDB.row(t, id)["num"]
+			nums_ok = nums_ok and not seen.has(n) and GameDB.by_num(t, n) == id
+			seen[n] = id
+		for id in pinned[t]:
+			nums_ok = nums_ok and int(GameDB.row(t, id)["num"]) == int(pinned[t][id])
+		nums_ok = nums_ok and seen.size() == pinned[t].size()
+	check(nums_ok and GameDB.by_num("pets", 3001) == "" and GameDB.by_num("companions", 3101) == "", "номери загону й улюбленців сталі, не повторюються, ведуть до свого запису")
+	# Лише для читання, без копій; невідомий id
+	var C0: Dictionary = GameDB.companion("dzhura")
+	check(C0.is_read_only() and C0["stats"].is_read_only() and GameDB.hero("petro")["meet"].is_read_only() and GameDB.hero("petro")["meet"][0].is_read_only() and GameDB.pet("pes")["stable"]["res"].is_read_only() and is_same(C0, GameDB.companion("dzhura")) and Pets.ids().is_read_only(), "записи заморожені, віддаються без копій")
+	check(GameDB.companion("nema").is_empty() and GameDB.hero("nema").is_empty() and GameDB.pet("nema").is_empty() and load("res://scripts/game/hero_service.gd").info("nema").is_empty() and Pets.value("nema", 3) == 0.0 and not Pets.follows("nema") and not Pets.gift_follows("nema", "pet"), "невідомий id: порожній запис, нуль хисту, у бій не йде")
+	# Хто ходить за героєм у бою: улюбленці стайні з механікою, а з дарів — лише в своєму гнізді
+	check(Pets.ids() == ["pes", "kit", "voron", "kin"] and Pets.follows("pes") and Pets.follows("kit") and Pets.follows("voron") and not Pets.follows("kin") and not Pets.follows("khovanets"), "за героєм ходять пес, кіт і ворон, кінь — ні")
+	check(Pets.gift_follows("khovanets", "pet") and Pets.gift_follows("skakun", "pet") and Pets.gift_follows("mazha", "cart") and not Pets.gift_follows("mazha", "pet") and not Pets.gift_follows("pes", "pet"), "супутники з дарів ходять за героєм зі своїх гнізд")
+	# Файли в єдиному вигляді й проходять перевірку
+	var Fmt = load("res://tools/data_format.gd")
+	var raws := {}
+	for t in ["companions", "heroes", "pets"]:
+		var text := FileAccess.get_file_as_string(GameDB.path_of(t))
+		raws[t] = JSON.parse_string(text)
+		check(Fmt.format_table(t, raws[t]) == text and not "\\u0" in text and GameDB.validate(t, raws[t]).is_empty(), "%s.json у єдиному вигляді й проходить перевірку" % t)
+	# Механіки: кожен найманець і кожен, хто ходить за героєм, має свій файл від своєї основи
+	var CM = load("res://scripts/mechanics/companion_mechanic.gd")
+	var PM = load("res://scripts/mechanics/pet_mechanic.gd")
+	var Loader = load("res://scripts/mechanics/loader.gd")
+	var mech_ok := true
+	for id in GameDB.companion_ids():
+		var s: Script = CM.script_of(GameDB.companion(id)["mechanic"])
+		mech_ok = mech_ok and s != null and s.resource_path == "res://scripts/mechanics/companion/%s.gd" % id
+	for id in GameDB.pet_ids():
+		var ref: String = str(GameDB.pet(id).get("mechanic", ""))
+		mech_ok = mech_ok and (ref == "" if id == "kin" else PM.script_of(ref) != null and ref == "pet/" + id)
+	check(mech_ok and GameDB.mechanic_files("companion") == ["companion/dzhura", "companion/strilets", "companion/znakhar"] and GameDB.mechanic_files("pet").size() == 6, "кожен найманець і кожен супутник героя має свою механіку, сиріт нема")
+	check(CM.script_of("pet/pes") == null and PM.script_of("companion/dzhura") == null and load("res://scripts/mechanics/mechanic.gd").script_of("pet/pes") == null and Loader.extends_base(PM.script_of("pet/mazha"), PM.BASE_PATH), "механіка чужої родини не підходить: основа перевіряється")
+	check(CM.hooks_of(CM.script_of("companion/znakhar")) == CM.TICK and CM.hooks_of(CM.script_of("companion/dzhura")) == 0 and PM.hooks_of(PM.script_of("pet/mazha")) == PM.MOVE and PM.hooks_of(PM.script_of("pet/pes")) == 0, "рушій кличе лише написані хуки: знахарка лікує щокадру, мажа їде сама")
+	# Перевірка ловить зламані записи
+	var bc: Dictionary = raws["companions"].duplicate(true)
+	bc["dzhura"]["stats"].erase("hp")
+	bc["dzhura"]["hire"]["cost"] = 120.5
+	bc["strilets"]["hire"]["loyalty"] = 9
+	bc["strilets"]["num"] = 3001
+	bc["znakhar"]["mechanic"] = "pet/pes"
+	bc["znakhar"]["colour"] = [1, 0, 0]
+	var miss := _missed(GameDB.validate("companions", bc), ["companions/dzhura.stats: немає обов'язкового поля «hp»", "companions/dzhura.hire.cost: має бути цілим", "«hire.loyalty» має бути від 0", "номер 3001", "companions/znakhar: «mechanic» має бути", "«colour»", "механіка res://scripts/mechanics/companion/znakhar.gd нікому не потрібна"])
+	check(miss.is_empty(), "перевірка ловить зламаного найманця%s" % ("" if miss.is_empty() else ": не впіймала " + str(miss)))
+	var bh: Dictionary = raws["heroes"].duplicate(true)
+	bh["petro"]["base"] = "kozak"
+	bh["petro"]["join"]["if"] = "camp=7"
+	bh["petro"]["meet"][0][0] = "nikhto"
+	bh["petro"]["quest"]["objective"]["loc"] = "nema_mistsia"
+	bh["yaryna"]["join"]["city"] = "atlantyda"
+	bh["yaryna"]["join"]["after"] = "nema_kroku"
+	bh["yaryna"]["quest"]["objective"].erase("item")
+	bh["yaryna"]["quest"]["objective"]["enemy"] = "chort"
+	bh["yaryna"]["meet"][1] = ["yaryna"]
+	bh["oksana"]["quest"]["objective"]["type"] = "hunt"
+	bh["oksana"]["quest_bond"] = 80.5
+	bh["oksana"]["num"] = 3101
+	miss = _missed(GameDB.validate("heroes", bh), ["heroes/petro: «base» посилається на найманця «kozak»", "«join.if» — нема кроку «camp» із вибором 7", "мовця «nikhto»", "нема місця «nema_mistsia»", "невідоме місто «atlantyda»", "нема кроку сюжету «nema_kroku»", "мета «fetch» потребує «item»", "«chort» не водиться в «rapids»", "heroes/yaryna.meet[1]: має бути 2 значень", "«hunt» — не з переліку", "heroes/oksana.quest_bond: має бути цілим", "номер 3101"])
+	check(miss.is_empty(), "перевірка ловить зламаного побратима%s" % ("" if miss.is_empty() else ": не впіймала " + str(miss)))
+	var bp: Dictionary = raws["pets"].duplicate(true)
+	bp["pes"]["stable"]["stat"] = "luck"
+	bp["pes"]["stable"]["res"]["gems"] = 5
+	bp["kit"]["gift"] = true
+	bp["kit"]["stable"]["text"] = "досвід більший"
+	bp["voron"].erase("mechanic")
+	bp["kin"]["stable"]["gold"] = 40000.5
+	bp["skakun"]["mechanic"] = "pet/nema_takoho"
+	bp.erase("mazha")
+	bp["kolobok"] = {"num": 3299, "gift": true, "mechanic": "pet/pes"}
+	miss = _missed(GameDB.validate("pets", bp), ["«luck» — не з переліку", "невідомий ресурс «gems»", "pets/kit: має бути або «stable»", "має містити %d", "механіка res://scripts/mechanics/pet/voron.gd нікому не потрібна", "pets/kin.stable.gold: має бути цілим", "pets/skakun: «mechanic» посилається на res://scripts/mechanics/pet/nema_takoho.gd, а такого файлу нема", "божий дар «mazha» (гніздо «cart») не має запису", "божого дару «kolobok» нема", "механіка res://scripts/mechanics/pet/mazha.gd нікому не потрібна"])
+	check(miss.is_empty(), "перевірка ловить зламаного улюбленця%s" % ("" if miss.is_empty() else ": не впіймала " + str(miss)))
+	# Нормалізація нових типів: список, словник, перелік
+	var norm: Array = GameDB._normalize_rows("pets", JSON.parse_string('{"t": {"num": 9, "name": "Т", "desc": "Т", "stable": {"stat": "xp", "base": 1, "per": 0, "text": "%d", "gold": 7.0, "res": {"wood": 3.0, "iron": 1}}}}'))
+	var T: Dictionary = norm[0]["t"]
+	check(norm[1].is_empty() and typeof(T["stable"]["gold"]) == TYPE_INT and typeof(T["stable"]["base"]) == TYPE_FLOAT and typeof(T["stable"]["res"]["wood"]) == TYPE_INT and T["stable"]["res"].keys() == ["wood", "iron"], "нормалізація зводить словник ресурсів до цілих і зберігає порядок")
+
+
+func _suite_party_mechanics() -> void:
+	suite("Механіки загону й улюбленців: кожен стає до бою")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full"]:
+		game.world.hints[k] = true
+	gp.level = 20
+	gp.recalc()
+	game.enter_location("wild_field")
+	await _frames(4)
+	_clear_enemies(game)
+	await _frames(1)
+	var c = game.combat
+	c.spawn_timer = 1.0e9
+	var HS = load("res://scripts/game/hero_service.gd")
+	# Кожен найманець і кожен побратим: окремо, проти одного міцного упиря
+	var who := []
+	for t in GameDB.companion_ids():
+		who.append({"type": t, "downed": false, "level": 15})
+	for id in GameDB.hero_ids():
+		var h: Dictionary = HS.info(id)
+		who.append({"type": h["base"], "downed": false, "level": 15, "hero": id, "mult": float(h["mult"]), "name": h["name"], "color": h["color"]})
+	var bad := []
+	for d in who:
+		_clear_enemies(game)
+		for x in c.companion_nodes:
+			x.queue_free()
+		c.companion_nodes.clear()
+		await _frames(1)
+		gp.hp = gp.max_hp * 0.5
+		gp.invuln = 99.0
+		c._spawn_companions([d])
+		var cn = c.companion_nodes[0]
+		c.spawn_enemy("upyr", 10, false, gp.global_position + Vector2(0, -150))
+		var e = c._last_enemy()
+		e.max_hp = 1.0e7
+		e.hp = e.max_hp
+		cn.hp = cn.max_hp * 0.3  # знахарка підлікує й себе
+		var hp0: float = cn.hp
+		for i in 240:
+			e.global_position = gp.global_position + Vector2(0, -150)
+			e.stun = 1.0
+			await process_frame
+		var label := "%s/%s" % [d["type"], d.get("hero", "")]
+		var ok: bool = cn.mechanic != null and cn.mechanic.get_script().resource_path.ends_with("/companion/%s.gd" % d["type"]) and e.hp < e.max_hp
+		if d.has("color"):
+			ok = ok and cn.color == d["color"] and cn.display_name == d["name"]
+		else:
+			ok = ok and cn.color == GameDB.companion(d["type"])["color"]
+		if d["type"] == "znakhar":
+			ok = ok and cn.hp > hp0  # лікує (і себе теж): ворог приголомшений і не б'є
+		if not ok:
+			bad.append(label)
+	check(bad.is_empty(), "кожен найманець і побратим б'є свою ціль (знахарка ще й лікує)%s" % ("" if bad.is_empty() else ": " + str(bad)))
+	check(c._companion_states()[0]["color"] == GameDB.hero("oksana")["color"] and GameDB.companion("strilets")["color"] == Color(0.3, 0.5, 0.25), "колір побратима свій, а запис найманця не змінено")
+	for x in c.companion_nodes:
+		x.queue_free()
+	c.companion_nodes.clear()
+	# Кожен, хто ходить за героєм: стає до бою й наздоганяє героя
+	var PetScript = c.PetScript
+	var pbad := []
+	for id in GameDB.pet_ids():
+		if not GameDB.pet(id).has("mechanic"):
+			continue
+		var pet = PetScript.new()
+		pet.setup(c, gp, id)
+		pet.position = gp.position + Vector2(-40, 24)
+		c.entities.add_child(pet)
+		var start: Vector2 = pet.position
+		gp.position += Vector2(300, 0)
+		await _frames(60)
+		var ok: bool = pet.mechanic != null and pet.mechanic.get_script().resource_path.ends_with("/pet/%s.gd" % id) and pet.position.distance_to(gp.position) < 150.0 and pet.position != start
+		ok = ok and pet._fetches == (id in ["pes", "khovanets"])
+		if not ok:
+			pbad.append(id)
+		pet.queue_free()
+		gp.position -= Vector2(300, 0)
+		await _frames(1)
+	check(pbad.is_empty(), "кожен улюбленець і супутник із дару стає до бою й наздоганяє героя%s" % ("" if pbad.is_empty() else ": " + str(pbad)))
+	game.queue_free()
+	await _frames(3)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
