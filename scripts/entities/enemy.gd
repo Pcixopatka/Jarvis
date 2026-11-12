@@ -373,6 +373,12 @@ func _pick_target():
 	return best
 
 
+## Тримає ворога в межах арени (відступ на його радіус).
+func _clamp_to_arena() -> void:
+	var pad := Vector2(radius, radius)
+	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
+
+
 func _process(delta: float) -> void:
 	if dead:
 		dying -= delta
@@ -433,6 +439,7 @@ func _process(delta: float) -> void:
 		stun -= delta * (2.5 if style != "" else 1.0)  # суперник у герці оговтується швидше
 		windup = 0.0
 		position += knockback * delta
+		_clamp_to_arena()  # інакше удари по приголомшеному виштовхують його за край мапи
 		knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 		queue_redraw()
 		return
@@ -490,8 +497,7 @@ func _process(delta: float) -> void:
 	knockback = knockback.move_toward(Vector2.ZERO, 1400.0 * delta)
 	anim_moving = vel.length() > 25.0
 	position += vel * delta
-	var pad := Vector2(radius, radius)
-	position = position.clamp(combat.arena.position + pad, combat.arena.end - pad)
+	_clamp_to_arena()
 
 	# Ближня атака із замахом: ворог червоніє, і за мить б'є, якщо ціль досі поруч
 	if windup > 0.0:

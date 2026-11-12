@@ -161,6 +161,7 @@ func _run() -> void:
 	await _suite_xp_gold_cap()
 	await _suite_reforge_rare()
 	await _suite_artifact_bag_icon()
+	await _suite_stun_arena()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -17373,5 +17374,104 @@ func _suite_artifact_bag_icon() -> void:
 	check(chest_ok and not ckeys.has(generic), "у скрині роду й торбі поруч артефакти теж зі спрайтами босів")
 	game.queue_free()
 	await _frames(3)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Приголомшений ворог під ударами: відкидання лишається, але за край арени його не виносить.
+func _suite_stun_arena() -> void:
+	suite("Приголомшений ворог не вилітає за край арени")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full"]:
+		gw.hints[k] = true
+	game.enter_location("wild_field")
+	await _frames(4)
+	_clear_enemies(game)
+	var c = game.combat
+	var ar: Rect2 = c.arena
+	var gap := 40.0  # ближче до краю, ніж відкидає за кілька кадрів
+	var spawn := func(pos: Vector2):
+		c.spawn_enemy("upyr", 5, false, pos)
+		var e = c._last_enemy()
+		e.max_hp = 1.0e9
+		e.hp = e.max_hp
+		return e
+	# Чи ворог у межах арени, звуженої на його радіус (з невеликим допуском на округлення)
+	var inside := func(e) -> bool:
+		var pad := Vector2(e.radius, e.radius) - Vector2(0.01, 0.01)
+		return Rect2(ar.position + pad, ar.size - pad * 2.0).has_point(e.position)
+	# Б'ємо приголомшеного: щокілька кадрів відкидання додається знову, як від нових ударів
+	var pound := func(e, kb: Vector2, frames: int) -> bool:
+		var ok := true
+		for i in frames:
+			gp.hp = gp.max_hp
+			gp.invuln = 1.0
+			e.stun = 5.0
+			if i % 8 == 0:
+				e.knockback += kb
+			await process_frame
+			if not inside.call(e):
+				ok = false
+		return ok
+	check(ar.size.x > 400.0 and ar.size.y > 400.0, "арена бою має розмір")
+	# 1. Біля правого краю, сильне відкидання назовні
+	var e1 = spawn.call(Vector2(ar.end.x - gap, ar.get_center().y))
+	check(await pound.call(e1, Vector2(3000, 0), 60), "приголомшений біля правого краю під ударами назовні лишається в арені")
+	check(absf(e1.position.x - (ar.end.x - e1.radius)) < 1.0, "його притиснуло до краю, а не зупинило раніше")
+	# 2. Біля лівого краю, відкидання ліворуч
+	var e2 = spawn.call(Vector2(ar.position.x + gap, ar.get_center().y + 120.0))
+	check(await pound.call(e2, Vector2(-3000, 0), 60), "приголомшений біля лівого краю під ударами назовні лишається в арені")
+	# 3. Кут: назовні за обома осями
+	var e3 = spawn.call(ar.end - Vector2(gap, gap))
+	check(await pound.call(e3, Vector2(2500, 2500), 60), "приголомшений у куті під ударами навскіс лишається в арені")
+	check(absf(e3.position.x - (ar.end.x - e3.radius)) < 1.0 and absf(e3.position.y - (ar.end.y - e3.radius)) < 1.0, "у куті його притиснуло до обох країв")
+	var e4 = spawn.call(ar.position + Vector2(gap, gap))
+	check(await pound.call(e4, Vector2(-2500, -2500), 60), "приголомшений у протилежному куті лишається в арені")
+	for e in [e1, e2, e3, e4]:
+		e.stun = 0.0
+		e.knockback = Vector2.ZERO
+	_clear_enemies(game)
+	await _frames(2)
+	# 4. Посеред арени відкидання й далі штовхає приголомшеного
+	var mid := ar.get_center() + Vector2(0, -150)
+	var e5 = spawn.call(mid)
+	e5.stun = 5.0
+	e5.knockback = Vector2(600, 0)
+	for i in 10:
+		gp.invuln = 1.0
+		e5.stun = 5.0
+		await process_frame
+	check(e5.position.x - mid.x > 40.0 and absf(e5.position.y - mid.y) < 1.0, "посеред арени приголомшеного відкидає, як і раніше")
+	check(e5.knockback.length() < 600.0, "відкидання приголомшеного й далі згасає")
+	_clear_enemies(game)
+	await _frames(2)
+	# 5. Не приголомшений біля краю: як і раніше, лишається в арені
+	var e6 = spawn.call(Vector2(ar.end.x - gap, ar.get_center().y))
+	var ok6 := true
+	for i in 60:
+		gp.hp = gp.max_hp
+		gp.invuln = 1.0
+		e6.stun = 0.0
+		if i % 8 == 0:
+			e6.knockback += Vector2(3000, 0)
+		await process_frame
+		if not inside.call(e6):
+			ok6 = false
+	check(ok6, "не приголомшений біля краю під відкиданням лишається в арені")
+	_clear_enemies(game)
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
