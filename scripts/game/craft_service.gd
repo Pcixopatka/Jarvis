@@ -17,7 +17,7 @@ const RECIPES := [["weapon", "sabre"], ["weapon", "mace"], ["weapon", "pike"], [
 
 
 static func recipe_name(slot: String, type: String) -> String:
-	return Data.WEAPON_TYPES[type]["name"] if slot == "weapon" else Data.SLOT_NAMES[slot]
+	return Data.weapon_name(type) if slot == "weapon" else Data.slot_name(slot)
 
 
 ## Ціна кування: {"gold", "iron", "wood", "herbs", "trophy"}.
@@ -83,8 +83,8 @@ static func reforge(world, player, uid: int, affix: String) -> String:
 	var cost := reforge_cost(it)
 	if not can_pay(player, cost):
 		return ""
-	var pool: Array = Data.AFFIX_POOL.duplicate()
-	pool.erase(Data.SLOT_PRIMARY[it["slot"]])
+	var pool: Array = Data.affix_pool().duplicate()
+	pool.erase(Data.slot_primary(it["slot"]))
 	for a in it["affixes"]:
 		pool.erase(a)
 	if pool.is_empty():
@@ -146,7 +146,7 @@ static func renew(world, player, uid: int, levels: int = 0) -> bool:
 		player.recalc()
 		return true
 	it["ilvl"] = target
-	var primary: String = Data.SLOT_PRIMARY[it["slot"]]
+	var primary: String = Data.slot_primary(it["slot"])
 	it["base"] = {primary: Data._primary_value(it["slot"], target, int(it["rarity"]))}
 	for a in it["affixes"].keys():
 		# властивість кидається наново, та нижчою за нинішню не стає: оновлення річ не псує

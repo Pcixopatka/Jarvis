@@ -22,7 +22,7 @@ static func _wrapped(text: String, size: int, col: Color) -> Label:
 static func block(player, item: Dictionary, do: Callable, at_smith: bool, cost_mult: float = 1.0) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
-	if item.is_empty() or not Data.SLOTS.has(item.get("slot", "")):
+	if item.is_empty() or not Data.slots().has(item.get("slot", "")):
 		return v
 	var uid: int = int(item["uid"])
 	if not SoulService.has_socket(item):
@@ -78,8 +78,8 @@ static func insert_text(player, item: Dictionary, id: String) -> String:
 static func active_text(player) -> String:
 	var parts := []
 	for k in player.soul_fx:
-		var cap: bool = is_equal_approx(float(player.soul_fx[k]) * 100.0, float(Souls.FX[k]["cap"]))
-		parts.append(str(Souls.FX[k]["text"]) % str(roundi(float(player.soul_fx[k]) * 100.0)) + (" (межа)" if cap else ""))
+		var cap: bool = is_equal_approx(float(player.soul_fx[k]) * 100.0, float(Souls.fx(k)["cap"]))
+		parts.append(str(Souls.fx(k)["text"]) % str(roundi(float(player.soul_fx[k]) * 100.0)) + (" (межа)" if cap else ""))
 	return ", ".join(parts)
 
 
@@ -104,11 +104,11 @@ static func codex(player) -> Control:
 		var t: int = SoulService.tier(id)
 		if t != last_tier:
 			last_tier = t
-			v.add_child(UI.label(str(Souls.TIER_NAMES[t]) + (" • лише зброя й оберіг" if t >= Souls.BOSS_TIER else ""), 17, Souls.TIER_COLORS[t], false))
+			v.add_child(UI.label(Souls.tier_name(t) + (" • лише зброя й оберіг" if t >= Souls.BOSS_TIER else ""), 17, Souls.tier_color(t), false))
 		var have: int = int(player.souls.get(id, 0))
 		var worn: bool = id in act
 		var mark := ("  діє" if worn else "") + ("  ×%d у торбинці" % have if have > 0 else "")
 		var known_soul: bool = have > 0 or worn
-		v.add_child(_wrapped("%s%s" % [SoulService.soul_name(id), mark if known_soul else "  ще не знайдено"], 16, Souls.TIER_COLORS[t] if known_soul else UI.MUTED))
+		v.add_child(_wrapped("%s%s" % [SoulService.soul_name(id), mark if known_soul else "  ще не знайдено"], 16, Souls.tier_color(t) if known_soul else UI.MUTED))
 		v.add_child(_wrapped(SoulService.fx_text(id), 14, UI.TEXT if known_soul else UI.MUTED))
 	return v

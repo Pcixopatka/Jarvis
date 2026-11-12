@@ -44,6 +44,7 @@ func _run() -> void:
 	_suite_data()
 	_suite_game_db()
 	_suite_party_db()
+	_suite_item_db()
 	_suite_player()
 	_suite_save()
 	_suite_city()
@@ -430,7 +431,7 @@ func _suite_data() -> void:
 					check(skill_ids.has(r), "%s: вміння %s вимагає невідоме %s" % [cls, n["id"], r])
 		var info: Dictionary = Classes.CLASSES[cls]
 		for wt in info["weapons"]:
-			check(Data.WEAPON_TYPES.has(wt), "%s: зброя %s існує" % [cls, wt])
+			check(Data.has_weapon(wt), "%s: зброя %s існує" % [cls, wt])
 		for nx in info["next"]:
 			check(Classes.CLASSES.has(nx), "%s → %s" % [cls, nx])
 	var perk_ids = {}
@@ -440,16 +441,16 @@ func _suite_data() -> void:
 				check(not perk_ids.has(pk["id"]), "дубль перка " + pk["id"])
 				perk_ids[pk["id"]] = true
 	# Речі всіх слотів, рідкостей і типів зброї
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		for r in 4:
-			var types: Array = Data.WEAPON_TYPES.keys() if slot == "weapon" else [""]
+			var types: Array = Data.weapon_ids() if slot == "weapon" else [""]
 			for t in types:
 				var it = Data.gen_item(5, r, slot, t)
 				var st = Data.item_stats(it)
 				check(it["affixes"].size() == r, "%s/%d: кількість бонусів" % [slot, r])
 				check(not st.is_empty(), "%s: порожні бонуси" % slot)
 				for k in st:
-					check(st[k] >= 0.0 and Data.STAT_FMT.has(k), "%s: бонус %s" % [slot, k])
+					check(st[k] >= 0.0 and GameDB.table("bonuses").has(k), "%s: бонус %s" % [slot, k])
 				check(Data.sell_price(it) > 0, "%s: ціна" % slot)
 	var it = Data.gen_item(3, 1, "weapon", "sabre")
 	var prev = 0
@@ -1365,7 +1366,7 @@ func _suite_craft() -> void:
 	var target: String = old_keys[0]
 	var fresh: String = CR.reforge(w, p, leg["uid"], target)
 	check(fresh != "" and not leg["affixes"].has(target) and leg["affixes"].has(fresh) and leg["affixes"].size() == 3, "перекувано одну властивість")
-	check(not (fresh in old_keys) and fresh != Data.SLOT_PRIMARY["amulet"], "нова властивість не повторюється")
+	check(not (fresh in old_keys) and fresh != Data.slot_primary("amulet"), "нова властивість не повторюється")
 	# Оновлення до рівня
 	var story_it = Data.gen_item(3, 3, "weapon", "sabre")
 	story_it["up"] = 4
@@ -7087,21 +7088,21 @@ func _suite_uniques() -> void:
 	var WS = load("res://scripts/game/wiki_service.gd")
 	var Tower = load("res://scripts/game/tower_service.gd")
 	var Depth = load("res://scripts/game/depth_service.gd")
-	check(Uniques.ORDER.size() == Uniques.DEFS.size() and Uniques.ORDER.size() >= 24, "золотих речей %d, порядок збігається з таблицею" % Uniques.DEFS.size())
+	check(Uniques.ids().size() == GameDB.table("golden").size() and Uniques.ids().size() >= 24, "золотих речей %d, порядок збігається з таблицею" % Uniques.ids().size())
 	var ok := true
 	var names := {}
 	var slots := {}
 	var wtypes := {}
 	var per_tier := {}
 	var bad := []
-	for id in Uniques.ORDER:
-		var D: Dictionary = Uniques.DEFS[id]
-		var good: bool = Data.SLOTS.has(D["slot"]) and int(D["tier"]) >= 1 and int(D["tier"]) <= 6 and Uniques.POWERS.has(D["power"]) and str(D["lore"]) != "" and not names.has(D["name"])
+	for id in Uniques.ids():
+		var D: Dictionary = Uniques.def(id)
+		var good: bool = Data.slots().has(D["slot"]) and int(D["tier"]) >= 1 and int(D["tier"]) <= 6 and GameDB.table("powers").has(D["power"]) and str(D["lore"]) != "" and not names.has(D["name"])
 		if D["slot"] == "weapon":
-			good = good and Data.WEAPON_TYPES.has(D["type"])
+			good = good and Data.has_weapon(D["type"])
 			wtypes[D["type"]] = true
 		for a in D["affixes"]:
-			good = good and (a in Data.INT_STATS or Uniques.MID.has(a)) and a != Data.SLOT_PRIMARY[D["slot"]] and not a in ["lifesteal", "regen"]
+			good = good and (Data.is_whole(a) or GameDB.bonus(a).has("mid")) and a != Data.slot_primary(D["slot"]) and not a in ["lifesteal", "regen"]
 		for b in D["bosses"]:
 			good = good and GameDB.has_boss(b)
 		good = good and not "{" in Uniques.power_text(id) and D["affixes"].size() >= 3
@@ -7112,7 +7113,7 @@ func _suite_uniques() -> void:
 			bad.append(id)
 		ok = ok and good
 	check(ok, "кожна золота річ: слот, ступінь, сила з числами, властивості без вампіризму й загоєння, переказ: %s" % str(bad))
-	check(slots.size() == Data.SLOTS.size() and wtypes.size() == Data.WEAPON_TYPES.size(), "золото є для кожного слота й кожного виду зброї")
+	check(slots.size() == Data.slots().size() and wtypes.size() == Data.weapon_ids().size(), "золото є для кожного слота й кожного виду зброї")
 	var tiers_ok := true
 	for t in range(1, 7):
 		tiers_ok = tiers_ok and int(per_tier.get(t, 0)) >= 3
@@ -7147,7 +7148,7 @@ func _suite_uniques() -> void:
 	var pick_ok := true
 	for i in 300:
 		var pid: String = Loot.pick(p, 2, "solovei")
-		var PD: Dictionary = Uniques.DEFS[pid]
+		var PD: Dictionary = Uniques.def(pid)
 		pick_ok = pick_ok and int(PD["tier"]) <= 2 and not (PD["slot"] == "weapon" and PD["type"] in ["staff", "pishchal"])
 	check(pick_ok, "козакові не падає посох чи пищаль, ступінь не вищий за ступінь боса")
 	var fav := 0
@@ -7189,8 +7190,8 @@ func _suite_uniques() -> void:
 		for e in sx["entries"]:
 			titles[str(e["title"])] = str(e["text"])
 	var wiki_ok := titles.has("Золоті речі") and titles.has("Шанс золота") and titles.has("Ступені золота")
-	for id in Uniques.ORDER:
-		var nm: String = str(Uniques.DEFS[id]["name"])
+	for id in Uniques.ids():
+		var nm: String = str(Uniques.def(id)["name"])
 		wiki_ok = wiki_ok and titles.has(nm) and Uniques.power_name(id) in str(titles.get(nm, ""))
 	check(wiki_ok, "у довіднику є правила золота й кожна золота річ із її силою")
 	var UI = load("res://scripts/ui/ui_kit.gd")
@@ -7414,12 +7415,12 @@ func _suite_artifacts() -> void:
 	for b in bosses:
 		if Arts.by_boss(b) == "":
 			missing.append(b)
-	check(missing.is_empty() and Arts.ORDER.size() == Arts.DEFS.size() and Arts.ORDER.size() == bosses.size(), "у кожного з %d босів свій артефакт: %s" % [bosses.size(), str(missing)])
+	check(missing.is_empty() and Arts.ids().size() == GameDB.table("artifacts").size() and Arts.ids().size() == bosses.size(), "у кожного з %d босів свій артефакт: %s" % [bosses.size(), str(missing)])
 	var known := ["st_burn", "st_bleed", "st_chill", "st_weak", "status", "travel", "plague", "potion_max", "mana_potion_max", "dodge_cd", "elite_dmg", "boss_dmg", "stone", "gold", "glory", "res", "unique_luck", "pickup", "trophy", "xp", "death_xp", "enrage", "soul", "set_luck", "dmg"]
 	var data_ok := true
 	var names := {}
-	for id in Arts.ORDER:
-		var D: Dictionary = Arts.DEFS[id]
+	for id in Arts.ids():
+		var D: Dictionary = Arts.def(id)
 		data_ok = data_ok and str(D["name"]) != "" and not names.has(D["name"]) and str(D["text"]) != "" and str(D["lore"]) != "" and GameDB.has_boss(D["boss"]) and not D["bonus"].is_empty()
 		for k in D["bonus"]:
 			data_ok = data_ok and k in known
@@ -7468,8 +7469,8 @@ func _suite_artifacts() -> void:
 		for e in sx["entries"]:
 			titles[str(e["title"])] = str(e["text"])
 	var wiki_ok := titles.has("Артефакти") and titles.has("Де взяти артефакт")
-	for id in Arts.ORDER:
-		wiki_ok = wiki_ok and titles.has(str(Arts.DEFS[id]["name"])) and str(Arts.DEFS[id]["text"]) in str(titles.get(str(Arts.DEFS[id]["name"]), ""))
+	for id in Arts.ids():
+		wiki_ok = wiki_ok and titles.has(str(Arts.def(id)["name"])) and str(Arts.def(id)["text"]) in str(titles.get(str(Arts.def(id)["name"]), ""))
 	check(wiki_ok, "у довіднику є правила й кожен артефакт із бонусом")
 	var card: Control = UI.item_card(hl)
 	var ctext := ""
@@ -7606,24 +7607,24 @@ func _suite_souls() -> void:
 		bosses[b] = true
 	var no_soul := []
 	for k in kinds:
-		if not Souls.SOULS.has(k):
+		if not Souls.has(k):
 			no_soul.append(k)
 	for b in bosses:
-		if not Souls.SOULS.has("b_" + b):
+		if not Souls.has("b_" + b):
 			no_soul.append("b_" + b)
 	check(no_soul.is_empty() and kinds.size() >= 18 and bosses.size() >= 19, "своя душа в кожної нечисті (%d) й кожного боса (%d): %s" % [kinds.size(), bosses.size(), str(no_soul)])
 	var data_ok := true
 	var bad := []
-	for id in Souls.ORDER:
-		var D: Dictionary = Souls.SOULS[id]
+	for id in Souls.ids():
+		var D: Dictionary = Souls.def(id)
 		var t: int = int(D["tier"])
 		var good: bool = str(D["name"]) != "" and str(D["lore"]) != "" and not D["fx"].is_empty() and t >= 1 and t <= 7 and (t >= Souls.BOSS_TIER) == id.begins_with("b_") and not "%s" in SS.fx_text(id) and SS.owner_name(id) != ""
 		for k in D["fx"]:
-			good = good and Souls.FX.has(k) and not k in Souls.FORBIDDEN
+			good = good and GameDB.table("soul_effects").has(k) and not k in Souls.FORBIDDEN
 		if not good:
 			bad.append(id)
 		data_ok = data_ok and good
-	check(data_ok and Souls.ORDER.size() == Souls.SOULS.size() and SS.known().size() == Souls.ORDER.size(), "душі: назва, ступінь, бонуси з відомих ключів, жодного лікування чи наснаги: %s" % str(bad))
+	check(data_ok and Souls.ids().size() == GameDB.table("souls").size() and SS.known().size() == Souls.ids().size(), "душі: назва, ступінь, бонуси з відомих ключів, жодного лікування чи наснаги: %s" % str(bad))
 	check(SS.soul_name("zlyden") == "Душа злидня" and SS.fx_text("b_baba_yaha") == "+10% швидкості бігу, перекид готовий на 10% швидше" and SS.tier("b_vii") == 6, "назви й тексти бонусів")
 	var unknown: Dictionary = SS.info("nova_nechyst")
 	check(str(unknown["name"]) == "Душа невідомої нечисті" and unknown["fx"].has("hp") and int(SS.info("b_nova")["tier"]) == Souls.BOSS_TIER, "нова нечисть без запису теж має просту душу")
@@ -7907,7 +7908,7 @@ func _suite_souls() -> void:
 	gp.add_item(sock_b)
 	game.hud.open_overlay()
 	var probes := []
-	for id in Souls.ORDER:
+	for id in Souls.ids():
 		gp.souls = {id: 2}
 		for itx in [sock_w, sock_b]:
 			var pb: Control = UiSouls.block(gp, itx, nop, true)
@@ -7927,7 +7928,7 @@ func _suite_souls() -> void:
 			tallest = maxf(tallest, b.get_combined_minimum_size().y) if full_w > UiSouls.WIDTH - sb.get_minimum_size().x else tallest
 			if b.clip_text or b.autowrap_mode == TextServer.AUTOWRAP_OFF or b.get_combined_minimum_size().x > UiSouls.WIDTH + 0.5 or first_w > UiSouls.WIDTH:
 				fit_bad.append(str(b.text).replace("\n", " / "))
-	check(probes.size() == Souls.ORDER.size() * 2 and fit_bad.is_empty(), "кнопки «Вселити» всіх %d душ вміщаються в %d, назва в першому рядку, текст не обрізаний: %s" % [Souls.ORDER.size(), UiSouls.WIDTH, str(fit_bad)])
+	check(probes.size() == Souls.ids().size() * 2 and fit_bad.is_empty(), "кнопки «Вселити» всіх %d душ вміщаються в %d, назва в першому рядку, текст не обрізаний: %s" % [Souls.ids().size(), UiSouls.WIDTH, str(fit_bad)])
 	check(tallest > 68.0, "довгий опис переноситься, і кнопка вищає (%.0f)" % tallest)
 	game.hud.close_overlay()  # прибирає й проби
 	game.close_character()
@@ -8188,10 +8189,10 @@ func _suite_hero_screen() -> void:
 	var Arts = load("res://scripts/data/artifacts.gd")
 	# Значок є для кожного виду зброї, кожного слота й артефакта (нова зброя без значка провалить перевірку)
 	var no_icon := []
-	for w in Data.WEAPON_TYPES:
+	for w in Data.weapon_ids():
 		if GfxS.icon_tex(UI.item_icon_id({"slot": "weapon", "type": w})) == null:
 			no_icon.append(w)
-	for sl in Data.SLOTS:
+	for sl in Data.slots():
 		if sl != "weapon" and GfxS.icon_tex(UI.item_icon_id({"slot": sl, "type": ""})) == null:
 			no_icon.append(sl)
 	check(no_icon.is_empty() and GfxS.icon_tex(UI.item_icon_id(Arts.make("zmiiv_zub"))) != null and GfxS.icon_tex("it_soul") != null, "значок є для кожної зброї, слота, артефакта й душі: %s" % str(no_icon))
@@ -8253,7 +8254,7 @@ func _suite_hero_screen() -> void:
 	check("Вдягнуто" in labels and "Шкода за секунду" in labels and ("Торба %d/%d" % [p.inventory.size(), p.bag_size()]) in labels and "Вампіризм" in labels and "Очки" in labels, "на одному екрані зведення, вдягнене, очки, показники й торба")
 	check(plus.size() == 4 and not plus[0].disabled, "чотири кнопки «+» для характеристик")
 	# до клітинок речей додались чотири гнізда божих дарів (вони трохи менші, але теж квадратні кнопки)
-	var gift_slots: int = load("res://scripts/data/divine.gd").SLOTS.size()
+	var gift_slots: int = load("res://scripts/data/divine.gd").slots().size()
 	check(cells.size() == worn + p.inventory.size() + gift_slots and empties.size() == (6 - worn) + (p.bag_size() - p.inventory.size()), "клітинок із речами %d, порожніх %d: уся торба й усі шість слотів на видноті" % [cells.size(), empties.size()])
 	var str0: int = p.stat("str")
 	game.char_do("stat", "str")
@@ -8735,7 +8736,7 @@ func _suite_pickup_filter() -> void:
 	SaveSystem.save_settings({"sound": keep["sound"], "music": keep["music"], "autosell": keep["autosell"], "pickup": [false, true, false, true]})
 	check(SaveSystem.load_settings()["pickup"] == [false, true, false, true], "фільтр зберігається в налаштуваннях")
 	SaveSystem.save_settings({"sound": keep["sound"], "music": keep["music"], "autosell": keep["autosell"]})
-	check(SaveSystem.load_settings()["pickup"] == [true, true, true, true] and Data.RARITY_PLURAL.size() == 4, "без налаштування герой підбирає все")
+	check(SaveSystem.load_settings()["pickup"] == [true, true, true, true] and Data.rarity_plurals().size() == 4, "без налаштування герой підбирає все")
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
 	game.account_path = TEST_ACCOUNT
@@ -10104,10 +10105,10 @@ func _suite_events_wiki() -> void:
 		rules_ok = rules_ok and Wiki.STATUS_TEXT.has(st) and titles.has(Status.INFO[st]["name"])
 	for a in Elites.AFFIXES:
 		rules_ok = rules_ok and titles.has(Elites.AFFIXES[a]["m"])
-	for k in Data.AFFIX_POOL:
+	for k in Data.affix_pool():
 		rules_ok = rules_ok and WS.PROP_NAMES.has(k)
-	for sl in Data.SLOTS:
-		rules_ok = rules_ok and WS.SLOT_MAIN.has(Data.SLOT_PRIMARY[sl])
+	for sl in Data.slots():
+		rules_ok = rules_ok and WS.SLOT_MAIN.has(Data.slot_primary(sl))
 	check(rules_ok, "стани, властивості еліт і речей — усі з назвами")
 	# Вміння, Загартування, найманці, побратими й досягнення: усе з таблиць гри є в довіднику
 	var Ach = load("res://scripts/data/achievements.gd")
@@ -11091,7 +11092,7 @@ func _suite_peril() -> void:
 		boss_kinds.append(str(L["boss"]))
 		data_ok = data_ok and L["type"] == "dungeon" and not L.get("scale", false) and Peril.LANDS.has(L["land"]) and GameDB.has_boss(L["boss"]) and GfxS.has(L["boss"]) and not GameDB.boss_wiki(L["boss"]).is_empty() and WM.ICON_ORDER.has(str(L["icon"])) and Peril.TITLES.has(L["boss"]) and Peril.TITLE_FX.has(L["boss"]) and int(L["rooms"]) >= 6
 		for e in L["enemies"]:
-			data_ok = data_ok and (GameDB.mob_name(e) != "") and GfxS.has(e) and not GameDB.mob_wiki(e).is_empty() and Souls.SOULS.has(e)
+			data_ok = data_ok and (GameDB.mob_name(e) != "") and GfxS.has(e) and not GameDB.mob_wiki(e).is_empty() and Souls.has(e)
 	check(ids.size() == 5 and levels == [100, 110, 120, 130, 140] and lands.size() == 5 and Peril.LAND_ORDER.size() == 5, "п'ять печер у п'яти землях, рівні від 100 до 140 з кроком 10: %s" % str(levels))
 	check(data_ok, "кожна печера: земля, бос зі спрайтом, описом і званням, нечисть з описами й душами")
 	check(Classes.BASE_LEVEL_MAX < int(levels[0]) and PS.is_peril(ids[0]) and not PS.is_peril("zmii_cave") and not PS.is_peril("nema"), "нечисть надважких печер вища за стелю рівня героя")
@@ -11165,15 +11166,15 @@ func _suite_peril() -> void:
 	check(absi(lost2 * 2 - lost1) <= 2, "«Ланка велетового ланцюга» зменшує втрату вдвічі (%d проти %d)" % [lost2, lost1])
 	d.free()
 	# ---- Золото шостого ступеня ----
-	check(Uniques.TIER_NAMES.size() == 7 and Uniques.PRIMARY_MULT.size() == 7 and Uniques.BASE_CHANCE.size() == 7 and is_equal_approx(Loot.chance(6, 0), float(Uniques.BASE_CHANCE[6])) and float(Uniques.BASE_CHANCE[6]) > float(Uniques.BASE_CHANCE[5]), "шостий ступінь золота: назва, сила, шанс")
+	check(Uniques.max_tier() == 6 and Uniques.tier_name(6) != "" and Uniques.tier_mult(6) > Uniques.tier_mult(5) and is_equal_approx(Loot.chance(6, 0), Uniques.tier_chance(6)) and Uniques.tier_chance(6) > Uniques.tier_chance(5), "шостий ступінь золота: назва, сила, шанс")
 	var tier_ok := true
 	for b in GameDB.boss_ids():
 		if GameDB.boss_tier(b) > 0:
 			tier_ok = tier_ok and (GameDB.boss_tier(b) == 6) == (b in boss_kinds)
 	var fav := {}
-	for id in Uniques.ORDER:
-		if int(Uniques.DEFS[id]["tier"]) == 6:
-			for b in Uniques.DEFS[id]["bosses"]:
+	for id in Uniques.ids():
+		if int(Uniques.def(id)["tier"]) == 6:
+			for b in Uniques.def(id)["bosses"]:
 				tier_ok = tier_ok and b in boss_kinds
 				fav[b] = true
 	check(tier_ok and fav.size() == 5, "шостий ступінь мають лише надважкі боси, і в кожного є улюблена річ")
@@ -11192,14 +11193,14 @@ func _suite_peril() -> void:
 	check(float(top["base"]["flat_dmg"]) > float(Uniques.make("shablia_bohdana", 140)["base"]["flat_dmg"]) * 1.04 and int(top["ilvl"]) == 140, "«Заповітна» зброя сильніша за «Характерницьку»")
 	var six := 0
 	for i in 400:
-		if int(Uniques.DEFS[Loot.pick(p, 6, boss_kinds[0])]["tier"]) == 6:
+		if int(Uniques.def(Loot.pick(p, 6, boss_kinds[0]))["tier"]) == 6:
 			six += 1
 	check(six > 200, "надважкий бос найчастіше дає річ шостого ступеня (%d із 400)" % six)
 	# ---- Артефакти й душі ----
 	var art_ok := true
 	for b in boss_kinds:
-		art_ok = art_ok and Arts.by_boss(b) != "" and Souls.SOULS.has("b_" + b) and SS.tier("b_" + b) == 7
-	check(art_ok and Souls.TIER_NAMES.size() == 8 and Souls.TIER_COLORS.size() == 8, "у кожного надважкого боса свій артефакт і душа сьомого ступеня")
+		art_ok = art_ok and Arts.by_boss(b) != "" and Souls.has("b_" + b) and SS.tier("b_" + b) == 7
+	check(art_ok and Souls.max_tier() == 7 and Souls.tier_name(7) != "" and Souls.tier_color(7) != Color.WHITE, "у кожного надважкого боса свій артефакт і душа сьомого ступеня")
 	var sp = _new_player()
 	sp.level = 99
 	sp.soul_found = 1
@@ -11238,37 +11239,37 @@ func _suite_sets() -> void:
 	var ids: Array = PS.ids()
 	var data_ok := true
 	var stats := {}
-	for sid in Sets.ORDER:
-		var S: Dictionary = Sets.SETS[sid]
+	for sid in Sets.ids():
+		var S: Dictionary = Sets.def(sid)
 		stats[str(S["stat"])] = true
-		data_ok = data_ok and str(S["name"]) != "" and str(S["of"]) != "" and str(S["lore"]) != "" and str(S["stat"]) in Data.INT_STATS and S["affixes"].size() >= 4 and str(S["stat"]) in S["affixes"]
+		data_ok = data_ok and str(S["name"]) != "" and str(S["of"]) != "" and str(S["lore"]) != "" and str(S["stat"]) in Data.whole_stats() and S["affixes"].size() >= 4 and str(S["stat"]) in S["affixes"]
 		for a in S["affixes"]:
-			data_ok = data_ok and a in Data.AFFIX_POOL and not a in ["lifesteal", "regen"]
+			data_ok = data_ok and a in Data.affix_pool() and not a in ["lifesteal", "regen"]
 		for step in Sets.STEPS:
-			data_ok = data_ok and S["bonus"].has(step) and not S["bonus"][step].is_empty() and Sets.step_text(sid, step) != "" and not "%s" in Sets.step_text(sid, step)
-			for k in S["bonus"][step]:
-				data_ok = data_ok and Sets.FX.has(k)
-	check(Sets.ORDER.size() == 3 and Sets.ORDER.size() == Sets.SETS.size() and stats.size() == 3 and Sets.STEPS == [2, 4, 6], "три набори під три головні риси, бонуси за 2, 4 й 6 речей")
+			data_ok = data_ok and not Sets.bonus(sid, step).is_empty() and Sets.step_text(sid, step) != "" and not "%s" in Sets.step_text(sid, step)
+			for k in Sets.bonus(sid, step):
+				data_ok = data_ok and GameDB.table("set_effects").has(k)
+	check(Sets.ids().size() == 3 and GameDB.table("sets").size() == 3 and stats.size() == 3 and Sets.STEPS == [2, 4, 6], "три набори під три головні риси, бонуси за 2, 4 й 6 речей")
 	check(data_ok, "кожен набір: назва, переказ, властивості без вампіризму й загоєння, бонуси з відомих ключів")
 	# ---- Річ набору ----
 	var it: Dictionary = Sets.make("sviatohor", "weapon", 120, "sabre")
 	check(it["name"] == "Шабля Святогора" and it["set"] == "sviatohor" and int(it["rarity"]) == 3 and int(it["ilvl"]) == 120 and it["affixes"].size() == 3 and Sets.is_set(it) and not Sets.is_set(Data.gen_item(10, 3)), "річ набору: ім'я, позначка, якість легендарної")
 	check(Sets.piece_name("dovbush", "belt") == "Пояс Довбуша" and Sets.piece_name("boian", "weapon", "staff") == "Посох Бояна", "назви речей наборів")
-	check(Data.item_color(it) == Data.SET_COLOR and Data.item_color(Data.gen_item(10, 3)) == Data.RARITY_COLORS[3] and not Data.SET_COLOR in Data.RARITY_COLORS, "у речі набору свій колір")
+	check(Data.item_color(it) == Data.SET_COLOR and Data.item_color(Data.gen_item(10, 3)) == Data.rarity_color(3) and not Data.SET_COLOR in range(Data.rarity_count()).map(func(r): return Data.rarity_color(r)), "у речі набору свій колір")
 	var aff_ok := true
-	for sid in Sets.ORDER:
-		for slot in Data.SLOTS:
+	for sid in Sets.ids():
+		for slot in Data.slots():
 			for i in 6:
 				var x: Dictionary = Sets.make(sid, slot, 100, "sabre")
-				aff_ok = aff_ok and x["affixes"].size() == 3 and not x["affixes"].has(Data.SLOT_PRIMARY[slot]) and x["base"].has(Data.SLOT_PRIMARY[slot])
+				aff_ok = aff_ok and x["affixes"].size() == 3 and not x["affixes"].has(Data.slot_primary(slot)) and x["base"].has(Data.slot_primary(slot))
 				for a in x["affixes"]:
-					aff_ok = aff_ok and a in Sets.SETS[sid]["affixes"]
+					aff_ok = aff_ok and a in Sets.def(sid)["affixes"]
 	check(aff_ok, "властивості речі лише з переліку набору, без головної властивості клітинки")
 	# ---- Бонуси на герої ----
 	var p = _new_player()
 	p.change_class("cossack")
 	p.level = 99
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		var piece: Dictionary = Sets.make("sviatohor", slot, 100, "sabre")
 		p.assign_uid(piece)
 		p.equipment[slot] = piece
@@ -11278,7 +11279,7 @@ func _suite_sets() -> void:
 	var fx6: Dictionary = Sets.fx(p.equipment)
 	check(int(Sets.count(p.equipment)["sviatohor"]) == 6 and is_equal_approx(float(fx6["hp"]), 16.0) and is_equal_approx(float(fx6["dmg"]), 18.0) and is_equal_approx(float(fx6["big_dmg"]), 10.0) and is_equal_approx(float(fx6["armor"]), 4.0), "шість речей: діють усі три щаблі разом")
 	check(int(Sets.worn.get("sviatohor", 0)) == 6, "картка речі знає, скільки речей набору вдягнено")
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		p.equipment[slot].erase("set")
 	p.recalc()
 	check(is_equal_approx(full_hp / p.max_hp, 1.16) and is_equal_approx(full_dmg / p.damage, 1.18) and p.set_fx.is_empty(), "набір справді додає здоров'я й шкоди (×%.3f і ×%.3f)" % [full_hp / p.max_hp, full_dmg / p.damage])
@@ -11640,13 +11641,14 @@ func _suite_shop() -> void:
 	var packs_ok := true
 	var seen := {}
 	var prev := 0
-	for p in Shop.PACKS:
-		packs_ok = packs_ok and str(p["id"]) != "" and not seen.has(p["id"]) and str(p["name"]) != "" and str(p["price"]) != "" and int(p["coins"]) > prev and SH.pack(str(p["id"])) == p
-		seen[p["id"]] = true
+	for pid in Shop.pack_ids():
+		var p: Dictionary = Shop.pack(pid)
+		packs_ok = packs_ok and str(pid) != "" and not seen.has(pid) and str(p["name"]) != "" and str(p["price"]) != "" and int(p["coins"]) > prev and SH.pack(str(pid)) == p
+		seen[pid] = true
 		prev = int(p["coins"])
-	check(Shop.PACKS.size() >= 4 and packs_ok and SH.pack("nema").is_empty(), "набори червінців: назва, ціна, щораз більше")
+	check(Shop.pack_ids().size() >= 4 and packs_ok and SH.pack("nema").is_empty(), "набори червінців: назва, ціна, щораз більше")
 	# ---- У крамниці є все рідкісне ----
-	check(SH.ids("unique").size() == Uniques.ORDER.size() and SH.ids("artifact").size() == Arts.ORDER.size() and SH.ids("soul").size() == SS.known().size() and SH.ids("set").size() == Sets.ORDER.size() * Data.SLOTS.size() and SH.ids("set_full").size() == Sets.ORDER.size(),
+	check(SH.ids("unique").size() == Uniques.ids().size() and SH.ids("artifact").size() == Arts.ids().size() and SH.ids("soul").size() == SS.known().size() and SH.ids("set").size() == Sets.ids().size() * Data.slots().size() and SH.ids("set_full").size() == Sets.ids().size(),
 		"у крамниці всі золоті речі (%d), артефакти (%d), душі (%d) й речі наборів (%d)" % [SH.ids("unique").size(), SH.ids("artifact").size(), SH.ids("soul").size(), SH.ids("set").size()])
 	var priced := true
 	for kind in ["unique", "artifact", "soul", "set", "set_full"]:
@@ -11654,7 +11656,7 @@ func _suite_shop() -> void:
 			priced = priced and SH.price(kind, id) > 0
 	check(priced and SH.price("unique", "nema") == 0 and SH.price("set", "sviatohor:nema") == 0 and SH.price("nema", "x") == 0, "кожен товар має ціну, вигаданих товарів нема")
 	check(SH.price("soul", "b_chornoboh") > SH.price("soul", "zlyden") and SH.price("unique", "mech_kladenets") > SH.price("unique", "kotyhoroshko") and SH.price("artifact", "ulamok_chornoho_sontsia") > SH.price("artifact", "zmiiv_zub"), "що вищий ступінь, то дорожче")
-	check(SH.price("set_full", "boian") < SH.price("set", "boian:head") * Data.SLOTS.size() and Shop.SOUL_PRICE.size() == Souls.TIER_NAMES.size() and Shop.UNIQUE_PRICE.size() == Uniques.TIER_NAMES.size(), "увесь набір дешевший, ніж поодинці; ціна є для кожного ступеня")
+	check(SH.price("set_full", "boian") < SH.price("set", "boian:head") * Data.slots().size() and range(1, Souls.max_tier() + 1).all(func(t): return Souls.tier_price(t) > 0) and range(1, Uniques.max_tier() + 1).all(func(t): return Uniques.tier_price(t) > 0), "увесь набір дешевший, ніж поодинці; ціна є для кожного ступеня")
 	# ---- Червінці ----
 	var w = WorldState.new()
 	var acc = Account.new()
@@ -11690,7 +11692,7 @@ func _suite_shop() -> void:
 	var slots := {}
 	for it in full["items"]:
 		slots[str(it["slot"])] = true
-	check(bool(full["ok"]) and full["items"].size() == Data.SLOTS.size() and slots.size() == Data.SLOTS.size() and int(SH.state(w)["spent"]) > 0, "увесь набір: шість речей у всі клітинки")
+	check(bool(full["ok"]) and full["items"].size() == Data.slots().size() and slots.size() == Data.slots().size() and int(SH.state(w)["spent"]) > 0, "увесь набір: шість речей у всі клітинки")
 	var mage = _new_player()
 	mage.change_class("volkhv")
 	check(SH.set_weapon(mage) == "staff" and SH.set_weapon(p) == str(p.weapon_type) and not SH.fits(p, "unique", "posokh_svaroha") and SH.fits(mage, "unique", "posokh_svaroha") and SH.fits(p, "soul", "zlyden"), "зброя набору до руки класу; чужу золоту зброю позначено")
@@ -11826,7 +11828,7 @@ func _suite_shop_game() -> void:
 	for sec in WS.sections():
 		for e in sec["entries"]:
 			if str(e["title"]) == "Крамниця":
-				found = "червінці" in str(e["text"]) and str(Shop.SET_FULL_PRICE) in str(e["text"])
+				found = "червінці" in str(e["text"]) and str(Shop.kind_price("set", "full_price")) in str(e["text"])
 	check(found, "довідник пояснює крамницю й ціни")
 	game.queue_free()
 	await _frames(3)
@@ -11873,7 +11875,7 @@ func _suite_skill_trees() -> void:
 					for k in node["fx"]:
 						good = good and Classes.FX_TEXT.has(k)
 					for wt in node.get("when", {}).get("weapon", []):
-						good = good and Data.WEAPON_TYPES.has(wt)
+						good = good and Data.has_weapon(wt)
 				if node.has("act"):
 					acts += 1
 					var A: Dictionary = node["act"]
@@ -12135,11 +12137,11 @@ func _suite_strilets() -> void:
 	for cls in ["strilets", "sahaidachnyk", "opryshok", "sokolnyk"]:
 		data_ok = data_ok and Classes.TREES.has(cls) and Paths.CARDS.has(cls) and str(C[cls]["address"]) != "" and Data.CITIES.has(str(C[cls]["where"]))
 		for wt in C[cls]["weapons"]:
-			data_ok = data_ok and wt in Data.AGI_WEAPONS and GfxS.has("%s_%s" % [cls, wt])
+			data_ok = data_ok and wt in Data.agi_weapons() and GfxS.has("%s_%s" % [cls, wt])
 		data_ok = data_ok and GfxS.has("hunter_" + cls) and GfxS.has("plain_" + cls)
 	check(data_ok, "у кожного класу стрільців є дерево, картка, місто наставника й спрайти з кожною його зброєю")
 	# ---- Зброя ----
-	check(Data.WEAPON_TYPES.has("bow") and Data.WEAPON_TYPES.has("pistols") and "bow" in Data.RANGED_WEAPONS and GfxS.ICON_ORDER.has("it_bow") and GfxS.ICON_ORDER.has("it_pistols"), "лук і пістолі: зброя дальнього бою зі своїми значками")
+	check(Data.has_weapon("bow") and Data.has_weapon("pistols") and Data.is_ranged("bow") and GfxS.ICON_ORDER.has("it_bow") and GfxS.ICON_ORDER.has("it_pistols"), "лук і пістолі: зброя дальнього бою зі своїми значками")
 	var bow: Dictionary = Data.gen_item(20, 1, "weapon", "bow")
 	var pist: Dictionary = Data.gen_item(20, 1, "weapon", "pistols")
 	check(str(bow["name"]).begins_with("Лук") and str(pist["name"]).begins_with("Пістолі"), "назви: «%s», «%s»" % [bow["name"], pist["name"]])
@@ -12208,7 +12210,7 @@ func _suite_strilets() -> void:
 	# ---- Спеціалізації ----
 	var trials_ok := true
 	for spec in C["strilets"]["next"]:
-		trials_ok = trials_ok and Spec.TRIALS.has(spec) and Story.NPCS.has(str(C[spec]["mentor"])) and Data.WEAPON_TYPES.has(str(Spec.TRIALS[spec]["item"]["type"])) and str(Spec.TRIALS[spec]["item"]["type"]) in C[spec]["weapons"]
+		trials_ok = trials_ok and Spec.TRIALS.has(spec) and Story.NPCS.has(str(C[spec]["mentor"])) and Data.has_weapon(str(Spec.TRIALS[spec]["item"]["type"])) and str(Spec.TRIALS[spec]["item"]["type"]) in C[spec]["weapons"]
 		var obj: Dictionary = Spec.TRIALS[spec]["objective"]
 		if obj.has("loc"):
 			trials_ok = trials_ok and Data.LOCATIONS.has(str(obj["loc"]))
@@ -12283,16 +12285,16 @@ func _suite_strilets() -> void:
 	check(again.skill_points == 5 and again.skills == moved.skills, "повторне завантаження нічого не міняє")
 	# ---- Золото, набори, крамниця ----
 	var types := {}
-	for id in Uniques.ORDER:
-		if Uniques.DEFS[id]["slot"] == "weapon":
-			types[str(Uniques.DEFS[id]["type"])] = int(types.get(str(Uniques.DEFS[id]["type"]), 0)) + 1
+	for id in Uniques.ids():
+		if Uniques.def(id)["slot"] == "weapon":
+			types[str(Uniques.def(id)["type"])] = int(types.get(str(Uniques.def(id)["type"]), 0)) + 1
 	check(int(types.get("bow", 0)) >= 3 and int(types.get("pistols", 0)) >= 3, "золоті луки й пістолі є на різних ступенях: %s" % str(types))
 	var sah = _new_player()
 	sah.change_class("strilets")
 	sah.change_class("sahaidachnyk")
 	var only_bow := true
 	for i in 200:
-		var D: Dictionary = Uniques.DEFS[Loot.pick(sah, 6, "dev")]
+		var D: Dictionary = Uniques.def(Loot.pick(sah, 6, "dev"))
 		only_bow = only_bow and (D["slot"] != "weapon" or D["type"] == "bow")
 	var opr = _new_player()
 	opr.change_class("strilets")
@@ -12710,13 +12712,13 @@ func _suite_costumes() -> void:
 	var WS = load("res://scripts/game/wiki_service.gd")
 	# ---- Дані й листи ----
 	var sheets_ok := true
-	for id in Cost.ORDER:
-		sheets_ok = sheets_ok and Cost.DEFS.has(id) and str(Cost.DEFS[id]["name"]) != "" and int(Cost.DEFS[id]["price"]) > 0 and GfxS.has(Cost.plain(id))
+	for id in Cost.ids():
+		sheets_ok = sheets_ok and Cost.has(id) and str(Cost.def(id)["name"]) != "" and int(Cost.def(id)["price"]) > 0 and GfxS.has(Cost.plain(id))
 		for wt in Cost.WEAPONS:
 			sheets_ok = sheets_ok and GfxS.has(Cost.sprite(id, wt))
-	check(sheets_ok and Cost.ORDER.size() == Cost.DEFS.size() and Cost.ORDER.size() >= 5, "кожне вбрання має назву, ціну й листи для всієї зброї (%d вбрань)" % Cost.ORDER.size())
+	check(sheets_ok and Cost.ids().size() == GameDB.table("costumes").size() and Cost.ids().size() >= 5, "кожне вбрання має назву, ціну й листи для всієї зброї (%d вбрань)" % Cost.ids().size())
 	var all_weapons := true
-	for wt in Data.WEAPON_TYPES:
+	for wt in Data.weapon_ids():
 		all_weapons = all_weapons and wt in Cost.WEAPONS
 	check(all_weapons, "вбрання намальовано для кожного виду зброї в грі")
 	# ---- Купівля й вдягання ----
@@ -12729,7 +12731,7 @@ func _suite_costumes() -> void:
 	p.recalc()
 	var look0: String = p.sprite_id()
 	var power0: float = Power.score(p)
-	var first: String = Cost.ORDER[0]
+	var first: String = Cost.ids()[0]
 	check("бракує" in CS.block_reason(w, first) and not CS.buy(w, p, first) and not CS.wear(w, p, first) and p.costume == "", "без червінців вбрання не купити й не вдягнути")
 	SH.state(w)["coins"] = CS.price(first) + 10
 	check(CS.buy(w, p, first) and CS.owned(w, first) and SH.coins(w) == 10 and p.costume == first, "куплено: вбрання в роду, герой одразу вдягнув")
@@ -12758,8 +12760,8 @@ func _suite_costumes() -> void:
 		if str(e["title"]) == "Вбрання героя":
 			art = str(e["text"])
 	var art_ok := art != ""
-	for id in Cost.ORDER:
-		art_ok = art_ok and str(Cost.DEFS[id]["name"]) in art and str(int(Cost.DEFS[id]["price"])) in art
+	for id in Cost.ids():
+		art_ok = art_ok and str(Cost.def(id)["name"]) in art and str(int(Cost.def(id)["price"])) in art
 	check(art_ok, "довідник перелічує всі вбрання з цінами")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
@@ -12775,7 +12777,7 @@ func _suite_costumes() -> void:
 		gw.hints[k] = true
 	game.player.change_class("cossack")
 	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
-	var top: String = Cost.ORDER[Cost.ORDER.size() - 1]
+	var top: String = Cost.ids()[Cost.ids().size() - 1]
 	SH.state(gw)["coins"] = CS.price(top)
 	game.enter_map()
 	await _frames(2)
@@ -12954,18 +12956,18 @@ func _suite_enchant_fair() -> void:
 	# ---- Дані зачарувань ----
 	var data_ok := true
 	var by_slot := {}
-	for id in Ench.ORDER:
-		var D: Dictionary = Ench.DEFS[id]
+	for id in Ench.ids():
+		var D: Dictionary = Ench.def(id)
 		data_ok = data_ok and str(D["name"]) != "" and not D["fx"].is_empty()
 		for k in D["fx"]:
 			data_ok = data_ok and Classes.FX_TEXT.has(k) and float(D["fx"][k]) > 0.0
 		for sl in D["slots"]:
-			data_ok = data_ok and sl in Data.SLOTS
+			data_ok = data_ok and sl in Data.slots()
 			by_slot[sl] = int(by_slot.get(sl, 0)) + 1
 	var every_slot := true
-	for sl in Data.SLOTS:
+	for sl in Data.slots():
 		every_slot = every_slot and int(by_slot.get(sl, 0)) >= 3
-	check(data_ok and every_slot and Ench.ORDER.size() == Ench.DEFS.size(), "кожне зачарування має назву й відомий хист, на кожну річ є щонайменше три")
+	check(data_ok and every_slot and Ench.ids().size() == GameDB.table("enchants").size(), "кожне зачарування має назву й відомий хист, на кожну річ є щонайменше три")
 	# ---- Накласти ----
 	var p = _new_player()
 	p.change_class("cossack")
@@ -12986,15 +12988,15 @@ func _suite_enchant_fair() -> void:
 	var cost: Dictionary = Ench.cost(leg)
 	var big0: float = p.fx("big_dmg")
 	check(ES.enchant(p, leg["uid"], "zviroboi") and ES.of(leg) == "zviroboi" and p.gold == 10000000 - int(cost["gold"]) and int(p.resources["trophy"]) == 100000 - int(cost["trophy"]) and int(p.resources["iron"]) == 100000 - int(cost["iron"]), "зачаровано: гривні, трофеї й залізо списано")
-	check(is_equal_approx(p.fx("big_dmg"), big0 + float(Ench.DEFS["zviroboi"]["fx"]["big_dmg"])) and "Звіробій" in ES.text(leg) and "елітам і босам" in ES.text(leg), "властивість діє на героя й видна на картці: %s" % ES.text(leg))
+	check(is_equal_approx(p.fx("big_dmg"), big0 + float(Ench.def("zviroboi")["fx"]["big_dmg"])) and "Звіробій" in ES.text(leg) and "елітам і босам" in ES.text(leg), "властивість діє на героя й видна на картці: %s" % ES.text(leg))
 	check(ES.block_reason(p, leg, "zviroboi") == "уже лежить на речі" and ES.enchant(p, leg["uid"], "dobyvach") and ES.of(leg) == "dobyvach" and is_equal_approx(p.fx("big_dmg"), big0) and p.fx("execute") > 0.0, "нове зачарування замінює старе")
 	var ward0: float = p.fx("ward")
-	check(ES.enchant(p, body["uid"], "obereh") and is_equal_approx(p.fx("ward"), ward0 + float(Ench.DEFS["obereh"]["fx"]["ward"])), "зачарування з різних речей складаються")
+	check(ES.enchant(p, body["uid"], "obereh") and is_equal_approx(p.fx("ward"), ward0 + float(Ench.def("obereh")["fx"]["ward"])), "зачарування з різних речей складаються")
 	p.unequip(body["uid"])
 	p.recalc()
 	check(is_equal_approx(p.fx("ward"), ward0), "знята річ свого зачарування не дає")
 	var peril_item: Dictionary = Data.gen_item(Ench.STRONG_LEVEL, 3, "weapon", "sabre")
-	check(is_equal_approx(float(Ench.fx_of(peril_item, "zviroboi")["big_dmg"]), float(Ench.DEFS["zviroboi"]["fx"]["big_dmg"]) * Ench.STRONG_MULT) and int(Ench.cost(peril_item)["gold"]) > int(cost["gold"]), "на речах %d-го рівня зачарування сильніше й дорожче" % Ench.STRONG_LEVEL)
+	check(is_equal_approx(float(Ench.fx_of(peril_item, "zviroboi")["big_dmg"]), float(Ench.def("zviroboi")["fx"]["big_dmg"]) * Ench.STRONG_MULT) and int(Ench.cost(peril_item)["gold"]) > int(cost["gold"]), "на речах %d-го рівня зачарування сильніше й дорожче" % Ench.STRONG_LEVEL)
 	var copy = _new_player()
 	copy.from_dict(p.to_dict())
 	check(ES.of(copy.find_item(leg["uid"])) == "dobyvach", "зачарування зберігається з річчю")
@@ -13013,8 +13015,8 @@ func _suite_enchant_fair() -> void:
 	var fits := true
 	var top: int = Fair.top_tier(60)
 	for e in golds:
-		var D: Dictionary = Uniq.DEFS[e["id"]]
-		fits = fits and int(D["tier"]) <= top and int(D["tier"]) >= top - 1 and (D["slot"] != "weapon" or D["type"] in Classes.CLASSES["cossack"]["weapons"]) and int(e["trophy"]) == int(Fair.UNIQUE_TROPHY[int(D["tier"])])
+		var D: Dictionary = Uniq.def(e["id"])
+		fits = fits and int(D["tier"]) <= top and int(D["tier"]) >= top - 1 and (D["slot"] != "weapon" or D["type"] in Classes.CLASSES["cossack"]["weapons"]) and int(e["trophy"]) == int(Uniq.tier_fair(int(D["tier"]))["trophy"])
 	check(golds.size() == Fair.GOLD_ITEMS and fits and arts.size() == 1 and goods.size() == Fair.GOODS_ORDER.size(), "товар тижня: три золоті речі під клас і рівень, артефакт і дрібний товар")
 	check(Fair.stock(p) == stock, "протягом тижня товар той самий")
 	var seen := {}
@@ -13055,10 +13057,10 @@ func _suite_enchant_fair() -> void:
 	for e in WS._entries("basics"):
 		if str(e["title"]) == "Зачарування речей":
 			var all := true
-			for id in Ench.ORDER:
-				all = all and str(Ench.DEFS[id]["name"]) in str(e["text"])
+			for id in Ench.ids():
+				all = all and str(Ench.def(id)["name"]) in str(e["text"])
 			arts_ok += 1 if all else 0
-		if str(e["title"]) == "Трофейний ярмарок" and str(int(Fair.UNIQUE_TROPHY[5])) in str(e["text"]) and str(Fair.ARTIFACT_TROPHY) in str(e["text"]):
+		if str(e["title"]) == "Трофейний ярмарок" and str(int(load("res://scripts/data/uniques.gd").tier_fair(5)["trophy"])) in str(e["text"]) and str(Fair.ARTIFACT_TROPHY) in str(e["text"]):
 			arts_ok += 1
 	check(arts_ok == 2, "довідник описує зачарування й ярмарок із числами")
 	# ---- У грі: кузня й ярмарок на хуторі ----
@@ -13500,18 +13502,18 @@ func _suite_divine() -> void:
 	# ---- Дані ----
 	var data_ok := true
 	var slots := {}
-	for id in Div.ORDER:
-		var D: Dictionary = Div.DEFS[id]
+	for id in Div.ids():
+		var D: Dictionary = Div.def(id)
 		slots[D["slot"]] = id
-		data_ok = data_ok and D["slot"] in Div.SLOTS and str(D["name"]) != "" and int(D["price"]) > 0 and GfxS.icon_tex(str(D["icon"])) != null and not D["lines"].is_empty() and id in Div.in_slot(D["slot"])
+		data_ok = data_ok and D["slot"] in Div.slots() and str(D["name"]) != "" and int(D["price"]) > 0 and GfxS.icon_tex(str(D["icon"])) != null and not D["lines"].is_empty() and id in Div.in_slot(D["slot"])
 		for k in D.get("fx", {}):
 			data_ok = data_ok and Classes.FX_TEXT.has(k)
 	var two := 0
-	for sl in Div.SLOTS:
-		data_ok = data_ok and not Div.in_slot(sl).is_empty() and Div.SLOT_NAMES.has(sl)
+	for sl in Div.slots():
+		data_ok = data_ok and not Div.in_slot(sl).is_empty() and GameDB.table("gift_slots").has(sl)
 		if Div.in_slot(sl).size() > 1:
 			two += 1
-	check(data_ok and slots.size() == Div.SLOTS.size() and Div.ORDER.size() == 9 and Div.SLOTS.size() == 7 and two == 2, "дев'ять дарів на сім гнізд: у двох гніздах вибір із двох")
+	check(data_ok and slots.size() == Div.slots().size() and Div.ids().size() == 9 and Div.slots().size() == 7 and two == 2, "дев'ять дарів на сім гнізд: у двох гніздах вибір із двох")
 	# ---- Купівля й гнізда ----
 	var w = WorldState.new()
 	var p = _new_player()
@@ -13532,12 +13534,12 @@ func _suite_divine() -> void:
 	var Acts = load("res://scripts/data/activities.gd")
 	var cap0: int = Acts.TRADE_CART + Acts.TRADE_CART_SKLAD * Camp.level(w, "sklad")
 	check(TS.capacity(w) == cap0, "без дару віз для торгу звичайний: %d" % TS.capacity(w))
-	check(DS.buy(w, p, "mazha") and DS.owned(w, "mazha") and DS.wears(p, "mazha") and int(Div.DEFS["mazha"]["bag"]) == 50 and p.bag_size() == bag0 + 50 and SH.coins(w) == 100000 - DS.price("mazha"), "Чумацький віз куплено: він у своєму гнізді, торба більша рівно на 50 (%d → %d)" % [bag0, p.bag_size()])
+	check(DS.buy(w, p, "mazha") and DS.owned(w, "mazha") and DS.wears(p, "mazha") and int(Div.def("mazha")["bag"]) == 50 and p.bag_size() == bag0 + 50 and SH.coins(w) == 100000 - DS.price("mazha"), "Чумацький віз куплено: він у своєму гнізді, торба більша рівно на 50 (%d → %d)" % [bag0, p.bag_size()])
 	check(p.inventory.is_empty() and DS.block_reason(w, "mazha") == "уже куплено", "дар не займає місця в торбі й удруге не продається")
 	check(DS.buy(w, p, "kryla") and p.stat("str") == int(round(str0 * 1.1)) and p.stat("agi") == int(round(agi0 * 1.1)) and p.damage > dmg0 * 1.05, "крила: усі характеристики +10%% (Сила %d → %d)" % [str0, p.stat("str")])
 	var dmg1: float = p.damage
-	check(DS.buy(w, p, "molot") and p.damage > dmg1 * 1.11 and is_equal_approx(p.fx("dmg"), float(Div.DEFS["molot"]["fx"]["dmg"])) and is_equal_approx(p.crit_mult, crit0 + float(Div.DEFS["molot"]["fx"]["crit_dmg"]) / 100.0), "громовий молот: бойові показники ростуть")
-	check(DS.buy(w, p, "khovanets") and is_equal_approx(p.pickup_radius, pick0 * (1.0 + float(Div.DEFS["khovanets"]["pickup"]))) and DS.remote_shop(p), "Хованець: радіус збору вп'ятеро більший, крамниця будь-де")
+	check(DS.buy(w, p, "molot") and p.damage > dmg1 * 1.11 and is_equal_approx(p.fx("dmg"), float(Div.def("molot")["fx"]["dmg"])) and is_equal_approx(p.crit_mult, crit0 + float(Div.def("molot")["fx"]["crit_dmg"]) / 100.0), "громовий молот: бойові показники ростуть")
+	check(DS.buy(w, p, "khovanets") and is_equal_approx(p.pickup_radius, pick0 * (1.0 + float(Div.def("khovanets")["pickup"]))) and DS.remote_shop(p), "Хованець: радіус збору вп'ятеро більший, крамниця будь-де")
 	check(p.divine.size() == 4 and p.inventory.is_empty(), "усі чотири гнізда зайнято, торба порожня")
 	# ---- Зняти й вдягнути ----
 	DS.unequip(w, p, "wings")
@@ -13547,7 +13549,7 @@ func _suite_divine() -> void:
 	check(p.bag_size() == bag0 and not DS.remote_shop(_new_player()), "без воза торба звичайна")
 	DS.equip(w, p, "mazha")
 	# ---- Чумацький віз: назва, тексти й місткість торгу ----
-	var MD: Dictionary = Div.DEFS["mazha"]
+	var MD: Dictionary = Div.def("mazha")
 	var mtext: String = (str(MD["name"]) + " " + str(MD["desc"]) + " " + " ".join(MD["lines"])).to_lower()
 	check(str(MD["name"]) == "Чумацький віз" and not "маж" in mtext, "дар зветься «Чумацький віз», слова «мажа» нема в назві, описі й рядках")
 	check(MD["lines"].size() == 2 and "50 місць" in str(MD["lines"][0]) and "торз" in str(MD["lines"][1]) and "50" in str(MD["lines"][1]) and int(MD["trade"]) == 50, "у властивостях дару обидва бонуси: торба й віз для торгу, по 50")
@@ -13643,8 +13645,8 @@ func _suite_divine() -> void:
 		if str(e["title"]) == "Божі дари":
 			art = str(e["text"])
 	var art_ok := art != ""
-	for id in Div.ORDER:
-		art_ok = art_ok and str(Div.DEFS[id]["name"]) in art and str(int(Div.DEFS[id]["price"])) in art
+	for id in Div.ids():
+		art_ok = art_ok and str(Div.def(id)["name"]) in art and str(int(Div.def(id)["price"])) in art
 	check(art_ok, "довідник описує всі дари з цінами")
 	check(load("res://scripts/ui/ui_character.gd").TRADER_BTN in art and "над торбою" in art and "голоблі" in art, "довідник каже про кнопку крамниці над торбою й про віз на голоблях")
 	check("одразу лягає в торбу" in art and "нема куди покласти" in art, "довідник каже, що з Хованцем здобич одразу в торбі")
@@ -13897,7 +13899,7 @@ func _suite_divine() -> void:
 	lcb.spawn_pickup(far, "item", 0, Data.gen_item(20, 1, "boots"))
 	check(not bool(gp.divine_fx.get("loot", false)) and ground.call() == 2 and gp.gold == plain_gold, "без Хованця здобич, як і раніше, падає на землю")
 	DS.equip(gw, gp, "khovanets")
-	check(bool(gp.divine_fx.get("loot", false)) and DS.remote_shop(gp) and float(gp.divine_fx.get("pickup", 0.0)) == float(Div.DEFS["khovanets"]["pickup"]), "решта властивостей Хованця без змін: крамниця будь-де й великий радіус збору")
+	check(bool(gp.divine_fx.get("loot", false)) and DS.remote_shop(gp) and float(gp.divine_fx.get("pickup", 0.0)) == float(Div.def("khovanets")["pickup"]), "решта властивостей Хованця без змін: крамниця будь-де й великий радіус збору")
 	for node in lcb.entities.get_children():
 		if node.get_script() == PickS:
 			node.queue_free()
@@ -14031,7 +14033,7 @@ func _suite_grid_shops() -> void:
 	gp.gold = 500000
 	for i in 5:
 		gp.add_item(Data.gen_item(28, i % 3, "body" if i % 2 == 0 else "boots"), true)
-	gp.add_item(Arts.make(Arts.ORDER[0]), true)
+	gp.add_item(Arts.make(Arts.ids()[0]), true)
 	gp.recalc()
 	game.enter_map()
 	await _frames(2)
@@ -14161,7 +14163,7 @@ func _suite_grid_shops() -> void:
 	check(UShop.CELL == UChar.CELL, "клітинка донатної крамниці така сама, як у торбі героя")
 	var stc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 	var want := {"Золоті речі": SHs.ids("unique").size(), "Артефакти": SHs.ids("artifact").size(), "Душі": SHs.ids("soul").size(),
-		"Набори": SetsD.ORDER.size() * (Data.SLOTS.size() + 1), "Божі дари": DivD.ORDER.size(), "Вбрання": CostD.ORDER.size()}
+		"Набори": SetsD.ids().size() * (Data.slots().size() + 1), "Божі дари": DivD.ids().size(), "Вбрання": CostD.ids().size()}
 	var grid_ok := true
 	var got := {}
 	for i in stc.get_tab_count():
@@ -14275,8 +14277,8 @@ func _suite_legends() -> void:
 	check(land_ok and Data.LOCATIONS["zamok_drakuly"]["boss"] == "drakula" and Data.LOCATIONS["zamok_drakuly"]["type"] == "dungeon", "Семигород на мапі: три місцевості й Замок Дракули")
 	check(str(brashov.get("region", "")) == "semyhorod" and Acts.TRADE_CITIES.get("brashov", {}).size() == Acts.TRADE_ORDER.size() and Data.REGION_ORDER[-1] == "semyhorod", "Брашов: місто Семигороду з торгом, край стоїть у списку останнім")
 	for kind in ["strygoi", "moroi"]:
-		check((GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "" and not GameDB.mob_wiki(kind).is_empty() and kind in Wiki.ENEMY_ORDER and Souls.SOULS.has(kind) and kind in Souls.ORDER and GameDB.hit_status(kind) != "" and Acts.BOUNTY_NAMES.has(kind), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % GameDB.mob_name(kind, kind))
-	check(GameDB.has_boss("drakula") and (GameDB.mob_name("drakula") != "") and GfxS.has("drakula") and GameDB.death_sound("drakula") != "" and not GameDB.boss_wiki("drakula").is_empty() and "drakula" in Wiki.BOSS_ORDER and Souls.SOULS.has("b_drakula") and Arts.by_boss("drakula") != "" and GameDB.boss_tier("drakula") == Uniq.TOP_COMMON_TIER and GameDB.is_phase2_boss("drakula"), "Дракула: ім'я, спрайт, голос, душа, артефакт, довідник, другий етап бою")
+		check((GameDB.mob_name(kind) != "") and (GameDB.mob_plural(kind) != "") and (GameDB.quest_item(kind) != "") and GfxS.has(kind) and GameDB.death_sound(kind) != "" and not GameDB.mob_wiki(kind).is_empty() and kind in Wiki.ENEMY_ORDER and Souls.has(kind) and kind in Souls.ids() and GameDB.hit_status(kind) != "" and Acts.BOUNTY_NAMES.has(kind), "%s: ім'я, спрайт, голос, душа, довідник, розшук" % GameDB.mob_name(kind, kind))
+	check(GameDB.has_boss("drakula") and (GameDB.mob_name("drakula") != "") and GfxS.has("drakula") and GameDB.death_sound("drakula") != "" and not GameDB.boss_wiki("drakula").is_empty() and "drakula" in Wiki.BOSS_ORDER and Souls.has("b_drakula") and Arts.by_boss("drakula") != "" and GameDB.boss_tier("drakula") == Uniq.TOP_COMMON_TIER and GameDB.is_phase2_boss("drakula"), "Дракула: ім'я, спрайт, голос, душа, артефакт, довідник, другий етап бою")
 	check("Влад" in str(GameDB.boss_wiki("drakula")["text"]) and "украв" in str(GameDB.boss_wiki("drakula")["text"]), "довідник відділяє упиря від справжнього воєводи Влада")
 	# ---- Дані лінійок ----
 	var data_ok := true
@@ -14304,7 +14306,7 @@ func _suite_legends() -> void:
 				_:
 					ok = false
 			if i == LL["steps"].size() - 1:
-				ok = ok and st["reward"].has("item") and st["reward"]["item"]["slot"] in Data.SLOTS and obj["type"] == "dungeon"
+				ok = ok and st["reward"].has("item") and st["reward"]["item"]["slot"] in Data.slots() and obj["type"] == "dungeon"
 		if not ok:
 			bad += line + " "
 		data_ok = data_ok and ok
@@ -14585,8 +14587,8 @@ func _suite_audit() -> void:
 	Data.sell_mult = 2.0
 	check(Data.sell_price(it0) == base0 * 2 and Data.base_price(it0) == base0 and City.buy_price(w0, "poltava", it0) == buy0, "ярмарок подвоює ціну продажу, а ціна в крамниці лишається та сама")
 	Data.sell_mult = 1.0
-	var set_it: Dictionary = Sets.make(Sets.SETS.keys()[0], "head", 100)
-	var gold_it: Dictionary = Uni.make(Uni.DEFS.keys()[0], 50)
+	var set_it: Dictionary = Sets.make(Sets.ids()[0], "head", 100)
+	var gold_it: Dictionary = Uni.make(Uni.ids()[0], 50)
 	check(Data.is_precious(set_it) and Data.is_precious(gold_it) and not Data.is_precious(it0), "золота й наборна речі цінні, звичайна рідкісна ні")
 
 	# ---- Торг: надбавки не діють на крам, куплений тут-таки ----
@@ -14900,7 +14902,7 @@ func _suite_audit() -> void:
 	# цінне не лишається на землі за повної торби
 	while not gp.bag_full():
 		gp.add_item(Data.gen_item(5, 0, "head"), true)
-	var set2: Dictionary = Sets.make(Sets.SETS.keys()[0], "boots", 100)
+	var set2: Dictionary = Sets.make(Sets.ids()[0], "boots", 100)
 	check(cb.pick_block(set2) == "" and cb.pick_block(Data.gen_item(30, 3, "head")) == "full", "наборна річ береться й у повну торбу, звичайна легендарна ні")
 	var reward: Dictionary = Data.gen_item(30, 3, "head")
 	gp.assign_uid(reward)
@@ -16301,9 +16303,9 @@ func _suite_auto_buffs() -> void:
 		if SI.kind(id) == "buff" and (Cls.act(id).has("heal") or Cls.act(id).get("fx", {}).has("regen_pct")):
 			check(id in heal_ids, "баф за даними з лікуванням визнано лікувальним: %s" % id)
 	# ---- Тексти ----
-	var nl: Array = Div.DEFS["nimb"]["lines"]
+	var nl: Array = Div.def("nimb")["lines"]
 	check(nl.size() == 3 and "авто-бафи" in str(nl[2]) and ("%d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in str(nl[2]), "у Німба третій рядок про авто-бафи з порогом лікування")
-	check(int(Div.DEFS["nimb"]["price"]) == 1200 and is_equal_approx(float(Div.DEFS["nimb"]["xp"]), 5.0) and is_equal_approx(float(Div.DEFS["nimb"]["gold"]), 5.0) and str(nl[0]) == "+500% досвіду" and str(nl[1]) == "+500% гривень", "ціна та сама, Німб дає +500% досвіду й гривень")
+	check(int(Div.def("nimb")["price"]) == 1200 and is_equal_approx(float(Div.def("nimb")["xp"]), 5.0) and is_equal_approx(float(Div.def("nimb")["gold"]), 5.0) and str(nl[0]) == "+500% досвіду" and str(nl[1]) == "+500% гривень", "ціна та сама, Німб дає +500% досвіду й гривень")
 	var art := ""
 	for sec in WS.sections():
 		for e in sec["entries"]:
@@ -16618,19 +16620,19 @@ func _suite_sale_off() -> void:
 	await _frames(1)
 	var pack_btns := []
 	for b in pg.find_children("*", "Button", true, false):
-		for pk in Shop.PACKS:
-			if str(pk["price"]) in b.text:
+		for pk in Shop.pack_ids():
+			if str(Shop.pack(pk)["price"]) in b.text:
 				pack_btns.append(b)
-	var all_off: bool = pack_btns.size() == Shop.PACKS.size()
+	var all_off: bool = pack_btns.size() == Shop.pack_ids().size()
 	for b in pack_btns:
 		all_off = all_off and b.disabled and "Зараз не продається" in b.text
-	check(all_off, "усі %d наборів з цінами в гривнях, кнопки неактивні й кажуть «Зараз не продається»" % Shop.PACKS.size())
+	check(all_off, "усі %d наборів з цінами в гривнях, кнопки неактивні й кажуть «Зараз не продається»" % Shop.pack_ids().size())
 	var pl := []
 	for l in pg.find_children("*", "Label", true, false):
 		pl.append(l.text)
 	var names_ok := true
-	for pk in Shop.PACKS:
-		names_ok = names_ok and str(pk["name"]) in pl
+	for pk in Shop.pack_ids():
+		names_ok = names_ok and str(Shop.pack(pk)["name"]) in pl
 	check(names_ok and "Червінці купують за справжні гроші" in str(pl), "назви наборів і вступ на місці, як раніше")
 	var b0: int = game.hud.banner_count
 	game.shop_do("pack", "coins_1200")
@@ -16653,9 +16655,9 @@ func _suite_sale_off() -> void:
 	for l in pg.find_children("*", "Label", true, false):
 		dl.append(l.text)
 	var prices_ok := true
-	for did in Div.ORDER:
+	for did in Div.ids():
 		prices_ok = prices_ok and UIK.num(DS.price(did)) in dl
-	check(cells == Div.ORDER.size() and prices_ok, "на вкладці «Божі дари» всі %d дарів із цінами під значками" % Div.ORDER.size())
+	check(cells == Div.ids().size() and prices_ok, "на вкладці «Божі дари» всі %d дарів із цінами під значками" % Div.ids().size())
 	var off_btn := false
 	var buy_btn := false
 	for b in pg.find_children("*", "Button", true, false):
@@ -16678,7 +16680,7 @@ func _suite_sale_off() -> void:
 	check(buy_twice.call("set_full", "sviatohor"), "увесь набір купується")
 	check(buy_twice.call("artifact", str(SH.ids("artifact")[0])), "артефакт купується")
 	check(buy_twice.call("soul", str(SH.ids("soul")[0])), "душа купується")
-	var cid: String = str(Cost.ORDER[0])
+	var cid: String = str(Cost.ids()[0])
 	var c1: int = SH.coins(gw)
 	game.shop_do("costume", cid)
 	game.shop_do("costume", cid)
@@ -16714,12 +16716,12 @@ func _suite_sale_off() -> void:
 	_set_sale(true)
 	check(DS.buy(gw, gp, "mazha"), "мажу куплено, поки дари продавались")
 	_set_sale(false)
-	check(DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]), "куплена мажа діє й з вимкненим продажем")
+	check(DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.def("mazha")["bag"]), "куплена мажа діє й з вимкненим продажем")
 	game.save_game()
 	check(game.load_game(), "гра завантажилась")
 	gw = game.world
 	gp = game.player
-	check(DS.owned(gw, "mazha") and DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]) and game.TradeService.capacity(gw) == game.Acts.TRADE_CART + game.Acts.TRADE_CART_SKLAD * game.CampService.level(gw, "sklad") + 50, "віз переживає збереження: і торба, і місткість торгу")
+	check(DS.owned(gw, "mazha") and DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.def("mazha")["bag"]) and game.TradeService.capacity(gw) == game.Acts.TRADE_CART + game.Acts.TRADE_CART_SKLAD * game.CampService.level(gw, "sklad") + 50, "віз переживає збереження: і торба, і місткість торгу")
 	game.enter_location("wild_field")
 	await _frames(4)
 	var cart := false
@@ -16774,7 +16776,7 @@ func _suite_sale_off() -> void:
 	for b in pg.find_children("*", "Button", true, false):
 		if not b.disabled and b.text.begins_with("Купити"):
 			live += 1
-	check(live == Shop.PACKS.size(), "з увімкненим продажем кнопки наборів «Купити» працюють")
+	check(live == Shop.pack_ids().size(), "з увімкненим продажем кнопки наборів «Купити» працюють")
 	game.shop_do("pack", "coins_2600")
 	await _frames(3)
 	check(SH.coins(gw) == 2600 and billing.purchases == paid0 + 1, "з увімкненим продажем набір червінців купується")
@@ -16862,8 +16864,8 @@ func _suite_xp_gold_cap() -> void:
 	# ---- 2. Золоті речі й речі наборів ----
 	var gold_bad := []
 	var gold_n := 0
-	for id in Uniques.ORDER:
-		var A: Dictionary = Uniques.DEFS[id]["affixes"]
+	for id in Uniques.ids():
+		var A: Dictionary = Uniques.def(id)["affixes"]
 		if not (A.has("xp") or A.has("gold")):
 			continue
 		for lvl in [1, 50, 99, 140]:
@@ -16885,8 +16887,8 @@ func _suite_xp_gold_cap() -> void:
 	check(is_equal_approx(float(lad99["affixes"]["xp"]), cap) and float(Uniques.make("ladanka_mamaia", 30)["affixes"]["xp"]) < cap and float(Uniques.make("ladanka_mamaia", 30)["affixes"]["xp"]) > float(Uniques.make("ladanka_mamaia", 10)["affixes"]["xp"]), "Ладанка Мамая: досвід росте з рівнем і впирається в стелю")
 	var set_bad := 0
 	seed(5)
-	for set_id in Sets.ORDER:
-		for slot in Data.SLOTS:
+	for set_id in Sets.ids():
+		for slot in Data.slots():
 			for lvl in [1, 50, 99, 140]:
 				for k in 5:
 					var it: Dictionary = Sets.make(set_id, slot, lvl, "sabre")
@@ -16901,7 +16903,7 @@ func _suite_xp_gold_cap() -> void:
 	for id in ["xp", "gold"]:
 		var p = _new_player()
 		p.equipment = {}
-		for slot in Data.SLOTS:
+		for slot in Data.slots():
 			var it := Data.gen_item(99, 3, slot, "sabre" if slot == "weapon" else "")
 			it["affixes"] = {id: best[id]}
 			it["up"] = 10
@@ -16914,7 +16916,7 @@ func _suite_xp_gold_cap() -> void:
 	var pn1 = _new_player()
 	for pn in [pn0, pn1]:
 		pn.equipment = {}
-		for slot in Data.SLOTS:
+		for slot in Data.slots():
 			var it := Data.gen_item(99, 3, slot, "sabre" if slot == "weapon" else "")
 			it["affixes"] = {"xp": best["xp"], "gold": best["gold"]}
 			it["up"] = 10
@@ -17157,7 +17159,7 @@ func _suite_xp_gold_cap() -> void:
 	check(diff.is_empty(), "інші властивості кидаються за тими самими формулами: %s" % str(diff))
 	var u_ok := true
 	for st_id in ["dmg_pct", "hp", "crit", "skill_power", "armor"]:
-		u_ok = u_ok and is_equal_approx(Uniques.value(st_id, 80, 1.1), 1.6 * (float(Uniques.MID[st_id][0]) + float(Uniques.MID[st_id][1]) * 80) * 1.1)
+		u_ok = u_ok and is_equal_approx(Uniques.value(st_id, 80, 1.1), 1.6 * (float(GameDB.bonus(st_id)["mid"][0]) + float(GameDB.bonus(st_id)["mid"][1]) * 80) * 1.1)
 	check(u_ok, "золоті речі: інші властивості ті самі")
 	# ---- Довідник ----
 	var prop_txt := ""
@@ -17203,7 +17205,7 @@ func _suite_reforge_rare() -> void:
 			if k != victim and (not after.has(k) or float(after[k]) != float(before[k])):
 				return false
 		return true
-	var set_id: String = Sets.SETS.keys()[0]
+	var set_id: String = Sets.ids()[0]
 	var gid := "oberih_berehyni"
 	var probe_set: Dictionary = Sets.make(set_id, "head", 60)
 	var probe_gold: Dictionary = Uniques.make(gid, 40)
@@ -17245,8 +17247,8 @@ func _suite_reforge_rare() -> void:
 	var gv := "hp"
 	var g_fresh: String = CR.reforge(cw, cp, int(g["uid"]), gv)
 	check(one_swapped.call(gb, g["affixes"], gv, g_fresh), "золота річ: замінено одну властивість (%s → %s), решта ті самі" % [gv, g_fresh])
-	check(str(g.get("unique", "")) == gid and Uniques.is_unique(g) and Uniques.power_id(g) == str(Uniques.DEFS[gid]["power"]), "золота річ лишилась золотою, з особливою силою")
-	var def_aff: Dictionary = Uniques.DEFS[gid]["affixes"]
+	check(str(g.get("unique", "")) == gid and Uniques.is_unique(g) and Uniques.power_id(g) == str(Uniques.def(gid)["power"]), "золота річ лишилась золотою, з особливою силою")
+	var def_aff: Dictionary = Uniques.def(gid)["affixes"]
 	var check_renew := func(it: Dictionary, levels: int, want_lvl: int, label: String) -> void:
 		var pre: Dictionary = it["affixes"].duplicate()
 		var pre_keep := {}
@@ -17281,8 +17283,8 @@ func _suite_reforge_rare() -> void:
 	check(same1 and same2, "золота річ без перекування після оновлення та сама, що Uniques.make на тому ж рівні")
 	# ---- Стеля досвіду й гривень ----
 	var plain_ids := []
-	for id in Uniques.ORDER:
-		var D: Dictionary = Uniques.DEFS[id]
+	for id in Uniques.ids():
+		var D: Dictionary = Uniques.def(id)
 		if str(D["slot"]) != "weapon" and not D["affixes"].has("xp") and not D["affixes"].has("gold"):
 			plain_ids.append(id)
 	var cap_hits := 0
@@ -17425,8 +17427,8 @@ func _suite_artifact_bag_icon() -> void:
 	var no_sprite := []
 	var bad := []
 	var by_boss := {}
-	for id in Arts.DEFS:
-		var boss: String = str(Arts.DEFS[id]["boss"])
+	for id in Arts.ids():
+		var boss: String = str(Arts.def(id)["boss"])
 		var shop_ic: TextureRect = UShop._goods_icon("artifact", id, null)
 		var want: String = _key_free(UKit.sprite_icon(boss, 48)) if Gfx.has(boss) else generic
 		for px in [66, 70]:
@@ -17443,10 +17445,10 @@ func _suite_artifact_bag_icon() -> void:
 		else:
 			no_sprite.append(id)
 		shop_ic.free()
-	check(bad.is_empty() and same == Arts.DEFS.size() * 2, "кожен артефакт у клітинці торби (66 і 70) має той самий значок, що в крамниці: %d, розбіжності %s" % [same, str(bad)])
-	check(sprites >= 6 and sprites + no_sprite.size() == Arts.DEFS.size(), "спрайт боса мають %d артефактів, без спрайта %s" % [sprites, str(no_sprite)])
+	check(bad.is_empty() and same == Arts.ids().size() * 2, "кожен артефакт у клітинці торби (66 і 70) має той самий значок, що в крамниці: %d, розбіжності %s" % [same, str(bad)])
+	check(sprites >= 6 and sprites + no_sprite.size() == Arts.ids().size(), "спрайт боса мають %d артефактів, без спрайта %s" % [sprites, str(no_sprite)])
 	var drawn := []  # артефакти, чий бос має спрайт
-	for id in Arts.ORDER:
+	for id in Arts.ids():
 		if not id in no_sprite:
 			drawn.append(id)
 	# ---- Різні боси дають різні значки ----
@@ -17456,7 +17458,7 @@ func _suite_artifact_bag_icon() -> void:
 	var c1: Button = UKit.item_cell(Arts.make(a1), func(): pass, false, 70)
 	var k0: String = _tex_key(_cell_tex(c0))
 	var k1: String = _tex_key(_cell_tex(c1))
-	check(Arts.DEFS[a0]["boss"] != Arts.DEFS[a1]["boss"] and k0 != k1 and k0 != generic and k1 != generic, "два артефакти різних босів у торбі різні: %s і %s" % [k0, k1])
+	check(Arts.def(a0)["boss"] != Arts.def(a1)["boss"] and k0 != k1 and k0 != generic and k1 != generic, "два артефакти різних босів у торбі різні: %s і %s" % [k0, k1])
 	var uniq := {}
 	for b in by_boss:
 		uniq[by_boss[b]] = true
@@ -17489,7 +17491,7 @@ func _suite_artifact_bag_icon() -> void:
 	check(_tex_key(_cell_tex(cg)) == generic and generic != "" and _key_free(UKit.artifact_icon("nema_takoho", 48)) == generic, "артефакт без спрайта боса має загальний значок і не падає")
 	cg.free()
 	# ---- Звичайна, золота й наборна речі як були ----
-	var kinds := {"звичайна": Data.gen_item(20, 2, "head"), "зброя": Data.gen_item(20, 3, "weapon"), "золота": Uniques.make("oberih_berehyni", 40), "наборна": Sets.make(Sets.SETS.keys()[0], "belt", 60)}
+	var kinds := {"звичайна": Data.gen_item(20, 2, "head"), "зброя": Data.gen_item(20, 3, "weapon"), "золота": Uniques.make("oberih_berehyni", 40), "наборна": Sets.make(Sets.ids()[0], "belt", 60)}
 	var kinds_ok := true
 	for kn in kinds:
 		var it: Dictionary = kinds[kn]
@@ -17752,6 +17754,219 @@ func _missed(found: Array, expect: Array) -> Array:
 		if not hit:
 			out.append(x)
 	return out
+
+
+## База речей (data/gear_slots.json ... coin_packs.json): типи, номери, заморожені записи, перевірка
+## зламаних записів і те, що кожну річ можна створити й вдягнути.
+func _suite_item_db() -> void:
+	suite("База речей")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var Sets = load("res://scripts/data/sets.gd")
+	var Souls = load("res://scripts/data/souls.gd")
+	var Artifacts = load("res://scripts/data/artifacts.gd")
+	var Enchants = load("res://scripts/data/enchants.gd")
+	var Shop = load("res://scripts/data/shop.gd")
+	var Costumes = load("res://scripts/data/costumes.gd")
+	var ClassesD = load("res://scripts/data/classes.gd")
+	var SoulS = load("res://scripts/game/soul_service.gd")
+	var probs := GameDB.problems()
+	check(probs.is_empty(), "у базі нема проблем%s" % ("" if probs.is_empty() else ": " + "; ".join(probs.slice(0, 5))))
+	var expect := {"gear_slots": 7, "rarities": 6, "weapons": 7, "armors": 15, "bonuses": 18, "sharpening": 10, "powers": 7,
+		"golden_tiers": 6, "set_effects": 10, "soul_effects": 21, "soul_tiers": 7, "gift_slots": 7, "shop_kinds": 4, "golden": 40,
+		"sets": 3, "artifacts": 25, "souls": 58, "enchants": 12, "gifts": 9, "costumes": 6, "coin_packs": 5}
+	var count_bad := []
+	for t in expect:
+		if GameDB.ids(t).size() != int(expect[t]):
+			count_bad.append("%s %d" % [t, GameDB.ids(t).size()])
+	check(count_bad.is_empty(), "у таблицях речей стільки записів, скільки було в коді: %s" % str(count_bad))
+	# ---- Номери: цілі, у проміжку своєї таблиці, ніде не повторюються, пошук за номером ----
+	var all_nums := {}
+	var nums_ok := true
+	var nums_bad := []
+	for t in GameDB.TABLES:
+		var span: Array = GameDB.NUM_RANGES[t]
+		for id in GameDB.ids(t):
+			var n = GameDB.row(t, id)["num"]
+			var good: bool = typeof(n) == TYPE_INT and n >= int(span[0]) and n <= int(span[1]) and not all_nums.has(n) and GameDB.by_num(t, n) == id
+			if not good:
+				nums_bad.append("%s/%s" % [t, id])
+			nums_ok = nums_ok and good
+			all_nums[n] = id
+	check(nums_ok, "номери всіх таблиць цілі, у своєму проміжку й не повторюються між таблицями: %s" % str(nums_bad))
+	var ranges := []
+	for t in GameDB.NUM_RANGES:
+		ranges.append(GameDB.NUM_RANGES[t])
+	ranges.append(GameDB.BOSS_NUM_RANGE)
+	var overlap := false
+	for i in ranges.size():
+		for j in range(i + 1, ranges.size()):
+			overlap = overlap or (int(ranges[i][0]) <= int(ranges[j][1]) and int(ranges[j][0]) <= int(ranges[i][1]))
+	check(not overlap and GameDB.NUM_RANGES.size() == GameDB.TABLES.size(), "проміжки номерів не перетинаються, і в кожної таблиці свій")
+	check(GameDB.gear_slot("weapon")["num"] == 4001 and GameDB.row("rarities", "legendary")["num"] == 4054 and GameDB.weapon("pistols")["num"] == 4107
+		and GameDB.row("armors", "motanka")["num"] == 4215 and GameDB.bonus("gold")["num"] == 4318 and GameDB.row("sharpening", "up9")["num"] == 4410
+		and GameDB.power("yadro")["num"] == 4507 and GameDB.row("golden_tiers", "t6")["num"] == 4606 and GameDB.row("set_effects", "big_dmg")["num"] == 4710
+		and GameDB.row("soul_effects", "heal_taken")["num"] == 4821 and GameDB.row("soul_tiers", "t7")["num"] == 4907 and GameDB.row("gift_slots", "lantern")["num"] == 4957
+		and GameDB.row("shop_kinds", "soul")["num"] == 4984, "номери основ ті самі, що їм дали")
+	check(GameDB.golden("kotyhoroshko")["num"] == 5001 and GameDB.golden("sholom_oleha")["num"] == 5040 and GameDB.item_set("boian")["num"] == 5103
+		and GameDB.artifact("zmiiv_zub")["num"] == 5201 and GameDB.artifact("ulamok_chornoho_sontsia")["num"] == 5225 and GameDB.by_num("souls", 5301) == "zlyden"
+		and GameDB.soul("b_chornoboh")["num"] == 5358 and GameDB.enchant("dzherelo")["num"] == 5412 and GameDB.gift("likhtar")["num"] == 5509
+		and GameDB.costume("zoloto")["num"] == 5606 and GameDB.by_num("coin_packs", 5705) == "coins_7000" and GameDB.by_num("golden", 4999) == "", "номери речей ті самі, що їм дали")
+	# ---- Типи: ціле ціле, дробове дробове, колір — Color ----
+	var types_ok := true
+	for id in GameDB.ids("golden"):
+		var R: Dictionary = GameDB.golden(id)
+		types_ok = types_ok and typeof(R["tier"]) == TYPE_INT
+		var kinds: Dictionary = GameDB.power(R["power"])["params"]
+		for k in R["params"]:
+			types_ok = types_ok and typeof(R["params"][k]) == (TYPE_INT if kinds[k] == "int" else TYPE_FLOAT)
+		for a in R["affixes"]:
+			types_ok = types_ok and typeof(R["affixes"][a]) == TYPE_FLOAT
+	for id in GameDB.ids("souls"):
+		for k in GameDB.soul(id)["fx"]:
+			types_ok = types_ok and typeof(GameDB.soul(id)["fx"][k]) == TYPE_INT
+		types_ok = types_ok and typeof(GameDB.soul(id)["tier"]) == TYPE_INT
+	for id in GameDB.ids("sets"):
+		for st in GameDB.item_set(id)["bonus"]:
+			types_ok = types_ok and typeof(st["pieces"]) == TYPE_INT
+			for k in st["fx"]:
+				types_ok = types_ok and typeof(st["fx"][k]) == TYPE_INT
+	for id in GameDB.ids("artifacts"):
+		for k in GameDB.artifact(id)["bonus"]:
+			types_ok = types_ok and typeof(GameDB.artifact(id)["bonus"][k]) == TYPE_FLOAT
+	for id in GameDB.ids("rarities"):
+		types_ok = types_ok and typeof(GameDB.row("rarities", id)["color"]) == TYPE_COLOR and typeof(GameDB.row("rarities", id)["rank"]) == TYPE_INT
+	for id in GameDB.ids("soul_tiers"):
+		types_ok = types_ok and typeof(GameDB.row("soul_tiers", id)["color"]) == TYPE_COLOR and typeof(GameDB.row("soul_tiers", id)["price"]) == TYPE_INT
+	types_ok = types_ok and typeof(GameDB.gift("mazha")["bag"]) == TYPE_INT and typeof(GameDB.gift("khovanets")["pickup"]) == TYPE_FLOAT and typeof(GameDB.gift("nimb")["price"]) == TYPE_INT
+	types_ok = types_ok and typeof(GameDB.bonus("str")["roll"]["every"]) == TYPE_INT and typeof(GameDB.gear_slot("belt")["primary"]["every"]) == TYPE_INT and typeof(GameDB.gear_slot("weapon")["drop"]) == TYPE_INT
+	types_ok = types_ok and typeof(GameDB.enchant("kat")["fx"]["status_dmg"]) == TYPE_FLOAT and typeof(GameDB.row("coin_packs", "coins_100")["coins"]) == TYPE_INT
+	check(types_ok, "цілі поля речей цілі, дробові дробові, кольори — Color")
+	var hrim: Dictionary = Uniques.params("kotyhoroshko")
+	check(typeof(hrim["radius"]) == TYPE_INT and hrim["radius"] == 200 and typeof(hrim["pct"]) == TYPE_FLOAT and typeof(Uniques.params("posokh_dazhboha")["sec"]) == TYPE_FLOAT and typeof(Uniques.params("posokh_dazhboha")["period"]) == TYPE_INT,
+		"параметри сили цілі чи дробові так, як каже сила (радіус 200, а не 200.0)")
+	# ---- Лише для читання, той самий запис, похідні переліки складаються раз ----
+	var G0: Dictionary = GameDB.golden("kotyhoroshko")
+	check(G0.is_read_only() and G0["params"].is_read_only() and G0["bosses"].is_read_only() and GameDB.item_set("boian")["bonus"][0]["fx"].is_read_only() and GameDB.soul("mavka")["fx"].is_read_only() and GameDB.gift("molot")["fx"].is_read_only() and GameDB.ids("golden").is_read_only(), "записи речей заморожені")
+	check(is_same(Uniques.def("kotyhoroshko"), GameDB.golden("kotyhoroshko")) and is_same(Data.slots(), Data.slots()) and Data.slots().is_read_only() and Data.affix_pool().is_read_only() and Data.sharpen_chances().is_read_only() and is_same(Data.armor_names("head"), Data.armor_names("head")),
+		"модулі віддають самі записи й складені раз переліки, а не копії")
+	var pool: Array = Data.affix_pool().duplicate()
+	pool.shuffle()
+	check(not pool.is_read_only() and pool.size() == Data.affix_pool().size(), "копія переліку властивостей змінна (кидок речі тасує саме копію)")
+	# ---- Похідні переліки з таблиць ----
+	check(Data.slots() == ["weapon", "head", "body", "belt", "boots", "amulet"] and Data.slot_name("artifact") == "Артефакт" and not Data.is_slot("artifact") and Data.slot_primary("belt") == "vit", "клітинки: шість вдягаються, артефакт ні")
+	check(Data.agi_weapons() == ["pishchal", "bow", "pistols"] and Data.basic_weapons() == ["sabre", "mace", "pike"] and Data.is_ranged("staff") and not Data.is_agi("staff") and not Data.is_ranged("pike"), "зброя: дальня, від Спритності й типова — прапорці в записах")
+	check(Data.whole_stats() == ["str", "agi", "vit", "spi"] and Data.capped_stats() == ["xp", "gold"] and Data.affix_pool().size() == 17 and not Data.affix_pool().has("flat_dmg") and Data.armor_names("amulet") == ["Оберіг", "Ладанка", "Мотанка"], "бонуси: цілі, зі стелею, властивості випадкової речі")
+	check(Data.rarity_count() == 6 and Data.rarity_name(3) == "Легендарна" and Data.rarity_plurals().size() == 4 and Data.rarity_color(4) == Color(1.0, 0.85, 0.3) and Data.sharpen_chances().size() == Data.MAX_UPGRADE, "рідкості й заточка за числом із речі")
+	check(Uniques.tier_name(0) == "" and Uniques.tier_mult(0) == 1.0 and Uniques.tier_chance(0) == 0.0 and Uniques.tier_price(0) == 0 and Uniques.tier_fair(6).is_empty() and Uniques.tier_name(9) == "" and Souls.tier_name(0) == "" and Souls.max_tier() == 7, "ступінь 0 і неіснуючий ступінь: порожні, як нульові клітинки старих масивів")
+	check(Shop.kinds() == ["unique", "set", "artifact", "soul"] and Shop.kind_price("set", "full_price") < Shop.kind_price("set") * Data.slots().size() and Shop.pack("nema").is_empty() and Costumes.price("nema") == 0, "розділи крамниці й ціни з таблиць")
+	# ---- Файли в єдиному вигляді ----
+	var fmt_bad := []
+	var Fmt = load("res://tools/data_format.gd")
+	for t in GameDB.ITEM_TABLES:
+		var text := FileAccess.get_file_as_string(GameDB.path_of(t))
+		if Fmt.format_table(t, JSON.parse_string(text)) != text or "\\u0" in text:
+			fmt_bad.append(t)
+	check(fmt_bad.is_empty(), "файли речей у єдиному вигляді (tools/data_format.gd): %s" % str(fmt_bad))
+	# ---- Перевірка ловить зламаний запис у кожній таблиці ----
+	var breaks := {
+		"gear_slots": [func(r): r["weapon"]["primary"]["stat"] = "nema"; r["head"]["drop"] = -1, ["нема бонусу «nema»", "gear_slots/head: «drop»"]],
+		"rarities": [func(r): r["rare"]["rank"] = 0; r["legendary"]["color"] = [2, 0, 0], ["«rank» 0 уже має", "rarities/legendary.color"]],
+		"weapons": [func(r): r["bow"]["dmg"] = 0; r["sabre"]["agi"] = true, ["weapons/bow: «dmg»", "«agi» лише"]],
+		"armors": [func(r): r["kuchma"]["slot"] = "weapon", ["armors/kuchma: «slot»"]],
+		"bonuses": [func(r): r["hp"]["text"] = "здоров'я"; r["str"]["roll"].erase("every"), ["bonuses/hp: «text»", "bonuses/str: цілий бонус"]],
+		"sharpening": [func(r): r["up3"]["chance"] = 1.5; r.erase("up9"), ["sharpening/up3: «chance»", "Data.MAX_UPGRADE"]],
+		"powers": [func(r): r["hrim"]["text"] = str(r["hrim"]["text"]) + " {nema}", ["{nema}"]],
+		"golden_tiers": [func(r): r["t2"]["tier"] = 5; r["t1"]["chance"] = 2.0, ["«tier» 5 уже має", "golden_tiers/t1: «chance»"]],
+		"set_effects": [func(r): r["dmg"]["text"] = "шкода", ["set_effects/dmg: «text»"]],
+		"soul_effects": [func(r): r["regen"] = {"num": 4899, "text": "+%s%% здоров'я/с", "cap": 5}, ["Souls.FORBIDDEN"]],
+		"soul_tiers": [func(r): r["t3"]["price"] = 0, ["soul_tiers/t3: «price»"]],
+		"gift_slots": [func(r): r["pet"]["name"] = " ", ["gift_slots/pet: «name» порожнє"]],
+		"shop_kinds": [func(r): r["nema"] = {"num": 4990, "name": "Нема"}; r["set"].erase("full_price"), ["shop_kinds/nema: крамниця не знає", "shop_kinds/set: потрібна «full_price»"]],
+		"golden": [func(r):
+			r["kotyhoroshko"]["bosses"] = ["nema"]
+			r["kotyhoroshko"]["power"] = "nema"
+			r["osykovyi_spys"]["params"]["max"] = 6.5
+			r["kozhukh_kozhumiaky"]["type"] = "sabre"
+			r["poias_baidy"]["affixes"]["regen"] = 1.0
+			r["vovcha_kuchma"]["tier"] = 9
+			r["luk_baidy"]["num"] = 5001, ["«nema», якої немає", "нема сили «nema»", "«params.max» має бути цілим", "golden/kozhukh_kozhumiaky: «type»", "не має «mid»", "«tier» 9", "номер 5001 уже має"]],
+		"sets": [func(r):
+			r["sviatohor"]["bonus"][0]["fx"] = {"nema": 3}
+			r["dovbush"]["bonus"][2]["pieces"] = 5
+			r["boian"]["affixes"].append("flat_dmg"), ["«nema» — нема в set_effects.json", "Sets.STEPS", "«flat_dmg» не кидається"]],
+		"artifacts": [func(r): r["zmiiv_zub"]["boss"] = "mavka"; r["iklo_upyria"]["boss"] = "vovkulaka", ["«mavka» тут бос", "у боса «vovkulaka» уже є артефакт"]],
+		"souls": [func(r): r["zlyden"]["fx"] = {"nema": 5}; r["b_nobody"] = {"num": 5399, "name": "Душа", "tier": 4, "fx": {"hp": 3}, "lore": "x"}; r["mavka"]["tier"] = 9, ["бонусу «nema» нема", "«nobody», якої немає", "souls/mavka: «tier» 9"]],
+		"enchants": [func(r): r["kat"]["slots"] = ["artifact"]; r["viter"]["fx"] = {"nema": 1.0}, ["«artifact» не клітинка спорядження", "ключа «nema» нема"]],
+		"gifts": [func(r): r["nimb"]["slot"] = "nema"; r["molot"]["price"] = 0; r["likhtar"]["sight"] = false, ["нема гнізда «nema»", "gifts/molot: «price»", "«sight» пишеться лише як true"]],
+		"costumes": [func(r): r["hetman"]["price"] = -5; r["hutsul"]["num"] = 1001, ["costumes/hetman: «price»", "номер 1001 поза проміжком"]],
+		"coin_packs": [func(r): r["coins_100"]["coins"] = 0; r["coins_550"]["price"] = "", ["coin_packs/coins_100: «coins»", "coin_packs/coins_550: «price» порожнє"]],
+	}
+	check(breaks.size() == GameDB.ITEM_TABLES.size(), "зламаний запис є для кожної таблиці речей")
+	var missed := []
+	for t in breaks:
+		var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of(t)))
+		if not GameDB.validate(t, raw).is_empty():
+			missed.append("%s: цілий файл не проходить" % t)
+		var bad: Dictionary = raw.duplicate(true)
+		breaks[t][0].call(bad)
+		var found := GameDB.validate(t, bad)
+		for x in breaks[t][1]:
+			var hit := false
+			for p in found:
+				hit = hit or x in str(p)
+			if not hit:
+				missed.append("%s: %s" % [t, x])
+	check(missed.is_empty(), "перевірка ловить кожну ваду зламаних записів речей%s" % ("" if missed.is_empty() else ": не впіймала " + str(missed)))
+	var praw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("pets")))
+	praw["nema"] = {"num": 3299, "gift": true, "mechanic": "pet/mazha"}
+	var pfound := str(GameDB.validate("pets", praw))
+	check("божого дару «nema» нема в gifts.json" in pfound, "супутник із дару перевіряється за gifts.json")
+	# ---- Кожну річ можна створити й вдягнути ----
+	var make_bad := []
+	var p = _new_player()
+	for id in Uniques.ids():
+		var it: Dictionary = Uniques.make(id, 60)
+		var job := "cossack"
+		for cls in ClassesD.CLASSES:
+			if Uniques.type_of(id) in ClassesD.CLASSES[cls].get("weapons", []):
+				job = cls
+				break
+		p.job = job
+		p.equipment[it["slot"]] = it
+		p.recalc()
+		if not p.u_pow.has(Uniques.def(id)["power"]) or p.damage <= 0.0 or Uniques.power_text(id).contains("{") or str(it["type"]) != Uniques.type_of(id):
+			make_bad.append(id)
+		p.equipment.erase(it["slot"])
+	p.job = "cossack"
+	for sid in Sets.ids():
+		for slot in Data.slots():
+			p.equipment[slot] = Sets.make(sid, slot, 110, "sabre" if slot == "weapon" else "")
+		p.recalc()
+		if p.set_fx.is_empty() or int(Sets.worn.get(sid, 0)) != 6:
+			make_bad.append(sid)
+	var amulet: Dictionary = p.equipment["amulet"]
+	amulet["sock"] = 1
+	for sid in Souls.ids():
+		amulet["soul"] = sid
+		p.recalc()
+		if p.soul_fx.is_empty() or SoulS.fx_text(sid) == "":
+			make_bad.append(sid)
+	amulet.erase("soul")
+	for aid in Artifacts.ids():
+		p.inventory = [Artifacts.make(aid)]
+		p.recalc()
+		if p.art.is_empty() or not Artifacts.is_artifact(p.inventory[0]) or p.can_use(p.inventory[0]):
+			make_bad.append(aid)
+	p.inventory = []
+	for eid in Enchants.ids():
+		var slot: String = Enchants.def(eid)["slots"][0]
+		p.equipment[slot]["ench"] = eid
+		p.recalc()
+		if p.fx(Enchants.def(eid)["fx"].keys()[0]) <= 0.0:
+			make_bad.append(eid)
+		p.equipment[slot].erase("ench")
+	check(make_bad.is_empty(), "кожна золота річ, річ набору, душа, артефакт і зачарування створюються й діють на героя: %s" % str(make_bad))
+	p.free()
 
 
 func _suite_party_db() -> void:

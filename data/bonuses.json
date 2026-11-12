@@ -1,0 +1,131 @@
+{
+	"str": {
+		"num": 4301,
+		"text": "+%s до Сили",
+		"whole": true,
+		"affix": true,
+		"roll": {"min": 1.0, "max": 1.0, "every": 3}
+	},
+	"agi": {
+		"num": 4302,
+		"text": "+%s до Спритності",
+		"whole": true,
+		"affix": true,
+		"roll": {"min": 1.0, "max": 1.0, "every": 3}
+	},
+	"vit": {
+		"num": 4303,
+		"text": "+%s до Витривалості",
+		"whole": true,
+		"affix": true,
+		"roll": {"min": 1.0, "max": 1.0, "every": 3}
+	},
+	"spi": {
+		"num": 4304,
+		"text": "+%s до Характерництва",
+		"whole": true,
+		"affix": true,
+		"roll": {"min": 1.0, "max": 1.0, "every": 3}
+	},
+	"flat_dmg": {
+		"num": 4305,
+		"text": "+%s шкоди"
+	},
+	"dmg_pct": {
+		"num": 4306,
+		"text": "+%s%% шкоди",
+		"affix": true,
+		"roll": {"min": 3.0, "max": 6.0, "per_level": 0.4},
+		"mid": [4.5, 0.4]
+	},
+	"crit": {
+		"num": 4307,
+		"text": "+%s%% шансу криту",
+		"decimals": 1,
+		"affix": true,
+		"roll": {"min": 1.5, "max": 3.5, "per_level": 0.15},
+		"mid": [2.5, 0.15]
+	},
+	"aspd": {
+		"num": 4308,
+		"text": "+%s%% швидкості удару",
+		"affix": true,
+		"roll": {"min": 3.0, "max": 6.0, "per_level": 0.3},
+		"mid": [4.5, 0.3]
+	},
+	"hp": {
+		"num": 4309,
+		"text": "+%s здоров'я",
+		"affix": true,
+		"roll": {"min": 8.0, "max": 16.0, "per_level": 3.0},
+		"mid": [12.0, 3.0]
+	},
+	"armor": {
+		"num": 4310,
+		"text": "+%s%% захисту",
+		"decimals": 1,
+		"affix": true,
+		"roll": {"min": 1.5, "max": 3.0, "per_level": 0.2},
+		"mid": [2.25, 0.2]
+	},
+	"regen": {
+		"num": 4311,
+		"text": "+%s здоров'я/с",
+		"decimals": 1,
+		"affix": true,
+		"roll": {"min": 0.3, "max": 0.7, "per_level": 0.05}
+	},
+	"lifesteal": {
+		"num": 4312,
+		"text": "+%s%% вампіризму",
+		"decimals": 1,
+		"affix": true,
+		"roll": {"min": 0.8, "max": 1.6, "per_level": 0.05}
+	},
+	"speed": {
+		"num": 4313,
+		"text": "+%s%% швидкості бігу",
+		"affix": true,
+		"roll": {"min": 2.0, "max": 4.0, "per_level": 0.2},
+		"mid": [3.0, 0.2]
+	},
+	"xp": {
+		"num": 4314,
+		"text": "+%s%% досвіду",
+		"decimals": 1,
+		"affix": true,
+		"capped": true,
+		"roll": {"min": 4.0, "max": 8.0, "per_level": 0.4},
+		"mid": [6.0, 0.4]
+	},
+	"skill_power": {
+		"num": 4315,
+		"text": "+%s%% сили вмінь",
+		"affix": true,
+		"roll": {"min": 4.0, "max": 7.0, "per_level": 0.4},
+		"mid": [5.5, 0.4]
+	},
+	"skill_cd": {
+		"num": 4316,
+		"text": "-%s%% перезарядки вмінь",
+		"affix": true,
+		"roll": {"min": 2.0, "max": 4.0, "per_level": 0.2},
+		"mid": [3.0, 0.2]
+	},
+	"pickup": {
+		"num": 4317,
+		"text": "+%s%% радіусу збору",
+		"affix": true,
+		"roll": {"min": 10.0, "max": 20.0},
+		"mid": [15.0, 0.0]
+	},
+	"gold": {
+		"num": 4318,
+		"text": "+%s%% гривень",
+		"decimals": 1,
+		"affix": true,
+		"capped": true,
+		"roll": {"min": 8.0, "max": 15.0, "per_level": 1.0},
+		"mid": [11.5, 1.0]
+	}
+}

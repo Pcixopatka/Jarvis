@@ -121,7 +121,7 @@ static func _hero(game) -> Control:
 
 	# Докладні показники у дві колонки
 	var lines := [
-		["Зброя", Data.WEAPON_TYPES[p.weapon_type]["name"]],
+		["Зброя", Data.weapon_name(p.weapon_type)],
 		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
 		["Шкода удару", "%.1f" % p.damage],
 		["Шанс криту", "%d%%  (x%s)" % [roundi(p.crit_chance * 100), ("%.2f" % p.crit_mult).trim_suffix("0").trim_suffix("0").trim_suffix(".")]],
@@ -162,10 +162,10 @@ static func _hero(game) -> Control:
 	bag.add_child(bag_head)
 	var arts: Array = p.Artifacts.active_ids(p.inventory)
 	if not arts.is_empty():
-		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 15, Data.RARITY_COLORS[p.Artifacts.RARITY], false))
+		bag.add_child(UI.label("Артефактів діє: %d" % arts.size(), 15, Data.rarity_color(p.Artifacts.RARITY), false))
 	# Набори: скільки речей вдягнено й які щаблі вже діють
 	var worn: Dictionary = p.Sets.count(p.equipment)
-	for sid in p.Sets.ORDER:
+	for sid in p.Sets.ids():
 		var n: int = int(worn.get(sid, 0))
 		if n <= 0:
 			continue
@@ -173,7 +173,7 @@ static func _hero(game) -> Control:
 		for step in p.Sets.STEPS:
 			if n >= int(step):
 				on.append(p.Sets.step_text(sid, step))
-		var sl := UI.label("✦ %s %d/%d%s" % [p.Sets.SETS[sid]["name"], n, Data.SLOTS.size(), (": " + ", ".join(on)) if not on.is_empty() else ": бонус від 2 речей"], 15, p.Sets.COLOR, false)
+		var sl := UI.label("✦ %s %d/%d%s" % [p.Sets.def(sid)["name"], n, Data.slots().size(), (": " + ", ".join(on)) if not on.is_empty() else ": бонус від 2 речей"], 15, p.Sets.COLOR, false)
 		sl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		sl.custom_minimum_size = Vector2(300, 0)
 		bag.add_child(sl)
@@ -233,7 +233,7 @@ static func _hero(game) -> Control:
 		if sure:
 			db.add_theme_stylebox_override("normal", UI.style(Color(0.45, 0.1, 0.08), Color(1.0, 0.5, 0.4), 10, 6))
 		acts.add_child(db)
-	if not equipped and p.can_use(item) and Data.SLOTS.has(item.get("slot", "")):
+	if not equipped and p.can_use(item) and Data.slots().has(item.get("slot", "")):
 		# що дасть ця річ герою загалом: одне число замість порівняння рядок за рядком
 		var gain: float = p.gain_from(item)
 		var gt := "Сила героя з цією річчю: %s%d%%" % ["+" if gain >= 0.0 else "−", absi(roundi(gain * 100.0))]

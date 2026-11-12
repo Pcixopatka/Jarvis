@@ -1,0 +1,77 @@
+{
+	"smushkova_shapka": {
+		"num": 4201,
+		"slot": "head",
+		"name": "Смушкова шапка"
+	},
+	"kuchma": {
+		"num": 4202,
+		"slot": "head",
+		"name": "Кучма"
+	},
+	"kozatska_shapka": {
+		"num": 4203,
+		"slot": "head",
+		"name": "Козацька шапка"
+	},
+	"zhupan": {
+		"num": 4204,
+		"slot": "body",
+		"name": "Жупан"
+	},
+	"kuntush": {
+		"num": 4205,
+		"slot": "body",
+		"name": "Кунтуш"
+	},
+	"kolchuha": {
+		"num": 4206,
+		"slot": "body",
+		"name": "Кольчуга"
+	},
+	"poias": {
+		"num": 4207,
+		"slot": "belt",
+		"name": "Пояс"
+	},
+	"shovkovyi_poias": {
+		"num": 4208,
+		"slot": "belt",
+		"name": "Шовковий пояс"
+	},
+	"cheres": {
+		"num": 4209,
+		"slot": "belt",
+		"name": "Черес"
+	},
+	"choboty": {
+		"num": 4210,
+		"slot": "boots",
+		"name": "Чоботи"
+	},
+	"sapiantsi": {
+		"num": 4211,
+		"slot": "boots",
+		"name": "Сап'янці"
+	},
+	"pokhidni_choboty": {
+		"num": 4212,
+		"slot": "boots",
+		"name": "Похідні чоботи"
+	},
+	"oberih": {
+		"num": 4213,
+		"slot": "amulet",
+		"name": "Оберіг"
+	},
+	"ladanka": {
+		"num": 4214,
+		"slot": "amulet",
+		"name": "Ладанка"
+	},
+	"motanka": {
+		"num": 4215,
+		"slot": "amulet",
+		"name": "Мотанка"
+	}
+}

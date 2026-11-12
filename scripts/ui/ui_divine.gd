@@ -15,13 +15,13 @@ const SEL_BASE := -10  # вибране гніздо дару на екрані 
 
 
 static func sel_of(slot: String) -> int:
-	return SEL_BASE - Divine.SLOTS.find(slot)
+	return SEL_BASE - Divine.slots().find(slot)
 
 
 ## Яке гніздо вибрано ("" — жодне).
 static func slot_of(sel: int) -> String:
 	var i := SEL_BASE - sel
-	return str(Divine.SLOTS[i]) if i >= 0 and i < Divine.SLOTS.size() else ""
+	return str(Divine.slots()[i]) if i >= 0 and i < Divine.slots().size() else ""
 
 
 static func _wrap(text: String, size: int, col: Color) -> Label:
@@ -66,11 +66,11 @@ static func slots_row(game, sel: int, px: int) -> Control:
 	v.add_theme_constant_override("separation", 4)
 	v.add_child(UI.label("Божі дари", 16, DIVINE_COLOR, false))
 	var grid := UI.grid(4)
-	for slot in Divine.SLOTS:
+	for slot in Divine.slots():
 		var worn: String = DivineService.worn(p, slot)
 		var on: bool = worn != "" and Divine.has(worn)
 		var id: String = worn if on else str(Divine.in_slot(slot)[0])
-		grid.add_child(_cell(str(Divine.DEFS[id]["icon"]), game.char_do.bind("select", sel_of(slot)), on, sel == sel_of(slot), px))
+		grid.add_child(_cell(str(Divine.def(id)["icon"]), game.char_do.bind("select", sel_of(slot)), on, sel == sel_of(slot), px))
 	v.add_child(grid)
 	return v
 
@@ -82,11 +82,11 @@ static func detail(game, slot: String) -> Control:
 	var ids: Array = Divine.in_slot(slot)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
-	v.add_child(UI.label("Гніздо «%s»" % Divine.SLOT_NAMES[slot], 22, DIVINE_COLOR, false))
+	v.add_child(UI.label("Гніздо «%s»" % Divine.slot_name(slot), 22, DIVINE_COLOR, false))
 	if ids.size() > 1:
 		v.add_child(_wrap("У це гніздо лягає один дар із %d: обирай, який зараз потрібніший." % ids.size(), 15, UI.MUTED))
 	for id in ids:
-		var D: Dictionary = Divine.DEFS[id]
+		var D: Dictionary = Divine.def(id)
 		var have: bool = DivineService.owned(w, id)
 		var on: bool = DivineService.wears(p, id)
 		var panel := PanelContainer.new()
@@ -127,8 +127,8 @@ static func shop_page(game) -> Control:
 	var UShop = load("res://scripts/ui/ui_shop.gd")
 	var grid := UI.grid(UShop.COLS)
 	var picked := ""
-	for id in Divine.ORDER:
-		var D: Dictionary = Divine.DEFS[id]
+	for id in Divine.ids():
+		var D: Dictionary = Divine.def(id)
 		var key := "divine:" + str(id)
 		if key == game.shop_sel:
 			picked = id
@@ -140,7 +140,7 @@ static func shop_page(game) -> Control:
 	if picked == "":
 		det.add_child(UShop._hint("Торкнись дару,\nщоб побачити,\nщо він дає."))
 	else:
-		var D: Dictionary = Divine.DEFS[picked]
+		var D: Dictionary = Divine.def(picked)
 		var have: bool = DivineService.owned(w, picked)
 		var on: bool = DivineService.wears(p, picked)
 		var head := HBoxContainer.new()
@@ -148,7 +148,7 @@ static func shop_page(game) -> Control:
 		head.add_child(UI.icon(str(D["icon"]), 64))
 		head.add_child(_wrap(str(D["name"]), 22, DIVINE_COLOR))
 		det.add_child(head)
-		det.add_child(_wrap("Гніздо «%s»" % Divine.SLOT_NAMES[D["slot"]], 14, UI.MUTED))
+		det.add_child(_wrap("Гніздо «%s»" % Divine.slot_name(D["slot"]), 14, UI.MUTED))
 		det.add_child(_wrap(str(D["desc"]), 16, UI.TEXT))
 		for line in D["lines"]:
 			det.add_child(_wrap("•  " + str(line), 15, UI.GOOD))

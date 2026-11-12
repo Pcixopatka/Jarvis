@@ -26,11 +26,11 @@ static func worn(player, slot: String) -> String:
 
 
 static func wears(player, id: String) -> bool:
-	return Divine.has(id) and worn(player, str(Divine.DEFS[id]["slot"])) == id
+	return Divine.has(id) and worn(player, str(Divine.def(id)["slot"])) == id
 
 
 static func price(id: String) -> int:
-	return int(Divine.DEFS[id]["price"]) if Divine.has(id) else 0
+	return int(Divine.def(id)["price"]) if Divine.has(id) else 0
 
 
 ## Чому не можна купити ("" — можна).
@@ -57,7 +57,7 @@ static func buy(world, player, id: String) -> bool:
 	if not s.has("divine"):
 		s["divine"] = {}
 	s["divine"][id] = true
-	player.divine[str(Divine.DEFS[id]["slot"])] = id
+	player.divine[str(Divine.def(id)["slot"])] = id
 	apply(world, player)
 	return true
 
@@ -66,7 +66,7 @@ static func buy(world, player, id: String) -> bool:
 static func equip(world, player, id: String) -> bool:
 	if not owned(world, id):
 		return false
-	player.divine[str(Divine.DEFS[id]["slot"])] = id
+	player.divine[str(Divine.def(id)["slot"])] = id
 	apply(world, player)
 	return true
 
@@ -82,9 +82,9 @@ static func fx_of(world, player) -> Dictionary:
 		"party": 0.0, "sight": false, "light": 1.0, "auto_buffs": false, "fx": {}}
 	for slot in player.divine.keys():
 		var id: String = str(player.divine[slot])
-		if not Divine.has(id) or not owned(world, id) or str(Divine.DEFS[id]["slot"]) != str(slot):
+		if not Divine.has(id) or not owned(world, id) or str(Divine.def(id)["slot"]) != str(slot):
 			continue
-		var D: Dictionary = Divine.DEFS[id]
+		var D: Dictionary = Divine.def(id)
 		out["bag"] = int(out["bag"]) + int(D.get("bag", 0))
 		out["trade"] = int(out["trade"]) + int(D.get("trade", 0))
 		out["stats"] = float(out["stats"]) + float(D.get("stats", 0.0))
@@ -107,7 +107,7 @@ static func fx_of(world, player) -> Dictionary:
 static func apply(world, player) -> void:
 	for slot in player.divine.keys():
 		var id: String = str(player.divine[slot])
-		if not Divine.has(id) or not owned(world, id) or str(Divine.DEFS[id]["slot"]) != str(slot):
+		if not Divine.has(id) or not owned(world, id) or str(Divine.def(id)["slot"]) != str(slot):
 			player.divine.erase(slot)
 	player.divine_fx = fx_of(world, player)
 	player.bag_divine = int(player.divine_fx["bag"])

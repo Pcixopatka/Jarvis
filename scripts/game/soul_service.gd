@@ -1,6 +1,6 @@
 extends RefCounted
 ## Душі: хто яку лишає, з яким шансом, гнізда в речах, торбинка душ героя й сума бонусів.
-## Таблиця душ — у Souls; тут лише правила.
+## Таблиці душ — data/souls.json, soul_effects.json, soul_tiers.json (див. Souls); тут лише правила.
 
 const Data := preload("res://scripts/data/data.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
@@ -25,8 +25,8 @@ static func id_for(e) -> String:
 
 ## Опис душі. Для нечисті, якої ще нема в таблиці, збирає просту душу, щоб нова істота не лишилась без неї.
 static func info(id: String) -> Dictionary:
-	if Souls.SOULS.has(id):
-		return Souls.SOULS[id]
+	if Souls.has(id):
+		return Souls.def(id)
 	var boss := id.begins_with("b_")
 	var kind := id.substr(2) if boss else id
 	var who: String = str(GameDB.boss_name(kind, "")) if boss else str(GameDB.mob_name(kind, ""))
@@ -43,7 +43,7 @@ static func tier(id: String) -> int:
 
 
 static func color(id: String) -> Color:
-	return Souls.TIER_COLORS[clampi(tier(id), 1, Souls.TIER_COLORS.size() - 1)]
+	return Souls.tier_color(clampi(tier(id), 1, Souls.max_tier()))
 
 
 ## Бонуси душі словами: «+5% швидкості бігу, перекид готовий на 8% швидше».
@@ -51,7 +51,7 @@ static func fx_text(id: String) -> String:
 	var parts := []
 	var fx: Dictionary = info(id)["fx"]
 	for k in fx:
-		parts.append(str(Souls.FX[k]["text"]) % str(int(fx[k])))
+		parts.append(str(Souls.fx(k)["text"]) % str(int(fx[k])))
 	return ", ".join(parts)
 
 
@@ -65,7 +65,7 @@ static func owner_name(id: String) -> String:
 ## Душі, чия нечисть справді є в грі (таблицю можна доповнити наперед).
 static func known() -> Array:
 	var out := []
-	for id in Souls.ORDER:
+	for id in Souls.ids():
 		if owner_name(id) != "":
 			out.append(id)
 	return out
@@ -138,7 +138,7 @@ static func soul_in(item: Dictionary) -> String:
 
 ## Чому в речі не можна пробити гніздо ("" — можна).
 static func socket_block(item: Dictionary) -> String:
-	if item.is_empty() or not Data.SLOTS.has(item.get("slot", "")):
+	if item.is_empty() or not Data.slots().has(item.get("slot", "")):
 		return "У цій речі гнізда не буває"
 	if has_socket(item):
 		return "Гніздо вже є"
@@ -229,7 +229,7 @@ static func strip(player, item: Dictionary) -> bool:
 ## Які душі діють: лише у вдягнених речах, кожна душа один раз.
 static func active_ids(player) -> Array:
 	var out := []
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		if player.equipment.has(slot):
 			var id := soul_in(player.equipment[slot])
 			if id != "" and not id in out:
@@ -246,7 +246,7 @@ static func fx_of(player) -> Dictionary:
 			sum[k] = float(sum.get(k, 0.0)) + float(fx[k])
 	var out := {}
 	for k in sum:
-		out[k] = minf(float(sum[k]), float(Souls.FX[k]["cap"])) / 100.0
+		out[k] = minf(float(sum[k]), float(Souls.fx(k)["cap"])) / 100.0
 	return out
 
 

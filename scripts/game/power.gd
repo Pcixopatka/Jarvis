@@ -20,7 +20,7 @@ static func dps(player) -> float:
 	var skills: float = maxf(1.6, 1.3 + 0.15 * minf(float(player.skill_power), 4.0))
 	if str(player.weapon_type) == "staff":
 		skills *= STAFF_SPELLS
-	elif str(player.weapon_type) in Data.AGI_WEAPONS:
+	elif Data.is_agi(str(player.weapon_type)):
 		skills *= RANGED_SHOTS
 	var shot: float = float(player.shot_mult) if "shot_mult" in player else 1.0  # стрільці: надлишок швидкості в силі пострілу
 	return player.damage * shot / maxf(player.attack_cooldown, 0.1) * crit * skills

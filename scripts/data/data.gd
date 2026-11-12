@@ -275,13 +275,16 @@ static func find_perk(id: String) -> Array:
 
 
 # ======================= Спорядження =======================
+# Основи речей лежать у таблицях (docs/data.md, «Речі»): клітинки (data/gear_slots.json), рідкості
+# (rarities.json), види зброї (weapons.json), основи обладунків (armors.json), бонуси (bonuses.json) і
+# заточка (sharpening.json). Тут правила: як із них складається випадкова річ, ціни, заточка.
 
-const SLOTS := ["weapon", "head", "body", "belt", "boots", "amulet"]
-const SLOT_NAMES := {"weapon": "Зброя", "head": "Шапка", "body": "Жупан", "belt": "Пояс", "boots": "Чоботи", "amulet": "Оберіг", "artifact": "Артефакт"}
+const GameDB := preload("res://scripts/core/game_db.gd")
+const _EMPTY := {}
+
 const INVENTORY_SIZE := 24
 const MAX_UPGRADE := 10
 const UPGRADE_BONUS := 0.12  # +12% до всіх бонусів речі за кожен рівень заточки
-const SHARPEN_CHANCE := [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.25]
 const SHARPEN_RISK_FROM := 6  # з цієї заточки невдача знижує рівень на 1
 const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гривні: у стільки разів дорожча
 
@@ -290,84 +293,243 @@ const SHARPEN_SAFE_MULT := 3.0  # заточка без ризику за гри
 ## шапка 99-го рівня на +10 давала +152% досвіду, а сума по всьому спорядженню сягала кількасот відсотків.
 const XP_GOLD_MAX_TOP := 16.7
 ## Стеля самої властивості xp чи gold на речі (без заточки): заточка множить її до XP_GOLD_MAX_TOP.
+## Які властивості так рахуються — «capped» у bonuses.json, їхній кидок — там само («roll»).
 const XP_GOLD_CAP := XP_GOLD_MAX_TOP / (1.0 + UPGRADE_BONUS * MAX_UPGRADE)
-## Кидок властивостей досвіду й гривень до масштабу: [нижня межа, верхня межа, приріст за рівень речі].
-const XP_GOLD_ROLL := {"xp": [4.0, 8.0, 0.4], "gold": [8.0, 15.0, 1.0]}
 ## Найкраща звичайна річ, від якої рахується масштаб: легендарна цього рівня з найвищим кидком дає рівно стелю.
 const XP_GOLD_TOP_LEVEL := 99
 const XP_GOLD_TOP_RARITY := 3
 
-const RARITY_NAMES := ["Звичайна", "Добротна", "Рідкісна", "Легендарна", "Унікальна", "Артефакт"]
-const RARITY_COLORS := [Color(0.85, 0.85, 0.85), Color(0.45, 0.9, 0.4), Color(0.4, 0.65, 1.0), Color(1.0, 0.6, 0.15), Color(1.0, 0.85, 0.3), Color(0.35, 0.88, 0.8)]
-const RARITY_PLURAL := ["Звичайні", "Добротні", "Рідкісні", "Легендарні"]  # для фільтра автопідбору
 const RARITY_MAX_RANDOM := 3  # випадкова річ не буває унікальною: золоті речі іменні (див. Uniques)
-const LEGEND_EPITHETS := ["Громовиця", "Вовча", "Чорноморська", "Січова", "Перунова", "Хортицька", "Буревісна", "Гайдамацька"]
 
-# Типи зброї: множники шкоди, перезарядки удару, дальності, ширини дуги та відкидання.
-const WEAPON_TYPES := {
-	"sabre": {"name": "Шабля", "dmg": 1.0, "cd": 1.0, "range": 1.0, "arc": 1.0, "kb": 1.0,
-		"hint": "Збалансована"},
-	"mace": {"name": "Булава", "dmg": 1.45, "cd": 1.35, "range": 0.9, "arc": 1.1, "kb": 1.8,
-		"hint": "Повільна, б'є сильно і далеко відкидає"},
-	"pike": {"name": "Спис", "dmg": 1.1, "cd": 1.15, "range": 1.5, "arc": 0.55, "kb": 1.2,
-		"hint": "Довгий, але вузький удар"},
-	"staff": {"name": "Посох", "dmg": 1.0, "cd": 1.1, "range": 1.0, "arc": 1.0, "kb": 0.5,
-		"hint": "Волхвів: б'є іскрами здалеку, сила — від Характерництва"},
-	"pishchal": {"name": "Пищаль", "dmg": 1.1, "cd": 1.5, "range": 1.0, "arc": 1.0, "kb": 1.2,
-		"hint": "Самопальника: куля пробиває ворогів, сила — від Спритності"},
-	"bow": {"name": "Лук", "dmg": 1.0, "cd": 1.15, "range": 1.0, "arc": 1.0, "kb": 0.6,
-		"hint": "Стрільців: швидкі стріли здалеку, сила — від Спритності"},
-	"pistols": {"name": "Пістолі", "dmg": 0.9, "cd": 0.9, "range": 1.0, "arc": 1.0, "kb": 0.8,
-		"hint": "Стрільців: два стволи, б'ють часто й зблизька, сила — від Спритності"},
-}
-## Зброя дальнього бою: б'є снарядами, дальність стала (див. Player.recalc)
-const RANGED_WEAPONS := ["staff", "pishchal", "bow", "pistols"]
-## Зброя, сила якої йде від Спритності
-const AGI_WEAPONS := ["pishchal", "bow", "pistols"]
-## Яку зброю генерувати в здобичі й крамницях (виставляє гра під клас героя; порожньо — будь-яку).
+## Яку зброю генерувати в здобичі й крамницях (виставляє гра під клас героя; порожньо — будь-яку «basic»).
 static var weapon_pool: Array = []
 
-const ARMOR_TYPES := {
-	"head": ["Смушкова шапка", "Кучма", "Козацька шапка"],
-	"body": ["Жупан", "Кунтуш", "Кольчуга"],
-	"belt": ["Пояс", "Шовковий пояс", "Черес"],
-	"boots": ["Чоботи", "Сап'янці", "Похідні чоботи"],
-	"amulet": ["Оберіг", "Ладанка", "Мотанка"],
-}
+# Похідні переліки з таблиць: складаються раз, коли вперше потрібні, і лише для читання.
+static var _slots: Array = []  # клітинки, що вдягаються (з «primary»), у порядку файлу
+static var _drop_slots: Array = []  # кидок клітинки випадкової речі: кожна стільки разів, яка її «drop»
+static var _armor_names := {}  # клітинка → назви основ обладунку
+static var _basic: Array = []  # типовий пул зброї
+static var _agi: Array = []  # зброя від Спритності
+static var _affix_pool: Array = []  # бонуси-властивості в порядку кидка
+static var _whole := {}  # цілі бонуси (характеристики)
+static var _capped: Array = []  # досвід і гривні
+static var _rarity: Array = []  # записи рідкостей за rank
+static var _rarity_colors: Array = []
+static var _sharpen: Array = []  # шанс заточки за нинішнім рівнем
 
-# Основний бонус кожного слота
-const SLOT_PRIMARY := {"weapon": "flat_dmg", "head": "hp", "body": "armor", "belt": "vit", "boots": "speed", "amulet": "skill_power"}
 
-# Шаблон тексту, кількість знаків після коми
-const STAT_FMT := {
-	"str": ["+%s до Сили", 0], "agi": ["+%s до Спритності", 0], "vit": ["+%s до Витривалості", 0],
-	"spi": ["+%s до Характерництва", 0], "flat_dmg": ["+%s шкоди", 0], "dmg_pct": ["+%s%% шкоди", 0],
-	"crit": ["+%s%% шансу криту", 1], "aspd": ["+%s%% швидкості удару", 0], "hp": ["+%s здоров'я", 0],
-	"armor": ["+%s%% захисту", 1], "regen": ["+%s здоров'я/с", 1], "lifesteal": ["+%s%% вампіризму", 1],
-	"speed": ["+%s%% швидкості бігу", 0], "xp": ["+%s%% досвіду", 1], "skill_power": ["+%s%% сили вмінь", 0],
-	"skill_cd": ["-%s%% перезарядки вмінь", 0], "pickup": ["+%s%% радіусу збору", 0], "gold": ["+%s%% гривень", 1],
-}
-const INT_STATS := ["str", "agi", "vit", "spi"]
-const AFFIX_POOL := ["str", "agi", "vit", "spi", "dmg_pct", "crit", "aspd", "hp", "armor", "regen",
-	"lifesteal", "speed", "xp", "skill_power", "skill_cd", "pickup", "gold"]
+## Клітинки спорядження, що вдягаються: ["weapon", "head", ...].
+static func slots() -> Array:
+	if _slots.is_empty():
+		for id in GameDB.ids("gear_slots"):
+			var R: Dictionary = GameDB.gear_slot(id)
+			if R.has("primary"):
+				_slots.append(id)
+				for i in int(R.get("drop", 0)):
+					_drop_slots.append(id)
+		_slots.make_read_only()
+		_drop_slots.make_read_only()
+	return _slots
+
+
+## Чи вдягається річ цієї клітинки (артефакт — ні).
+static func is_slot(id: String) -> bool:
+	return GameDB.gear_slot(id).has("primary")
+
+
+## Назва клітинки: «Зброя», «Шапка», «Артефакт».
+static func slot_name(id: String) -> String:
+	return str(GameDB.gear_slot(id)["name"])
+
+
+## Головний бонус речі цієї клітинки (flat_dmg, hp...).
+static func slot_primary(slot: String) -> String:
+	return str(GameDB.gear_slot(slot)["primary"]["stat"])
+
+
+## Вид зброї: {name, dmg, cd, range, arc, kb, hint...} (weapons.json).
+static func weapon(type: String) -> Dictionary:
+	return GameDB.weapon(type)
+
+
+static func has_weapon(type: String) -> bool:
+	return GameDB.table("weapons").has(type)
+
+
+static func weapon_name(type: String) -> String:
+	return str(GameDB.weapon(type)["name"])
+
+
+## Усі види зброї в порядку файлу.
+static func weapon_ids() -> Array:
+	return GameDB.ids("weapons")
+
+
+## Зброя дальнього бою: б'є снарядами, дальність стала (див. Player.recalc).
+static func is_ranged(type: String) -> bool:
+	return bool(GameDB.weapon(type).get("ranged", false))
+
+
+## Зброя, сила якої йде від Спритності.
+static func is_agi(type: String) -> bool:
+	return bool(GameDB.weapon(type).get("agi", false))
+
+
+static func agi_weapons() -> Array:
+	if _agi.is_empty():
+		for id in weapon_ids():
+			if is_agi(id):
+				_agi.append(id)
+		_agi.make_read_only()
+	return _agi
+
+
+## Зброя, що падає, коли гра не задала пулу під клас.
+static func basic_weapons() -> Array:
+	if _basic.is_empty():
+		for id in weapon_ids():
+			if GameDB.weapon(id).get("basic", false):
+				_basic.append(id)
+		_basic.make_read_only()
+	return _basic
+
+
+## Назви основ обладунку клітинки в порядку файлу.
+static func armor_names(slot: String) -> Array:
+	if _armor_names.is_empty():
+		for id in GameDB.ids("armors"):
+			var R: Dictionary = GameDB.row("armors", id)
+			if not _armor_names.has(R["slot"]):
+				_armor_names[R["slot"]] = []
+			_armor_names[R["slot"]].append(R["name"])
+		for s in _armor_names:
+			_armor_names[s].make_read_only()
+		_armor_names.make_read_only()
+	return _armor_names.get(slot, [])
+
+
+## Бонуси, що бувають властивостями випадкової речі, у порядку кидка.
+static func affix_pool() -> Array:
+	if _affix_pool.is_empty():
+		for id in GameDB.ids("bonuses"):
+			if GameDB.bonus(id).get("affix", false):
+				_affix_pool.append(id)
+		_affix_pool.make_read_only()
+	return _affix_pool
+
+
+## Усі бонуси речей у порядку файлу.
+static func stat_ids() -> Array:
+	return GameDB.ids("bonuses")
+
+
+## Цілий бонус (Сила, Спритність...): заточка округлює його донизу.
+static func is_whole(id: String) -> bool:
+	if _whole.is_empty():
+		for b in GameDB.ids("bonuses"):
+			if GameDB.bonus(b).get("whole", false):
+				_whole[b] = true
+		_whole.make_read_only()
+	return _whole.has(id)
+
+
+## Цілі бонуси в порядку файлу.
+static func whole_stats() -> Array:
+	var out := []
+	for id in stat_ids():
+		if is_whole(id):
+			out.append(id)
+	return out
+
+
+## Властивості з масштабом і стелею (досвід, гривні).
+static func capped_stats() -> Array:
+	if _capped.is_empty():
+		for id in GameDB.ids("bonuses"):
+			if GameDB.bonus(id).get("capped", false):
+				_capped.append(id)
+		_capped.make_read_only()
+	return _capped
+
+
+static func is_capped(id: String) -> bool:
+	return capped_stats().has(id)
+
+
+static func _rarities() -> Array:
+	if _rarity.is_empty():
+		_rarity = GameDB.ladder("rarities", "rank")
+		for R in _rarity:
+			_rarity_colors.append(R.get("color", Color.WHITE))
+		_rarity_colors.make_read_only()
+	return _rarity
+
+
+## Назва рідкості: «Легендарна».
+static func rarity_name(r: int) -> String:
+	return str(_rarities()[r]["name"])
+
+
+## Множина рідкості для фільтра автопідбору: «Легендарні».
+static func rarity_plural(r: int) -> String:
+	return str(_rarities()[r]["plural"])
+
+
+## Колір рідкості (назва й клітинка речі).
+static func rarity_color(r: int) -> Color:
+	if _rarity_colors.is_empty():
+		_rarities()
+	return _rarity_colors[r]
+
+
+## Множини рідкостей випадкових речей: «Звичайні», «Добротні»...
+static func rarity_plurals() -> Array:
+	var out := []
+	for R in _rarities():
+		if R.has("plural"):
+			out.append(R["plural"])
+	return out
+
+
+## Скільки всього рідкостей (від звичайної до артефакта).
+static func rarity_count() -> int:
+	return _rarities().size()
+
+
+## Шанси заточки: [з +0, з +1, ...].
+static func sharpen_chances() -> Array:
+	if _sharpen.is_empty():
+		for R in GameDB.ladder("sharpening", "up"):
+			_sharpen.append(float(R["chance"]))
+		_sharpen.make_read_only()
+	return _sharpen
+
+
+## Шаблон тексту бонусу (%s — число) і скільки в ньому знаків після коми.
+static func stat_text(id: String) -> String:
+	return str(GameDB.bonus(id)["text"])
+
+
+static func stat_decimals(id: String) -> int:
+	return int(GameDB.bonus(id).get("decimals", 0))
 
 
 static func fmt_stat(id: String, value: float) -> String:
-	var f: Array = STAT_FMT[id]
-	var num := ("%.1f" % value) if f[1] == 1 else str(roundi(value))
-	return f[0] % num
+	var B: Dictionary = GameDB.bonus(id)
+	var num := ("%.1f" % value) if int(B.get("decimals", 0)) == 1 else str(roundi(value))
+	return str(B["text"]) % num
 
 
 ## Масштаб властивості досвіду чи гривень: найвищий кидок легендарної речі XP_GOLD_TOP_LEVEL-го рівня
 ## дорівнює XP_GOLD_CAP. Так само множаться й ці властивості на речах зі старих збережень.
 static func xp_gold_scale(id: String) -> float:
-	var r: Array = XP_GOLD_ROLL[id]
-	return XP_GOLD_CAP / ((float(r[1]) + float(r[2]) * XP_GOLD_TOP_LEVEL) * (1.0 + 0.15 * XP_GOLD_TOP_RARITY))
+	var r: Dictionary = GameDB.bonus(id)["roll"]
+	return XP_GOLD_CAP / ((float(r["max"]) + float(r["per_level"]) * XP_GOLD_TOP_LEVEL) * (1.0 + 0.15 * XP_GOLD_TOP_RARITY))
 
 
 ## Значення властивості під стелею: досвід і гривні не більші за XP_GOLD_CAP, решта як є.
 static func cap_affix(id: String, value: float) -> float:
-	return minf(value, XP_GOLD_CAP) if XP_GOLD_ROLL.has(id) else value
+	return minf(value, XP_GOLD_CAP) if is_capped(id) else value
 
 
 ## Позначка на речі: її досвід і гривні вже перераховано під стелю (див. rescale_xp_gold).
@@ -384,7 +546,7 @@ static func rescale_xp_gold(item: Dictionary) -> bool:
 	for src in [item.get("base", {}), item.get("affixes", {})]:
 		if typeof(src) != TYPE_DICTIONARY:
 			continue
-		for id in XP_GOLD_ROLL:
+		for id in capped_stats():
 			if src.has(id):
 				src[id] = cap_affix(id, float(src[id]) * xp_gold_scale(id))
 				changed = true
@@ -393,53 +555,42 @@ static func rescale_xp_gold(item: Dictionary) -> bool:
 	return changed
 
 
+## Кидок властивості (bonuses.json, «roll»): дробова — (min..max + per_level × рівень) × якість рідкості,
+## ціла — від min до max + рівень/every + рідкість/2, досвід і гривні — ще й масштаб і стеля.
 static func _roll_value(id: String, ilvl: int, rarity: int) -> float:
 	var q := 1.0 + 0.15 * rarity
-	if XP_GOLD_ROLL.has(id):
-		var r: Array = XP_GOLD_ROLL[id]
-		return cap_affix(id, (randf_range(float(r[0]), float(r[1])) + float(r[2]) * ilvl) * q * xp_gold_scale(id))
-	match id:
-		"str", "agi", "vit", "spi":
-			return float(randi_range(1, 1 + ilvl / 3 + rarity / 2))
-		"dmg_pct": return (randf_range(3, 6) + 0.4 * ilvl) * q
-		"crit": return (randf_range(1.5, 3.5) + 0.15 * ilvl) * q
-		"aspd": return (randf_range(3, 6) + 0.3 * ilvl) * q
-		"hp": return (randf_range(8, 16) + 3.0 * ilvl) * q
-		"armor": return (randf_range(1.5, 3.0) + 0.2 * ilvl) * q
-		"regen": return (randf_range(0.3, 0.7) + 0.05 * ilvl) * q
-		"lifesteal": return (randf_range(0.8, 1.6) + 0.05 * ilvl) * q
-		"speed": return (randf_range(2, 4) + 0.2 * ilvl) * q
-		"skill_power": return (randf_range(4, 7) + 0.4 * ilvl) * q
-		"skill_cd": return (randf_range(2, 4) + 0.2 * ilvl) * q
-		"pickup": return randf_range(10, 20) * q
-	return 0.0
+	var B: Dictionary = GameDB.bonus(id)
+	var R: Dictionary = B.get("roll", _EMPTY)
+	if R.is_empty():
+		return 0.0
+	if B.get("capped", false):
+		return cap_affix(id, (randf_range(float(R["min"]), float(R["max"])) + float(R["per_level"]) * ilvl) * q * xp_gold_scale(id))
+	if B.get("whole", false):
+		return float(randi_range(int(R["min"]), int(R["max"]) + ilvl / int(R["every"]) + rarity / 2))
+	return (randf_range(float(R["min"]), float(R["max"])) + float(R.get("per_level", 0.0)) * ilvl) * q
 
 
+## Головний бонус речі (gear_slots.json, «primary»): дробовий — (base + per_level × рівень) × якість,
+## цілий — base + рівень/every + рідкість/2.
 static func _primary_value(slot: String, ilvl: int, rarity: int) -> float:
 	var q := 1.0 + 0.15 * rarity
-	match slot:
-		"weapon": return (3.0 + 1.2 * ilvl) * q
-		"head": return (10.0 + 4.0 * ilvl) * q
-		"body": return (3.0 + 0.4 * ilvl) * q
-		"belt": return float(1 + ilvl / 4 + rarity / 2)
-		"boots": return (3.0 + 0.3 * ilvl) * q
-		"amulet": return (5.0 + 0.6 * ilvl) * q
-	return 0.0
+	var P: Dictionary = GameDB.gear_slot(slot).get("primary", _EMPTY)
+	if P.is_empty():
+		return 0.0
+	if P.has("every"):
+		return float(int(P["base"]) + ilvl / int(P["every"]) + rarity / 2)
+	return (float(P["base"]) + float(P["per_level"]) * ilvl) * q
 
 
-## Ваги рідкості випадкової речі: звичайна, добротна, рідкісна, легендарна, і приріст ваги за рівень.
+## Ваги рідкості випадкової речі (rarities.json, «weight»): звичайна, добротна, рідкісна, легендарна.
 ## Рідкісних і легендарних із рівнем більшає, але повільно. Стара крива (10 + 0,8 і 2 + 0,3 за рівень)
 ## робилася для гри до 22-го рівня: на 75-му кожна восьма річ була легендарною, і за годину їх падало
 ## від 25 до 50 (tools/loot_probe.gd). Тепер легендарна на 75-му — кожна тридцята з рядової нечисті.
-const RARITY_BASE := [60.0, 28.0, 10.0, 1.5]
-const RARITY_PER_LEVEL := [0.0, 0.0, 0.15, 0.03]
-
-
-## Ваги рідкості для рівня (див. RARITY_BASE).
 static func rarity_weights(level: int) -> Array:
 	var w := []
-	for i in RARITY_BASE.size():
-		w.append(float(RARITY_BASE[i]) + float(RARITY_PER_LEVEL[i]) * level)
+	for R in _rarities():
+		if R.has("weight"):
+			w.append(float(R["weight"]["base"]) + float(R["weight"]["per_level"]) * level)
 	return w
 
 
@@ -471,21 +622,23 @@ static func roll_rarity(wave: int, min_rarity: int = 0) -> int:
 static func gen_item(ilvl: int, rarity: int, slot: String = "", type: String = "") -> Dictionary:
 	rarity = mini(rarity, RARITY_MAX_RANDOM)
 	if slot == "":
-		slot = ["weapon", "weapon", "head", "body", "belt", "boots", "amulet"][randi() % 7]
+		slots()
+		slot = _drop_slots[randi() % _drop_slots.size()]
 	var name := ""
 	if slot == "weapon":
 		if type == "":
-			var pool: Array = weapon_pool if not weapon_pool.is_empty() else ["sabre", "mace", "pike"]
+			var pool: Array = weapon_pool if not weapon_pool.is_empty() else basic_weapons()
 			type = pool[randi() % pool.size()]
-		name = WEAPON_TYPES[type]["name"]
+		name = weapon_name(type)
 	else:
-		var names: Array = ARMOR_TYPES[slot]
+		var names: Array = armor_names(slot)
 		name = names[mini(names.size() - 1, randi() % names.size())]
-	if rarity == 3:
-		name += " «%s»" % LEGEND_EPITHETS[randi() % LEGEND_EPITHETS.size()]
-	var primary: String = SLOT_PRIMARY[slot]
+	var epithets: Array = _rarities()[rarity].get("epithets", [])
+	if not epithets.is_empty():
+		name += " «%s»" % epithets[randi() % epithets.size()]
+	var primary: String = slot_primary(slot)
 	var affixes := {}
-	var pool := AFFIX_POOL.duplicate()
+	var pool := affix_pool().duplicate()
 	pool.erase(primary)
 	pool.shuffle()
 	for i in rarity:
@@ -503,7 +656,7 @@ const SET_COLOR := Color(0.88, 0.55, 1.0)
 static func item_color(item: Dictionary) -> Color:
 	if item.has("set"):
 		return SET_COLOR
-	return RARITY_COLORS[int(item["rarity"])]
+	return rarity_color(int(item["rarity"]))
 
 
 static func item_title(item: Dictionary) -> String:
@@ -517,7 +670,7 @@ static func item_stats(item: Dictionary) -> Dictionary:
 	for src in [item["base"], item["affixes"]]:
 		for id in src:
 			var v: float = src[id] * mult
-			if id in INT_STATS:
+			if is_whole(id):
 				v = floorf(v)
 			out[id] = out.get(id, 0.0) + v
 	return out
@@ -533,7 +686,8 @@ static func sharpen_safe_cost(item: Dictionary, cost_mult: float = 1.0) -> int:
 
 
 static func sharpen_chance(item: Dictionary) -> float:
-	return SHARPEN_CHANCE[mini(item["up"], SHARPEN_CHANCE.size() - 1)]
+	var ch := sharpen_chances()
+	return ch[mini(item["up"], ch.size() - 1)]
 
 
 ## Множник ціни продажу (ярмарок у місті — ×2; виставляє гра при вході в місто).

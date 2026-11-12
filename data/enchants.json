@@ -1,0 +1,74 @@
+{
+	"zviroboi": {
+		"num": 5401,
+		"name": "Звіробій",
+		"slots": ["weapon"],
+		"fx": {"big_dmg": 6.0}
+	},
+	"dobyvach": {
+		"num": 5402,
+		"name": "Добивач",
+		"slots": ["weapon"],
+		"fx": {"execute": 10.0}
+	},
+	"naskok": {
+		"num": 5403,
+		"name": "Наскок",
+		"slots": ["weapon"],
+		"fx": {"opener": 10.0}
+	},
+	"kat": {
+		"num": 5404,
+		"name": "Кат",
+		"slots": ["weapon"],
+		"fx": {"status_dmg": 6.0}
+	},
+	"krovopyvtsia": {
+		"num": 5405,
+		"name": "Кровопивця",
+		"slots": ["weapon"],
+		"fx": {"lifesteal": 1.0}
+	},
+	"obereh": {
+		"num": 5406,
+		"name": "Оберіг",
+		"slots": ["head", "body", "belt", "boots"],
+		"fx": {"ward": 2.0}
+	},
+	"kolyuchka": {
+		"num": 5407,
+		"name": "Колючка",
+		"slots": ["head", "body", "belt", "boots"],
+		"fx": {"thorns": 8.0}
+	},
+	"zhyvytsia": {
+		"num": 5408,
+		"name": "Живиця",
+		"slots": ["head", "body", "belt", "boots"],
+		"fx": {"kill_heal": 0.3}
+	},
+	"viter": {
+		"num": 5409,
+		"name": "Вітер",
+		"slots": ["head", "body", "belt", "boots"],
+		"fx": {"dodge_cd": 6.0}
+	},
+	"mudrist": {
+		"num": 5410,
+		"name": "Мудрість",
+		"slots": ["amulet"],
+		"fx": {"skill": 5.0}
+	},
+	"pospikh": {
+		"num": 5411,
+		"name": "Поспіх",
+		"slots": ["amulet"],
+		"fx": {"cd": 4.0}
+	},
+	"dzherelo": {
+		"num": 5412,
+		"name": "Джерело",
+		"slots": ["amulet"],
+		"fx": {"kill_mana": 2.0}
+	}
+}

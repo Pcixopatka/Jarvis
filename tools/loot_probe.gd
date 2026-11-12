@@ -48,11 +48,19 @@ func _initialize() -> void:
 	var hours := int(_env("LOOT_HOURS", "400"))
 	var overhead := float(_env("LOOT_OVERHEAD", "40"))
 	print("Шанси: річ із рядового %s%%, еліта %s%% нечисті й річ із неї %s%%, золота річ із боса %s, артефакт %s%% (Башта %s%%)." % [
-		_pct(Data.ITEM_DROP_CHANCE), _pct(Elites.CHANCE), _pct(Elites.ITEM_CHANCE), str(Uniques.BASE_CHANCE.slice(1)), _pct(Artifacts.CHANCE), _pct(Artifacts.CHANCE_TOWER)])
+		_pct(Data.ITEM_DROP_CHANCE), _pct(Elites.CHANCE), _pct(Elites.ITEM_CHANCE), str(_tier_chances()), _pct(Artifacts.CHANCE), _pct(Artifacts.CHANCE_TOWER)])
 	for lvl in levels:
 		_level(lvl, hours, overhead)
 	_artifact_luck()
 	quit()
+
+
+## Шанси золота за ступенями 1..6 (golden_tiers.json).
+func _tier_chances() -> Array:
+	var out := []
+	for t in range(1, Uniques.max_tier() + 1):
+		out.append(Uniques.tier_chance(t))
+	return out
 
 
 func _env(name: String, fallback: String) -> String:
@@ -238,6 +246,6 @@ func _artifact_luck() -> void:
 		for n in waits:
 			s += int(n)
 		print("Золота річ, ступінь %d (%s): босів до неї в середньому %.0f, кожен десятий чекає понад %d, найдовше %d" % [
-			tier, Uniques.TIER_NAMES[tier], float(s) / waits.size(), int(waits[int(waits.size() * 0.9)]), int(waits[waits.size() - 1])])
+			tier, Uniques.tier_name(tier), float(s) / waits.size(), int(waits[int(waits.size() * 0.9)]), int(waits[waits.size() - 1])])
 	boss.free()
 	p.free()

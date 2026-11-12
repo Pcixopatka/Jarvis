@@ -311,7 +311,7 @@ var _gain_sim := false  # іде примірка: recalc усередині н�
 ## На скільки зміниться сила героя, якщо вдягнути цю річ замість тієї, що зараз у її клітинці.
 ## Частка: 0.05 — на 5% сильніший, від'ємна — слабший. Нічого не міняє: приміряє й повертає як було.
 func gain_from(item: Dictionary) -> float:
-	if item.is_empty() or not can_use(item) or not Data.SLOTS.has(item.get("slot", "")):
+	if item.is_empty() or not can_use(item) or not Data.slots().has(item.get("slot", "")):
 		return 0.0
 	var slot: String = item["slot"]
 	if equipment.has(slot) and equipment[slot].get("uid", -1) == item.get("uid", -2):
@@ -436,9 +436,9 @@ func _calc_equipment() -> void:
 			var t := Uniques.tier(it)
 			if t > int(pow_tier.get(pid, 0)):
 				pow_tier[pid] = t
-				u_pow[pid] = Uniques.DEFS[str(it["unique"])]["params"]
+				u_pow[pid] = Uniques.params(str(it["unique"]))
 	weapon_type = equipment["weapon"]["type"] if equipment.has("weapon") else "sabre"
-	weapon = Data.WEAPON_TYPES[weapon_type]
+	weapon = Data.weapon(weapon_type)
 
 
 func eq(id: String) -> float:
@@ -692,7 +692,7 @@ func recalc() -> void:
 	var s_spi := _bonus("spi")
 
 	# Волхв із посохом черпає силу з Характерництва, усі інші — із Сили
-	var s_main := s_spi if weapon_type == "staff" else (s_agi if weapon_type in Data.AGI_WEAPONS else s_str)
+	var s_main := s_spi if weapon_type == "staff" else (s_agi if Data.is_agi(weapon_type) else s_str)
 	damage = (20.0 + eq("flat_dmg")) * weapon["dmg"] * (1.0 + 0.06 * s_main + 0.08 * pk("sharp") + 0.08 * pk("porokh") + 0.03 * pk("h_hand") + eq("dmg_pct") / 100.0)
 	if weapon_type == "mace":
 		damage *= 1.0 + 0.1 * pk("mace_master")
@@ -714,16 +714,16 @@ func recalc() -> void:
 	elif weapon_type == "pistols":
 		attack_range = 330.0  # пістолі б'ють ближче за лук і пищаль
 	attack_arc = deg_to_rad((130.0 + 20.0 * pk("cleave")) * weapon["arc"])
-	var aspd_agi: float = Data.soft_agi_aspd(s_agi) if weapon_type in Data.AGI_WEAPONS else float(s_agi)
+	var aspd_agi: float = Data.soft_agi_aspd(s_agi) if Data.is_agi(weapon_type) else float(s_agi)
 	attack_cooldown = 0.42 * weapon["cd"] / (1.0 + 0.04 * aspd_agi + 0.06 * pk("fury") + 0.04 * pk("h_fast") + eq("aspd") / 100.0)
 	if weapon_type == "pishchal":
 		attack_cooldown /= 1.0 + 0.1 * pk("shvydke")
 	attack_cooldown /= (1.0 + float(soul_fx.get("aspd", 0.0))) * (1.0 + float(set_fx.get("aspd", 0.0)) / 100.0) * (1.0 + fx("aspd") / 100.0)
 	shot_mult = 1.0
-	if weapon_type in Data.AGI_WEAPONS and attack_cooldown < RANGED_MIN_CD:
+	if Data.is_agi(weapon_type) and attack_cooldown < RANGED_MIN_CD:
 		shot_mult = RANGED_MIN_CD / attack_cooldown
 		attack_cooldown = RANGED_MIN_CD
-	if not weapon_type in Data.RANGED_WEAPONS:
+	if not Data.is_ranged(weapon_type):
 		attack_range *= 1.0 + fx("range") / 100.0
 	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0 + fx("crit") / 100.0)
 	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0)) + float(set_fx.get("crit_dmg", 0.0)) / 100.0 + fx("crit_dmg") / 100.0
@@ -2750,7 +2750,7 @@ func _draw() -> void:
 			draw_line(head + Vector2(side * 2, 4), head + Vector2(-side * 5, 8), Color(0.3, 0.18, 0.08) * tint, 2.5)
 		# Шапка (якщо вдягнена): хутряна кучма з кольоровим шликом за рідкістю (волхв — без шапки, у вінку)
 		if equipment.has("head") and not volkhv:
-			var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
+			var hc: Color = Data.rarity_color(int(equipment["head"]["rarity"]))
 			draw_colored_polygon(PackedVector2Array([
 				head + Vector2(side * 6, -10), head + Vector2(-side * 4, -24), head + Vector2(-side * 14, -18), head + Vector2(-side * 8, -9)
 			]), hc.darkened(0.25) * tint)
@@ -3007,7 +3007,7 @@ func _draw_sprite(tint: Color) -> void:
 		_draw_halo(tint)
 	# Накладки: вдягнена шапка (шлик кольору рідкості) і вовча подоба
 	if equipment.has("head") and costume == "" and not Classes.is_volkhv_line(job) and wolf_timer <= 0.0 and Gfx.has("overlay_hat"):
-		var hc: Color = Data.RARITY_COLORS[equipment["head"]["rarity"]]
+		var hc: Color = Data.rarity_color(int(equipment["head"]["rarity"]))
 		Gfx.draw(self, "overlay_hat", facing, frame, Vector2(-24, -30), hc * tint)
 	if wolf_timer > 0.0 and Gfx.has("overlay_wolf"):
 		Gfx.draw(self, "overlay_wolf", facing, frame, Vector2(-24, -30), tint)

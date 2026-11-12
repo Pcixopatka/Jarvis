@@ -286,7 +286,7 @@ static func _smith(game) -> Control:
 	list.add_theme_constant_override("separation", 6)
 	list.add_child(UI.label("Вдягнуте", 22, UI.GOLD, false))
 	var eg := UI.grid(5)
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		if p.equipment.has(slot):
 			var it: Dictionary = p.equipment[slot]
 			eg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, 66))

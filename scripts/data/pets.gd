@@ -57,8 +57,7 @@ static func gift_follows(id: String, slot: String) -> bool:
 	var R: Dictionary = GameDB.pet(id)
 	if not R.has("gift") or not R.has("mechanic"):
 		return false
-	var Divine = load("res://scripts/data/divine.gd")
-	return str(Divine.DEFS.get(id, {}).get("slot", "")) == slot
+	return str(GameDB.gift(id).get("slot", "")) == slot
 
 
 static func value(id: String, level: int) -> float:

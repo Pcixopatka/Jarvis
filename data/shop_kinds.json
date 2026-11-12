@@ -1,0 +1,22 @@
+{
+	"unique": {
+		"num": 4981,
+		"name": "Золоті речі"
+	},
+	"set": {
+		"num": 4982,
+		"name": "Набори",
+		"price": 350,
+		"full_price": 1800
+	},
+	"artifact": {
+		"num": 4983,
+		"name": "Артефакти",
+		"price": 250,
+		"peril_price": 500
+	},
+	"soul": {
+		"num": 4984,
+		"name": "Душі"
+	}
+}

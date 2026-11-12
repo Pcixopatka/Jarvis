@@ -130,7 +130,7 @@ static func reward_text(step: Dictionary) -> String:
 	if int(r.get("trophy", 0)) > 0:
 		parts.append("трофеї: %d" % int(r["trophy"]))
 	if r.has("item"):
-		parts.append("%s річ" % str(Data.RARITY_NAMES[int(r["item"])]).to_lower())
+		parts.append("%s річ" % Data.rarity_name(int(r["item"])).to_lower())
 	if r.has("stone"):
 		parts.append(str(_svc("stone_service").NAMES[r["stone"]]))
 	return ", ".join(parts)

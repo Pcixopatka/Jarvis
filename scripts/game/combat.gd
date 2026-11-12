@@ -1334,12 +1334,12 @@ func _drop_loot(e: Node2D) -> void:
 		else:
 			# золота річ: окремий банер і дзвін, щоб таку здобич не проґавити
 			spawn_pickup(pos, "item", 0, golden)
-			Events.banner.emit("Золота здобич!\n%s" % golden["name"], Data.RARITY_COLORS[int(golden["rarity"])])
+			Events.banner.emit("Золота здобич!\n%s" % golden["name"], Data.rarity_color(int(golden["rarity"])))
 			Audio.play("coin", 0.0, 2.0)
 		var trophy: Dictionary = LootService.artifact_on_boss(self, player, e)
 		if not trophy.is_empty():
 			spawn_pickup(pos, "item", 0, trophy)
-			float_text(pos + Vector2(0, -90), "Артефакт: %s" % trophy["name"], Data.RARITY_COLORS[int(trophy["rarity"])])
+			float_text(pos + Vector2(0, -90), "Артефакт: %s" % trophy["name"], Data.rarity_color(int(trophy["rarity"])))
 		var piece: Dictionary = SetService.on_boss(self, player, e, bool(loc.get("peril_first", false)))
 		if not piece.is_empty():
 			spawn_pickup(pos, "item", 0, piece)

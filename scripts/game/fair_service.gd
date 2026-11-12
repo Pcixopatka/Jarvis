@@ -14,9 +14,8 @@ const PerilService := preload("res://scripts/game/peril_service.gd")
 
 const MIN_LEVEL := 20
 const GOLD_ITEMS := 3  # золотих речей на тиждень
-## Ціна золотої речі за її ступенем (1..5): трофеї й гривні. Шостий ступінь лишається надважким печерам.
-const UNIQUE_TROPHY := [0, 150, 220, 300, 400, 550]
-const UNIQUE_GOLD := [0, 20000, 40000, 70000, 110000, 160000]
+## Ціна золотої речі за її ступенем — «fair» у data/golden_tiers.json (трофеї й гривні). Шостий ступінь
+## лишається надважким печерам, у нього ярмаркової ціни нема.
 const ARTIFACT_TROPHY := 400
 const ARTIFACT_GOLD := 80000
 ## Дрібний товар: ключ -> {"name", "trophy", "gold", "limit" на тиждень}.
@@ -67,28 +66,28 @@ static func stock(player) -> Array:
 	var weapons: Array = Classes.CLASSES[player.job].get("weapons", [])
 	var top := top_tier(int(player.level))
 	var pool := []
-	for id in Uniques.ORDER:
-		var D: Dictionary = Uniques.DEFS[id]
+	for id in Uniques.ids():
+		var D: Dictionary = Uniques.def(id)
 		var t: int = int(D["tier"])
 		if t > top or t < maxi(1, top - 1):
 			continue  # лише свого ступеня й на один нижчого
-		if D["slot"] == "weapon" and not D["type"] in weapons:
+		if D["slot"] == "weapon" and not str(D["type"]) in weapons:
 			continue
 		pool.append(id)
 	for id in _shuffled(pool, "gold").slice(0, GOLD_ITEMS):
-		var t: int = int(Uniques.DEFS[id]["tier"])
-		out.append({"key": "u:" + id, "kind": "unique", "id": id, "name": str(Uniques.DEFS[id]["name"]), "tier": t,
-			"trophy": int(UNIQUE_TROPHY[t]), "gold": int(UNIQUE_GOLD[t]), "limit": 1})
+		var t: int = int(Uniques.def(id)["tier"])
+		out.append({"key": "u:" + id, "kind": "unique", "id": id, "name": str(Uniques.def(id)["name"]), "tier": t,
+			"trophy": int(Uniques.tier_fair(t)["trophy"]), "gold": int(Uniques.tier_fair(t)["gold"]), "limit": 1})
 	var peril := []
 	for loc in PerilService.ids():
 		peril.append(str(Data.LOCATIONS[loc]["boss"]))
 	var arts := []
-	for id in Artifacts.ORDER:
-		if not str(Artifacts.DEFS[id].get("boss", "")) in peril:
+	for id in Artifacts.ids():
+		if not str(Artifacts.def(id).get("boss", "")) in peril:
 			arts.append(id)
 	if not arts.is_empty():
 		var aid: String = _shuffled(arts, "art")[0]
-		out.append({"key": "a:" + aid, "kind": "artifact", "id": aid, "name": str(Artifacts.DEFS[aid]["name"]), "tier": 0,
+		out.append({"key": "a:" + aid, "kind": "artifact", "id": aid, "name": str(Artifacts.def(aid)["name"]), "tier": 0,
 			"trophy": ARTIFACT_TROPHY, "gold": ARTIFACT_GOLD, "limit": 1})
 	for gid in GOODS_ORDER:
 		var G: Dictionary = GOODS[gid]

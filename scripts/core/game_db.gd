@@ -1,9 +1,9 @@
 extends RefCounted
-## База даних гри: сталі таблиці (нечисть, а згодом уміння, речі, світ) лежать у data/*.json,
+## База даних гри: сталі таблиці (нечисть, загін, речі, а згодом світ і вміння) лежать у data/*.json,
 ## окремо від коду. Цей модуль — єдиний вхід до них: вантажить кожну таблицю раз, коли вона вперше
 ## потрібна, зводить числа до потрібних типів за схемою й перевіряє записи (див. problems()).
 ## Записи, які віддає база, лише для читання: їх заморожено, і спроба змінити їх дає помилку.
-## Опис полів і як додати нечисть — docs/data.md.
+## Опис полів, проміжки номерів і як додати нечисть чи річ — docs/data.md.
 
 const DIR := "res://data/"
 
@@ -130,8 +130,241 @@ const PET_SCHEMA := {
 		"gold": {"type": "int", "required": true},  # ціна 1-го ступеня; ступінь N коштує в N разів більше
 		"res": {"type": "map", "required": true, "of": {"type": "int"}},  # ресурси 1-го ступеня
 	}},
-	"gift": {"type": "bool"},  # супутник із божого дару з тим самим id (Divine.DEFS)
+	"gift": {"type": "bool"},  # супутник із божого дару з тим самим id (gifts.json)
 	"mechanic": {"type": "string"},  # що робить у бою: "pet/<файл>"; без нього в бій не йде (кінь)
+}
+
+# ---------- Речі: основи спорядження ----------
+
+## Клітинка спорядження. Клітинки з «primary» вдягаються (зброя, шапка...), без нього — ні (артефакт).
+const GEAR_SLOT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4001...)
+	"name": {"type": "string", "required": true},  # «Зброя», «Шапка»
+	"primary": {"type": "record", "fields": {  # головний бонус речі цієї клітинки
+		"stat": {"type": "string", "required": true},  # бонус із bonuses.json
+		"base": {"type": "float", "required": true},  # на 0-му рівні речі
+		"per_level": {"type": "float"},  # дробовий бонус: приріст за рівень речі (далі × якість рідкості)
+		"every": {"type": "int"},  # цілий бонус: +1 за кожні every рівнів речі (і +1 за дві рідкості)
+	}},
+	"drop": {"type": "int"},  # вага клітинки у випадковій речі (зброя — 2, решта — 1; без поля — не падає)
+}
+
+## Рідкість речі. rank — число, яке лежить у речі («rarity»), від 0.
+const RARITY_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4051...)
+	"rank": {"type": "int", "required": true},  # 0 звичайна ... 5 артефакт; збереження зберігають саме його
+	"name": {"type": "string", "required": true},  # «Легендарна»
+	"plural": {"type": "string"},  # «Легендарні» — для фільтра автопідбору
+	"color": {"type": "color", "required": true},  # колір назви й клітинки речі
+	"weight": {"type": "record", "fields": {  # є, якщо така рідкість буває у випадкової речі
+		"base": {"type": "float", "required": true},  # вага на 0-му рівні
+		"per_level": {"type": "float", "required": true},  # приріст ваги за рівень
+	}},
+	"epithets": {"type": "list", "of": {"type": "string"}},  # прізвиська легендарної речі: Шабля «Вовча»
+}
+
+## Вид зброї: множники до звичайного удару.
+const WEAPON_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4101...)
+	"name": {"type": "string", "required": true},
+	"dmg": {"type": "float", "required": true},  # шкода
+	"cd": {"type": "float", "required": true},  # перезарядка удару
+	"range": {"type": "float", "required": true},  # дальність
+	"arc": {"type": "float", "required": true},  # ширина дуги
+	"kb": {"type": "float", "required": true},  # відкидання
+	"hint": {"type": "string", "required": true},  # підказка в картці речі
+	"ranged": {"type": "bool"},  # б'є снарядами, дальність стала (Player.recalc)
+	"agi": {"type": "bool"},  # сила від Спритності (стрільці)
+	"basic": {"type": "bool"},  # падає, коли гра не задала зброї під клас (Data.weapon_pool порожній)
+}
+
+## Основа обладунку: назва звичайної речі неозброєної клітинки («Кучма», «Черес»).
+const ARMOR_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4201...)
+	"slot": {"type": "string", "required": true},  # клітинка з gear_slots.json
+	"name": {"type": "string", "required": true},
+}
+
+## Бонус речі (властивість): текст, точність і кидок.
+const BONUS_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4301...)
+	"text": {"type": "string", "required": true},  # шаблон: %s — число
+	"decimals": {"type": "int"},  # знаків після коми в тексті (без поля — 0)
+	"whole": {"type": "bool"},  # ціле число (характеристики): заточка округлює донизу
+	"affix": {"type": "bool"},  # буває додатковою властивістю випадкової речі (порядок файлу — порядок кидка)
+	"capped": {"type": "bool"},  # досвід і гривні: масштаб і стеля (Data.xp_gold_scale, XP_GOLD_CAP)
+	"roll": {"type": "record", "fields": {  # кидок властивості до якості рідкості
+		"min": {"type": "float", "required": true},
+		"max": {"type": "float", "required": true},
+		"per_level": {"type": "float"},  # дробова: + per_level × рівень речі
+		"every": {"type": "int"},  # ціла: верхня межа +1 за кожні every рівнів речі й +1 за дві рідкості
+	}},
+	"mid": {"type": "list", "size": 2, "of": {"type": "float"}},  # середина кидка для золотих речей: [стала, за рівень]
+}
+
+## Заточка: шанс удачі з нинішнього рівня up на наступний.
+const SHARPEN_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4401...)
+	"up": {"type": "int", "required": true},  # з якої заточки (0 — ще не точена)
+	"chance": {"type": "float", "required": true},
+}
+
+## Сила золотої речі: назва, опис і параметри, які пише кожна річ із цією силою.
+const POWER_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4501...)
+	"name": {"type": "string", "required": true},
+	"text": {"type": "string", "required": true},  # {параметр} підставляється з речі
+	"params": {"type": "map", "required": true, "of": {"type": "enum", "values": ["int", "float", "pct"]}},  # pct — частка, у тексті відсотки
+}
+
+## Ступінь золотої речі (1..6).
+const GOLDEN_TIER_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4601...)
+	"tier": {"type": "int", "required": true},
+	"name": {"type": "string", "required": true},  # «Сотницька»
+	"primary_mult": {"type": "float", "required": true},  # множник головного бонусу (дробового)
+	"chance": {"type": "float", "required": true},  # шанс золотої речі з боса цього ступеня
+	"price": {"type": "int", "required": true},  # у крамниці, червінців
+	"fair": {"type": "record", "fields": {  # на трофейному ярмарку (шостого там нема)
+		"trophy": {"type": "int", "required": true},
+		"gold": {"type": "int", "required": true},
+	}},
+}
+
+## Бонус набору (ключ, який читає Player.recalc) і його текст: число у відсотках.
+const SET_EFFECT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4701...)
+	"text": {"type": "string", "required": true},
+}
+
+## Бонус душі: текст і межа суми всіх душ разом (у відсотках).
+const SOUL_EFFECT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4801...)
+	"text": {"type": "string", "required": true},
+	"cap": {"type": "int", "required": true},
+}
+
+## Ступінь душі (1..7).
+const SOUL_TIER_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4901...)
+	"tier": {"type": "int", "required": true},
+	"name": {"type": "string", "required": true},
+	"color": {"type": "color", "required": true},
+	"price": {"type": "int", "required": true},  # у крамниці, червінців
+}
+
+# ---------- Речі ----------
+
+## Золота (унікальна) річ: іменна, зі сталими властивостями й однією силою.
+const GOLDEN_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5001...)
+	"name": {"type": "string", "required": true},
+	"slot": {"type": "string", "required": true},  # клітинка (gear_slots.json)
+	"type": {"type": "string"},  # вид зброї (weapons.json), лише для зброї
+	"tier": {"type": "int", "required": true},  # ступінь (golden_tiers.json)
+	"bosses": {"type": "list", "required": true, "of": {"type": "string"}},  # хто з босів дає її втричі частіше
+	"affixes": {"type": "map", "required": true, "of": {"type": "float"}},  # бонус → множник
+	"power": {"type": "string", "required": true},  # сила (powers.json)
+	"params": {"type": "map", "required": true, "of": {"type": "float"}},  # параметри сили (ціле чи частка — за силою)
+	"lore": {"type": "string", "required": true},
+}
+
+## Набір із шести речей.
+const SET_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5101...)
+	"name": {"type": "string", "required": true},  # «Спадок Святогора»
+	"of": {"type": "string", "required": true},  # родовий: «Шабля Святогора»
+	"stat": {"type": "string", "required": true},  # головна риса класу, під яку набір зібрано
+	"affixes": {"type": "list", "required": true, "of": {"type": "string"}},  # з цих бонусів кидаються три на річ
+	"bonus": {"type": "list", "required": true, "of": {"type": "record", "fields": {
+		"pieces": {"type": "int", "required": true},  # від скількох вдягнених речей
+		"fx": {"type": "map", "required": true, "of": {"type": "int"}},  # бонус (set_effects.json) → відсотки
+	}}},
+	"lore": {"type": "string", "required": true},
+}
+
+## Артефакт: трофей боса, діє з торби.
+const ARTIFACT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5201...)
+	"name": {"type": "string", "required": true},
+	"boss": {"type": "string", "required": true},  # чий трофей (mobs.json, вид із «boss»)
+	"bonus": {"type": "map", "required": true, "of": {"type": "float"}},  # ключ → значення (читає Player, служби)
+	"text": {"type": "string", "required": true},
+	"lore": {"type": "string", "required": true},
+}
+
+## Душа: id — вид нечисті, а для боса "b_" + вид.
+const SOUL_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5301...)
+	"name": {"type": "string", "required": true},
+	"tier": {"type": "int", "required": true},  # ступінь (soul_tiers.json)
+	"fx": {"type": "map", "required": true, "of": {"type": "int"}},  # бонус (soul_effects.json) → відсотки
+	"lore": {"type": "string", "required": true},
+}
+
+## Зачарування речі.
+const ENCHANT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5401...)
+	"name": {"type": "string", "required": true},
+	"slots": {"type": "list", "required": true, "of": {"type": "string"}},  # на які клітинки лягає
+	"fx": {"type": "map", "required": true, "of": {"type": "float"}},  # ключі як у пасивних умінь (Classes.FX_TEXT)
+}
+
+## Гніздо божих дарів.
+const GIFT_SLOT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4951...)
+	"name": {"type": "string", "required": true},
+}
+
+## Божий дар із крамниці за червінці (поля див. DivineService.fx_of).
+const GIFT_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5501...)
+	"slot": {"type": "string", "required": true},  # гніздо (gift_slots.json)
+	"name": {"type": "string", "required": true},
+	"icon": {"type": "string", "required": true},  # значок (tools/pixel/icons.py)
+	"price": {"type": "int", "required": true},  # червінців
+	"pickup": {"type": "float"},  # у скільки разів більший радіус збору (надбавка)
+	"shop": {"type": "bool"},  # крамниця будь-де
+	"loot": {"type": "bool"},  # здобич одразу в торбу
+	"bag": {"type": "int"},  # місць у торбі
+	"trade": {"type": "int"},  # одиниць краму на возі
+	"stats": {"type": "float"},  # частка до всіх характеристик
+	"fx": {"type": "map", "of": {"type": "float"}},  # бойові показники (Classes.FX_TEXT)
+	"revive": {"type": "float"},  # з якою часткою здоров'я раз на бій піднімає
+	"xp": {"type": "float"},
+	"gold": {"type": "float"},
+	"auto_buffs": {"type": "bool"},
+	"party": {"type": "float"},  # частка до шкоди й здоров'я загону
+	"sight": {"type": "bool"},  # стрілка до еліти
+	"light": {"type": "float"},  # у скільки разів далі світить
+	"desc": {"type": "string", "required": true},
+	"lines": {"type": "list", "required": true, "of": {"type": "string"}},  # рядки опису
+}
+
+## Вбрання: лише вигляд.
+const COSTUME_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5601...)
+	"name": {"type": "string", "required": true},
+	"price": {"type": "int", "required": true},  # червінців
+	"desc": {"type": "string", "required": true},
+}
+
+## Набір червінців: id — назва товару в магазині застосунків.
+const COIN_PACK_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (5701...)
+	"name": {"type": "string", "required": true},
+	"coins": {"type": "int", "required": true},
+	"bonus": {"type": "int", "required": true},  # відсотків понад найменший набір
+	"price": {"type": "string", "required": true},  # орієнтовна ціна (справжню показує магазин)
+}
+
+## Розділ крамниці за червінці (вкладка). Ціни золота й душ — у їхніх ступенях.
+const SHOP_KIND_SCHEMA := {
+	"num": {"type": "int", "required": true},  # сталий номер (4981...)
+	"name": {"type": "string", "required": true},
+	"price": {"type": "int"},  # артефакт, річ набору
+	"peril_price": {"type": "int"},  # артефакт надважкого боса
+	"full_price": {"type": "int"},  # увесь набір разом
 }
 
 ## Таблиці бази: назва → файл і схема. Нова таблиця (уміння, речі...) додається сюди одним рядком,
@@ -141,7 +374,41 @@ const TABLES := {
 	"companions": {"file": "companions.json", "schema": COMPANION_SCHEMA},
 	"heroes": {"file": "heroes.json", "schema": HERO_SCHEMA},
 	"pets": {"file": "pets.json", "schema": PET_SCHEMA},
+	"gear_slots": {"file": "gear_slots.json", "schema": GEAR_SLOT_SCHEMA},
+	"rarities": {"file": "rarities.json", "schema": RARITY_SCHEMA},
+	"weapons": {"file": "weapons.json", "schema": WEAPON_SCHEMA},
+	"armors": {"file": "armors.json", "schema": ARMOR_SCHEMA},
+	"bonuses": {"file": "bonuses.json", "schema": BONUS_SCHEMA},
+	"sharpening": {"file": "sharpening.json", "schema": SHARPEN_SCHEMA},
+	"powers": {"file": "powers.json", "schema": POWER_SCHEMA},
+	"golden_tiers": {"file": "golden_tiers.json", "schema": GOLDEN_TIER_SCHEMA},
+	"set_effects": {"file": "set_effects.json", "schema": SET_EFFECT_SCHEMA},
+	"soul_effects": {"file": "soul_effects.json", "schema": SOUL_EFFECT_SCHEMA},
+	"soul_tiers": {"file": "soul_tiers.json", "schema": SOUL_TIER_SCHEMA},
+	"gift_slots": {"file": "gift_slots.json", "schema": GIFT_SLOT_SCHEMA},
+	"shop_kinds": {"file": "shop_kinds.json", "schema": SHOP_KIND_SCHEMA},
+	"golden": {"file": "golden.json", "schema": GOLDEN_SCHEMA},
+	"sets": {"file": "sets.json", "schema": SET_SCHEMA},
+	"artifacts": {"file": "artifacts.json", "schema": ARTIFACT_SCHEMA},
+	"souls": {"file": "souls.json", "schema": SOUL_SCHEMA},
+	"enchants": {"file": "enchants.json", "schema": ENCHANT_SCHEMA},
+	"gifts": {"file": "gifts.json", "schema": GIFT_SCHEMA},
+	"costumes": {"file": "costumes.json", "schema": COSTUME_SCHEMA},
+	"coin_packs": {"file": "coin_packs.json", "schema": COIN_PACK_SCHEMA},
 }
+
+## Проміжки сталих номерів за таблицями: [перший, останній]. Номер запису мусить лежати у своєму
+## проміжку (так номер одразу каже, з якої він таблиці). Нова таблиця бере вільний проміжок (docs/data.md).
+const NUM_RANGES := {
+	"mobs": [1001, 1999], "companions": [3001, 3099], "heroes": [3101, 3199], "pets": [3201, 3299],
+	"gear_slots": [4001, 4049], "rarities": [4051, 4099], "weapons": [4101, 4199], "armors": [4201, 4299],
+	"bonuses": [4301, 4399], "sharpening": [4401, 4499], "powers": [4501, 4599], "golden_tiers": [4601, 4699],
+	"set_effects": [4701, 4799], "soul_effects": [4801, 4899], "soul_tiers": [4901, 4949], "gift_slots": [4951, 4979],
+	"shop_kinds": [4981, 4999], "golden": [5001, 5099], "sets": [5101, 5199], "artifacts": [5201, 5299],
+	"souls": [5301, 5399], "enchants": [5401, 5499], "gifts": [5501, 5599], "costumes": [5601, 5699],
+	"coin_packs": [5701, 5799],
+}
+const BOSS_NUM_RANGE := [2001, 2999]  # boss.num у mobs.json
 
 ## Основи механік за родинами: тека в scripts/mechanics/ → скрипт-основа.
 const MECHANIC_BASES := {
@@ -196,6 +463,7 @@ static func _load(name: String) -> void:
 	for p in file_probs + res[1]:
 		push_error("GameDB: %s" % p)
 	var rows: Dictionary = res[0]
+	_post(name, rows)
 	_freeze(rows)
 	var keys := rows.keys()
 	keys.make_read_only()
@@ -221,6 +489,21 @@ static func _read(name: String, probs: Array) -> Dictionary:
 	return json.data
 
 
+## Що таблиця доводить до ладу після схеми, поки записи ще не заморожено.
+## Золота річ: параметри сили стають цілими чи дробовими так, як їх оголошує сила (powers.json):
+## JSON дає всі числа дробовими, а радіус чи кількість стрибків — цілі.
+static func _post(name: String, rows: Dictionary) -> void:
+	if name != "golden":
+		return
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var kinds: Dictionary = row("powers", str(R.get("power", ""))).get("params", _EMPTY)
+		var P: Dictionary = R.get("params", {})
+		for k in P:
+			if str(kinds.get(k, "")) == "int" and float(P[k]) == floorf(float(P[k])):
+				P[k] = int(P[k])
+
+
 ## Заморожує словники й масиви на всю глибину.
 static func _freeze(v) -> void:
 	if v is Dictionary:
@@ -243,7 +526,9 @@ static func problems() -> Array:
 		table(name)
 		out.append_array(_load_problems[name])
 		var raw := _read(name, [])
-		out.append_array(validate(name, raw))
+		for p in validate(name, raw):
+			if not p in out:  # те саме посилання перевіряють обидві таблиці (річ → бос і бос ← річ)
+				out.append(p)
 	return out
 
 
@@ -435,6 +720,10 @@ static func _rules(name: String, rows: Dictionary) -> Array:
 			for id in rows:
 				out.append_array(_pet_rules("pets/" + id, rows[id]))
 			out.append_array(_unique_nums(name, rows))
+		_:
+			if ITEM_TABLES.has(name):
+				out.append_array(_item_rules(name, rows))
+				out.append_array(_unique_nums(name, rows))
 	return out
 
 
@@ -511,11 +800,200 @@ static func _pet_rules(where: String, R: Dictionary) -> Array:
 	if R.has("gift"):
 		for k in ["name", "desc"]:
 			if R.has(k):
-				out.append("%s: у супутника з дару «%s» береться з самого дару (Divine.DEFS), тут його не пишуть" % [where, k])
+				out.append("%s: у супутника з дару «%s» береться з самого дару (gifts.json), тут його не пишуть" % [where, k])
 		if not R.has("mechanic"):
 			out.append("%s: супутник із дару без «mechanic» у бою нічого не робить" % where)
 	if R.has("mechanic") and not _is_mechanic_ref(R["mechanic"], "pet"):
 		out.append("%s: «mechanic» має бути \"pet/<файл>\", а не «%s»" % [where, R["mechanic"]])
+	return out
+
+
+## Таблиці речей: їхні правила — _item_rules, посилання — _item_links.
+const ITEM_TABLES := ["gear_slots", "rarities", "weapons", "armors", "bonuses", "sharpening", "powers", "golden_tiers",
+	"set_effects", "soul_effects", "soul_tiers", "gift_slots", "shop_kinds", "golden", "sets", "artifacts", "souls",
+	"enchants", "gifts", "costumes", "coin_packs"]
+## Рядкові поля записів речей, які не можуть бути порожні.
+const _ITEM_TEXTS := ["name", "text", "lore", "desc", "hint", "of", "icon", "plural"]
+
+
+## Номери-ступені (rank рідкості, tier, up заточки) ідуть підряд від first без пропусків і повторів.
+static func _contiguous(name: String, rows: Dictionary, field: String, first: int) -> Array:
+	var out := []
+	var seen := {}
+	for id in rows:
+		if rows[id].has(field):
+			var v := int(rows[id][field])
+			if seen.has(v):
+				out.append("%s/%s: «%s» %d уже має «%s»" % [name, id, field, v, seen[v]])
+			seen[v] = id
+	for i in seen.size():
+		if not seen.has(first + i):
+			out.append("%s: «%s» мають іти підряд від %d, а %d бракує" % [name, field, first, first + i])
+			break
+	return out
+
+
+static func _positive(R: Dictionary, keys: Array, where: String, out: Array, zero_ok: bool = false) -> void:
+	for k in keys:
+		if R.has(k) and (float(R[k]) < 0.0 or (not zero_ok and float(R[k]) == 0.0)):
+			out.append("%s: «%s» має бути %s" % [where, k, "не від'ємним" if zero_ok else "більшим за нуль"])
+
+
+## Правила таблиць речей, що не залежать від інших таблиць.
+static func _item_rules(name: String, rows: Dictionary) -> Array:
+	var out := []
+	for id in rows:
+		var R: Dictionary = rows[id]
+		var where := "%s/%s" % [name, id]
+		_not_blank(R, _ITEM_TEXTS, where, out)
+		for k in R:
+			if R[k] is bool and not R[k]:
+				out.append("%s: «%s» пишеться лише як true" % [where, k])
+		match name:
+			"gear_slots":
+				var P: Dictionary = R.get("primary", _EMPTY)
+				if R.has("primary") and P.has("per_level") == P.has("every"):
+					out.append("%s: у «primary» має бути або «per_level» (дробовий бонус), або «every» (цілий)" % where)
+				if P.has("every") and int(P["every"]) < 1:
+					out.append("%s: «primary.every» має бути від 1" % where)
+				_positive(P, ["base"], where + ".primary", out, true)
+				_positive(R, ["drop"], where, out, true)
+				if R.has("drop") and not R.has("primary"):
+					out.append("%s: «drop» без «primary»: така річ не вдягається" % where)
+			"rarities":
+				if R.has("weight"):
+					_positive(R["weight"], ["base"], where + ".weight", out)
+					_positive(R["weight"], ["per_level"], where + ".weight", out, true)
+					if not R.has("plural"):
+						out.append("%s: випадкова рідкість потребує «plural» (фільтр автопідбору)" % where)
+				for e in R.get("epithets", []):
+					if str(e).strip_edges() == "":
+						out.append("%s: порожнє прізвисько в «epithets»" % where)
+			"weapons":
+				_positive(R, ["dmg", "cd", "range", "arc", "kb"], where, out)
+				if R.get("agi", false) and not R.get("ranged", false):
+					out.append("%s: «agi» лише в зброї дальнього бою («ranged»)" % where)
+			"bonuses":
+				if R.has("text") and not "%s" in str(R["text"]):
+					out.append("%s: «text» має містити %%s (число)" % where)
+				if int(R.get("decimals", 0)) < 0 or int(R.get("decimals", 0)) > 1:
+					out.append("%s: «decimals» буває 0 або 1" % where)
+				var roll: Dictionary = R.get("roll", _EMPTY)
+				if R.has("roll"):
+					if float(roll["min"]) > float(roll["max"]):
+						out.append("%s: «roll.min» більший за «roll.max»" % where)
+					if R.get("whole", false) != roll.has("every"):
+						out.append("%s: цілий бонус («whole») кидається з «roll.every», дробовий — без нього" % where)
+					if roll.has("every") and int(roll["every"]) < 1:
+						out.append("%s: «roll.every» має бути від 1" % where)
+				for k in ["affix", "capped"]:
+					if R.get(k, false) and not R.has("roll"):
+						out.append("%s: «%s» потребує «roll»" % [where, k])
+			"sharpening":
+				if R.has("chance") and (float(R["chance"]) <= 0.0 or float(R["chance"]) > 1.0):
+					out.append("%s: «chance» має бути від 0 до 1" % where)
+			"powers":
+				if R.get("params", _EMPTY).is_empty():
+					out.append("%s: «params» порожні" % where)
+				for k in _placeholders(str(R.get("text", ""))):
+					if not R.get("params", _EMPTY).has(k):
+						out.append("%s: у тексті {%s}, а такого параметра в «params» нема" % [where, k])
+			"golden_tiers":
+				_positive(R, ["primary_mult", "price"], where, out)
+				if R.has("chance") and (float(R["chance"]) < 0.0 or float(R["chance"]) > 1.0):
+					out.append("%s: «chance» має бути від 0 до 1" % where)
+				_positive(R.get("fair", _EMPTY), ["trophy", "gold"], where + ".fair", out)
+			"set_effects":
+				if R.has("text") and not "%s" in str(R["text"]):
+					out.append("%s: «text» має містити %%s (відсотки)" % where)
+			"soul_effects":
+				if R.has("text") and not "%s" in str(R["text"]):
+					out.append("%s: «text» має містити %%s (відсотки)" % where)
+				_positive(R, ["cap"], where, out)
+			"soul_tiers":
+				_positive(R, ["price"], where, out)
+			"shop_kinds":
+				_positive(R, ["price", "peril_price", "full_price"], where, out)
+			"golden":
+				if R.get("affixes", _EMPTY).is_empty():
+					out.append("%s: «affixes» порожні" % where)
+				for k in R.get("affixes", _EMPTY):
+					if float(R["affixes"][k]) <= 0.0:
+						out.append("%s: множник «affixes.%s» має бути більшим за нуль" % [where, k])
+				if R.get("bosses", []).is_empty():
+					out.append("%s: «bosses» порожні" % where)
+				if R.has("slot") and (str(R["slot"]) == "weapon") != R.has("type"):
+					out.append("%s: «type» (вид зброї) пишеться у зброї й лише в неї" % where)
+			"sets":
+				if R.get("affixes", []).is_empty():
+					out.append("%s: «affixes» порожні" % where)
+				var steps := []
+				for st in R.get("bonus", []):
+					steps.append(int(st["pieces"]))
+					if st["fx"].is_empty():
+						out.append("%s: бонус за %d речей порожній" % [where, int(st["pieces"])])
+					for k in st["fx"]:
+						if int(st["fx"][k]) <= 0:
+							out.append("%s: бонус «%s» за %d речей має бути більшим за нуль" % [where, k, int(st["pieces"])])
+				if R.has("bonus") and steps != load("res://scripts/data/sets.gd").STEPS:
+					out.append("%s: щаблі бонусу %s, а мають бути %s (Sets.STEPS)" % [where, str(steps), str(load("res://scripts/data/sets.gd").STEPS)])
+			"artifacts":
+				if R.get("bonus", _EMPTY).is_empty():
+					out.append("%s: «bonus» порожній" % where)
+				for k in R.get("bonus", _EMPTY):
+					if float(R["bonus"][k]) == 0.0:
+						out.append("%s: «bonus.%s» нульовий" % [where, k])
+			"souls":
+				if R.get("fx", _EMPTY).is_empty():
+					out.append("%s: «fx» порожні" % where)
+				for k in R.get("fx", _EMPTY):
+					if int(R["fx"][k]) <= 0:
+						out.append("%s: «fx.%s» має бути більшим за нуль" % [where, k])
+			"enchants":
+				if R.get("slots", []).is_empty():
+					out.append("%s: «slots» порожні" % where)
+				if R.get("fx", _EMPTY).is_empty():
+					out.append("%s: «fx» порожні" % where)
+				for k in R.get("fx", _EMPTY):
+					if float(R["fx"][k]) <= 0.0:
+						out.append("%s: «fx.%s» має бути більшим за нуль" % [where, k])
+			"gifts":
+				_positive(R, ["price", "pickup", "bag", "trade", "stats", "revive", "xp", "gold", "party", "light"], where, out)
+				if R.get("lines", []).is_empty():
+					out.append("%s: «lines» порожні" % where)
+				for ln in R.get("lines", []):
+					if str(ln).strip_edges() == "":
+						out.append("%s: порожній рядок у «lines»" % where)
+			"costumes":
+				_positive(R, ["price"], where, out)
+			"coin_packs":
+				_not_blank(R, ["price"], where, out)
+				_positive(R, ["coins"], where, out)
+				_positive(R, ["bonus"], where, out, true)
+	match name:
+		"rarities":
+			out.append_array(_contiguous(name, rows, "rank", 0))
+		"sharpening":
+			out.append_array(_contiguous(name, rows, "up", 0))
+		"golden_tiers", "soul_tiers":
+			out.append_array(_contiguous(name, rows, "tier", 1))
+		"weapons":
+			var basic := false
+			for id in rows:
+				basic = basic or rows[id].get("basic", false)
+			if not rows.is_empty() and not basic:
+				out.append("weapons: жодна зброя не «basic», а без пулу класу річ бере зброю з них")
+	return out
+
+
+## Назви {параметрів} у тексті сили.
+static func _placeholders(text: String) -> Array:
+	var out := []
+	var parts := text.split("{")
+	for i in range(1, parts.size()):
+		var k := parts[i].get_slice("}", 0)
+		if k != "" and not k in out:
+			out.append(k)
 	return out
 
 
@@ -528,20 +1006,25 @@ static func _unique_nums(name: String, rows: Dictionary) -> Array:
 	var out := []
 	var seen := {}
 	var seen_boss := {}
+	var span: Array = NUM_RANGES.get(name, [])
 	for id in rows:
 		var R: Dictionary = rows[id]
 		if R.has("num"):
 			var n := int(R["num"])
 			if n <= 0:
 				out.append("%s/%s: «num» має бути додатним" % [name, id])
+			elif not span.is_empty() and (n < int(span[0]) or n > int(span[1])):
+				out.append("%s/%s: номер %d поза проміжком таблиці %d–%d (NUM_RANGES)" % [name, id, n, int(span[0]), int(span[1])])
 			elif seen.has(n):
 				out.append("%s/%s: номер %d уже має «%s»" % [name, id, n, seen[n]])
 			else:
 				seen[n] = id
-		if R.has("boss") and R["boss"].has("num"):
+		if name == "mobs" and R.has("boss") and R["boss"].has("num"):
 			var n := int(R["boss"]["num"])
 			if n <= 0:
 				out.append("mobs/%s: «boss.num» має бути додатним" % id)
+			elif n < int(BOSS_NUM_RANGE[0]) or n > int(BOSS_NUM_RANGE[1]):
+				out.append("mobs/%s: номер боса %d поза проміжком %d–%d" % [id, n, int(BOSS_NUM_RANGE[0]), int(BOSS_NUM_RANGE[1])])
 			elif seen_boss.has(n):
 				out.append("mobs/%s: номер боса %d уже має «%s»" % [id, n, seen_boss[n]])
 			else:
@@ -561,7 +1044,207 @@ static func _links(name: String, rows: Dictionary) -> Array:
 			out.append_array(_hero_links(rows))
 		"pets":
 			out.append_array(_pet_links(rows))
+		_:
+			if ITEM_TABLES.has(name):
+				out.append_array(_item_links(name, rows))
 	return out
+
+
+## Чи є в таблиці name запис id (для перевірки посилань: таблиця вантажиться, як у грі).
+static func _has_row(name: String, id) -> bool:
+	return table(name).has(str(id))
+
+
+## Клітинки, що вдягаються (мають «primary»), у порядку файлу.
+static func _worn_slots() -> Array:
+	var out := []
+	for id in ids("gear_slots"):
+		if row("gear_slots", id).has("primary"):
+			out.append(id)
+	return out
+
+
+## Посилання таблиць речей на інші таблиці й на код гри.
+static func _item_links(name: String, rows: Dictionary) -> Array:
+	var out := []
+	var worn := _worn_slots()
+	var Classes = load("res://scripts/data/classes.gd")
+	match name:
+		"gear_slots":
+			var any_worn := false
+			for id in rows:
+				var P: Dictionary = rows[id].get("primary", _EMPTY)
+				any_worn = any_worn or not P.is_empty()
+				if P.has("stat"):
+					var B: Dictionary = row("bonuses", str(P["stat"]))
+					if B.is_empty():
+						out.append("gear_slots/%s: «primary.stat» — нема бонусу «%s» у bonuses.json" % [id, P["stat"]])
+					elif bool(B.get("whole", false)) != P.has("every"):
+						out.append("gear_slots/%s: «%s» %s, тож у «primary» потрібне %s" % [id, P["stat"], "цілий" if B.get("whole", false) else "дробовий", "«every»" if B.get("whole", false) else "«per_level»"])
+			for need in ["weapon", load("res://scripts/data/artifacts.gd").SLOT]:
+				if not rows.has(need):
+					out.append("gear_slots: нема клітинки «%s», а код гри її знає" % need)
+			if not any_worn:
+				out.append("gear_slots: жодна клітинка не вдягається (нема «primary»)")
+		"rarities":
+			var Data = load("res://scripts/data/data.gd")
+			var by_rank := {}
+			for id in rows:
+				by_rank[int(rows[id].get("rank", -1))] = rows[id]
+			for r in by_rank:
+				if by_rank[r].has("weight") != (r <= Data.RARITY_MAX_RANDOM):
+					out.append("rarities: вагу («weight») мають рідкості 0–%d (Data.RARITY_MAX_RANDOM), і лише вони (ранг %d)" % [Data.RARITY_MAX_RANDOM, r])
+			for r in [Data.RARITY_MAX_RANDOM, load("res://scripts/data/uniques.gd").RARITY, load("res://scripts/data/artifacts.gd").RARITY]:
+				if not by_rank.has(r):
+					out.append("rarities: нема рідкості з рангом %d, а код гри її знає" % r)
+			if by_rank.has(Data.RARITY_MAX_RANDOM) and by_rank[Data.RARITY_MAX_RANDOM].get("epithets", []).is_empty():
+				out.append("rarities: найвища випадкова рідкість (ранг %d) потребує «epithets»" % Data.RARITY_MAX_RANDOM)
+		"weapons":
+			for cls in Classes.CLASSES:
+				for w in Classes.CLASSES[cls].get("weapons", []):
+					if not rows.has(w):
+						out.append("клас %s носить зброю «%s», якої нема у weapons.json" % [cls, w])
+			for w in load("res://scripts/data/costumes.gd").WEAPONS:
+				if not rows.has(w):
+					out.append("Costumes.WEAPONS: зброї «%s» нема у weapons.json" % w)
+		"armors":
+			var have := {}
+			for id in rows:
+				var s := str(rows[id].get("slot", ""))
+				have[s] = true
+				if not s in worn or s == "weapon":
+					out.append("armors/%s: «slot» — «%s» не клітинка обладунку (gear_slots.json з «primary», не зброя)" % [id, s])
+			for s in worn:
+				if s != "weapon" and not have.has(s):
+					out.append("armors: клітинка «%s» без жодної основи, випадкова річ для неї не складеться" % s)
+		"bonuses":
+			var pool := 0
+			for id in rows:
+				pool += 1 if rows[id].get("affix", false) else 0
+			if not rows.is_empty() and pool < load("res://scripts/data/data.gd").RARITY_MAX_RANDOM + 1:
+				out.append("bonuses: замало «affix» — легендарна річ кидає %d властивості після головної" % load("res://scripts/data/data.gd").RARITY_MAX_RANDOM)
+		"sharpening":
+			var Data = load("res://scripts/data/data.gd")
+			if rows.size() != Data.MAX_UPGRADE:
+				out.append("sharpening: %d записів, а заточка має %d щаблів (Data.MAX_UPGRADE)" % [rows.size(), Data.MAX_UPGRADE])
+		"golden_tiers":
+			var U = load("res://scripts/data/uniques.gd")
+			if rows.size() < U.TOP_COMMON_TIER:
+				out.append("golden_tiers: менше ступенів, ніж Uniques.TOP_COMMON_TIER (%d)" % U.TOP_COMMON_TIER)
+		"soul_tiers":
+			var S = load("res://scripts/data/souls.gd")
+			if rows.size() < S.BOSS_TIER:
+				out.append("soul_tiers: менше ступенів, ніж Souls.BOSS_TIER (%d)" % S.BOSS_TIER)
+		"soul_effects":
+			for id in rows:
+				if id in load("res://scripts/data/souls.gd").FORBIDDEN:
+					out.append("soul_effects/%s: душі не дають такого (Souls.FORBIDDEN): гра не має ставати легшою" % id)
+		"shop_kinds":
+			var SS = load("res://scripts/game/shop_service.gd")
+			for id in rows:
+				if SS.ids(id).is_empty():
+					out.append("shop_kinds/%s: крамниця не знає такого розділу (ShopService.ids порожній)" % id)
+			for need in [["set", "price"], ["set", "full_price"], ["artifact", "price"], ["artifact", "peril_price"]]:
+				if rows.has(need[0]) and not rows[need[0]].has(need[1]):
+					out.append("shop_kinds/%s: потрібна «%s»" % need)
+		"golden":
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "golden/" + id
+				if R.has("slot") and not str(R["slot"]) in worn:
+					out.append("%s: «slot» — «%s» не клітинка спорядження" % [where, R["slot"]])
+				if R.has("type") and not _has_row("weapons", R["type"]):
+					out.append("%s: «type» — нема зброї «%s» у weapons.json" % [where, R["type"]])
+				if R.has("tier") and not _tier_exists("golden_tiers", int(R["tier"])):
+					out.append("%s: «tier» %d — нема такого ступеня в golden_tiers.json" % [where, int(R["tier"])])
+				for b in R.get("bosses", []):
+					_need_boss(b, "золота річ %s" % id, out)
+				var P: Dictionary = row("powers", str(R.get("power", "")))
+				if P.is_empty():
+					out.append("%s: «power» — нема сили «%s» у powers.json" % [where, R.get("power", "")])
+				else:
+					var kinds: Dictionary = P["params"]
+					for k in R.get("params", _EMPTY):
+						if not kinds.has(k):
+							out.append("%s: сила «%s» не має параметра «%s»" % [where, R["power"], k])
+						elif str(kinds[k]) == "int" and float(R["params"][k]) != floorf(float(R["params"][k])):
+							out.append("%s: «params.%s» має бути цілим (так каже сила «%s»)" % [where, k, R["power"]])
+					for k in kinds:
+						if not R.get("params", _EMPTY).has(k):
+							out.append("%s: бракує параметра «%s» сили «%s»" % [where, k, R["power"]])
+				for k in R.get("affixes", _EMPTY):
+					var B: Dictionary = row("bonuses", k)
+					if B.is_empty():
+						out.append("%s: «affixes» — нема бонусу «%s» у bonuses.json" % [where, k])
+					elif not B.get("whole", false) and not B.has("mid"):
+						out.append("%s: бонус «%s» не має «mid» (середини кидка для золотих речей)" % [where, k])
+		"sets":
+			for id in rows:
+				var R: Dictionary = rows[id]
+				var where: String = "sets/" + id
+				if R.has("stat") and not _has_row("bonuses", R["stat"]):
+					out.append("%s: «stat» — нема бонусу «%s»" % [where, R["stat"]])
+				for k in R.get("affixes", []):
+					if not row("bonuses", str(k)).has("roll"):
+						out.append("%s: «affixes» — бонус «%s» не кидається (нема в bonuses.json чи без «roll»)" % [where, k])
+				for st in R.get("bonus", []):
+					for k in st["fx"]:
+						if not _has_row("set_effects", k):
+							out.append("%s: бонус «%s» — нема в set_effects.json" % [where, k])
+		"artifacts":
+			var by_boss := {}
+			for id in rows:
+				var b := str(rows[id].get("boss", ""))
+				_need_boss(b, "артефакт %s" % id, out)
+				if by_boss.has(b):
+					out.append("artifacts/%s: у боса «%s» уже є артефакт «%s» (діє лише перший)" % [id, b, by_boss[b]])
+				by_boss[b] = id
+		"souls":
+			for id in rows:
+				var R: Dictionary = rows[id]
+				if R.has("tier") and not _tier_exists("soul_tiers", int(R["tier"])):
+					out.append("souls/%s: «tier» %d — нема такого ступеня в soul_tiers.json" % [id, int(R["tier"])])
+				for k in R.get("fx", _EMPTY):
+					if not _has_row("soul_effects", k):
+						out.append("souls/%s: «fx» — бонусу «%s» нема в soul_effects.json" % [id, k])
+				if str(id).begins_with("b_"):
+					_need_boss(str(id).substr(2), "душа %s" % id, out)
+				elif not has_mob(id):
+					out.append("душа %s посилається на нечисть «%s», якої немає в mobs.json" % [id, id])
+				elif not mob(id).has("name"):
+					out.append("душа %s: у «%s» нема поля «name»" % [id, id])
+		"enchants":
+			for id in rows:
+				for s in rows[id].get("slots", []):
+					if not s in worn:
+						out.append("enchants/%s: «slots» — «%s» не клітинка спорядження" % [id, s])
+				for k in rows[id].get("fx", _EMPTY):
+					if not Classes.FX_TEXT.has(k):
+						out.append("enchants/%s: «fx» — ключа «%s» нема в Classes.FX_TEXT" % [id, k])
+		"gifts":
+			for id in rows:
+				if rows[id].has("slot") and not _has_row("gift_slots", rows[id]["slot"]):
+					out.append("gifts/%s: «slot» — нема гнізда «%s» у gift_slots.json" % [id, rows[id]["slot"]])
+				for k in rows[id].get("fx", _EMPTY):
+					if not Classes.FX_TEXT.has(k):
+						out.append("gifts/%s: «fx» — ключа «%s» нема в Classes.FX_TEXT" % [id, k])
+	return out
+
+
+## Чи є ступінь t у таблиці ступенів (golden_tiers, soul_tiers).
+static func _tier_exists(name: String, t: int) -> bool:
+	for id in ids(name):
+		if int(row(name, id).get("tier", -1)) == t:
+			return true
+	return false
+
+
+## Посилання речі на боса: вид є в mobs.json і має запис «boss» (той самий текст, що й у _mob_links).
+static func _need_boss(kind, what: String, out: Array) -> void:
+	if not has_mob(str(kind)):
+		out.append("%s посилається на нечисть «%s», якої немає в mobs.json" % [what, kind])
+	elif not has_boss(str(kind)):
+		out.append("%s: «%s» тут бос, але в mobs.json у нього нема запису «boss»" % [what, kind])
 
 
 static func _mob_links(rows: Dictionary) -> Array:
@@ -607,15 +1290,13 @@ static func _mob_links(rows: Dictionary) -> Array:
 		need.call(k, "звитяга надважкої печери", "boss")
 	for k in Peril.TITLE_FX:
 		need.call(k, "бонус звитяги надважкої печери", "boss")
-	var Uniques = load("res://scripts/data/uniques.gd")
-	for u in Uniques.DEFS:
-		for b in Uniques.DEFS[u].get("bosses", []):
+	# Речі, що посилаються на нечисть (ті самі перевірки є й у самих таблицях речей, див. _item_links)
+	for u in ids("golden"):
+		for b in row("golden", u).get("bosses", []):
 			need.call(b, "золота річ %s" % u, "boss")
-	var Arts = load("res://scripts/data/artifacts.gd")
-	for a in Arts.DEFS:
-		need.call(Arts.DEFS[a]["boss"], "артефакт %s" % a, "boss")
-	var Souls = load("res://scripts/data/souls.gd")
-	for s in Souls.SOULS:
+	for a in ids("artifacts"):
+		need.call(row("artifacts", a).get("boss", ""), "артефакт %s" % a, "boss")
+	for s in ids("souls"):
 		if str(s).begins_with("b_"):
 			need.call(str(s).substr(2), "душа %s" % s, "boss")
 		else:
@@ -770,7 +1451,6 @@ static func _hero_links(rows: Dictionary) -> Array:
 static func _pet_links(rows: Dictionary) -> Array:
 	var out := []
 	var Camp = load("res://scripts/data/camp_data.gd")
-	var Divine = load("res://scripts/data/divine.gd")
 	var used := {}
 	for id in rows:
 		var R: Dictionary = rows[id]
@@ -779,16 +1459,16 @@ static func _pet_links(rows: Dictionary) -> Array:
 			if not Camp.RESOURCES.has(r) and r != Camp.TROPHY:
 				out.append("%s: «stable.res» — невідомий ресурс «%s» (див. CampData.RESOURCES)" % [where, r])
 		if R.has("gift"):
-			if not Divine.DEFS.has(id):
-				out.append("%s: божого дару «%s» нема в Divine.DEFS" % [where, id])
-			elif not str(Divine.DEFS[id]["slot"]) in PET_GIFT_SLOTS:
-				out.append("%s: дар «%s» лежить у гнізді «%s», а супутники бувають лише в %s" % [where, id, Divine.DEFS[id]["slot"], str(PET_GIFT_SLOTS)])
+			if not _has_row("gifts", id):
+				out.append("%s: божого дару «%s» нема в gifts.json" % [where, id])
+			elif not str(row("gifts", id).get("slot", "")) in PET_GIFT_SLOTS:
+				out.append("%s: дар «%s» лежить у гнізді «%s», а супутники бувають лише в %s" % [where, id, row("gifts", id).get("slot", ""), str(PET_GIFT_SLOTS)])
 		if R.has("mechanic"):
 			_mechanic_ref(where, "mechanic", str(R["mechanic"]), used, out)
 	# Кожен дар-супутник (гнізда «Супутник» і «Віз») має запис, інакше в бою його не видно
-	for d in Divine.DEFS:
-		if str(Divine.DEFS[d]["slot"]) in PET_GIFT_SLOTS and not rows.has(d):
-			out.append("божий дар «%s» (гніздо «%s») не має запису в pets.json, тож у бою його не видно" % [d, Divine.DEFS[d]["slot"]])
+	for d in ids("gifts"):
+		if str(row("gifts", d).get("slot", "")) in PET_GIFT_SLOTS and not rows.has(d):
+			out.append("божий дар «%s» (гніздо «%s») не має запису в pets.json, тож у бою його не видно" % [d, row("gifts", d).get("slot", "")])
 	out.append_array(_mechanic_orphans(["pet"], used, "pets.json"))
 	return out
 
@@ -932,3 +1612,82 @@ static func pet(id: String) -> Dictionary:
 ## Усі записи pets.json у порядку файлу (і стайня, і дари).
 static func pet_ids() -> Array:
 	return ids("pets")
+
+
+# ---------- Речі ----------
+# Записи речей (див. docs/data.md, «Речі»); для невідомого id — порожній запис. Зручні виклики поверх
+# них — у модулях Data, Uniques, Sets, Artifacts, Souls, Enchants, Divine, Costumes, Shop.
+
+## Клітинка спорядження (gear_slots.json).
+static func gear_slot(id: String) -> Dictionary:
+	return table("gear_slots").get(id, _EMPTY)
+
+
+## Вид зброї (weapons.json).
+static func weapon(id: String) -> Dictionary:
+	return table("weapons").get(id, _EMPTY)
+
+
+## Бонус речі (bonuses.json).
+static func bonus(id: String) -> Dictionary:
+	return table("bonuses").get(id, _EMPTY)
+
+
+## Сила золотої речі (powers.json).
+static func power(id: String) -> Dictionary:
+	return table("powers").get(id, _EMPTY)
+
+
+## Золота річ (golden.json).
+static func golden(id: String) -> Dictionary:
+	return table("golden").get(id, _EMPTY)
+
+
+## Набір (sets.json).
+static func item_set(id: String) -> Dictionary:
+	return table("sets").get(id, _EMPTY)
+
+
+## Артефакт (artifacts.json).
+static func artifact(id: String) -> Dictionary:
+	return table("artifacts").get(id, _EMPTY)
+
+
+## Душа (souls.json).
+static func soul(id: String) -> Dictionary:
+	return table("souls").get(id, _EMPTY)
+
+
+## Зачарування (enchants.json).
+static func enchant(id: String) -> Dictionary:
+	return table("enchants").get(id, _EMPTY)
+
+
+## Божий дар (gifts.json).
+static func gift(id: String) -> Dictionary:
+	return table("gifts").get(id, _EMPTY)
+
+
+## Вбрання (costumes.json).
+static func costume(id: String) -> Dictionary:
+	return table("costumes").get(id, _EMPTY)
+
+
+## Записи таблиці-драбини за числовим полем: [запис для 0, для 1, ...]; пропуск — порожній запис.
+## Так рідкість (rank), ступінь (tier) і заточка (up) читаються за числом, яке лежить у речі.
+## Масив складається раз і заморожується; модулі тримають його в себе, тож у бою це читання з масиву.
+static func ladder(name: String, field: String) -> Array:
+	var key := name + "#" + field
+	if not _nums.has(key):
+		var out := []
+		for id in ids(name):
+			var R: Dictionary = row(name, id)
+			if not R.has(field) or int(R[field]) < 0:
+				continue
+			var i := int(R[field])
+			while out.size() <= i:
+				out.append(_EMPTY)
+			out[i] = R
+		out.make_read_only()
+		_nums[key] = out
+	return _nums[key]

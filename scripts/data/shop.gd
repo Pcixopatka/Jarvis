@@ -1,7 +1,6 @@
 extends RefCounted
 ## Крамниця за донат: усе рідкісне за окрему валюту, червінці.
 ## Червінці купують за справжні гроші наборами (див. Billing); вони спільні для всіх героїв роду.
-## Ціни речей у червінцях зібрані тут, щоб їх було легко міняти.
 
 const COIN := "червінці"
 const COIN_SHORT := "черв."
@@ -11,25 +10,33 @@ const COIN_SHORT := "черв."
 ## (робоче значення лежить у ShopService.coins_on_sale, його читають служба, екран крамниці й довідник).
 const COINS_ON_SALE := false
 
-## Набори червінців. id — назва товару в магазині застосунків; price — орієнтовна ціна справжніми грошима
-## (справжню показує магазин застосунків); bonus — скільки відсотків червінців понад найменший набір.
-const PACKS := [
-	{"id": "coins_100", "name": "Жменя червінців", "coins": 100, "bonus": 0, "price": "39 грн"},
-	{"id": "coins_550", "name": "Гаман червінців", "coins": 550, "bonus": 10, "price": "199 грн"},
-	{"id": "coins_1200", "name": "Калитка червінців", "coins": 1200, "bonus": 20, "price": "399 грн"},
-	{"id": "coins_2600", "name": "Скринька червінців", "coins": 2600, "bonus": 30, "price": "799 грн"},
-	{"id": "coins_7000", "name": "Військова скарбниця", "coins": 7000, "bonus": 40, "price": "1999 грн"},
-]
+## Записи — у таблицях: набори червінців у data/coin_packs.json (id — назва товару в магазині застосунків;
+## price — орієнтовна ціна справжніми грошима, справжню показує магазин; bonus — скільки відсотків червінців
+## понад найменший набір), розділи крамниці у data/shop_kinds.json (назва вкладки й ціни артефакта та
+## речей набору), ціни золотих речей і душ — у їхніх ступенях (golden_tiers.json, soul_tiers.json).
 
-## Душа за її ступенем (1..7)
-const SOUL_PRICE := [0, 40, 60, 90, 150, 220, 320, 500]
-## Золота річ за її ступенем (1..6)
-const UNIQUE_PRICE := [0, 150, 220, 300, 400, 550, 800]
-const ARTIFACT_PRICE := 250
-const ARTIFACT_PERIL_PRICE := 500  # трофей надважкого боса
-const SET_PIECE_PRICE := 350
-const SET_FULL_PRICE := 1800  # усі шість речей набору разом: дешевше, ніж поодинці
+const GameDB := preload("res://scripts/core/game_db.gd")
 
-## Розділи крамниці за порядком вкладок
-const KINDS := ["unique", "set", "artifact", "soul"]
-const KIND_NAMES := {"unique": "Золоті речі", "set": "Набори", "artifact": "Артефакти", "soul": "Душі"}
+
+## Набори червінців у порядку файлу.
+static func pack_ids() -> Array:
+	return GameDB.ids("coin_packs")
+
+
+## Набір червінців: {name, coins, bonus, price}; для невідомого — порожній.
+static func pack(id: String) -> Dictionary:
+	return GameDB.row("coin_packs", id)
+
+
+## Розділи крамниці за порядком вкладок.
+static func kinds() -> Array:
+	return GameDB.ids("shop_kinds")
+
+
+static func kind_name(kind: String) -> String:
+	return str(GameDB.row("shop_kinds", kind)["name"])
+
+
+## Ціни розділу: price (артефакт, річ набору), peril_price (артефакт надважкого боса), full_price (увесь набір).
+static func kind_price(kind: String, field: String = "price") -> int:
+	return int(GameDB.row("shop_kinds", kind).get(field, 0))

@@ -56,7 +56,7 @@ static func item_button(item: Dictionary, cb: Callable, selected: bool = false, 
 	var col: Color = Data.item_color(item)
 	var b := Button.new()
 	var up: String = (" +%d" % item["up"]) if item["up"] > 0 else ""
-	b.text = ("★ " if item.has("unique") else ("◆ " if item.has("artifact") else ("✦ " if item.has("set") else ""))) + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.SLOT_NAMES[item["slot"]])
+	b.text = ("★ " if item.has("unique") else ("◆ " if item.has("artifact") else ("✦ " if item.has("set") else ""))) + item["name"] + up + ("\n" + extra if extra != "" else "\n" + Data.slot_name(item["slot"]))
 	b.custom_minimum_size = Vector2(150, 62)
 	b.clip_text = true
 	b.add_theme_font_size_override("font_size", 15)
@@ -82,7 +82,7 @@ static func item_icon_id(item: Dictionary) -> String:
 
 ## Значок артефакта: спрайт його боса, а без спрайта загальний ромб. Одне правило для крамниці, ярмарку й торби.
 static func artifact_icon(id: String, px: int) -> TextureRect:
-	var boss: String = str(load("res://scripts/data/artifacts.gd").DEFS.get(id, {}).get("boss", ""))
+	var boss: String = str(GameDB.artifact(id).get("boss", ""))
 	return sprite_icon(boss, px) if boss != "" and load("res://scripts/world/gfx.gd").has(boss) else icon("it_artifact", px)
 
 
@@ -232,7 +232,7 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 	v.add_child(label(Data.item_title(item), 24, col, false))
 	if item.has("artifact"):
 		# артефакт: не вдягається, діє з торби
-		var AD: Dictionary = load("res://scripts/data/artifacts.gd").DEFS[str(item["artifact"])]
+		var AD: Dictionary = GameDB.artifact(str(item["artifact"]))
 		v.add_child(label("Артефакт • діє, поки лежить у торбі", 16, MUTED, false))
 		for row in [[str(AD["text"]), 18, GOOD], ["Трофей боса: %s. Другий такий самий не діє, у скрині артефакт спить." % GameDB.boss_name(AD["boss"], ""), 15, MUTED], [str(AD["lore"]), 15, MUTED]]:
 			var al := label(row[0], row[1], row[2], false)
@@ -242,16 +242,16 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		return v
 	var Uniq = load("res://scripts/data/uniques.gd")
 	var golden: bool = Uniq.is_unique(item)
-	var rar: String = Data.RARITY_NAMES[item["rarity"]]
+	var rar: String = Data.rarity_name(int(item["rarity"]))
 	if golden:
-		rar += " «%s»" % Uniq.TIER_NAMES[Uniq.tier(item)]
+		rar += " «%s»" % Uniq.tier_name(Uniq.tier(item))
 	var SetsD = load("res://scripts/data/sets.gd")
 	var set_id: String = SetsD.set_of(item)
 	if set_id != "":
 		rar = "Річ набору"
-	v.add_child(label("%s • %s • рівень речі %d" % [rar, Data.SLOT_NAMES[item["slot"]], item["ilvl"]], 16, MUTED, false))
+	v.add_child(label("%s • %s • рівень речі %d" % [rar, Data.slot_name(item["slot"]), item["ilvl"]], 16, MUTED, false))
 	if item["slot"] == "weapon":
-		v.add_child(label(Data.WEAPON_TYPES[item["type"]]["hint"], 16, MUTED, false))
+		v.add_child(label(Data.weapon(item["type"])["hint"], 16, MUTED, false))
 	var st := Data.item_stats(item)
 	var cmp := Data.item_stats(compare) if not compare.is_empty() else {}
 	for id in st:
@@ -294,14 +294,14 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 	if set_id != "":
 		# набір: скільки речей вдягнено й що дає кожен щабель
 		var have: int = int(SetsD.worn.get(set_id, 0))
-		v.add_child(label("✦ %s: вдягнено %d із %d" % [SetsD.SETS[set_id]["name"], have, Data.SLOTS.size()], 18, col, false))
+		v.add_child(label("✦ %s: вдягнено %d із %d" % [SetsD.def(set_id)["name"], have, Data.slots().size()], 18, col, false))
 		for step in SetsD.STEPS:
 			var on: bool = have >= int(step)
 			var bl := label("%d речі: %s" % [step, SetsD.step_text(set_id, step)] if int(step) < 5 else "%d речей: %s" % [step, SetsD.step_text(set_id, step)], 16, GOOD if on else MUTED, false)
 			bl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			bl.custom_minimum_size = Vector2(290, 0)
 			v.add_child(bl)
-		var sl2 := label(str(SetsD.SETS[set_id]["lore"]), 15, MUTED, false)
+		var sl2 := label(str(SetsD.def(set_id)["lore"]), 15, MUTED, false)
 		sl2.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		sl2.custom_minimum_size = Vector2(290, 0)
 		v.add_child(sl2)
@@ -309,7 +309,7 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		# сила золотої речі й переказ про неї
 		var uid: String = str(item["unique"])
 		v.add_child(label("✦ " + Uniq.power_name(uid), 18, GOLD, false))
-		for txt in [[Uniq.power_text(uid), 16, TEXT], [str(Uniq.DEFS[uid]["lore"]), 15, MUTED]]:
+		for txt in [[Uniq.power_text(uid), 16, TEXT], [str(Uniq.def(uid)["lore"]), 15, MUTED]]:
 			var pl := label(txt[0], txt[1], txt[2], false)
 			pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			pl.custom_minimum_size = Vector2(290, 0)

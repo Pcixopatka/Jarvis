@@ -38,10 +38,7 @@ static func coins(world) -> int:
 # ======================= Червінці =======================
 
 static func pack(id: String) -> Dictionary:
-	for p in Shop.PACKS:
-		if str(p["id"]) == id:
-			return p
-	return {}
+	return Shop.pack(id)
 
 
 ## Чому набір зараз не купити (порожньо: можна).
@@ -80,28 +77,28 @@ static func _peril_bosses() -> Array:
 	return out
 
 
-## Ціна товару в червінцях (0 — такого товару нема).
+## Ціна товару в червінцях (0 — такого товару нема): ступені золота й душ, розділи крамниці (data/shop_kinds.json).
 static func price(kind: String, id: String) -> int:
 	match kind:
 		"soul":
-			if not Souls.SOULS.has(id):
+			if not Souls.has(id):
 				return 0
-			return int(Shop.SOUL_PRICE[clampi(int(Souls.SOULS[id]["tier"]), 1, Shop.SOUL_PRICE.size() - 1)])
+			return Souls.tier_price(clampi(int(Souls.def(id)["tier"]), 1, Souls.max_tier()))
 		"unique":
-			if not Uniques.DEFS.has(id):
+			if not Uniques.has(id):
 				return 0
-			return int(Shop.UNIQUE_PRICE[clampi(int(Uniques.DEFS[id]["tier"]), 1, Shop.UNIQUE_PRICE.size() - 1)])
+			return Uniques.tier_price(clampi(int(Uniques.def(id)["tier"]), 1, Uniques.max_tier()))
 		"artifact":
-			if not Artifacts.DEFS.has(id):
+			if Artifacts.def(id).is_empty():
 				return 0
-			return Shop.ARTIFACT_PERIL_PRICE if str(Artifacts.DEFS[id]["boss"]) in _peril_bosses() else Shop.ARTIFACT_PRICE
+			return Shop.kind_price("artifact", "peril_price") if str(Artifacts.def(id)["boss"]) in _peril_bosses() else Shop.kind_price("artifact")
 		"set":
 			var parts := id.split(":")
-			if parts.size() != 2 or not Sets.SETS.has(parts[0]) or not parts[1] in Data.SLOTS:
+			if parts.size() != 2 or Sets.def(parts[0]).is_empty() or not parts[1] in Data.slots():
 				return 0
-			return Shop.SET_PIECE_PRICE
+			return Shop.kind_price("set")
 		"set_full":
-			return Shop.SET_FULL_PRICE if Sets.SETS.has(id) else 0
+			return Shop.kind_price("set", "full_price") if not Sets.def(id).is_empty() else 0
 	return 0
 
 
@@ -111,17 +108,17 @@ static func ids(kind: String) -> Array:
 		"soul":
 			return SoulService.known()
 		"unique":
-			return Uniques.ORDER.duplicate()
+			return Uniques.ids().duplicate()
 		"artifact":
-			return Artifacts.ORDER.duplicate()
+			return Artifacts.ids().duplicate()
 		"set":
 			var out := []
-			for sid in Sets.ORDER:
-				for slot in Data.SLOTS:
+			for sid in Sets.ids():
+				for slot in Data.slots():
 					out.append("%s:%s" % [sid, slot])
 			return out
 		"set_full":
-			return Sets.ORDER.duplicate()
+			return Sets.ids().duplicate()
 	return []
 
 
@@ -138,8 +135,8 @@ static func set_weapon(player) -> String:
 
 ## Чи річ до руки цьому героєві (чужу зброю купити можна, але вдягти її зможе інший герой).
 static func fits(player, kind: String, id: String) -> bool:
-	if kind == "unique" and str(Uniques.DEFS[id]["slot"]) == "weapon":
-		return str(Uniques.DEFS[id]["type"]) in Classes.CLASSES[player.job].get("weapons", [])
+	if kind == "unique" and str(Uniques.def(id)["slot"]) == "weapon":
+		return Uniques.type_of(id) in Classes.CLASSES[player.job].get("weapons", [])
 	return true
 
 
@@ -172,7 +169,7 @@ static func _make(player, kind: String, id: String) -> Array:
 			return [Sets.make(parts[0], parts[1], lvl, set_weapon(player) if parts[1] == "weapon" else "")]
 		"set_full":
 			var out := []
-			for slot in Data.SLOTS:
+			for slot in Data.slots():
 				out.append(Sets.make(id, slot, lvl, set_weapon(player) if slot == "weapon" else ""))
 			return out
 	return []
@@ -195,7 +192,7 @@ static func buy(world, player, kind: String, id: String) -> Dictionary:
 		for it in items:
 			player.add_item(it, true)  # куплене лягає й понад місце в торбі
 		player.recalc()
-		what = "%s у торбі" % (str(items[0]["name"]) if items.size() == 1 else "«%s»: шість речей" % str(Sets.SETS[id]["name"]))
+		what = "%s у торбі" % (str(items[0]["name"]) if items.size() == 1 else "«%s»: шість речей" % str(Sets.def(id)["name"]))
 	s["coins"] = int(s["coins"]) - cost
 	s["spent"] = int(s["spent"]) + cost
 	s["bought"][key(kind, id)] = int(s["bought"].get(key(kind, id), 0)) + 1

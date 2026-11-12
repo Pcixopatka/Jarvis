@@ -46,7 +46,7 @@ static func boss_tier(combat, e) -> int:
 static func chance(tier: int, luck: int) -> float:
 	if luck >= Uniques.LUCK_SURE:
 		return 1.0
-	return float(Uniques.BASE_CHANCE[tier]) * (1.0 + luck / Uniques.LUCK_STEP)
+	return Uniques.tier_chance(tier) * (1.0 + luck / Uniques.LUCK_STEP)
 
 
 ## Усі золоті речі героя (вдягнені й у торбі) за id.
@@ -68,12 +68,12 @@ static func pick(player, tier: int, boss_kind: String) -> String:
 	var ids := []
 	var weights := []
 	var total := 0.0
-	for id in Uniques.ORDER:
-		var D: Dictionary = Uniques.DEFS[id]
+	for id in Uniques.ids():
+		var D: Dictionary = Uniques.def(id)
 		var t: int = int(D["tier"])
 		if t > tier:
 			continue
-		if D["slot"] == "weapon" and not D["type"] in weapons:
+		if D["slot"] == "weapon" and not str(D["type"]) in weapons:
 			continue
 		var w := 4.0 if t == tier else (2.0 if t == tier - 1 else 1.0)
 		if boss_kind in D["bosses"]:

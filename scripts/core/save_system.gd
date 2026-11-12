@@ -242,8 +242,8 @@ static func _rescale_item(item: Dictionary) -> bool:
 	if not Data.rescale_xp_gold(item):
 		return false
 	if Uniques.is_unique(item):
-		var def_affixes: Dictionary = Uniques.DEFS[str(item["unique"])]["affixes"]
-		for id in Data.XP_GOLD_ROLL:
+		var def_affixes: Dictionary = Uniques.def(str(item["unique"]))["affixes"]
+		for id in Data.capped_stats():
 			if item["affixes"].has(id) and def_affixes.has(id):
 				item["affixes"][id] = Uniques.value(id, int(item.get("ilvl", 1)), float(def_affixes[id]))
 	return true

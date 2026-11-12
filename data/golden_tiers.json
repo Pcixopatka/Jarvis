@@ -1,0 +1,55 @@
+{
+	"t1": {
+		"num": 4601,
+		"tier": 1,
+		"name": "Сотницька",
+		"primary_mult": 1.0,
+		"chance": 0.01,
+		"price": 150,
+		"fair": {"trophy": 150, "gold": 20000}
+	},
+	"t2": {
+		"num": 4602,
+		"tier": 2,
+		"name": "Полковницька",
+		"primary_mult": 1.04,
+		"chance": 0.014,
+		"price": 220,
+		"fair": {"trophy": 220, "gold": 40000}
+	},
+	"t3": {
+		"num": 4603,
+		"tier": 3,
+		"name": "Кошова",
+		"primary_mult": 1.08,
+		"chance": 0.018,
+		"price": 300,
+		"fair": {"trophy": 300, "gold": 70000}
+	},
+	"t4": {
+		"num": 4604,
+		"tier": 4,
+		"name": "Гетьманська",
+		"primary_mult": 1.12,
+		"chance": 0.024,
+		"price": 400,
+		"fair": {"trophy": 400, "gold": 110000}
+	},
+	"t5": {
+		"num": 4605,
+		"tier": 5,
+		"name": "Характерницька",
+		"primary_mult": 1.18,
+		"chance": 0.032,
+		"price": 550,
+		"fair": {"trophy": 550, "gold": 160000}
+	},
+	"t6": {
+		"num": 4606,
+		"tier": 6,
+		"name": "Заповітна",
+		"primary_mult": 1.24,
+		"chance": 0.05,
+		"price": 800
+	}
+}

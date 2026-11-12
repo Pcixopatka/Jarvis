@@ -1,0 +1,41 @@
+{
+	"sviatohor": {
+		"num": 5101,
+		"name": "Спадок Святогора",
+		"of": "Святогора",
+		"stat": "str",
+		"affixes": ["str", "vit", "hp", "armor", "dmg_pct"],
+		"bonus": [
+			{"pieces": 2, "fx": {"hp": 8}},
+			{"pieces": 4, "fx": {"dmg": 8, "armor": 4}},
+			{"pieces": 6, "fx": {"dmg": 10, "hp": 8, "big_dmg": 10}}
+		],
+		"lore": "Святогора не носила земля, такий він був дужий. Силу свою він передав тому, хто не побоявся її взяти."
+	},
+	"dovbush": {
+		"num": 5102,
+		"name": "Убір Довбуша",
+		"of": "Довбуша",
+		"stat": "agi",
+		"affixes": ["agi", "crit", "aspd", "dmg_pct", "speed"],
+		"bonus": [
+			{"pieces": 2, "fx": {"aspd": 6}},
+			{"pieces": 4, "fx": {"crit": 6, "speed": 6}},
+			{"pieces": 6, "fx": {"dmg": 8, "crit_dmg": 30}}
+		],
+		"lore": "Олекса Довбуш ходив горами швидше за погоню й бив раніше, ніж його помічали."
+	},
+	"boian": {
+		"num": 5103,
+		"name": "Шати Віщого Бояна",
+		"of": "Бояна",
+		"stat": "spi",
+		"affixes": ["spi", "skill_power", "skill_cd", "hp", "crit"],
+		"bonus": [
+			{"pieces": 2, "fx": {"skill": 8}},
+			{"pieces": 4, "fx": {"cd": 8, "hp": 6}},
+			{"pieces": 6, "fx": {"skill": 14, "dmg": 6}}
+		],
+		"lore": "Боян, Велесів онук, співав так, що слово ставало ділом. Його шати пам'ятають кожне замовляння."
+	}
+}

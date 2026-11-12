@@ -178,7 +178,7 @@ func _build_hero(lvl: int) -> void:
 			break
 		p.learn_perk(id)
 	# Спорядження свого рівня: добротне, з типовою для цього етапу заточкою
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		var wt: String = SPEC_WEAPON.get(spec, "staff" if cls == "volkhv" else ("bow" if cls == "strilets" else "sabre"))
 		var it = Data.gen_item(lvl, 1, slot, wt if slot == "weapon" else "")
 		it["up"] = mini(lvl / 3, 4)
@@ -202,13 +202,13 @@ func _build_hero(lvl: int) -> void:
 func _regear(p, lvl: int, rarity: int, up: int, best: bool) -> void:
 	for it in p.inventory.duplicate():
 		p.remove_from_bag(it["uid"])
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		if p.equipment.has(slot):
 			p.equipment.erase(slot)
 	var wt: String = "staff" if p.is_volkhv() else str(SPEC_WEAPON.get(p.job, "sabre"))
-	var main: String = "agi" if wt in Data.AGI_WEAPONS else "str"  # стрільцям потрібна Спритність, а не Сила
+	var main: String = "agi" if Data.is_agi(wt) else "str"  # стрільцям потрібна Спритність, а не Сила
 	var souls := {"weapon": "b_putinoid", "amulet": "b_lykho", "head": "zarazhenyi", "body": "vedmid", "belt": "vovkulaka", "boots": "pesyholovets"}
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		var pick: Dictionary = {}
 		var pick_score := -1.0
 		for i in (12 if best else 1):

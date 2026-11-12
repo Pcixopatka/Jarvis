@@ -15,7 +15,7 @@ static func owned_count(world) -> int:
 
 
 static func price(id: String) -> int:
-	return int(Costumes.DEFS[id]["price"]) if Costumes.has(id) else 0
+	return Costumes.price(id)
 
 
 ## Чому не можна купити ("" — можна).

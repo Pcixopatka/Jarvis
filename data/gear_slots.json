@@ -1,0 +1,42 @@
+{
+	"weapon": {
+		"num": 4001,
+		"name": "Зброя",
+		"primary": {"stat": "flat_dmg", "base": 3.0, "per_level": 1.2},
+		"drop": 2
+	},
+	"head": {
+		"num": 4002,
+		"name": "Шапка",
+		"primary": {"stat": "hp", "base": 10.0, "per_level": 4.0},
+		"drop": 1
+	},
+	"body": {
+		"num": 4003,
+		"name": "Жупан",
+		"primary": {"stat": "armor", "base": 3.0, "per_level": 0.4},
+		"drop": 1
+	},
+	"belt": {
+		"num": 4004,
+		"name": "Пояс",
+		"primary": {"stat": "vit", "base": 1.0, "every": 4},
+		"drop": 1
+	},
+	"boots": {
+		"num": 4005,
+		"name": "Чоботи",
+		"primary": {"stat": "speed", "base": 3.0, "per_level": 0.3},
+		"drop": 1
+	},
+	"amulet": {
+		"num": 4006,
+		"name": "Оберіг",
+		"primary": {"stat": "skill_power", "base": 5.0, "per_level": 0.6},
+		"drop": 1
+	},
+	"artifact": {
+		"num": 4007,
+		"name": "Артефакт"
+	}
+}

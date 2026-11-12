@@ -855,8 +855,8 @@ var _trader_prev_city := ""
 ## Номер вкладки крамниці за назвою (вкладки можуть додаватися, тож шукаємо за іменем).
 func _shop_tab_index(title: String) -> int:
 	var names := ["Червінці"]
-	for kind in ShopService.Shop.KINDS:
-		names.append(str(ShopService.Shop.KIND_NAMES[kind]))
+	for kind in ShopService.Shop.kinds():
+		names.append(ShopService.Shop.kind_name(kind))
 	names.append_array(["Божі дари", "Вбрання", "Універсал"])
 	return maxi(0, names.find(title))
 
@@ -1312,7 +1312,7 @@ func _check_full_set() -> void:
 		return
 	var worn: Dictionary = Sets.count(player.equipment)
 	for sid in worn:
-		if int(worn[sid]) >= Data.SLOTS.size():
+		if int(worn[sid]) >= Data.slots().size():
 			_record("set_full", 1)
 			return
 
@@ -2594,7 +2594,7 @@ func char_do(action: String, arg) -> void:
 			char_sel_uid = arg
 		"divine_toggle":
 			# вдягнути чи зняти божий дар у його гнізді
-			var dslot: String = str(DivineService.Divine.DEFS[str(arg)]["slot"])
+			var dslot: String = str(DivineService.Divine.def(str(arg))["slot"])
 			if DivineService.wears(player, str(arg)):
 				DivineService.unequip(world, player, dslot)
 			else:
@@ -3256,11 +3256,11 @@ func _show_pickup_menu(back: Callable) -> void:
 	hud.add_title("Фільтр автопідбору")
 	hud.add_title("Вимкнена рідкість не підбирається: річ лежить тьмяна,\nа коли йдеш із місця, продається. Золоті речі й артефакти беруться завжди.", 22, UI.TEXT)
 	for r in 4:
-		var b := hud.add_button(("☑ " if combat.pickup_filter[r] else "☐ ") + "%s речі" % Data.RARITY_PLURAL[r], func():
+		var b := hud.add_button(("☑ " if combat.pickup_filter[r] else "☐ ") + "%s речі" % Data.rarity_plural(r), func():
 			combat.pickup_filter[r] = not combat.pickup_filter[r]
 			_save_settings()
 			_show_pickup_menu(back), Vector2(480, 64))
-		b.add_theme_color_override("font_color", Data.RARITY_COLORS[r])
+		b.add_theme_color_override("font_color", Data.rarity_color(r))
 	var lying: int = combat.ignored_count() if combat.active else 0
 	if lying > 0:
 		hud.add_button("Підібрати все, що лежить: %d" % lying, func():
@@ -3460,7 +3460,7 @@ func shop_do(action: String, arg) -> void:
 			shop_sel = "divine:" + did
 			if DivineService.owned(world, did):
 				if DivineService.wears(player, did):
-					DivineService.unequip(world, player, str(DivineService.Divine.DEFS[did]["slot"]))
+					DivineService.unequip(world, player, str(DivineService.Divine.def(did)["slot"]))
 				else:
 					DivineService.equip(world, player, did)
 				shop_confirm = ""
@@ -3477,7 +3477,7 @@ func shop_do(action: String, arg) -> void:
 				if DivineService.buy(world, player, did):
 					save_game()
 					Audio.play("quest", 0.0)
-					hud.show_banner("%s тепер у твого роду.\nГерой уже вдягнув: глянь гнізда на екрані героя" % DivineService.Divine.DEFS[did]["name"], UI.GOLD)
+					hud.show_banner("%s тепер у твого роду.\nГерой уже вдягнув: глянь гнізда на екрані героя" % DivineService.Divine.def(did)["name"], UI.GOLD)
 		"costume":
 			# куплене вбрання вдягається й знімається одним дотиком, купівля просить підтвердження
 			var cid: String = str(arg)
@@ -3517,10 +3517,11 @@ func shop_do(action: String, arg) -> void:
 				hud.show_banner(why, UI.BAD)
 				hud.set_screen(UiShop.build(self), "shop")
 				return
-			var p: Dictionary = ShopService.pack(str(arg))
-			Billing.purchase(str(p["id"]), "%s: %s червінців" % [p["name"], UI.num(int(p["coins"]))], str(p["price"]), func(paid: bool):
+			var pid := str(arg)
+			var p: Dictionary = ShopService.pack(pid)
+			Billing.purchase(pid, "%s: %s червінців" % [p["name"], UI.num(int(p["coins"]))], str(p["price"]), func(paid: bool):
 				if paid:
-					var n: int = ShopService.grant_pack(world, str(p["id"]))
+					var n: int = ShopService.grant_pack(world, pid)
 					save_game()
 					Audio.play("coins", 0.05)
 					hud.show_banner("Дякуємо за підтримку!\n+%s червінців" % UI.num(n), UI.GOLD)
@@ -3677,7 +3678,7 @@ func camp_do(action: String, arg) -> void:
 			if not it.is_empty():
 				Audio.play("sharpen_ok", 0.03)
 				smith_msg = "Викувано: %s" % Data.item_title(it)
-				smith_msg_color = Data.RARITY_COLORS[it["rarity"]]
+				smith_msg_color = Data.rarity_color(int(it["rarity"]))
 				_record("craft")
 		"reforge":
 			var fresh := CraftService.reforge(world, player, arg[0], arg[1])

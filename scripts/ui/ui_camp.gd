@@ -265,7 +265,7 @@ static func _forge(game) -> Control:
 	list.add_theme_constant_override("separation", 6)
 	list.add_child(UI.label("Вдягнуте", 22, UI.GOLD, false))
 	var eg := UI.grid(5)
-	for slot in Data.SLOTS:
+	for slot in Data.slots():
 		if p.equipment.has(slot):
 			var it: Dictionary = p.equipment[slot]
 			eg.add_child(UI.item_cell(it, _do(game, "select", it["uid"]), it["uid"] == sel, 66))
@@ -349,8 +349,7 @@ static func _craft_item_actions(game, det: VBoxContainer, it: Dictionary) -> voi
 		var cost := CraftService.reforge_cost(it)
 		det.add_child(UI.label("Перекувати властивість (%s):" % _craft_cost_text(cost), 16, UI.MUTED, false))
 		for a in it["affixes"]:
-			var fmt: Array = Data.STAT_FMT[a]
-			var txt: String = fmt[0] % (("%." + str(fmt[1]) + "f") % it["affixes"][a])
+			var txt: String = Data.stat_text(a) % (("%." + str(Data.stat_decimals(a)) + "f") % it["affixes"][a])
 			det.add_child(UI.button("↻ " + txt, _do(game, "reforge", [it["uid"], a]), Vector2(370, 46), 15, CraftService.can_pay(p, cost)))
 	if CraftService.can_renew(w, it, p.level):
 		# кожен рівень речі коштує окремо й дорожче за попередній: можна підняти на один або одразу до свого
@@ -379,7 +378,7 @@ static func _crafting(game) -> Control:
 		var label: String = ("▸ " if t == tier else "") + CraftService.TIER_NAMES[t] + ("" if open else "\n(кузня %d)" % CraftService.TIER_KUZNIA[t])
 		var b := UI.button(label, _do(game, "craft_tier", t), Vector2(220, 60), 17, open)
 		if t == tier:
-			b.modulate = Data.RARITY_COLORS[t].lightened(0.3)
+			b.modulate = Data.rarity_color(t).lightened(0.3)
 		tiers.add_child(b)
 	v.add_child(tiers)
 	var grid := UI.grid(2)
@@ -551,7 +550,7 @@ static func _enchant_block(game, det: VBoxContainer, it: Dictionary) -> void:
 	det.add_child(hl)
 	for id in Enchants.options(it):
 		var on: bool = EnchantService.of(it) == id
-		var txt := "%s%s\n%s" % ["✧ " if on else "", Enchants.DEFS[id]["name"], game.player.Classes.fx_text(Enchants.fx_of(it, id))]
+		var txt := "%s%s\n%s" % ["✧ " if on else "", Enchants.def(id)["name"], game.player.Classes.fx_text(Enchants.fx_of(it, id))]
 		var b := UI.button(txt, _do(game, "enchant", [it["uid"], id]), Vector2(370, 58), 15, EnchantService.block_reason(p, it, id) == "")
 		if on:
 			b.modulate = Color(0.85, 0.75, 1.0)
@@ -579,12 +578,12 @@ static func _fair(game) -> Control:
 		var icon: Control = null
 		match str(e["kind"]):
 			"unique":
-				var D: Dictionary = Uniq.DEFS[e["id"]]
-				col = Data.RARITY_COLORS[Uniq.RARITY]
+				var D: Dictionary = Uniq.def(e["id"])
+				col = Data.rarity_color(Uniq.RARITY)
 				mark = "★"
-				icon = UI.icon(UI.item_icon_id({"slot": D["slot"], "type": D["type"]}), UShop.CELL)
+				icon = UI.icon(UI.item_icon_id({"slot": D["slot"], "type": Uniq.type_of(str(e["id"]))}), UShop.CELL)
 			"artifact":
-				col = Data.RARITY_COLORS[Arts.RARITY]
+				col = Data.rarity_color(Arts.RARITY)
 				mark = "◆"
 				icon = UI.artifact_icon(str(e["id"]), UShop.CELL)
 			_:
@@ -604,14 +603,14 @@ static func _fair(game) -> Control:
 		var col: Color = UI.GOLD
 		match str(picked["kind"]):
 			"unique":
-				var D: Dictionary = Uniq.DEFS[picked["id"]]
-				col = Data.RARITY_COLORS[Uniq.RARITY]
-				sub = "Золота річ «%s» • %s • рівень %d" % [Uniq.TIER_NAMES[int(picked["tier"])], Data.SLOT_NAMES[D["slot"]], int(p.level)]
+				var D: Dictionary = Uniq.def(picked["id"])
+				col = Data.rarity_color(Uniq.RARITY)
+				sub = "Золота річ «%s» • %s • рівень %d" % [Uniq.tier_name(int(picked["tier"])), Data.slot_name(D["slot"]), int(p.level)]
 				text = "%s: %s" % [Uniq.power_name(str(picked["id"])), Uniq.power_text(str(picked["id"]))]
 			"artifact":
-				col = Data.RARITY_COLORS[Arts.RARITY]
+				col = Data.rarity_color(Arts.RARITY)
 				sub = "Артефакт • діє з торби"
-				text = str(Arts.DEFS[picked["id"]]["text"])
+				text = str(Arts.def(picked["id"])["text"])
 			_:
 				sub = "можна взяти на тиждень: %d" % int(picked["limit"])
 		var nl := UI.label(str(picked["name"]), 22, col, false)

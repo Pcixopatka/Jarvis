@@ -19,9 +19,9 @@ static func of(item: Dictionary) -> String:
 ## Напис для картки речі ("" — зачарування нема).
 static func text(item: Dictionary) -> String:
 	var id := of(item)
-	if not Enchants.DEFS.has(id):
+	if not Enchants.has(id):
 		return ""
-	return "%s: %s" % [Enchants.DEFS[id]["name"], Classes.fx_text(Enchants.fx_of(item, id))]
+	return "%s: %s" % [Enchants.def(id)["name"], Classes.fx_text(Enchants.fx_of(item, id))]
 
 
 static func can_pay(player, cost: Dictionary) -> bool:

@@ -25,7 +25,7 @@ static func main_stat(player) -> String:
 	var weapons: Array = Classes.CLASSES[player.job].get("weapons", [])
 	if weapons.has("staff"):
 		return "spi"
-	for wt in Data.AGI_WEAPONS:
+	for wt in Data.agi_weapons():
 		if weapons.has(wt):
 			return "agi"
 	if str(player.job) == "plastun":
@@ -40,10 +40,10 @@ static func pick(player) -> Array:
 	var opts := []
 	var weights := []
 	var total := 0.0
-	for id in Sets.ORDER:
-		for slot in Data.SLOTS:
+	for id in Sets.ids():
+		for slot in Data.slots():
 			var w := 1.0
-			if str(Sets.SETS[id]["stat"]) == main:
+			if str(Sets.def(id)["stat"]) == main:
 				w *= Sets.W_CLASS
 			if not have.has("%s:%s" % [id, slot]):
 				w *= Sets.W_NEW

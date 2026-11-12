@@ -53,7 +53,7 @@ static func drive(game) -> void:
 		var keep: float = p.attack_range * 0.7
 		if to.length() > keep:
 			dir = to.normalized()
-		elif str(p.weapon_type) in Data.RANGED_WEAPONS and to.length() < keep * 0.45:
+		elif Data.is_ranged(str(p.weapon_type)) and to.length() < keep * 0.45:
 			dir = -to.normalized()  # стрілець і волхв тримають відстань
 	elif c.portal != null and is_instance_valid(c.portal) and (c.room_cleared or c.field_cleared):
 		var tp: Vector2 = c.portal.global_position - p.global_position

@@ -27,8 +27,8 @@ const COIN_COLOR := Color(1.0, 0.78, 0.3)
 static func build(game) -> Control:
 	# Вкладки будуються ліниво: функція викликається лише для відкритої (UI.screen).
 	var pages := [["Червінці", func(): return _packs(game)]]
-	for kind in Shop.KINDS:
-		pages.append([Shop.KIND_NAMES[kind], (func(): return _sets(game)) if kind == "set" else _goods.bind(game, kind)])
+	for kind in Shop.kinds():
+		pages.append([Shop.kind_name(kind), (func(): return _sets(game)) if kind == "set" else _goods.bind(game, kind)])
 	pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
 	pages.append(["Вбрання", func(): return _costumes(game)])
 	pages.append(["Універсал", func(): return _premium(game)])
@@ -71,7 +71,8 @@ static func _packs(game) -> Control:
 	grid.add_theme_constant_override("h_separation", 12)
 	grid.add_theme_constant_override("v_separation", 10)
 	v.add_child(grid)
-	for p in Shop.PACKS:
+	for pid in Shop.pack_ids():
+		var p: Dictionary = Shop.pack(pid)
 		var panel := PanelContainer.new()
 		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		panel.add_theme_stylebox_override("panel", UI.style(CARD_BG, CARD_LINE, 10, 10))
@@ -85,9 +86,9 @@ static func _packs(game) -> Control:
 		col.add_child(_wrap(str(p["name"]), 21, UI.GOLD))
 		col.add_child(_wrap("%s червінців%s" % [UI.num(int(p["coins"])), ("   •   на %d%% більше за ті самі гроші" % int(p["bonus"])) if int(p["bonus"]) > 0 else ""], 17, COIN_COLOR))
 		if ShopService.coins_on_sale:
-			h.add_child(UI.button("Купити\n%s" % str(p["price"]), game.shop_do.bind("pack", str(p["id"])), Vector2(170, 64), 18))
+			h.add_child(UI.button("Купити\n%s" % str(p["price"]), game.shop_do.bind("pack", str(pid)), Vector2(170, 64), 18))
 		else:  # купівлю червінців вимкнено (Shop.COINS_ON_SALE): ціну видно, кнопка не працює
-			h.add_child(UI.button("%s\n%s" % [ShopService.OFF_TEXT, str(p["price"])], game.shop_do.bind("pack", str(p["id"])), Vector2(170, 64), 15, false))
+			h.add_child(UI.button("%s\n%s" % [ShopService.OFF_TEXT, str(p["price"])], game.shop_do.bind("pack", str(pid)), Vector2(170, 64), 15, false))
 		grid.add_child(panel)
 	return v
 
@@ -101,7 +102,7 @@ static func _costumes(game) -> Control:
 	var wt: String = "pike" if p.is_peasant() else str(p.weapon_type)
 	var grid := UI.grid(COLS)
 	var picked := ""
-	for id in Costumes.ORDER:
+	for id in Costumes.ids():
 		var key := "costume:" + str(id)
 		if key == game.shop_sel:
 			picked = id
@@ -113,7 +114,7 @@ static func _costumes(game) -> Control:
 	if picked == "":
 		det.add_child(_hint("Торкнись вбрання,\nщоб роздивитись його."))
 	else:
-		var D: Dictionary = Costumes.DEFS[picked]
+		var D: Dictionary = Costumes.def(picked)
 		var have: bool = CostumeService.owned(world, picked)
 		var worn: bool = str(p.costume) == picked
 		var big := UI.sprite_icon(Costumes.sprite(picked, wt), 128)
@@ -223,8 +224,8 @@ static func _goods_icon(kind: String, id: String, p) -> Control:
 	var Gfx = load("res://scripts/world/gfx.gd")
 	match kind:
 		"unique":
-			var D: Dictionary = Uniques.DEFS[id]
-			return UI.icon(UI.item_icon_id({"slot": D["slot"], "type": D["type"]}), CELL)
+			var D: Dictionary = Uniques.def(id)
+			return UI.icon(UI.item_icon_id({"slot": D["slot"], "type": Uniques.type_of(id)}), CELL)
 		"artifact":
 			return UI.artifact_icon(id, CELL)
 		"soul":
@@ -240,30 +241,30 @@ static func _goods_icon(kind: String, id: String, p) -> Control:
 static func _goods_info(kind: String, id: String, p) -> Dictionary:
 	match kind:
 		"unique":
-			var D: Dictionary = Uniques.DEFS[id]
-			return {"title": "★ " + str(D["name"]), "col": Data.RARITY_COLORS[Uniques.RARITY],
-				"sub": "Золота річ «%s» • %s" % [Uniques.TIER_NAMES[int(D["tier"])], str(Data.WEAPON_TYPES[D["type"]]["name"]) if D["slot"] == "weapon" else str(Data.SLOT_NAMES[D["slot"]])],
+			var D: Dictionary = Uniques.def(id)
+			return {"title": "★ " + str(D["name"]), "col": Data.rarity_color(Uniques.RARITY),
+				"sub": "Золота річ «%s» • %s" % [Uniques.tier_name(int(D["tier"])), Data.weapon_name(D["type"]) if D["slot"] == "weapon" else Data.slot_name(D["slot"])],
 				"text": "%s: %s" % [Uniques.power_name(id), Uniques.power_text(id)]}
 		"artifact":
-			var A: Dictionary = Artifacts.DEFS[id]
-			return {"title": "◆ " + str(A["name"]), "col": Data.RARITY_COLORS[Artifacts.RARITY],
+			var A: Dictionary = Artifacts.def(id)
+			return {"title": "◆ " + str(A["name"]), "col": Data.rarity_color(Artifacts.RARITY),
 				"sub": "Артефакт • трофей: %s" % str(GameDB.boss_name(A["boss"], "")), "text": str(A["text"])}
 		"soul":
 			var t: int = SoulService.tier(id)
 			return {"title": SoulService.soul_name(id), "col": SoulService.color(id),
-				"sub": "%s • %s%s" % [str(Souls.TIER_NAMES[t]), SoulService.owner_name(id), " • лише зброя й оберіг" if t >= Souls.BOSS_TIER else ""],
+				"sub": "%s • %s%s" % [Souls.tier_name(t), SoulService.owner_name(id), " • лише зброя й оберіг" if t >= Souls.BOSS_TIER else ""],
 				"text": SoulService.fx_text(id)}
 		"set":
 			var sid: String = id.get_slice(":", 0)
 			var slot: String = id.get_slice(":", 1)
 			return {"title": "✦ " + Sets.piece_name(sid, slot, ShopService.set_weapon(p) if slot == "weapon" else ""), "col": Sets.COLOR,
-				"sub": "Набір «%s» • %s" % [str(Sets.SETS[sid]["name"]), str(Data.SLOT_NAMES[slot])], "text": ""}
+				"sub": "Набір «%s» • %s" % [str(Sets.def(sid)["name"]), Data.slot_name(slot)], "text": ""}
 		"set_full":
 			var steps := []
 			for step in Sets.STEPS:
 				steps.append("%d речі: %s" % [step, Sets.step_text(id, step)])
-			return {"title": "✦ Увесь набір «%s»" % str(Sets.SETS[id]["name"]), "col": Sets.COLOR,
-				"sub": "шість речей разом: дешевше, ніж поодинці (%d замість %d)" % [Shop.SET_FULL_PRICE, Shop.SET_PIECE_PRICE * Data.SLOTS.size()], "text": "\n".join(steps)}
+			return {"title": "✦ Увесь набір «%s»" % str(Sets.def(id)["name"]), "col": Sets.COLOR,
+				"sub": "шість речей разом: дешевше, ніж поодинці (%d замість %d)" % [Shop.kind_price("set", "full_price"), Shop.kind_price("set") * Data.slots().size()], "text": "\n".join(steps)}
 	return {"title": id, "col": UI.GOLD, "sub": "", "text": ""}
 
 
@@ -321,10 +322,10 @@ static func _goods(game, kind: String) -> Control:
 		var head := ""
 		match kind:
 			"unique":
-				head = "«%s»" % Uniques.TIER_NAMES[int(Uniques.DEFS[id]["tier"])]
+				head = "«%s»" % Uniques.tier_name(int(Uniques.def(id)["tier"]))
 			"soul":
 				var t: int = SoulService.tier(id)
-				head = str(Souls.TIER_NAMES[t]) + (" • лише зброя й оберіг" if t >= Souls.BOSS_TIER else "")
+				head = Souls.tier_name(t) + (" • лише зброя й оберіг" if t >= Souls.BOSS_TIER else "")
 		if grid == null or head != last_head:
 			if head != "":
 				left.add_child(UI.label(head, 18, UI.GOLD, false))
@@ -340,12 +341,12 @@ static func _goods(game, kind: String) -> Control:
 static func _sets(game) -> Control:
 	var p = game.player
 	var lvl: int = ShopService.item_level(p)
-	var wname: String = str(Data.WEAPON_TYPES[ShopService.set_weapon(p)]["name"]).to_lower()
+	var wname: String = Data.weapon_name(ShopService.set_weapon(p)).to_lower()
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 6)
 	var det: Control = null
-	for sid in Sets.ORDER:
-		var S: Dictionary = Sets.SETS[sid]
+	for sid in Sets.ids():
+		var S: Dictionary = Sets.def(sid)
 		var steps := []
 		for step in Sets.STEPS:
 			steps.append("%d: %s" % [step, Sets.step_text(sid, step)])
@@ -361,7 +362,7 @@ static func _sets(game) -> Control:
 			UI.num(ShopService.price("set_full", sid)), "✦6", ShopService.bought(game.world, "set_full", sid) > 0))
 		if full_key == game.shop_sel:
 			det = _detail(game, "set_full", sid)
-		for slot in Data.SLOTS:
+		for slot in Data.slots():
 			var pid := "%s:%s" % [sid, slot]
 			grid.add_child(_goods_cell(game, "set", pid, "✦"))
 			if ShopService.key("set", pid) == game.shop_sel:
