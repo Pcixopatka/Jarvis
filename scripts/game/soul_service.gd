@@ -3,6 +3,7 @@ extends RefCounted
 ## Таблиця душ — у Souls; тут лише правила.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Souls := preload("res://scripts/data/souls.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Elites := preload("res://scripts/data/elites.gd")
@@ -17,7 +18,7 @@ static var _base_hp := {}
 static func id_for(e) -> String:
 	if e.illusion or int(e.xp_value) <= 0:
 		return ""
-	if e.is_boss and Data.BOSS_NAMES.has(e.kind):
+	if e.is_boss and GameDB.has_boss(e.kind):
 		return "b_" + str(e.kind)
 	return str(e.kind)
 
@@ -28,7 +29,7 @@ static func info(id: String) -> Dictionary:
 		return Souls.SOULS[id]
 	var boss := id.begins_with("b_")
 	var kind := id.substr(2) if boss else id
-	var who: String = str(Data.BOSS_NAMES.get(kind, "")) if boss else str(Data.ENEMY_NAMES.get(kind, ""))
+	var who: String = str(GameDB.boss_name(kind, "")) if boss else str(GameDB.mob_name(kind, ""))
 	return {"name": ("Душа: %s" % who) if who != "" else "Душа невідомої нечисті", "tier": Souls.BOSS_TIER if boss else 2,
 		"fx": {"hp": 9 if boss else 4}, "lore": "Цієї нечисті ще нема в Пом'янику."}
 
@@ -57,8 +58,8 @@ static func fx_text(id: String) -> String:
 ## Чия це душа: назва нечисті чи боса.
 static func owner_name(id: String) -> String:
 	if id.begins_with("b_"):
-		return str(Data.BOSS_NAMES.get(id.substr(2), ""))
-	return str(Data.ENEMY_NAMES.get(id, ""))
+		return str(GameDB.boss_name(id.substr(2), ""))
+	return str(GameDB.mob_name(id, ""))
 
 
 ## Душі, чия нечисть справді є в грі (таблицю можна доповнити наперед).

@@ -5,6 +5,7 @@ extends Node2D
 ## Про важливі події повідомляє через шину Events; сам нічого не знає про меню й інтерфейс.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const EnemyScript := preload("res://scripts/entities/enemy.gd")
 const CompanionScript := preload("res://scripts/entities/companion.gd")
@@ -612,7 +613,7 @@ func _ring_spawn() -> void:
 	_ring_boss.hp = _ring_boss.max_hp
 	_ring_boss.damage = float(st["dmg"])
 	_ring_boss.dmg_cap = float(st["cap"])
-	Events.banner.emit("Коло %d із %d\n%s" % [ring_stage + 1, int(Acts.RING_STAGES), Data.BOSS_NAMES.get(kind, "Чудовисько")], Color(1.0, 0.55, 0.2))
+	Events.banner.emit("Коло %d із %d\n%s" % [ring_stage + 1, int(Acts.RING_STAGES), GameDB.boss_name(kind, "Чудовисько")], Color(1.0, 0.55, 0.2))
 
 
 func _update_ring(delta: float) -> void:
@@ -667,7 +668,7 @@ func _start_floor() -> void:
 	field_cleared = false
 	room_cleared = false
 	Audio.play_music("battle")
-	Events.banner.emit("%s\n%s" % [loc["name"], ("Супербос: %s!" % Data.BOSS_NAMES[loc["boss"]]) if loc["boss"] != "" else "Хвиль: %d, далі — %s" % [loc["waves"], loc["mini_title"].to_lower()]], Color(1.0, 0.7, 0.4))
+	Events.banner.emit("%s\n%s" % [loc["name"], ("Супербос: %s!" % GameDB.boss_name(loc["boss"])) if loc["boss"] != "" else "Хвиль: %d, далі — %s" % [loc["waves"], loc["mini_title"].to_lower()]], Color(1.0, 0.7, 0.4))
 
 
 ## Наступний поверх без виходу з бою (поранені побратими лишаються пораненими).
@@ -724,7 +725,7 @@ func _spawn_tower_boss() -> void:
 		b.max_hp *= float(loc.get("boss_hp_mult", 1.0))
 		b.hp = b.max_hp
 		b.damage *= float(loc.get("boss_dmg_mult", 1.0))
-		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
+		Events.banner.emit("%s!" % GameDB.boss_name(loc["boss"]), Color(1.0, 0.55, 0.2))
 		return
 	# Міні-бос: іменована еліта з 2–3 властивостями, удвічі міцніша за звичайну
 	spawn_enemy(loc["mini"], lvl, false, pos)
@@ -1150,7 +1151,7 @@ func _spawn_room() -> void:
 			hb._base_speed *= float(loc.get("boss_speed_mult", 1.0))  # Лісовий Дід рахує швидкість від неї, коли міняє зріст
 			if loc.has("enrage_after"):
 				hb.enrage_after = float(loc["enrage_after"]) + float(player.art.get("enrage", 0.0))
-		Events.banner.emit("%s!" % Data.BOSS_NAMES[loc["boss"]], Color(1.0, 0.55, 0.2))
+		Events.banner.emit("%s!" % GameDB.boss_name(loc["boss"]), Color(1.0, 0.55, 0.2))
 	else:
 		Events.banner.emit("%s\nКімната %d/%d" % [loc["name"], room, loc["rooms"]], Color(1, 0.92, 0.7))
 
@@ -1330,7 +1331,7 @@ func _drop_loot(e: Node2D) -> void:
 		Audio.play_music("map")  # бій скінчено: замість бойової теми — спокійна
 		var golden: Dictionary = LootService.on_boss(self, player, e)
 		if golden.is_empty():
-			Events.banner.emit("Перемога!\n%s" % Data.BOSS_NAMES.get(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
+			Events.banner.emit("Перемога!\n%s" % GameDB.boss_name(e.kind, "Бос"), Color(1.0, 0.85, 0.3))
 		else:
 			# золота річ: окремий банер і дзвін, щоб таку здобич не проґавити
 			spawn_pickup(pos, "item", 0, golden)

@@ -4,6 +4,7 @@ extends RefCounted
 ## game.shop_do(дія, аргумент), після чого екран перебудовується. Покупка за червінці просить другий дотик.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 const Shop := preload("res://scripts/data/shop.gd")
 const ShopService := preload("res://scripts/game/shop_service.gd")
@@ -246,7 +247,7 @@ static func _goods_info(kind: String, id: String, p) -> Dictionary:
 		"artifact":
 			var A: Dictionary = Artifacts.DEFS[id]
 			return {"title": "◆ " + str(A["name"]), "col": Data.RARITY_COLORS[Artifacts.RARITY],
-				"sub": "Артефакт • трофей: %s" % str(Data.BOSS_NAMES.get(A["boss"], "")), "text": str(A["text"])}
+				"sub": "Артефакт • трофей: %s" % str(GameDB.boss_name(A["boss"], "")), "text": str(A["text"])}
 		"soul":
 			var t: int = SoulService.tier(id)
 			return {"title": SoulService.soul_name(id), "col": SoulService.color(id),

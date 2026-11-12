@@ -3,6 +3,7 @@ extends RefCounted
 ## Дії йдуть через game.city_do(дія, аргумент).
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 
 
@@ -842,7 +843,7 @@ static func _bounty_row(game, b: Dictionary, mode: String) -> Control:
 	if mode == "killed":
 		head += "   (голову здобуто)"
 	info.add_child(UI.label(head, 21, UI.GOOD if mode == "killed" else UI.TEXT, false))
-	info.add_child(UI.label("%s: %s.  Нагорода: %d грн, +%d слави, +30 лояльності" % [Data.ENEMY_NAMES[b["kind"]], BS.traits(b), b["gold"], b["glory"]], 16, UI.MUTED, false))
+	info.add_child(UI.label("%s: %s.  Нагорода: %d грн, +%d слави, +30 лояльності" % [GameDB.mob_name(b["kind"]), BS.traits(b), b["gold"], b["glory"]], 16, UI.MUTED, false))
 	row.add_child(info)
 	match mode:
 		"take":

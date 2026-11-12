@@ -2,6 +2,7 @@ extends RefCounted
 ## Спільні будівельні блоки інтерфейсу: написи, кнопки, картки речей.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const GOLD := Color(1.0, 0.85, 0.3)
 const TEXT := Color(0.95, 0.92, 0.85)
 const MUTED := Color(0.7, 0.7, 0.7)
@@ -233,7 +234,7 @@ static func item_card(item: Dictionary, compare: Dictionary = {}) -> VBoxContain
 		# артефакт: не вдягається, діє з торби
 		var AD: Dictionary = load("res://scripts/data/artifacts.gd").DEFS[str(item["artifact"])]
 		v.add_child(label("Артефакт • діє, поки лежить у торбі", 16, MUTED, false))
-		for row in [[str(AD["text"]), 18, GOOD], ["Трофей боса: %s. Другий такий самий не діє, у скрині артефакт спить." % Data.BOSS_NAMES.get(AD["boss"], ""), 15, MUTED], [str(AD["lore"]), 15, MUTED]]:
+		for row in [[str(AD["text"]), 18, GOOD], ["Трофей боса: %s. Другий такий самий не діє, у скрині артефакт спить." % GameDB.boss_name(AD["boss"], ""), 15, MUTED], [str(AD["lore"]), 15, MUTED]]:
 			var al := label(row[0], row[1], row[2], false)
 			al.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			al.custom_minimum_size = Vector2(290, 0)

@@ -9,6 +9,7 @@ extends SceneTree
 ##   LOOT_OVERHEAD=40          секунд між походами (дорога, здобич, місто)
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Elites := preload("res://scripts/data/elites.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
@@ -159,7 +160,7 @@ func _level(lvl: int, hours: int, overhead: float) -> void:
 		p.stones.clear()
 		boss_souls += _soul(p, boss)
 	var tier: int = LootService.boss_tier(fake, boss)
-	print("Печера далекого краю (%s, бос %s, ступінь %d): %.0f походів за годину, у кожному %d нечисті й бос" % [DL["name"], Data.BOSS_NAMES[DL["boss"]], tier, dun_runs, room_kills])
+	print("Печера далекого краю (%s, бос %s, ступінь %d): %.0f походів за годину, у кожному %d нечисті й бос" % [DL["name"], GameDB.boss_name(DL["boss"]), tier, dun_runs, room_kills])
 	print("  речей за годину: %s" % _rar(items, hours))
 	print("  золота річ: раз на %.0f босів, тобто раз на %s" % [float(bosses) / maxf(gold, 1.0), _per(gold, hours)])
 	print("  артефакт цього боса: шанс за перемогу %.1f%%, перший у середньому за %s" % [100.0 * art / maxf(bosses, 1.0), _per(art, hours)])
@@ -169,7 +170,7 @@ func _level(lvl: int, hours: int, overhead: float) -> void:
 	fake.loc = DepthService.loc_for(depth)
 	var dboss = _foe(str(fake.loc["boss"]), int(fake.loc["level"]), true)
 	var dt: int = LootService.boss_tier(fake, dboss)
-	print("  Глибина %d (бос %s): ступінь золота %d, шанс %s%% за боса" % [depth, Data.BOSS_NAMES[fake.loc["boss"]], dt, _pct(LootService.chance(dt, 0))])
+	print("  Глибина %d (бос %s): ступінь золота %d, шанс %s%% за боса" % [depth, GameDB.boss_name(fake.loc["boss"]), dt, _pct(LootService.chance(dt, 0))])
 	for e in [reg, eli, boss, dboss]:
 		e.free()
 	p.free()

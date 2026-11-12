@@ -6,6 +6,7 @@ extends RefCounted
 
 const Wiki := preload("res://scripts/data/wiki_data.gd")
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Classes := preload("res://scripts/data/classes.gd")
@@ -389,22 +390,21 @@ static func _probe(kind: String, boss: bool) -> Dictionary:
 
 static func _enemies() -> Array:
 	var out := []
-	var Enemy = load("res://scripts/entities/enemy.gd")
 	for kind in Wiki.ENEMY_ORDER:
-		var W: Dictionary = Wiki.ENEMIES[kind]
+		var W: Dictionary = GameDB.mob_wiki(kind)
 		var pr := _probe(kind, false)
 		var traits := []
 		traits.append("здоров'я " + ("мале" if pr["hp"] < 60.0 else ("велике" if pr["hp"] > 120.0 else "середнє")))
 		traits.append("повільний" if pr["speed"] < 90.0 else ("швидкий" if pr["speed"] > 145.0 else "звичайний на хід"))
 		if pr["ranged"]:
 			traits.append("б'є здалеку")
-		var st: String = Enemy.HIT_STATUS.get(kind, "")
+		var st: String = GameDB.hit_status(kind)
 		if st != "":
 			traits.append("удар: " + str(Status.INFO[st]["name"]).to_lower())
 		var homes := _homes(kind)
 		var where := ", ".join(homes.slice(0, 5)) + (" та інші" if homes.size() > 5 else "")
 		var text: String = W["text"] + "\n" + _cap(", ".join(traits)) + ".\nПорада: " + W["tip"]
-		out.append(_e(Data.ENEMY_NAMES[kind], ("Живе: " + where) if where != "" else "", text, {"sprite": kind}))
+		out.append(_e(GameDB.mob_name(kind), ("Живе: " + where) if where != "" else "", text, {"sprite": kind}))
 	return out
 
 
@@ -431,14 +431,14 @@ static func _bosses() -> Array:
 		mod_lines.append("%s: %s" % [BS.MODS[m]["name"], BS.MODS[m]["desc"]])
 	var pool := []
 	for b in BS.POOL:
-		pool.append(Data.BOSS_NAMES[b])
+		pool.append(GameDB.boss_name(b))
 	out.append(_e("Бос дня й бос тижня", "раз на день і раз на тиждень", "На мапі внизу панелі є кнопка «Боси дня й тижня». Щодня й щотижня виходить один із відомих босів, той самий для всіх гравців. Бос тижня той самий увесь тиждень; якщо бос дня з ним збігся, поступається бос дня. Це не господар лігва: кроки історії, перекази й досягнення за босів лігв на нього не зважають. Рівнем він дорівнює героєві, тож не буває ні заслабким, ні задужим. Бос дня відкривається з %d-го рівня героя, бос тижня з %d-го. Перемогти кожного можна раз на період, а герой рахує своїх окремо. Поразка спроби не забирає, але ціна смерті звичайна.\nБос дня має у %s більше здоров'я за звичайного боса свого рівня й одну властивість. Бос тижня має у %s більше здоров'я, б'є на %d%% сильніше й має дві властивості. Властивості щоразу інші:\n• %s\nНагорода боса дня: %d грн за кожен рівень героя, %d трофеїв, %d%% досвіду рівня й легендарна річ. Бос тижня дає %d грн за рівень, %d трофеїв, %d%% досвіду рівня, %d легендарні речі й золоту річ напевно. Крім того, бос кидає звичайну здобич: шанс на золоту річ, трофей-артефакт і душу. Найкращий час на кожного боса запам'ятовується, а перемоги йдуть у «Літопис слави».\nХто може вийти: %s. Надважких босів серед них нема." % [
 		int(BS.MIN_LEVEL["day"]), int(BS.MIN_LEVEL["week"]), _num(BS.HP_MULT["day"]) + " раза", _num(BS.HP_MULT["week"]) + " раза", roundi((float(BS.DMG_MULT["week"]) - 1.0) * 100.0),
 		"\n• ".join(mod_lines), int(BS.GOLD_PER_LEVEL["day"]), int(BS.TROPHIES["day"]), roundi(float(BS.XP_PART["day"]) * 100.0),
 		int(BS.GOLD_PER_LEVEL["week"]), int(BS.TROPHIES["week"]), roundi(float(BS.XP_PART["week"]) * 100.0), int(BS.WEEK_ITEMS), ", ".join(pool)], {}))
 	var phase2 := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani", "pushkar", "lisovyi_did", "idolyshche", "karachun"]
 	for kind in Wiki.BOSS_ORDER:
-		var W: Dictionary = Wiki.BOSSES[kind]
+		var W: Dictionary = GameDB.boss_wiki(kind)
 		var text: String = W["text"]
 		if kind in phase2:
 			text += " На половині здоров'я лютішає й кличе підмогу."
@@ -451,7 +451,7 @@ static func _bosses() -> Array:
 		text += "\nПорада: " + W["tip"]
 		# Змія малюємо кодом (у нього нема листа спрайтів), тож у довіднику — його значок із мапи
 		var icon := {"sprite": kind} if load("res://scripts/world/gfx.gd").has(kind) else {"map": "serpent"}
-		out.append(_e(Data.BOSS_NAMES[kind], "Де: " + ", ".join(_boss_where(kind)), text, icon))
+		out.append(_e(GameDB.boss_name(kind), "Де: " + ", ".join(_boss_where(kind)), text, icon))
 	return out
 
 
@@ -464,14 +464,14 @@ static func _loc_entry(id: String, head: String) -> Dictionary:
 	elif L.get("endless", false):
 		sub = "Печера без дна • після сюжету"
 	elif L.has("peril"):
-		sub = "Надважка печера • %d кімнат • бос: %s • рівень %s • з %d-го рівня героя" % [int(L["rooms"]), Data.BOSS_NAMES[L["boss"]], lvl, int(load("res://scripts/data/peril.gd").OPEN_LEVEL)]
+		sub = "Надважка печера • %d кімнат • бос: %s • рівень %s • з %d-го рівня героя" % [int(L["rooms"]), GameDB.boss_name(L["boss"]), lvl, int(load("res://scripts/data/peril.gd").OPEN_LEVEL)]
 	elif L["type"] == "dungeon":
-		sub = "Печера • %d кімнат • бос: %s • рівень %s" % [int(L["rooms"]), Data.BOSS_NAMES[L["boss"]], lvl]
+		sub = "Печера • %d кімнат • бос: %s • рівень %s" % [int(L["rooms"]), GameDB.boss_name(L["boss"]), lvl]
 	else:
 		sub = "Дика місцевість • рівень %s" % lvl
 	var foes := []
 	for e in L["enemies"]:
-		foes.append(Data.ENEMY_NAMES[e])
+		foes.append(GameDB.mob_name(e))
 	var more := ""
 	if L.get("endless", false):
 		# Башта й Глибини: стелі нема, складність росте з кожною сходинкою
@@ -822,7 +822,7 @@ static func _artifacts() -> Array:
 	out.append(_e("Де взяти артефакт", "у кожного боса свій", "Свій трофей лишає господар лігва: шанс %s%% за перемогу, супербос Башти дає %s%%, бос надважкої печери %s%%, а бос, значно слабший за героя, лише %s%%. Кожна перемога над босом без його трофея наближає удачу саме з ним: за %d таких поспіль шанс подвоюється, а після %d наступна дає трофей напевно. Що вже лежить у торбі, удруге не падає. Реклама «×2 здобичі» на цей шанс не впливає. При повній торбі артефакт лягає понад місце." % [_num(Artifacts.CHANCE * 100.0), _num(Artifacts.CHANCE_TOWER * 100.0), _num(Artifacts.CHANCE_PERIL * 100.0), _num(Artifacts.CHANCE_GREY * 100.0), int(Artifacts.LUCK_STEP), Artifacts.LUCK_SURE]))
 	for id in Artifacts.ORDER:
 		var D: Dictionary = Artifacts.DEFS[id]
-		out.append(_e(str(D["name"]), "артефакт • %s" % Data.BOSS_NAMES.get(D["boss"], ""), "%s.\n%s" % [D["text"], D["lore"]], {}, "Артефакти: усі %d" % Artifacts.ORDER.size() if id == Artifacts.ORDER[0] else ""))
+		out.append(_e(str(D["name"]), "артефакт • %s" % GameDB.boss_name(D["boss"], ""), "%s.\n%s" % [D["text"], D["lore"]], {}, "Артефакти: усі %d" % Artifacts.ORDER.size() if id == Artifacts.ORDER[0] else ""))
 	return out
 
 

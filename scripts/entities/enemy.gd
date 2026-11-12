@@ -8,23 +8,7 @@ const Status := preload("res://scripts/game/status.gd")
 const Peril := preload("res://scripts/data/peril.gd")
 const Elites := preload("res://scripts/data/elites.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
-## Який стан може накласти удар цього ворога (шанс HIT_STATUS_CHANCE)
-const HIT_STATUS := {"zarazhenyi": "plague", "pishchalnyk": "plague", "bolotianyk": "plague", "chaklun": "plague", "putinoid": "plague",
-	"vovkulaka": "bleed", "upyr": "bleed", "chort": "burn", "zmii": "burn", "mavka": "chill", "koshchii": "chill",
-	"potopelnyk": "chill", "pesyholovets": "bleed", "kamiana_baba": "weak", "mara": "weak",
-	"morskyi_tsar": "chill", "shubin": "burn", "bila_pani": "chill",
-	"vedmid": "bleed", "kikimora": "chill", "mertvyi_strilets": "burn", "kromeshnyk": "weak", "boyaryn": "plague", "lisovyk": "chill",
-	"pushkar": "burn", "lisovyi_did": "bleed", "idolyshche": "weak", "karachun": "chill",
-	"almasty": "bleed", "kadzhi": "burn", "dev": "weak", "karakondzhul": "bleed", "samodiva": "chill",
-	"mertvyi_lytsar": "bleed", "lauma": "weak", "aitvaras": "burn", "velnias": "burn", "menkv": "weak", "shurale": "bleed", "chud": "weak",
-	"zolota_baba": "weak", "stallo": "bleed", "khiisi": "chill", "chornoboh": "plague",
-	"strygoi": "bleed", "moroi": "weak", "drakula": "bleed"}
-## Нечисть далеких країв зі своїм прийомом (див. _minion_ability)
-const MINION_ABILITIES := ["pesyholovets", "kamiana_baba", "mara", "vedmid", "kikimora", "mertvyi_strilets", "kromeshnyk", "boyaryn", "lisovyk",
-	"almasty", "kadzhi", "karakondzhul", "samodiva", "mertvyi_lytsar", "lauma", "aitvaras", "menkv", "shurale", "chud", "stallo", "khiisi"]
-## Боси, що лютішають на половині здоров'я (другий етап бою)
-const PHASE2_BOSSES := ["koshchii", "putinoid", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii", "morskyi_tsar", "shubin", "bila_pani", "pushkar",
-	"lisovyi_did", "idolyshche", "karachun", "dev", "khala", "velnias", "zolota_baba", "chornoboh", "drakula"]
+const GameDB := preload("res://scripts/core/game_db.gd")
 ## Боси, що лікуються, поки їх не перебити шкодою: [почала, наїлась, вдавилась]
 const FEAST_TEXT := {
 	"idolyshche": ["Ідолище сіло бенкетувати!\nЗавдай шкоди, поки не вдавиться", "Ідолище наїлося й набралося сил.", "Ідолище вдавилося! Бий!"],
@@ -108,214 +92,26 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 	kind = k
 	level = lvl
 	var s := Data.enemy_hp_scale(lvl)  # мірка від еталонного героя цього рівня
-	match k:
-		"mavka":
-			radius = 16.0; max_hp = 30.0; speed = 150.0; damage = 8.0; xp_value = 3
-			color = Color(0.6, 0.92, 0.65)
-		"upyr":
-			radius = 22.0; max_hp = 85.0; speed = 92.0; damage = 15.0; xp_value = 6
-			color = Color(0.5, 0.1, 0.14)
-		"bolotianyk":
-			radius = 20.0; max_hp = 45.0; speed = 85.0; damage = 7.0; xp_value = 5
-			color = Color(0.33, 0.45, 0.2)
-			ranged = true; keep_distance = 320.0; shoot_cd = 2.8
-		"vovkulaka":
-			radius = 19.0; max_hp = 55.0; speed = 175.0; damage = 12.0; xp_value = 5
-			color = Color(0.45, 0.43, 0.42)
-		"zarazhenyi":
-			radius = 20.0; max_hp = 70.0; speed = 100.0; damage = 13.0; xp_value = 6
-			color = Color(0.45, 0.16, 0.13)
-		"chaklun":
-			radius = 24.0; max_hp = 90.0; speed = 95.0; damage = 22.0; xp_value = 7
-			color = Color(0.12, 0.1, 0.14)
-			ranged = true; keep_distance = 300.0; shoot_cd = 2.2
-		"chort":
-			radius = 17.0; max_hp = 50.0; speed = 185.0; damage = 13.0; xp_value = 6
-			color = Color(0.42, 0.12, 0.08)
-		"pishchalnyk":
-			radius = 19.0; max_hp = 55.0; speed = 90.0; damage = 15.0; xp_value = 7
-			color = Color(0.4, 0.14, 0.12)
-			ranged = true; keep_distance = 340.0; shoot_cd = 2.6
-		"koshchii":
-			radius = 24.0; max_hp = 170.0; speed = 100.0; damage = 26.0; xp_value = 8
-			color = Color(0.1, 0.08, 0.1)
-			ranged = true; keep_distance = 220.0; shoot_cd = 2.4
-		"putinoid":
-			radius = 26.0; max_hp = 260.0; speed = 105.0; damage = 30.0; xp_value = 10
-			color = Color(0.45, 0.06, 0.1)
-			ranged = true; keep_distance = 260.0; shoot_cd = 2.0
-		"zmii":
-			radius = 52.0; max_hp = 60.0; speed = 70.0; damage = 17.0; xp_value = 6
-			color = Color(0.2, 0.55, 0.25)
-			ranged = true; shoot_cd = 2.6
-		"rival":
-			# Козак-суперник у герці; стиль і сила — у make_rival()
-			radius = 20.0; max_hp = 120.0; speed = 160.0; damage = 14.0; xp_value = 0
-			color = Color(0.7, 0.2, 0.2)
-		# ---- Супербоси Башти ----
-		"baba_yaha":
-			radius = 22.0; max_hp = 150.0; speed = 125.0; damage = 24.0; xp_value = 9
-			color = Color(0.35, 0.28, 0.22)
-			ranged = true; keep_distance = 280.0; shoot_cd = 2.3
-		"solovei":
-			radius = 23.0; max_hp = 170.0; speed = 110.0; damage = 22.0; xp_value = 9
-			color = Color(0.3, 0.35, 0.2)
-			ranged = true; keep_distance = 240.0; shoot_cd = 3.0
-		"lykho":
-			radius = 30.0; max_hp = 260.0; speed = 80.0; damage = 32.0; xp_value = 10
-			color = Color(0.25, 0.22, 0.28)
-		"oprychnyk":
-			radius = 24.0; max_hp = 200.0; speed = 120.0; damage = 28.0; xp_value = 10
-			color = Color(0.12, 0.1, 0.1)
-		# ---- Нечисть далеких країв ----
-		"potopelnyk":
-			radius = 21.0; max_hp = 95.0; speed = 80.0; damage = 14.0; xp_value = 7
-			color = Color(0.35, 0.6, 0.62)
-		"pesyholovets":
-			radius = 21.0; max_hp = 70.0; speed = 160.0; damage = 15.0; xp_value = 8
-			color = Color(0.6, 0.4, 0.22)
-		"kamiana_baba":
-			radius = 26.0; max_hp = 170.0; speed = 55.0; damage = 20.0; xp_value = 10
-			color = Color(0.6, 0.6, 0.57)
-		"mara":
-			radius = 17.0; max_hp = 38.0; speed = 150.0; damage = 12.0; xp_value = 7
-			color = Color(0.85, 0.88, 0.98)
-		"zlyden":
-			radius = 12.0; max_hp = 22.0; speed = 215.0; damage = 6.0; xp_value = 3
-			color = Color(0.55, 0.5, 0.3)
-			base_scale = 0.75
+	# Сталі числа виду — у data/mobs.json (див. GameDB); невідомий вид лишає типові значення
+	var R: Dictionary = GameDB.mob(k)
+	var at: Dictionary = R.get("attack", {})
+	if not R.is_empty():
+		var st: Dictionary = R["stats"]
+		radius = st["radius"]
+		max_hp = st["hp"]
+		speed = st["speed"]
+		damage = st["damage"]
+		xp_value = st["xp"]
+		color = R["color"]
+		if at.has("ranged"):
+			ranged = at["ranged"]
+		if at.has("keep_distance"):
+			keep_distance = at["keep_distance"]
+		if at.has("shoot_cd"):
+			shoot_cd = at["shoot_cd"]
+		if st.has("scale"):
+			base_scale = st["scale"]
 			scale = Vector2.ONE * base_scale
-		# ---- Боси далеких країв ----
-		"morskyi_tsar":
-			radius = 25.0; max_hp = 230.0; speed = 90.0; damage = 28.0; xp_value = 11
-			color = Color(0.2, 0.55, 0.65)
-			ranged = true; keep_distance = 280.0; shoot_cd = 2.3
-		"shubin":
-			radius = 29.0; max_hp = 300.0; speed = 85.0; damage = 31.0; xp_value = 11
-			color = Color(0.25, 0.22, 0.2)
-		"bila_pani":
-			radius = 21.0; max_hp = 160.0; speed = 140.0; damage = 21.0; xp_value = 10
-			color = Color(0.92, 0.94, 1.0)
-			ranged = true; keep_distance = 260.0; shoot_cd = 2.0
-		# ---- Боси печер поза сюжетом ----
-		"vidma":
-			radius = 21.0; max_hp = 140.0; speed = 135.0; damage = 21.0; xp_value = 9
-			color = Color(0.45, 0.2, 0.6)
-			ranged = true; keep_distance = 300.0; shoot_cd = 2.2
-		"vii":
-			radius = 30.0; max_hp = 380.0; speed = 62.0; damage = 32.0; xp_value = 11
-			color = Color(0.4, 0.42, 0.45)
-		# ---- Московія ----
-		"vedmid":
-			radius = 25.0; max_hp = 140.0; speed = 115.0; damage = 19.0; xp_value = 9
-			color = Color(0.42, 0.27, 0.16)
-		"kikimora":
-			radius = 15.0; max_hp = 40.0; speed = 125.0; damage = 9.0; xp_value = 7
-			color = Color(0.4, 0.45, 0.33)
-			keep_distance = 280.0
-			base_scale = 0.85
-			scale = Vector2.ONE * base_scale
-		"mertvyi_strilets":
-			radius = 19.0; max_hp = 60.0; speed = 85.0; damage = 16.0; xp_value = 8
-			color = Color(0.69, 0.16, 0.12)
-			keep_distance = 360.0
-		"kromeshnyk":
-			radius = 18.0; max_hp = 65.0; speed = 150.0; damage = 14.0; xp_value = 8
-			color = Color(0.12, 0.09, 0.09)
-		"boyaryn":
-			radius = 24.0; max_hp = 150.0; speed = 60.0; damage = 18.0; xp_value = 10
-			color = Color(0.48, 0.12, 0.2)
-		"lisovyk":
-			radius = 22.0; max_hp = 100.0; speed = 105.0; damage = 14.0; xp_value = 8
-			color = Color(0.35, 0.3, 0.2)
-		"pushkar":
-			radius = 27.0; max_hp = 290.0; speed = 75.0; damage = 30.0; xp_value = 11
-			color = Color(0.35, 0.25, 0.19)
-			ranged = true; keep_distance = 300.0; shoot_cd = 2.6
-		"lisovyi_did":
-			radius = 24.0; max_hp = 260.0; speed = 100.0; damage = 27.0; xp_value = 11
-			color = Color(0.29, 0.23, 0.14)
-		"idolyshche":
-			radius = 32.0; max_hp = 330.0; speed = 60.0; damage = 33.0; xp_value = 12
-			color = Color(0.48, 0.35, 0.23)
-			ranged = true; keep_distance = 0.0; shoot_cd = 3.2
-		"karachun":
-			radius = 24.0; max_hp = 300.0; speed = 90.0; damage = 30.0; xp_value = 12
-			color = Color(0.17, 0.2, 0.28)
-			ranged = true; keep_distance = 280.0; shoot_cd = 2.2
-		# ---- Нечисть і боси надважких печер ----
-		"almasty":
-			radius = 24.0; max_hp = 150.0; speed = 120.0; damage = 19.0; xp_value = 10
-			color = Color(0.48, 0.4, 0.31)
-		"kadzhi":
-			radius = 20.0; max_hp = 70.0; speed = 90.0; damage = 17.0; xp_value = 10
-			color = Color(0.12, 0.27, 0.31)
-			ranged = true; keep_distance = 320.0; shoot_cd = 2.4
-		"karakondzhul":
-			radius = 17.0; max_hp = 55.0; speed = 190.0; damage = 11.0; xp_value = 9
-			color = Color(0.23, 0.19, 0.27)
-		"samodiva":
-			radius = 17.0; max_hp = 50.0; speed = 120.0; damage = 11.0; xp_value = 10
-			color = Color(0.94, 0.96, 0.99)
-			ranged = true; keep_distance = 360.0; shoot_cd = 3.0
-		"mertvyi_lytsar":
-			radius = 23.0; max_hp = 190.0; speed = 80.0; damage = 22.0; xp_value = 12
-			color = Color(0.89, 0.89, 0.86)
-		"lauma":
-			radius = 18.0; max_hp = 65.0; speed = 100.0; damage = 14.0; xp_value = 10
-			color = Color(0.35, 0.43, 0.33)
-			ranged = true; keep_distance = 300.0; shoot_cd = 2.6
-		"aitvaras":
-			radius = 16.0; max_hp = 45.0; speed = 200.0; damage = 13.0; xp_value = 9
-			color = Color(0.85, 0.31, 0.1)
-		"menkv":
-			radius = 27.0; max_hp = 210.0; speed = 70.0; damage = 24.0; xp_value = 12
-			color = Color(0.35, 0.29, 0.2)
-		"shurale":
-			radius = 17.0; max_hp = 60.0; speed = 180.0; damage = 15.0; xp_value = 10
-			color = Color(0.31, 0.38, 0.2)
-		"chud":
-			radius = 18.0; max_hp = 60.0; speed = 95.0; damage = 16.0; xp_value = 10
-			color = Color(0.24, 0.24, 0.27)
-			ranged = true; keep_distance = 340.0; shoot_cd = 2.4
-		"stallo":
-			radius = 28.0; max_hp = 230.0; speed = 65.0; damage = 26.0; xp_value = 13
-			color = Color(0.29, 0.25, 0.22)
-		"khiisi":
-			radius = 14.0; max_hp = 40.0; speed = 210.0; damage = 11.0; xp_value = 8
-			color = Color(0.23, 0.31, 0.41)
-			base_scale = 0.85
-			scale = Vector2.ONE * base_scale
-		# ---- Семигород: край Дракули ----
-		"strygoi":
-			radius = 20.0; max_hp = 105.0; speed = 112.0; damage = 16.0; xp_value = 9
-			color = Color(0.45, 0.42, 0.5)
-		"moroi":
-			radius = 17.0; max_hp = 55.0; speed = 105.0; damage = 13.0; xp_value = 9
-			color = Color(0.75, 0.82, 0.95)
-			ranged = true; keep_distance = 300.0; shoot_cd = 2.6
-		"drakula":
-			radius = 24.0; max_hp = 320.0; speed = 125.0; damage = 29.0; xp_value = 13
-			color = Color(0.2, 0.05, 0.08)
-		"dev":
-			radius = 30.0; max_hp = 380.0; speed = 75.0; damage = 34.0; xp_value = 13
-			color = Color(0.35, 0.39, 0.44)
-		"khala":
-			radius = 23.0; max_hp = 290.0; speed = 110.0; damage = 24.0; xp_value = 13
-			color = Color(0.15, 0.2, 0.35)
-			ranged = true; keep_distance = 260.0; shoot_cd = 2.4
-		"velnias":
-			radius = 24.0; max_hp = 340.0; speed = 115.0; damage = 31.0; xp_value = 14
-			color = Color(0.12, 0.23, 0.16)
-			ranged = true; keep_distance = 240.0; shoot_cd = 2.2
-		"zolota_baba":
-			radius = 28.0; max_hp = 420.0; speed = 55.0; damage = 33.0; xp_value = 14
-			color = Color(0.91, 0.72, 0.23)
-			ranged = true; keep_distance = 0.0; shoot_cd = 2.8
-		"chornoboh":
-			radius = 26.0; max_hp = 400.0; speed = 100.0; damage = 35.0; xp_value = 15
-			color = Color(0.09, 0.07, 0.11)
-			ranged = true; keep_distance = 260.0; shoot_cd = 1.9
 	r_draw = radius
 	max_hp *= s
 	damage *= Data.enemy_dmg_scale(lvl)
@@ -332,17 +128,18 @@ func setup(k: String, lvl: int, boss: bool = false) -> void:
 			radius *= 2.0
 			speed *= 0.85
 	shoot_timer = randf_range(1.0, shoot_cd)
-	windup_max = {"mavka": 0.3, "upyr": 0.45, "bolotianyk": 0.4, "vovkulaka": 0.25, "zarazhenyi": 0.5, "chaklun": 0.5, "zmii": 0.5,
-		"chort": 0.28, "pishchalnyk": 0.45, "potopelnyk": 0.5, "pesyholovets": 0.3, "kamiana_baba": 0.6, "mara": 0.3, "zlyden": 0.22,
-		"vedmid": 0.5, "kikimora": 0.3, "mertvyi_strilets": 0.45, "kromeshnyk": 0.3, "boyaryn": 0.6, "lisovyk": 0.4}.get(k, 0.35)
-	if k in MINION_ABILITIES:
+	windup_max = at["windup"] if at.has("windup") else 0.35
+	if GameDB.has_minion_ability(k):
 		ability_timer = randf_range(2.0, 4.5)
 	if is_boss:
 		windup_max = 0.55
 		ability_timer = 3.0
-		if k in ["kikimora", "mertvyi_strilets"]:
-			ranged = true
-			shoot_cd = 2.4
+		var ab: Dictionary = at.get("as_boss", {})
+		if not ab.is_empty():
+			if ab.has("ranged"):
+				ranged = ab["ranged"]
+			if ab.has("shoot_cd"):
+				shoot_cd = ab["shoot_cd"]
 			shoot_timer = randf_range(1.0, shoot_cd)
 	hp = max_hp
 	if k == "lisovyi_did":
@@ -518,7 +315,7 @@ func _process(delta: float) -> void:
 		ability_timer -= delta
 		if ability_timer <= 0.0:
 			_rival_ability(p)
-	elif kind in MINION_ABILITIES and p != null and not illusion and cast_time <= 0.0:
+	elif GameDB.has_minion_ability(kind) and p != null and not illusion and cast_time <= 0.0:
 		ability_timer -= delta
 		if ability_timer <= 0.0:
 			_minion_ability(p, dist)
@@ -640,7 +437,7 @@ func take_damage(amount: float, kb: Vector2, crit: bool = false) -> void:
 	combat.fx.burst(global_position + Vector2(0, -radius * 0.5), blood, 7 if crit else 4, 240, 4.0, 0.35, 300, (-kb).angle() + PI if kb.length() > 1 else 0.0, TAU if kb.length() <= 1 else 1.6)
 	if crit:
 		combat.fx.burst(global_position + Vector2(0, -radius * 0.5), Color(1, 0.95, 0.6), 6, 320, 3.0, 0.2)
-	if is_boss and kind in PHASE2_BOSSES and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
+	if is_boss and GameDB.is_phase2_boss(kind) and not phase2 and hp < max_hp * 0.5 and hp > 0.0:
 		_enter_phase2()
 	if hp <= 0.0 and kind == "koshchii" and combat.boss_revives > 0:
 		# Кощієва смерть схована в голці — поки голка ціла, він встає знову
@@ -677,7 +474,7 @@ func on_hit(target) -> void:
 		target.gold -= g
 		loot_gold += g
 		combat.float_text(target.global_position + Vector2(0, -80), "Злидень поцупив %d грн" % g, Color(1.0, 0.8, 0.3))
-	var st: String = HIT_STATUS.get(kind, "")
+	var st: String = GameDB.hit_status(kind)
 	# Слабка нечисть перших місць станів не накладає — новачкові й так непросто
 	if st != "" and level >= 4 and randf() < (HIT_STATUS_CHANCE * 0.5 if is_boss else HIT_STATUS_CHANCE):
 		target.add_status(st, 3.0, damage * 0.1)
@@ -706,7 +503,7 @@ func make_elite(affs: Array) -> void:
 		windup_max *= 0.8
 	if "iron" in affs:
 		dmg_taken_mult = 0.55
-	title = Elites.title(kind, Data.ENEMY_NAMES[kind], affs)
+	title = Elites.title(kind, GameDB.mob_name(kind), affs)
 
 
 # --- Особливі атаки босів ---
@@ -751,7 +548,7 @@ func _tick_enrage(delta: float) -> void:
 		enrage_n += 1
 		damage *= 1.0 + Peril.ENRAGE_DMG
 		if enrage_n == 1:
-			Events.banner.emit("%s лютішає!\nЩо довше бій, то важчий удар" % Data.ENEMY_NAMES.get(kind, "Бос"), Color(1.0, 0.35, 0.25))
+			Events.banner.emit("%s лютішає!\nЩо довше бій, то важчий удар" % GameDB.mob_name(kind, "Бос"), Color(1.0, 0.35, 0.25))
 			Events.hint.emit("enrage", "Надважкий бос лютішає, коли бій затягнувся: його удар росте кожні %d с. Довгий обережний бій тут не рятує." % int(Peril.ENRAGE_EVERY))
 			Audio.play("roar", 0.0)
 			combat.shake(10.0)

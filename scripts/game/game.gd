@@ -4,6 +4,7 @@ extends Node2D
 ## Бій веде Combat, інтерфейс — Hud, логіку міста — CityService; Game лише з'єднує їх.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 const UiCharacter := preload("res://scripts/ui/ui_character.gd")
 const UiCity := preload("res://scripts/ui/ui_city.gd")
@@ -341,7 +342,7 @@ func _combat_info() -> Dictionary:
 		if combat.field_cleared:
 			sub = "Поверх пройдено! Портал веде вище"
 		elif combat.tower_boss_spawned:
-			sub = "Рівень %d  •  %s" % [L["level"], ("Супербос: %s" % Data.BOSS_NAMES[L["boss"]]) if L["boss"] != "" else L["mini_title"]]
+			sub = "Рівень %d  •  %s" % [L["level"], ("Супербос: %s" % GameDB.boss_name(L["boss"])) if L["boss"] != "" else L["mini_title"]]
 		else:
 			sub = "Рівень %d  •  Хвиля %d/%d" % [L["level"], combat.wave, L["waves"]]
 	elif combat.is_dungeon():

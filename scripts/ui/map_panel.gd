@@ -2,6 +2,7 @@ extends RefCounted
 ## Бічна панель мапи: опис вибраного міста чи місцевості й кнопка вирушити.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const CampService := preload("res://scripts/game/camp_service.gd")
@@ -72,7 +73,7 @@ static func build_bosses(world, player, on_back: Callable, on_go: Callable) -> C
 		box.add_theme_constant_override("separation", 4)
 		panel.add_child(box)
 		box.add_child(UI.label(BS.NAMES[kind], 16, UI.MUTED, false))
-		box.add_child(_wrapped(str(Data.BOSS_NAMES[boss]), 21, UI.GOLD))
+		box.add_child(_wrapped(str(GameDB.boss_name(boss)), 21, UI.GOLD))
 		for m in BS.mods(kind):
 			box.add_child(_wrapped("%s: %s" % [BS.MODS[m]["name"], BS.MODS[m]["desc"]], 15, UI.BAD))
 		box.add_child(_wrapped("Нагорода: " + "; ".join(BS.reward_lines(player, kind)) + ".", 14, UI.TEXT))
@@ -114,8 +115,8 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 	_threat_line(v, player, int(L["level"]), float(L["hp_mult"]), float(L["dmg_mult"]), load("res://scripts/game/far_service.gd").DEPTH_FLOOR)
 	var names := []
 	for e in L["enemies"]:
-		names.append(Data.ENEMY_NAMES[e])
-	v.add_child(_wrapped("Нечисть: %s. Бос: %s. Еліти: +%d%%." % [", ".join(names), Data.BOSS_NAMES[L["boss"]], roundi(L["elite_bonus"] * 100)], 16, UI.MUTED))
+		names.append(GameDB.mob_name(e))
+	v.add_child(_wrapped("Нечисть: %s. Бос: %s. Еліти: +%d%%." % [", ".join(names), GameDB.boss_name(L["boss"]), roundi(L["elite_bonus"] * 100)], 16, UI.MUTED))
 	v.add_child(UI.button("Спуститися", func(): on_go.call(sel), Vector2(350, 70), 26))
 	return v
 
@@ -164,7 +165,7 @@ static func build_spot(sel: String, world, player, on_go: Callable) -> Control:
 			for i in ids.size():
 				var mark := "✓ " if i < paid else "• "
 				var prize := "нагороду взято" if i < paid else "+%s грн, +%d слави" % [UI.num(RS.stage_gold(player.level, i)), int(Acts.RING_GLORY[i])]
-				v.add_child(_wrapped("%sКоло %d: %s (%s)" % [mark, i + 1, Data.BOSS_NAMES.get(ids[i], ids[i]), prize], 16, UI.GOOD if i < paid else UI.TEXT))
+				v.add_child(_wrapped("%sКоло %d: %s (%s)" % [mark, i + 1, GameDB.boss_name(ids[i], ids[i]), prize], 16, UI.GOOD if i < paid else UI.TEXT))
 			if paid >= stages:
 				v.add_child(_wrapped("Тижневу нагороду взято. Ходи на час і на рекорд: перші %d чудовиська дня ще приносять малий гаманець. Новий склад за %d дн." % [int(Acts.RING_REPEAT_PAID), RS.days_to_reset()], 16, UI.MUTED))
 			else:
@@ -225,8 +226,8 @@ static func build_tower(world, player, sel: int, on_change: Callable, on_go: Cal
 	_threat_line(v, player, int(L["level"]), float(L["hp_mult"]), float(L["dmg_mult"]), load("res://scripts/game/far_service.gd").TOWER_FLOOR)
 	var names := []
 	for e in L["enemies"]:
-		names.append(Data.ENEMY_NAMES[e])
-	var boss_line: String = ("СУПЕРБОС: %s." % Data.BOSS_NAMES[L["boss"]]) if L["boss"] != "" else ("%s: %s." % [L["mini_title"], Data.ENEMY_NAMES[L["mini"]]])
+		names.append(GameDB.mob_name(e))
+	var boss_line: String = ("СУПЕРБОС: %s." % GameDB.boss_name(L["boss"])) if L["boss"] != "" else ("%s: %s." % [L["mini_title"], GameDB.mob_name(L["mini"])])
 	v.add_child(_wrapped("Нечисть: %s. %s Еліти: +%d%%." % [", ".join(names), boss_line, roundi(L["elite_bonus"] * 100)], 16, UI.MUTED))
 	if sel > int(s["best"]):
 		v.add_child(_wrapped("Перше проходження: +%d грн%s." % [TS.first_gold(sel), ", легендарна річ і камінь долі" if TS.is_super(sel) else " і річ"], 16, UI.GOLD))
@@ -320,7 +321,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 		return v
 	var L: Dictionary = Data.LOCATIONS[sel]
 	v.add_child(_wrapped(L["name"], 28, UI.GOLD))
-	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], Data.BOSS_NAMES[L["boss"]]]) if L["type"] == "dungeon" else "Дика місцевість"
+	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], GameDB.boss_name(L["boss"])]) if L["type"] == "dungeon" else "Дика місцевість"
 	v.add_child(_wrapped(kind_text, 17, UI.MUTED))
 	var danger: bool = L["level"] > player.level + 2
 	if L.get("scale", false):
@@ -341,7 +342,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 			["", "слабка", "сильна", "чорна"][pl], pl, 25 * pl], 17, Color(0.6, 1.0, 0.35)))
 	var names := []
 	for e in L["enemies"]:
-		names.append(Data.ENEMY_NAMES[e])
+		names.append(GameDB.mob_name(e))
 	v.add_child(_wrapped("Нечисть: " + ", ".join(names), 17, UI.MUTED))
 	var times: int = world.cleared.get(sel, 0)
 	var rep := "Можна проходити повторно для прокачки"
@@ -386,12 +387,12 @@ static func build_peril(sel: String, world, player, here: bool, on_go: Callable,
 	v.add_child(_wrapped(L["name"], 28, UI.GOLD))
 	v.add_child(_wrapped("Надважка печера  •  %s" % PS.land_name(sel), 17, UI.MUTED))
 	v.add_child(_wrapped("Нечисть %d-го рівня  •  кімнат: %d" % [int(L["level"]), int(L["rooms"])], 19, UI.BAD))
-	v.add_child(_wrapped("Надважкий бос: %s" % Data.BOSS_NAMES[L["boss"]], 17, UI.GOLD))
+	v.add_child(_wrapped("Надважкий бос: %s" % GameDB.boss_name(L["boss"]), 17, UI.GOLD))
 	_threat_line(v, player, int(L["level"]), PS.hp_mult(sel), PS.dmg_mult(sel))
 	v.add_child(_wrapped(L["desc"], 17, UI.TEXT))
 	var names := []
 	for e in L["enemies"]:
-		names.append(Data.ENEMY_NAMES[e])
+		names.append(GameDB.mob_name(e))
 	v.add_child(_wrapped("Нечисть: " + ", ".join(names), 16, UI.MUTED))
 	v.add_child(_wrapped("Правила: смерть забирає %s%% досвіду рівня замість %s%%. Бос лютішає, якщо бій із ним триває довше за %s хв. Зілля й побратими працюють як завжди." % [
 		_pct(Data.DEATH_XP_LOSS * Peril.DEATH_XP_MULT), _pct(Data.DEATH_XP_LOSS), _pct(Peril.ENRAGE_AFTER / 6000.0)], 15, UI.MUTED))

@@ -8,6 +8,7 @@ extends RefCounted
 ## Сам бій це печера на одну кімнату (Combat._spawn_room): бос із почтом із рідного лігва.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
 const LootService := preload("res://scripts/game/loot_service.gd")
@@ -127,7 +128,7 @@ static func available(world, player) -> int:
 static func loc_for(player, kind: String) -> Dictionary:
 	var boss := boss_id(kind)
 	var home := home_of(boss)
-	var loc := {"name": "%s: %s" % [NAMES[kind], Data.BOSS_NAMES[boss]], "type": "dungeon", "biome": str(home.get("biome", "cave")),
+	var loc := {"name": "%s: %s" % [NAMES[kind], GameDB.boss_name(boss)], "type": "dungeon", "biome": str(home.get("biome", "cave")),
 		"level": int(player.level), "rooms": 1, "enemies": home["enemies"], "boss": boss, "hunt": kind,
 		"boss_hp_mult": float(HP_MULT[kind]), "boss_dmg_mult": float(DMG_MULT[kind]), "desc": ""}
 	for m in mods(kind):

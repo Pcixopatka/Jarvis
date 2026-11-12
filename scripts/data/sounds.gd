@@ -1,6 +1,9 @@
 extends RefCounted
 ## Звукова мапа гри: гучність кожного звуку, голоси нечисті, фон за ландшафтом.
+## Голос смерті кожного виду записаний у data/mobs.json (sounds.death).
 ## Самі файли — assets/audio (збирає tools/audio/build_audio.py), перелік — sound_index.gd.
+
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 ## Базова гучність звуку в дБ: додається до гучності, вказаної в місці виклику.
 ## Усі файли вирівняні за гучністю, тож тут задано, наскільки помітним має бути кожен звук у грі.
@@ -14,24 +17,6 @@ const VOLUME := {
 	"enemy_die": -5.0, "die_beast": -5.0, "die_undead": -6.0, "die_slime": -5.0, "die_human": -6.0, "die_spirit": -6.0,
 }
 
-## Голос смерті за видом нечисті (решта — загальний «enemy_die»).
-const DEATH := {
-	"vovkulaka": "die_beast", "chort": "die_beast",
-	"upyr": "die_undead", "zarazhenyi": "die_undead",
-	"mavka": "die_spirit",
-	"bolotianyk": "die_slime",
-	"pishchalnyk": "die_human", "chaklun": "die_human", "rival": "die_human", "vidma": "die_spirit", "vii": "die_undead",
-	"potopelnyk": "die_undead", "pesyholovets": "die_beast", "kamiana_baba": "die_undead", "mara": "die_spirit", "zlyden": "die_beast",
-	"oprychnyk": "die_human", "vedmid": "die_beast", "kikimora": "die_spirit", "mertvyi_strilets": "die_undead", "kromeshnyk": "die_human", "boyaryn": "die_undead", "lisovyk": "die_spirit", "pushkar": "die_human", "lisovyi_did": "die_spirit", "idolyshche": "die_beast", "karachun": "die_spirit",
-	"morskyi_tsar": "die_slime", "shubin": "die_undead", "bila_pani": "die_spirit",
-	"almasty": "die_beast", "kadzhi": "die_spirit", "dev": "die_beast",
-	"karakondzhul": "die_beast", "samodiva": "die_spirit", "khala": "die_beast",
-	"mertvyi_lytsar": "die_undead", "lauma": "die_spirit", "aitvaras": "die_spirit", "velnias": "die_beast",
-	"menkv": "die_beast", "shurale": "die_beast", "chud": "die_human", "zolota_baba": "die_undead",
-	"stallo": "die_beast", "khiisi": "die_spirit", "chornoboh": "die_spirit",
-	"strygoi": "die_undead", "moroi": "die_spirit", "drakula": "die_undead",
-}
-
 ## Фоновий шум за ландшафтом ("" — тиша).
 const AMBIENT := {
 	"steppe": "wind", "mountain": "wind", "forest": "forest", "village": "forest", "river": "river", "swamp": "night",
@@ -41,8 +26,10 @@ const AMBIENT := {
 const AMBIENT_VOLUME := {"forest": -2.0, "wind": 0.0, "night": -4.0, "cave": 0.0, "river": -3.0, "fire": -3.0, "crowd": -6.0}
 
 
+## Голос смерті нечисті: свій із data/mobs.json (sounds.death), решта — загальний «enemy_die».
 static func death(kind: String) -> String:
-	return DEATH.get(kind, "enemy_die")
+	var s := GameDB.death_sound(kind)
+	return s if s != "" else "enemy_die"
 
 
 static func ambient_for(biome: String, night: bool = false) -> String:

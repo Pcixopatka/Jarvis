@@ -4,6 +4,7 @@ extends RefCounted
 ## Що лютіший бос, то вищий ступінь речі; у Глибинах і Башті ступінь росте далі.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 
 const RARITY := 4
 ## Ступені: що вищий, то сильніша головна властивість і рідкісніша річ.
@@ -15,11 +16,7 @@ const TOP_COMMON_TIER := 5  # найвищий ступінь поза надв�
 const LUCK_STEP := 20.0  # кожні 20 босів без золота подвоюють шанс
 const LUCK_SURE := 99  # сотий бос поспіль без золота дає річ напевно
 const LEVEL_GAP := 8  # бос має бути не нижчий за героя більш як на стільки рівнів
-## Власний ступінь боса. Нового боса без запису оцінюють за рівнем його лігва (див. LootService.boss_tier).
-const BOSS_TIER := {"zmii": 1, "upyr": 1, "vovkulaka": 1, "chaklun": 2, "vidma": 2, "baba_yaha": 2, "solovei": 2,
-	"koshchii": 3, "bila_pani": 3, "pushkar": 3, "vii": 4, "shubin": 4, "lykho": 4, "morskyi_tsar": 4, "putinoid": 4,
-	"oprychnyk": 4, "lisovyi_did": 4, "idolyshche": 4, "karachun": 5, "drakula": 5,
-	"dev": 6, "khala": 6, "velnias": 6, "zolota_baba": 6, "chornoboh": 6}
+## Власний ступінь боса — boss.tier у data/mobs.json. Нового боса без нього оцінюють за рівнем лігва (див. LootService.boss_tier).
 
 ## Середина кидка властивості легендарної речі: [стала, приріст за рівень] (див. Data._roll_value).
 const MID := {"dmg_pct": [4.5, 0.4], "crit": [2.5, 0.15], "aspd": [4.5, 0.3], "hp": [12.0, 3.0], "armor": [2.25, 0.2],
@@ -248,5 +245,5 @@ static func power_text(id: String) -> String:
 static func boss_names(id: String) -> String:
 	var out := []
 	for b in DEFS[id]["bosses"]:
-		out.append(str(Data.BOSS_NAMES.get(b, b)))
+		out.append(GameDB.boss_name(b, b))
 	return ", ".join(out)

@@ -3,6 +3,7 @@ extends RefCounted
 ## Шанси навмисно малі; реклама «×2 здобичі», свята й зараза на них не впливають.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
@@ -25,7 +26,7 @@ static func worthy(combat, player, e) -> bool:
 ## Ступінь боса: власний, а в Глибинах і Башті вищий. Шостий ступінь мають лише надважкі боси:
 ## Глибини й Башта до нього не дотягують.
 static func boss_tier(combat, e) -> int:
-	var t: int = int(Uniques.BOSS_TIER.get(e.kind, 0))
+	var t: int = GameDB.boss_tier(e.kind)
 	var top: int = maxi(Uniques.TOP_COMMON_TIER, t)
 	if t == 0:
 		t = 3

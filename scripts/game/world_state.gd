@@ -2,6 +2,7 @@ extends RefCounted
 ## Стан світу: лояльність міст, дошки завдань, активні завдання, загін, крамниці.
 
 const Data := preload("res://scripts/data/data.gd")
+const GameDB := preload("res://scripts/core/game_db.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
@@ -169,11 +170,11 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 		if randf() < 0.5:
 			q["type"] = "kill"
 			q["count"] = 8 + L["level"] * 2
-			q["text"] = "Знищ %d %s (%s)" % [q["count"], Data.ENEMY_PLURAL[e], L["name"]]
+			q["text"] = "Знищ %d %s (%s)" % [q["count"], GameDB.mob_plural(e), L["name"]]
 		else:
 			q["type"] = "fetch"
 			q["count"] = 4 + L["level"] / 2
-			q["text"] = "Принеси: %s × %d (%s)" % [Data.QUEST_ITEMS[e], q["count"], L["name"]]
+			q["text"] = "Принеси: %s × %d (%s)" % [GameDB.quest_item(e), q["count"], L["name"]]
 	q["gold"] = int((40 + 25 * eff) * mult)
 	q["xp"] = int((30 + 20 * eff) * mult)
 	q["loyalty"] = int((30 + 5 * L["level"]) * mult)
@@ -228,7 +229,7 @@ func on_kill(kind: String) -> Array:
 		elif q["type"] == "fetch" and randf() < 0.4:
 			q["progress"] += 1
 			if not is_done(q):
-				msgs.append("%s %d/%d" % [Data.QUEST_ITEMS[kind], q["progress"], q["count"]])
+				msgs.append("%s %d/%d" % [GameDB.quest_item(kind), q["progress"], q["count"]])
 		if is_done(q):
 			msgs.append("Завдання виконано! Здай: %s" % Data.place_name(str(q["city"])))
 	return msgs
