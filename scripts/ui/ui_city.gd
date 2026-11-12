@@ -313,7 +313,13 @@ static func _smith(game) -> Control:
 		return h
 	det.add_child(UI.item_card(it))
 	if it["up"] >= Data.MAX_UPGRADE:
-		det.add_child(UI.label("Заточено до межі!", 22, UI.GOLD, false))
+		# неактивна кнопка того самого розміру на місці «Заточити» (і порожнє місце замість «без ризику»):
+		# після останньої заточки під палець не стає гніздо чи душа
+		det.add_child(UI.button("Заточено до краю: +%d" % int(it["up"]), func(): pass, Vector2(340, 80), 20, false))
+		if safe_n <= 0:
+			var gap := Control.new()
+			gap.custom_minimum_size = Vector2(340, 72)
+			det.add_child(gap)
 	else:
 		var cost := Data.sharpen_cost(it)
 		var chance := minf(1.0, Data.sharpen_chance(it) + game.HolidayService.bonus("sharpen"))

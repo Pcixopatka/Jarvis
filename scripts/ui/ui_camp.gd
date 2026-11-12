@@ -48,7 +48,7 @@ static func build(game) -> Control:
 		pages.append(["Ярмарок", func(): return _fair(game)])
 	var pts: int = game.player.unspent_points()
 	return UI.screen("Хутір • " + resources_text(game.player), "На мапу", game.leave_camp,
-		pages, game.camp_tab, func(i: int): game.camp_tab = i,
+		pages, game.camp_tab, game.camp_tab_changed,
 		[["Персонаж" + ((" +%d" % pts) if pts > 0 else ""), game.open_character]])
 
 
@@ -304,14 +304,33 @@ static func _forge(game) -> Control:
 		if it["up"] >= Data.SHARPEN_RISK_FROM and AdRewards.safe_tokens(w) <= 0:
 			var safe_cost := Data.sharpen_safe_cost(it, CampService.forge_cost_mult(w))
 			det.add_child(UI.button("Заточити без ризику\n%s грн • рівень не впаде" % UI.num(safe_cost), _do(game, "sharpen_safe", sel), Vector2(370, 72), 17, p.gold >= safe_cost))
-	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
-		det.add_child(UI.button("Переплавити на залізо (+%d)" % CampService.salvage_value(it), _do(game, "salvage", sel), Vector2(370, 56), 18))
+	else:
+		# Заточено до краю: на місці кнопок заточки лишається неактивна кнопка того самого розміру
+		# (і порожнє місце замість «без ризику»), щоб наступний дотик туди нічого не зробив.
+		det.add_child(sharpen_done_button(it, Vector2(370, 80), 19))
+		if AdRewards.safe_tokens(w) <= 0:
+			var gap := Control.new()
+			gap.custom_minimum_size = Vector2(370, 72)
+			det.add_child(gap)
 	_craft_item_actions(game, det, it)
 	_enchant_block(game, det, it)
 	det.add_child(load("res://scripts/ui/ui_souls.gd").block(p, it, func(a: String, b): return _do(game, a, b), true, CampService.forge_cost_mult(w)))
 	if game.smith_msg != "":
 		det.add_child(UI.label(game.smith_msg, 20, game.smith_msg_color, false))
+	# Переплавка в самому низу, подалі від заточки; цінна річ плавиться з другого дотику
+	if CampService.level(w, "kuznia") >= 2 and not p.is_equipped(sel):
+		var sure: bool = game.confirm_action == "salvage:%d" % sel
+		var sb := UI.button(("Точно переплавити?\nНатисни ще раз (+%d заліза)" if sure else "Переплавити на залізо (+%d)") % CampService.salvage_value(it),
+			_do(game, "salvage", sel), Vector2(370, 56), 17 if sure else 18)
+		if sure:
+			sb.modulate = UI.BAD
+		det.add_child(sb)
 	return h
+
+
+## Неактивна кнопка на місці «Заточити», коли річ уже заточена до краю.
+static func sharpen_done_button(it: Dictionary, size: Vector2, font: int) -> Button:
+	return UI.button("Заточено до краю: +%d" % int(it["up"]), func(): pass, size, font, false)
 
 
 static func _craft_cost_text(cost: Dictionary) -> String:

@@ -151,6 +151,7 @@ func _run() -> void:
 	await _suite_place_restore()
 	await _suite_hero_names()
 	await _suite_pet_fetch()
+	await _suite_salvage_confirm()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -15423,6 +15424,192 @@ func _suite_pet_fetch() -> void:
 		if str(e["title"]) in ["Божі дари", "Улюбленці"]:
 			basics += str(e["text"])
 	check("Хованець не біжить" in basics and "до тієї, якої зараз не взяти" in basics, "довідник: до здобичі, якої не взяти, Хованець і пес не біжать")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Кузня хутора: «Переплавити» в самому низу, заточена до краю річ не підставляє під палець іншу дію,
+## цінна річ плавиться лише другим дотиком, душа з переплавленої речі вертається в торбинку.
+func _suite_salvage_confirm() -> void:
+	suite("Кузня: переплавка внизу й з підтвердженням")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Sets = load("res://scripts/data/sets.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var CampS = load("res://scripts/game/camp_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "kleinody"]:
+		gw.hints[k] = true
+	gp.level = 60
+	gp.gold = 10000000
+	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	gw.camp["buildings"] = {"kuznia": 3}
+	gw.boosts["safe_sharpen"] = 0  # без безпечних заточок кузня показує «Заточити без ризику»
+	game.enter_camp()
+	await _frames(2)
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var forge_i := -1
+	for i in tc.get_tab_count():
+		if tc.get_tab_title(i) == "Кузня":
+			forge_i = i
+	check(forge_i >= 0, "на хуторі є вкладка «Кузня»")
+	game.camp_tab = forge_i
+	# кнопки правої колонки кузні в порядку зверху вниз
+	var det_buttons := func() -> Array:
+		var out := []
+		var sv = null
+		for b in game.hud.screen_root.find_children("*", "Button", true, false):
+			if b.is_visible_in_tree() and (b.text.begins_with("Переплавити") or b.text.begins_with("Точно переплавити")):
+				sv = b
+		if sv == null:
+			return out
+		for b in sv.get_parent().find_children("*", "Button", true, false):
+			if b.is_visible_in_tree():
+				out.append(b)
+		return out
+	var find_text := func(start: String):
+		for b in game.hud.screen_root.find_children("*", "Button", true, false):
+			if b.is_visible_in_tree() and b.text.begins_with(start):
+				return b
+		return null
+	var add := func(it: Dictionary) -> int:
+		gp.add_item(it)
+		return int(it["uid"])
+	# 1. «Переплавити» остання кнопка: під заточкою, перекуванням, оновленням, зачаруванням і душами
+	var leg: Dictionary = Data.gen_item(30, 3, "weapon", "sabre")
+	var leg_uid: int = add.call(leg)
+	game.camp_do("select", leg_uid)
+	await _frames(2)
+	var bs: Array = det_buttons.call()
+	var last = bs[-1] if not bs.is_empty() else null
+	check(last != null and str(last.text).begins_with("Переплавити") and last == last.get_parent().get_child(last.get_parent().get_child_count() - 1), "«Переплавити» остання в правій колонці кузні")
+	var below_all := last != null
+	for start in ["Заточити до", "↻", "Оновити", "Пробити гніздо"]:
+		var idx := -1
+		for i in bs.size():
+			if str(bs[i].text).begins_with(start):
+				idx = i
+				break
+		below_all = below_all and idx >= 0 and idx < bs.size() - 1 and bs[idx].global_position.y < last.global_position.y
+	var ench_b = find_text.call("Звіробій")
+	below_all = below_all and ench_b != null and ench_b.global_position.y < last.global_position.y
+	check(below_all, "переплавка нижча за заточку, перекування, оновлення, зачарування й гніздо для душі")
+	# 2. Цінна річ (рідкісна +3): перший дотик лише питає, другий плавить
+	var rare: Dictionary = Data.gen_item(30, 2, "boots")
+	rare["up"] = 3
+	var rare_uid: int = add.call(rare)
+	game.camp_do("select", rare_uid)
+	await _frames(2)
+	var iron: int = int(gp.resources["iron"])
+	game.camp_do("salvage", rare_uid)
+	await _frames(2)
+	check(not gp.find_item(rare_uid).is_empty() and int(gp.resources["iron"]) == iron, "цінна річ: перший дотик «Переплавити» нічого не нищить і заліза не дає")
+	var sure_b = find_text.call("Точно переплавити")
+	check(sure_b != null and sure_b == (det_buttons.call() as Array)[-1], "після першого дотику внизу напис підтвердження")
+	game.camp_do("salvage", rare_uid)
+	await _frames(2)
+	check(gp.find_item(rare_uid).is_empty() and int(gp.resources["iron"]) > iron, "другий дотик плавить і дає залізо")
+	# 3. Інша дія між дотиками скидає підтвердження
+	var r2: Dictionary = Data.gen_item(30, 2, "belt")
+	r2["up"] = 2
+	var r2_uid: int = add.call(r2)
+	game.camp_do("select", r2_uid)
+	game.camp_do("salvage", r2_uid)
+	game.camp_do("select", leg_uid)
+	check(game.confirm_action == "", "вибір іншої речі скидає підтвердження")
+	game.camp_do("select", r2_uid)
+	game.camp_do("salvage", r2_uid)
+	check(not gp.find_item(r2_uid).is_empty(), "після вибору іншої речі «Переплавити» знову лише питає")
+	game.camp_do("sharpen", r2_uid)
+	game.camp_do("salvage", r2_uid)
+	check(not gp.find_item(r2_uid).is_empty() and game.confirm_action == "salvage:%d" % r2_uid, "після заточки між дотиками переплавка знову лише питає")
+	await _frames(2)
+	var other_tab: int = 0 if forge_i != 0 else 1
+	game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].current_tab = other_tab
+	await _frames(3)
+	check(game.confirm_action == "", "перемикання вкладки скидає підтвердження")
+	game.camp_tab = forge_i
+	game.camp_do("salvage", r2_uid)
+	game.leave_camp()
+	check(game.confirm_action == "" and not gp.find_item(r2_uid).is_empty(), "вихід з хутора скидає підтвердження")
+	game.enter_camp()
+	game.camp_tab = forge_i
+	await _frames(2)
+	# 4. Звичайний незаточений мотлох плавиться з першого дотику
+	for rar in [0, 1]:
+		var junk: Dictionary = Data.gen_item(30, rar, "boots")
+		var junk_uid: int = add.call(junk)
+		game.camp_do("select", junk_uid)
+		game.camp_do("salvage", junk_uid)
+		check(gp.find_item(junk_uid).is_empty(), "незаточена річ рідкості %d плавиться з першого дотику" % rar)
+	# 5. Наборна, золота, зачарована й річ із душею просять підтвердження
+	var set_it: Dictionary = Sets.make("sviatohor", "boots", 30)
+	var gold_it: Dictionary = Uniques.make("kotyhoroshko", 30)
+	var ench_it: Dictionary = Data.gen_item(30, 1, "belt")
+	ench_it["ench"] = "zviroboi"
+	var soul_it: Dictionary = Data.gen_item(30, 1, "belt")
+	soul_it["sock"] = 1
+	soul_it["soul"] = "mavka"
+	for pair in [["наборна", set_it], ["золота", gold_it], ["зачарована", ench_it], ["з душею", soul_it]]:
+		var u: int = add.call(pair[1])
+		game.camp_do("select", u)
+		game.camp_do("salvage", u)
+		check(not gp.find_item(u).is_empty() and game.confirm_action == "salvage:%d" % u, "%s річ: перший дотик лише питає" % pair[0])
+	# 7. Душа з переплавленої речі вертається в торбинку
+	var mavky: int = int(gp.souls.get("mavka", 0))
+	game.camp_do("salvage", int(soul_it["uid"]))
+	check(gp.find_item(int(soul_it["uid"])).is_empty() and int(gp.souls.get("mavka", 0)) == mavky + 1, "душа з переплавленої речі вернулась у торбинку")
+	# 6. Заточена до краю річ: на місці «Заточити» неактивна кнопка того самого розміру
+	var top: Dictionary = Data.gen_item(30, 2, "boots")
+	top["up"] = 9
+	var top_uid: int = add.call(top)
+	game.camp_do("select", top_uid)
+	await _frames(3)
+	var sh = find_text.call("Заточити до +10")
+	var safe_b = find_text.call("Заточити без ризику")
+	var sh_rect: Rect2 = sh.get_global_rect() if sh != null else Rect2()
+	var safe_rect: Rect2 = safe_b.get_global_rect() if safe_b != null else Rect2()
+	check(sh != null and safe_b != null, "на +9 є «Заточити до +10» і «Заточити без ризику»")
+	gp.find_item(top_uid)["up"] = Data.MAX_UPGRADE
+	game.camp_do("select", top_uid)
+	await _frames(3)
+	var done = find_text.call("Заточено до краю")
+	check(done != null and done.disabled and done.get_global_rect().is_equal_approx(sh_rect), "на +10 на місці «Заточити» неактивна кнопка того самого розміру")
+	var under_finger := []
+	for b in game.hud.screen_root.find_children("*", "Button", true, false):
+		if b.is_visible_in_tree() and not b.disabled and (b.get_global_rect().has_point(sh_rect.get_center()) or b.get_global_rect().has_point(safe_rect.get_center())):
+			under_finger.append(b.text)
+	check(under_finger.is_empty(), "на місці кнопок заточки на +10 нема жодної активної кнопки: %s" % str(under_finger))
+	var first_active := ""
+	var past := false
+	for b in det_buttons.call():
+		if b == done:
+			past = true
+		elif past and not b.disabled:
+			first_active = b.text
+			break
+	check(first_active != "" and not first_active.begins_with("Переплавити"), "перша активна кнопка під карткою на +10 не «Переплавити»: %s" % first_active.replace("\n", " / "))
+	# Довідник
+	var kuv := ""
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e["title"]) == "Кування":
+				kuv = str(e["text"])
+	check("другим дотиком" in kuv, "у довіднику «Кування» сказано про підтвердження переплавки цінної речі")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

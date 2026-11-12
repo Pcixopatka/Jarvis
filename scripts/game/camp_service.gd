@@ -173,6 +173,13 @@ static func salvage_value(item: Dictionary) -> int:
 	return 2 + int(item["ilvl"]) / 2 + 2 * int(item["rarity"]) + int(item["up"])
 
 
+## Чи річ цінна: її переплавка просить другого дотику (заточена, рідкісна й вища, золота чи наборна,
+## зачарована або з душею в гнізді). Незаточений звичайний і добротний мотлох плавиться з першого дотику.
+static func salvage_precious(item: Dictionary) -> bool:
+	return int(item.get("up", 0)) > 0 or int(item.get("rarity", 0)) >= 2 or Data.is_precious(item) \
+		or str(item.get("ench", "")) != "" or str(item.get("soul", "")) != ""
+
+
 static func salvage(world, player, uid: int) -> int:
 	if level(world, "kuznia") < 2 or player.is_equipped(uid) or player.find_item(uid).has("artifact"):
 		return 0  # артефакт не переплавляють

@@ -3583,6 +3583,7 @@ func enter_camp() -> void:
 	camp_sel_uid = -1
 	chest_sel = ""
 	smith_msg = ""
+	confirm_action = ""
 	var back := _expedition_news(true)
 	_build_camp()
 	if not back.is_empty():
@@ -3595,7 +3596,16 @@ func enter_camp() -> void:
 
 
 func leave_camp() -> void:
+	confirm_action = ""
 	enter_map()
+
+
+## Перемикання вкладки хутора скидає підтвердження переплавки: кузню перебудовуємо, щоб напис не лишився.
+func camp_tab_changed(i: int) -> void:
+	camp_tab = i
+	if confirm_action.begins_with("salvage:"):
+		confirm_action = ""
+		(func(): if state == State.CAMP: _build_camp(true)).call_deferred()
 
 
 ## keep_scroll — екран перебудовано після дії на ньому: список лишається там, де був.
@@ -3604,6 +3614,8 @@ func _build_camp(keep_scroll: bool = false) -> void:
 
 
 func camp_do(action: String, arg) -> void:
+	if action != "salvage":
+		confirm_action = ""  # будь-яка інша дія скидає підтвердження переплавки
 	match action:
 		"build":
 			if CampService.build(world, player, arg):
@@ -3629,6 +3641,14 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("coin", 0.0)
 				hud.show_banner("Куплено: %s" % StoneService.NAMES[arg], UI.GOLD)
 		"salvage":
+			# цінна річ плавиться лише з другого дотику, як «Знищити» на екрані героя
+			var sv: Dictionary = player.find_item(arg)
+			if not sv.is_empty() and CampService.salvage_precious(sv) and confirm_action != "salvage:%d" % arg:
+				confirm_action = "salvage:%d" % arg
+				save_game()
+				_build_camp(true)
+				return
+			confirm_action = ""
 			var v := CampService.salvage(world, player, arg)
 			if v > 0:
 				Audio.play("sharpen_ok", 0.1, -6.0)
