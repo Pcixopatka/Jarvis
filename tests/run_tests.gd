@@ -15166,10 +15166,17 @@ func _suite_hero_names() -> void:
 	check(game.naming == "" and game.state == game.State.MAP, "тести з вимкненим прапорцем не спиняються на екрані імені")
 	game._show_main_menu()
 	game.ask_name = true
+	var menu_bg: Color = game.hud.overlay.color
+	if game.hud._banner_tween and game.hud._banner_tween.is_valid():
+		game.hud._banner_tween.kill()
+	game.hud.banner.modulate.a = 0.0
+	var banners0: int = game.hud.banner_count
 	game._continue_game()
 	await _frames(2)
 	btns = _overlay_buttons(game)
 	check(game.naming == "first" and game.hud.overlay.visible and btns.has("Готово") and not btns.has("Назад") and NS.check(game.name_edit.text) == "", "старий герой без імені: після входу екран імені з жеребом, без «Назад»")
+	check(game.hud.overlay.color.a == 1.0, "екран імені: тло суцільне, нічого не просвічує (%.2f)" % game.hud.overlay.color.a)
+	var banners_entry: int = game.hud.banner_count
 	game.go_back(true)
 	await _frames(2)
 	check(game.naming == "first" and game.hud.overlay.visible and game.state == game.State.MAP, "системна «Назад» не дає вийти без імені й нічого не ламає")
@@ -15177,8 +15184,32 @@ func _suite_hero_names() -> void:
 	btns["Готово"].pressed.emit()
 	await _frames(2)
 	check(game.naming == "" and not game.hud.overlay.visible and game.player.nick == offered, "одним дотиком: герой має запропоноване ім'я (%s)" % offered)
+	check(game.hud.overlay.color == menu_bg, "після екрана імені тло меню вертається попереднє")
+	if banners_entry == banners0:
+		check(game.hud.banner_count == banners0 and game.hud.banner.modulate.a == 0.0, "банера при вході не було: після «Готово» нічого не показано")
+	else:
+		check(game.hud.banner_count == banners_entry + 1, "банер при вході був (свято тощо): після «Готово» показано знову один раз")
 	check(str(SaveSystem.load_data(TEST_SAVE)["player"].get("nick", "")) == offered, "і воно в збереженні")
 	check(game.state == game.State.MAP and game.map_here == "wild_field", "гравець там, де стояв")
+	# Покинутий герць: банер про списану спробу затулено екраном імені, після «Готово» він знову видимий
+	game.player.nick = ""
+	game.meta["fight"] = "duel"
+	game.save_game()
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(2)
+	check(game.naming == "first" and "покинув" in game.hud.banner.text, "покинутий герць: банер показано під екраном імені")
+	var notice_col = game.hud.banner.get_theme_color("font_color")
+	# поки гравець вписує ім'я, банер згасає
+	game.hud._banner_tween.kill()
+	game.hud.banner.modulate.a = 0.0
+	game.hud.banner.text = ""
+	game.name_edit.text = offered  # те саме ім'я: далі його чекає перевірка перейменування
+	_overlay_buttons(game)["Готово"].pressed.emit()
+	await _frames(2)
+	var bt = game.hud._banner_tween
+	check(game.naming == "" and "покинув" in game.hud.banner.text and game.hud.banner.get_theme_color("font_color") == notice_col and (game.hud.banner.modulate.a > 0.0 or (bt != null and bt.is_running() and bt.get_total_elapsed_time() < 0.5)), "після «Готово» банер про покинутий бій знову видно, той самий текст і колір")
+	check(not game.meta.has("fight") and game.player.nick != "", "позначку бою знято, ім'я є")
 	game._show_main_menu()
 	game._continue_game()
 	await _frames(2)

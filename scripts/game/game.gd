@@ -521,6 +521,7 @@ var fight_notice := ""  # що сказати після завантаженн�
 func _continue_game() -> void:
 	if load_game():
 		_remember_slot()
+		var banners := hud.banner_count  # банери, показані після цього, екран імені може затулити
 		_restore_place()
 		if fight_notice != "":
 			hud.show_banner(fight_notice, UI.BAD)
@@ -530,7 +531,7 @@ func _continue_game() -> void:
 			meta.erase("notice")
 			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка «Персонаж»)", UI.GOLD)
 		if ask_name and player.nick == "":
-			_ask_first_name()  # герой зі збереження, де імен ще не було
+			_ask_first_name(banners)  # герой зі збереження, де імен ще не було
 	elif SaveSystem.exists(save_path):
 		# Збереження є, та не читається (зіпсоване чи з новішої версії гри). Нову гру поверх нього
 		# не починаємо: вона затерла б героя. Файл лишається, як був.
@@ -3027,8 +3028,8 @@ func _name_screen(kind: String, start: String, back: Callable, done: Callable, s
 	_name_done = done
 	_name_paused = get_tree().paused
 	_open_menu()
-	# тло щільніше за звичайне меню: написи, що спливають після входу (свято, досягнення), не лізуть на поле
-	hud.overlay.color = Color(0.03, 0.03, 0.025, 0.97)
+	# суцільне тло: крізь екран імені не просвічують ні мапа, ні банери, ні підказка
+	hud.overlay.color = Color(0.03, 0.03, 0.025, 1.0)
 	_menu_back = Callable()  # «Назад» тут розбирає go_back за naming
 	hud.add_title("Нове ім'я героя" if kind == "rename" else "Як тебе звати?", 44)
 	hud.add_title(sub, 20, UI.TEXT)
@@ -3113,12 +3114,18 @@ func _ask_new_hero(back: Callable, n: int = 0) -> void:
 
 
 ## Старий герой без імені: після входу в гру, один раз. Запропоноване прізвисько проходить одним дотиком.
-func _ask_first_name() -> void:
+## banners: лічильник банерів перед входом. Банер, показаний відтоді, гравець не бачив за екраном імені,
+## тож після «Готово» останній такий банер показується знову.
+func _ask_first_name(banners: int = -1) -> void:
+	if banners < 0:
+		banners = hud.banner_count
 	_name_screen("first", NameService.roll(), Callable(), func(nick: String):
 		player.nick = nick
 		save_game()
 		hud.close_overlay()
-		get_tree().paused = _name_paused, "У героя ще нема імені. Впиши своє або візьми те, що випав жереб.")
+		get_tree().paused = _name_paused
+		if hud.banner_count > banners and not hud.last_banner.is_empty():
+			hud.show_banner(hud.last_banner["text"], hud.last_banner["col"]), "У героя ще нема імені. Впиши своє або візьми те, що випав жереб.")
 
 
 func _slot_file(n: int) -> String:

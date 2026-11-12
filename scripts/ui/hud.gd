@@ -560,7 +560,13 @@ static func banner_hold(text: String) -> float:
 	return clampf(1.6 + 0.6 * (text.split("\n").size() - 1) + maxf(0.0, text.length() - 60) * 0.012, 1.6, 6.0)
 
 
+var banner_count := 0  # скільки банерів показано від запуску
+var last_banner := {}  # останній банер: text, col, ms (час показу)
+
+
 func show_banner(text: String, col: Color = Color(1, 0.92, 0.7)) -> void:
+	banner_count += 1
+	last_banner = {"text": text, "col": col, "ms": Time.get_ticks_msec()}
 	banner.text = text
 	banner.add_theme_color_override("font_color", col)
 	banner.add_theme_font_size_override("font_size", banner_font(text))
