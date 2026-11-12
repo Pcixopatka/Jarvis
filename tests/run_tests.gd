@@ -2361,6 +2361,23 @@ func _suite_trade_game() -> void:
 	game.hud.close_dialogue()
 	game.city_do("trade_buy", ["salt", 4])
 	check(TS.cargo_n(game.world, "salt") == 4 and p.gold < 5000, "купив сіль на Січі через вкладку «Торг»")
+	# Чумацький віз: екран торгу показує більшу місткість
+	var DSv = load("res://scripts/game/divine_service.gd")
+	var cap_t: int = TS.capacity(game.world)
+	var trade_head := func() -> String:
+		var built: Control = load("res://scripts/ui/ui_city.gd")._trade(game, "sich")
+		var out := ""
+		for l in built.find_children("*", "Label", true, false):
+			if str(l.text).begins_with("Віз:"):
+				out = str(l.text)
+		built.free()
+		return out
+	check(trade_head.call().begins_with("Віз: 4/%d " % cap_t), "екран торгу без дару: %s" % trade_head.call())
+	game.world.shop["coins"] = int(game.world.shop.get("coins", 0)) + 1000
+	check(DSv.buy(game.world, p, "mazha") and TS.capacity(game.world) == cap_t + 50, "Чумацький віз куплено: місткість торгу більша на 50")
+	check(trade_head.call().begins_with("Віз: 4/%d " % (cap_t + 50)), "екран торгу в місті показує нову місткість: %s" % trade_head.call())
+	DSv.unequip(game.world, p, "cart")
+	check(trade_head.call().begins_with("Віз: 4/%d " % cap_t), "зняв дар: на екрані торгу знову %d" % cap_t)
 	# Напад дорогою: відбити
 	game.start_ambush("kyiv")
 	await _frames(2)
@@ -13327,7 +13344,11 @@ func _suite_divine() -> void:
 	var crit0: float = p.crit_mult
 	check(not DS.buy(w, p, "mazha") and "бракує" in DS.block_reason(w, "mazha") and not DS.equip(w, p, "mazha") and p.divine.is_empty(), "без червінців дар не купити й не вдягнути")
 	SH.state(w)["coins"] = 100000
-	check(DS.buy(w, p, "mazha") and DS.owned(w, "mazha") and DS.wears(p, "mazha") and p.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]) and SH.coins(w) == 100000 - DS.price("mazha"), "чумацьку мажу куплено: вона у своєму гнізді, торба більша на %d" % int(Div.DEFS["mazha"]["bag"]))
+	var TS = load("res://scripts/game/trade_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var cap0: int = Acts.TRADE_CART + Acts.TRADE_CART_SKLAD * Camp.level(w, "sklad")
+	check(TS.capacity(w) == cap0, "без дару віз для торгу звичайний: %d" % TS.capacity(w))
+	check(DS.buy(w, p, "mazha") and DS.owned(w, "mazha") and DS.wears(p, "mazha") and int(Div.DEFS["mazha"]["bag"]) == 50 and p.bag_size() == bag0 + 50 and SH.coins(w) == 100000 - DS.price("mazha"), "Чумацький віз куплено: він у своєму гнізді, торба більша рівно на 50 (%d → %d)" % [bag0, p.bag_size()])
 	check(p.inventory.is_empty() and DS.block_reason(w, "mazha") == "уже куплено", "дар не займає місця в торбі й удруге не продається")
 	check(DS.buy(w, p, "kryla") and p.stat("str") == int(round(str0 * 1.1)) and p.stat("agi") == int(round(agi0 * 1.1)) and p.damage > dmg0 * 1.05, "крила: усі характеристики +10%% (Сила %d → %d)" % [str0, p.stat("str")])
 	var dmg1: float = p.damage
@@ -13339,8 +13360,49 @@ func _suite_divine() -> void:
 	check(p.stat("str") == str0 and not DS.wears(p, "kryla") and DS.owned(w, "kryla"), "зняті крила не діють, але лишаються в роду")
 	check(DS.equip(w, p, "kryla") and p.stat("str") == int(round(str0 * 1.1)), "вдягнули знову")
 	DS.unequip(w, p, "cart")
-	check(p.bag_size() == bag0 and not DS.remote_shop(_new_player()), "без мажі торба звичайна")
+	check(p.bag_size() == bag0 and not DS.remote_shop(_new_player()), "без воза торба звичайна")
 	DS.equip(w, p, "mazha")
+	# ---- Чумацький віз: назва, тексти й місткість торгу ----
+	var MD: Dictionary = Div.DEFS["mazha"]
+	var mtext: String = (str(MD["name"]) + " " + str(MD["desc"]) + " " + " ".join(MD["lines"])).to_lower()
+	check(str(MD["name"]) == "Чумацький віз" and not "маж" in mtext, "дар зветься «Чумацький віз», слова «мажа» нема в назві, описі й рядках")
+	check(MD["lines"].size() == 2 and "50 місць" in str(MD["lines"][0]) and "торз" in str(MD["lines"][1]) and "50" in str(MD["lines"][1]) and int(MD["trade"]) == 50, "у властивостях дару обидва бонуси: торба й віз для торгу, по 50")
+	var wiki_maz := []
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			if "маж" in str(e).to_lower():
+				wiki_maz.append(str(e.get("title", "")))
+	check(wiki_maz.is_empty(), "у статтях довідника нема слова «мажа»: %s" % str(wiki_maz))
+	check(TS.capacity(w) == cap0 + 50, "з вдягненим возом місткість торгу більша на 50: %d" % TS.capacity(w))
+	DS.unequip(w, p, "cart")
+	check(TS.capacity(w) == cap0, "зняв віз: місткість торгу знову %d" % cap0)
+	DS.equip(w, p, "mazha")
+	check(TS.capacity(w) == cap0 + 50, "вдягнув знову: знову більша на 50")
+	var p_other = _new_player()
+	Camp.apply_effects(w, p_other)
+	check(p_other.divine.is_empty() and TS.capacity(w) == cap0, "інший герой роду без дару бонусу до воза не має")
+	Camp.apply_effects(w, p)
+	check(TS.capacity(w) == cap0 + 50, "знову граємо героєм із возом: бонус повернувся")
+	# крам понад стару місткість; дар зняли, вантаж лишився
+	var wt = WorldState.new()
+	var pt = _new_player()
+	pt.level = 10
+	pt.gold = 10000000
+	SH.state(wt)["coins"] = 100000
+	Camp.apply_effects(wt, pt)
+	DS.buy(wt, pt, "mazha")
+	var got := 0
+	for g in Acts.TRADE_ORDER:
+		got += TS.buy(wt, pt, "sich", g, Acts.TRADE_STOCK - 1)
+	check(got > Acts.TRADE_CART and TS.cargo_count(wt) == got and got <= TS.capacity(wt), "з возом куплено %d одиниць краму, понад стару місткість %d" % [got, Acts.TRADE_CART])
+	DS.unequip(wt, pt, "cart")
+	var g_left: String = Acts.TRADE_ORDER[0]
+	var gold_t: int = pt.gold
+	check(TS.capacity(wt) == Acts.TRADE_CART and TS.cargo_count(wt) == got and TS.free_space(wt) == 0, "дар зняли: вантаж цілий (%d), вільного місця 0, а не від'ємне" % TS.cargo_count(wt))
+	check(TS.stock_left(wt, "sich", g_left) > 0 and not TS.can_buy(wt, pt, "sich", g_left) and TS.buy(wt, pt, "sich", g_left, 1) == 0 and pt.gold == gold_t and TS.cargo_count(wt) == got, "поки вантаж більший за віз, докупити не можна")
+	for g in Acts.TRADE_ORDER:
+		TS.sell(wt, pt, "sich", g, 99)
+	check(TS.cargo_count(wt) == 0 and TS.free_space(wt) == Acts.TRADE_CART and TS.buy(wt, pt, "sich", g_left, 1) == 1, "продав, і купувати знову можна")
 	# ---- Рід і збереження ----
 	var p2 = _new_player()
 	p2.change_class("cossack")
@@ -13366,7 +13428,18 @@ func _suite_divine() -> void:
 	check(DS.equip(w5, p5, "khovanets") and DS.remote_shop(p5) and is_equal_approx(p5.speed, sp0) and p5.divine.size() == 1, "назад на Хованця: у гнізді завжди один дар")
 	DS.buy(w5, p5, "molot")
 	check(DS.buy(w5, p5, "ladanka") and DS.worn(p5, "relic") == "ladanka" and p5.fx("dmg") == 0.0 and is_equal_approx(float(p5.divine_fx["revive"]), 0.5), "ладанка лягає в гніздо «Реліквія» замість молота")
-	check(DS.buy(w5, p5, "nimb") and is_equal_approx(p5.xp_mult, xp0 + 0.15) and is_equal_approx(p5.gold_mult, gm0 + 0.15), "німб: досвід і гривні +15%")
+	check(DS.buy(w5, p5, "nimb") and is_equal_approx(p5.xp_mult, xp0 + 2.0) and is_equal_approx(p5.gold_mult, gm0 + 2.0), "німб: досвід і гривні +200%% (множники %.2f і %.2f)" % [p5.xp_mult, p5.gold_mult])
+	# з Німбом та сама нагорода втричі більша, якщо інших надбавок нема
+	var pn0 = _new_player()
+	Camp.apply_effects(w5, pn0)
+	var pn1 = _new_player()
+	pn1.divine = {"halo": "nimb"}
+	Camp.apply_effects(w5, pn1)
+	pn0.gold = 0
+	pn1.gold = 0
+	pn0.add_gold(100)
+	pn1.add_gold(100)
+	check(is_equal_approx(pn0.xp_mult, 1.0) and is_equal_approx(pn0.gold_mult, 1.0) and is_equal_approx(pn1.xp_mult, 3.0) and is_equal_approx(pn1.gold_mult, 3.0) and pn0.gold == 100 and pn1.gold == 300, "з Німбом досвід і гривні втричі більші: %d проти %d грн" % [pn1.gold, pn0.gold])
 	check(DS.buy(w5, p5, "stiah") and is_equal_approx(float(p5.divine_fx["party"]), 0.25) and DS.buy(w5, p5, "likhtar") and bool(p5.divine_fx["sight"]) and float(p5.divine_fx["light"]) > 1.0, "стяг і ліхтар мають власні гнізда")
 	check(p5.divine.size() == 5 and p5.inventory.is_empty(), "п'ять гнізд зайнято: супутник, реліквія, німб, стяг, ліхтар")
 	var CompS = load("res://scripts/entities/companion.gd")
@@ -13389,7 +13462,7 @@ func _suite_divine() -> void:
 	for id in Div.ORDER:
 		art_ok = art_ok and str(Div.DEFS[id]["name"]) in art and str(int(Div.DEFS[id]["price"])) in art
 	check(art_ok, "довідник описує всі дари з цінами")
-	check(load("res://scripts/ui/ui_character.gd").TRADER_BTN in art and "над торбою" in art and "голоблі" in art, "довідник каже про кнопку крамниці над торбою й про мажу на голоблях")
+	check(load("res://scripts/ui/ui_character.gd").TRADER_BTN in art and "над торбою" in art and "голоблі" in art, "довідник каже про кнопку крамниці над торбою й про віз на голоблях")
 	check("одразу лягає в торбу" in art and "нема куди покласти" in art, "довідник каже, що з Хованцем здобич одразу в торбі")
 	# ---- У грі ----
 	var game = load("res://scenes/main.tscn").instantiate()
@@ -16046,7 +16119,7 @@ func _suite_auto_buffs() -> void:
 	# ---- Тексти ----
 	var nl: Array = Div.DEFS["nimb"]["lines"]
 	check(nl.size() == 3 and "авто-бафи" in str(nl[2]) and ("%d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in str(nl[2]), "у Німба третій рядок про авто-бафи з порогом лікування")
-	check(int(Div.DEFS["nimb"]["price"]) == 1200 and is_equal_approx(float(Div.DEFS["nimb"]["xp"]), 0.15) and is_equal_approx(float(Div.DEFS["nimb"]["gold"]), 0.15), "ціна й інші властивості Німба ті самі")
+	check(int(Div.DEFS["nimb"]["price"]) == 1200 and is_equal_approx(float(Div.DEFS["nimb"]["xp"]), 2.0) and is_equal_approx(float(Div.DEFS["nimb"]["gold"]), 2.0) and str(nl[0]) == "+200% досвіду" and str(nl[1]) == "+200% гривень", "ціна та сама, Німб дає +200% досвіду й гривень")
 	var art := ""
 	for sec in WS.sections():
 		for e in sec["entries"]:
@@ -16462,7 +16535,7 @@ func _suite_sale_off() -> void:
 	check(game.load_game(), "гра завантажилась")
 	gw = game.world
 	gp = game.player
-	check(DS.owned(gw, "mazha") and DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]), "мажа переживає збереження")
+	check(DS.owned(gw, "mazha") and DS.wears(gp, "mazha") and gp.bag_size() == bag0 + int(Div.DEFS["mazha"]["bag"]) and game.TradeService.capacity(gw) == game.Acts.TRADE_CART + game.Acts.TRADE_CART_SKLAD * game.CampService.level(gw, "sklad") + 50, "віз переживає збереження: і торба, і місткість торгу")
 	game.enter_location("wild_field")
 	await _frames(4)
 	var cart := false

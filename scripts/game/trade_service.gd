@@ -41,8 +41,9 @@ static func tick(world) -> void:
 
 # ---------- Віз ----------
 
+## Місткість воза: основа, Склад на хуторі й Чумацький віз героя, яким грають (world.cart_divine).
 static func capacity(world) -> int:
-	return Acts.TRADE_CART + Acts.TRADE_CART_SKLAD * CampService.level(world, "sklad")
+	return Acts.TRADE_CART + Acts.TRADE_CART_SKLAD * CampService.level(world, "sklad") + int(world.cart_divine)
 
 
 static func cargo_n(world, good: String) -> int:
@@ -56,8 +57,9 @@ static func cargo_count(world) -> int:
 	return n
 
 
+## Скільки ще влазить. Якщо дар зняли й вантажу більше, ніж місця, крам лишається, а докупити не можна.
 static func free_space(world) -> int:
-	return capacity(world) - cargo_count(world)
+	return maxi(0, capacity(world) - cargo_count(world))
 
 
 ## Середня ціна, за яку куплено цей крам на возі (0 — нема).
