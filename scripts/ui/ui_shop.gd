@@ -225,8 +225,7 @@ static func _goods_icon(kind: String, id: String, p) -> Control:
 			var D: Dictionary = Uniques.DEFS[id]
 			return UI.icon(UI.item_icon_id({"slot": D["slot"], "type": D["type"]}), CELL)
 		"artifact":
-			var boss: String = str(Artifacts.DEFS[id].get("boss", ""))
-			return UI.sprite_icon(boss, CELL) if Gfx.has(boss) else UI.icon("it_artifact", CELL)
+			return UI.artifact_icon(id, CELL)
 		"soul":
 			var who: String = id.trim_prefix("b_")
 			return UI.sprite_icon(who, CELL) if Gfx.has(who) else UI.icon("it_soul", CELL)

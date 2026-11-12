@@ -79,6 +79,19 @@ static func item_icon_id(item: Dictionary) -> String:
 	return "it_" + str(item.get("slot", "amulet"))
 
 
+## Значок артефакта: спрайт його боса, а без спрайта загальний ромб. Одне правило для крамниці, ярмарку й торби.
+static func artifact_icon(id: String, px: int) -> TextureRect:
+	var boss: String = str(load("res://scripts/data/artifacts.gd").DEFS.get(id, {}).get("boss", ""))
+	return sprite_icon(boss, px) if boss != "" and load("res://scripts/world/gfx.gd").has(boss) else icon("it_artifact", px)
+
+
+## Значок речі гравця заданого розміру: артефакт за правилом artifact_icon, решта за item_icon_id.
+static func item_icon(item: Dictionary, px: int) -> TextureRect:
+	if item.has("artifact"):
+		return artifact_icon(str(item["artifact"]), px)
+	return icon(item_icon_id(item), px)
+
+
 static func _cell_mark(text: String, col: Color, size: int, anchor: int, off: Vector2) -> Label:
 	var l := label(text, size, col, false)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -108,7 +121,7 @@ static func item_cell(item: Dictionary, cb: Callable, selected: bool = false, px
 	b.add_theme_stylebox_override("pressed", style(bg.darkened(0.15), edge, 8, 3 if check else 2))
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	var isz: int = px - 22 - (8 if note != "" else 0)  # з підписом значок трохи менший і вищий
-	var t := icon(item_icon_id(item), isz)
+	var t := item_icon(item, isz)
 	t.set_anchors_preset(Control.PRESET_CENTER)
 	t.position = Vector2(-isz / 2.0, -isz / 2.0 - (6.0 if note != "" else 0.0))
 	b.add_child(t)

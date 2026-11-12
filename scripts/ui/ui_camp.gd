@@ -570,7 +570,6 @@ static func _fair(game) -> Control:
 	var UShop = load("res://scripts/ui/ui_shop.gd")
 	var Uniq = load("res://scripts/data/uniques.gd")
 	var Arts = load("res://scripts/data/artifacts.gd")
-	var Gfx = load("res://scripts/world/gfx.gd")
 	var grid := UI.grid(UShop.COLS)
 	var picked: Dictionary = {}
 	for e in FairService.stock(p):
@@ -587,8 +586,7 @@ static func _fair(game) -> Control:
 			"artifact":
 				col = Data.RARITY_COLORS[Arts.RARITY]
 				mark = "◆"
-				var boss: String = str(Arts.DEFS[e["id"]].get("boss", ""))
-				icon = UI.sprite_icon(boss, UShop.CELL) if Gfx.has(boss) else UI.icon("it_artifact", UShop.CELL)
+				icon = UI.artifact_icon(str(e["id"]), UShop.CELL)
 			_:
 				icon = UI.icon(str(FAIR_ICONS.get(str(e["id"]), "trophy")), UShop.CELL)
 		if key == game.fair_sel:

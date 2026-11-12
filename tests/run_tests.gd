@@ -160,6 +160,7 @@ func _run() -> void:
 	await _suite_sale_off()
 	await _suite_xp_gold_cap()
 	await _suite_reforge_rare()
+	await _suite_artifact_bag_icon()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -17196,6 +17197,180 @@ func _suite_reforge_rare() -> void:
 			if str(e["title"]) == "Кування":
 				forge_txt = str(e["text"])
 	check(not "не перековуються" in all_text and not "сталі властивості" in all_text and "золотої й наборної теж" in forge_txt and not "—" in forge_txt, "довідник: золоті й наборні речі перековуються")
+	game.queue_free()
+	await _frames(3)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Що намальовано в значку: шлях текстури, а для вирізки з аркуша ще й шматок аркуша.
+func _tex_key(t: TextureRect) -> String:
+	if t == null or t.texture == null:
+		return ""
+	if t.texture is AtlasTexture:
+		return "%s@%s" % [t.texture.atlas.resource_path, str(t.texture.region)]
+	return t.texture.resource_path
+
+
+## Те саме для значка поза деревом сцени: ключ, а сам значок звільнити.
+func _key_free(t: TextureRect) -> String:
+	var k := _tex_key(t)
+	t.free()
+	return k
+
+
+## Значок усередині клітинки (перший TextureRect).
+func _cell_tex(cell: Control) -> TextureRect:
+	var ts: Array = cell.find_children("*", "TextureRect", true, false)
+	return ts[0] if not ts.is_empty() else null
+
+
+func _suite_artifact_bag_icon() -> void:
+	suite("Артефакт у торбі намальований так само, як у крамниці")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var UKit = load("res://scripts/ui/ui_kit.gd")
+	var UShop = load("res://scripts/ui/ui_shop.gd")
+	var UChar = load("res://scripts/ui/ui_character.gd")
+	var UCamp = load("res://scripts/ui/ui_camp.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var Gfx = load("res://scripts/world/gfx.gd")
+	var Sets = load("res://scripts/data/sets.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var generic: String = _key_free(UKit.icon("it_artifact", 48))
+	# ---- Кожен артефакт: клітинка торби й клітинка крамниці показують те саме ----
+	var same := 0
+	var sprites := 0
+	var no_sprite := []
+	var bad := []
+	var by_boss := {}
+	for id in Arts.DEFS:
+		var boss: String = str(Arts.DEFS[id]["boss"])
+		var shop_ic: TextureRect = UShop._goods_icon("artifact", id, null)
+		var want: String = _key_free(UKit.sprite_icon(boss, 48)) if Gfx.has(boss) else generic
+		for px in [66, 70]:
+			var cell: Button = UKit.item_cell(Arts.make(id), func(): pass, false, px)
+			var k: String = _tex_key(_cell_tex(cell))
+			if k == _tex_key(shop_ic) and k == want and k != "":
+				same += 1
+			else:
+				bad.append("%s/%d" % [id, px])
+			cell.free()
+		if Gfx.has(boss):
+			sprites += 1
+			by_boss[boss] = _tex_key(shop_ic)
+		else:
+			no_sprite.append(id)
+		shop_ic.free()
+	check(bad.is_empty() and same == Arts.DEFS.size() * 2, "кожен артефакт у клітинці торби (66 і 70) має той самий значок, що в крамниці: %d, розбіжності %s" % [same, str(bad)])
+	check(sprites >= 6 and sprites + no_sprite.size() == Arts.DEFS.size(), "спрайт боса мають %d артефактів, без спрайта %s" % [sprites, str(no_sprite)])
+	var drawn := []  # артефакти, чий бос має спрайт
+	for id in Arts.ORDER:
+		if not id in no_sprite:
+			drawn.append(id)
+	# ---- Різні боси дають різні значки ----
+	var a0: String = drawn[0]
+	var a1: String = drawn[1]
+	var c0: Button = UKit.item_cell(Arts.make(a0), func(): pass, false, 70)
+	var c1: Button = UKit.item_cell(Arts.make(a1), func(): pass, false, 70)
+	var k0: String = _tex_key(_cell_tex(c0))
+	var k1: String = _tex_key(_cell_tex(c1))
+	check(Arts.DEFS[a0]["boss"] != Arts.DEFS[a1]["boss"] and k0 != k1 and k0 != generic and k1 != generic, "два артефакти різних босів у торбі різні: %s і %s" % [k0, k1])
+	var uniq := {}
+	for b in by_boss:
+		uniq[by_boss[b]] = true
+	check(uniq.size() == by_boss.size(), "усі %d боси дають різні значки" % by_boss.size())
+	# вписаний у клітинку: того самого розміру й на тому самому місці, що й звичайний значок
+	var plain0: Button = UKit.item_cell(Data.gen_item(20, 2, "head"), func(): pass, false, 70)
+	var t0: TextureRect = _cell_tex(c0)
+	var tp: TextureRect = _cell_tex(plain0)
+	var fit := t0.custom_minimum_size == tp.custom_minimum_size and t0.position == tp.position and t0.custom_minimum_size == Vector2(48, 48) \
+		and t0.stretch_mode == TextureRect.STRETCH_KEEP_ASPECT_CENTERED and t0.expand_mode == TextureRect.EXPAND_IGNORE_SIZE
+	var priced: Button = UKit.item_cell(Arts.make(a0), func(): pass, false, 66, false, "123")
+	var tpr: TextureRect = _cell_tex(priced)
+	check(fit and tpr.custom_minimum_size == Vector2(36, 36) and _tex_key(tpr) == k0, "спрайт боса вписаний у клітинку, як звичайний значок, і з підписом під ним")
+	# решта клітинки артефакта як була: тло й рамка за рідкістю, вибір
+	var csel: Button = UKit.item_cell(Arts.make(a0), func(): pass, true, 70)
+	var col: Color = Data.item_color(Arts.make(a0))
+	var sb: StyleBoxFlat = c0.get_theme_stylebox("normal")
+	var sbs: StyleBoxFlat = csel.get_theme_stylebox("normal")
+	check(sb.bg_color == col.darkened(0.74) and sb.border_color == col.darkened(0.2) and sbs.bg_color == col.darkened(0.5) and c0.find_children("*", "TextureRect", true, false).size() == 1, "тло, рамка й вибір клітинки артефакта не змінились, значок один")
+	for n in [c0, c1, plain0, priced, csel]:
+		n.free()
+	# ---- Без спрайта боса лишається загальний ромб ----
+	for id in no_sprite:
+		var cn: Button = UKit.item_cell(Arts.make(id), func(): pass, false, 70)
+		check(_tex_key(_cell_tex(cn)) == generic, "артефакт %s: спрайта боса нема, у торбі загальний значок, як і в крамниці" % id)
+		cn.free()
+	var ghost: Dictionary = Arts.make(a0)
+	ghost["artifact"] = "nema_takoho"
+	var cg: Button = UKit.item_cell(ghost, func(): pass, false, 70)
+	check(_tex_key(_cell_tex(cg)) == generic and generic != "" and _key_free(UKit.artifact_icon("nema_takoho", 48)) == generic, "артефакт без спрайта боса має загальний значок і не падає")
+	cg.free()
+	# ---- Звичайна, золота й наборна речі як були ----
+	var kinds := {"звичайна": Data.gen_item(20, 2, "head"), "зброя": Data.gen_item(20, 3, "weapon"), "золота": Uniques.make("oberih_berehyni", 40), "наборна": Sets.make(Sets.SETS.keys()[0], "belt", 60)}
+	var kinds_ok := true
+	for kn in kinds:
+		var it: Dictionary = kinds[kn]
+		var cell: Button = UKit.item_cell(it, func(): pass, false, 70)
+		var t: TextureRect = _cell_tex(cell)
+		kinds_ok = kinds_ok and _tex_key(t) == _key_free(UKit.icon(UKit.item_icon_id(it), 48)) and t.custom_minimum_size == Vector2(48, 48) and t.texture_filter == CanvasItem.TEXTURE_FILTER_NEAREST
+		cell.free()
+	check(kinds_ok, "звичайна річ, зброя, золота й наборна малюються своїми значками, як і раніше")
+	# ---- На екрані героя й у скрині ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "kleinody"]:
+		gw.hints[k] = true
+	gp.level = 30
+	var want_keys := []
+	for i in 3:
+		gp.add_item(Arts.make(drawn[i]), true)
+		want_keys.append(_key_free(UKit.artifact_icon(drawn[i], 48)))
+	gp.recalc()
+	game.enter_map()
+	await _frames(2)
+	game.char_tab = 1
+	game.open_character()
+	await _frames(2)
+	var htc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	htc.current_tab = 0  # вкладка «Герой» будується, коли її відкривають
+	await _frames(1)
+	var hkeys := {}
+	for c in _cells(htc.get_tab_control(0), UChar.CELL):
+		hkeys[_tex_key(_cell_tex(c))] = true
+	var hero_ok := true
+	for wk in want_keys:
+		hero_ok = hero_ok and hkeys.has(wk)
+	check(hero_ok and not hkeys.has(generic), "торба на екрані героя показує артефакти спрайтами їхніх босів, загального ромба нема")
+	game.close_character()
+	await _frames(2)
+	game.account.put_item(Arts.make(drawn[5]), 0)
+	game.camp_tab = 0
+	game.enter_camp()
+	await _frames(2)
+	var ctc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var chest_i := -1
+	for i in ctc.get_tab_count():
+		if ctc.get_tab_title(i) == "Скриня":
+			chest_i = i
+	ctc.current_tab = chest_i
+	await _frames(1)
+	var ckeys := {}
+	for c in _cells(ctc.get_tab_control(chest_i), UCamp.CHEST_CELL):
+		ckeys[_tex_key(_cell_tex(c))] = true
+	var chest_ok: bool = chest_i >= 0 and ckeys.has(_key_free(UKit.artifact_icon(drawn[5], 48)))
+	for wk in want_keys:
+		chest_ok = chest_ok and ckeys.has(wk)
+	check(chest_ok and not ckeys.has(generic), "у скрині роду й торбі поруч артефакти теж зі спрайтами босів")
 	game.queue_free()
 	await _frames(3)
 	SaveSystem.delete(TEST_SAVE)
