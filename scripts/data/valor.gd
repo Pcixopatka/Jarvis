@@ -24,6 +24,11 @@ const ORDER := ["dmg", "hp", "ward", "skill", "luck"]
 const EXTRA_TEXT := {"gold": "+%s%% гривень"}
 
 
+## Найбільша звитяга героя: усі лінії заповнені до краю. Далі смуга лише стоїть повна, очок не дає.
+static func max_valor() -> int:
+	return LINES.size() * LINE_MAX
+
+
 ## Скільки досвіду вміщає смуга, коли вже заповнено filled смуг.
 static func bar(filled: int) -> int:
 	return int(Data.xp_for_level(Classes.BASE_LEVEL_MAX - 1) * BAR_PART * (1.0 + BAR_STEP * maxi(0, filled)))

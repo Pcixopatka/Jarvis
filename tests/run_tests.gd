@@ -170,6 +170,7 @@ func _run() -> void:
 	await _suite_world_fights()
 	await _suite_mechanics()
 	await _suite_party_mechanics()
+	await _suite_valor_cap()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -18356,3 +18357,125 @@ func _suite_world_fights() -> void:
 	check(bad.is_empty() and n == 67, "бій починається в кожному з %d місць: нечисть місця, земля й шум краєвиду%s" % [n, ("" if bad.is_empty() else ": " + str(bad))])
 	game.queue_free()
 	await _frames(2)
+
+
+## Звитяга має стелю: коли всі лінії повні, нових очок нема, смуга лише стоїть повна.
+func _suite_valor_cap() -> void:
+	suite("Звитяги: стеля")
+	var Valor = load("res://scripts/data/valor.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var AccountScript = load("res://scripts/game/account.gd")
+	var WorldState = load("res://scripts/game/world_state.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var top: int = Valor.max_valor()
+	check(top == Valor.LINES.size() * Valor.LINE_MAX and top > 0, "стеля звитяги — усі лінії повні: %d" % top)
+	var full := {}
+	for id in Valor.ORDER:
+		full[id] = Valor.LINE_MAX
+	var banners := [0]
+	var count := func(text: String, _col: Color) -> void:
+		if text.begins_with("Звитяга"):
+			banners[0] += 1
+	var events = root.get_node("Events")
+	events.banner.connect(count)
+	# ---- Остання смуга перед стелею ----
+	var p = _new_player()
+	p.change_class("cossack")
+	p.level = Classes.BASE_LEVEL_MAX
+	p.xp = 0
+	p.valor = top - 1
+	p.valor_xp = 0
+	p.valor_spent = {}
+	p.recalc()
+	p.add_xp(p.valor_next())
+	check(p.valor == top and p.valor_points() == top and banners[0] == 1 and p.valor_xp <= p.valor_next(), "остання смуга дає рівно одне очко й доводить до стелі")
+	# ---- На стелі ----
+	p.valor_spent = full.duplicate()
+	p.recalc()
+	p.add_xp(p.valor_next() * 1000)
+	check(p.valor == top and p.valor_points() == 0 and p.valor_xp == p.valor_next() and banners[0] == 1, "на стелі досвід не дає очок і банера, смуга стоїть повна (звитяга %d, смуга %d / %d)" % [p.valor, p.valor_xp, p.valor_next()])
+	# ---- Смерть на стелі ----
+	var bar: int = p.valor_next()
+	var lost: int = p.death_xp_loss(1.0)
+	check(lost > 0 and p.valor_xp == bar - lost and p.valor == top, "смерть на стелі забирає частку смуги (%d)" % lost)
+	p.add_xp(lost * 3)
+	check(p.valor == top and p.valor_xp == bar and banners[0] == 1, "після смерті смуга знову наповнюється до краю, без нового очка")
+	# ---- Старе збереження понад стелю ----
+	var d: Dictionary = p.to_dict()
+	d["valor"] = top + 1
+	d["valor_xp"] = bar * 7
+	d["valor_spent"] = full.duplicate()
+	var q = _new_player()
+	q.from_dict(d)
+	check(q.valor == top and q.valor_points() == 0 and q.valor_spent == full and q.valor_xp == q.valor_next(), "збереження зі звитягою %d: стеля %d, вільних очок 0, вкладені очки на місці" % [top + 1, q.valor])
+	# ---- Рекорд роду понад стелю ----
+	var acc = AccountScript.new()
+	acc.from_dict({"stats": {"valor": top + 1, "kills": 5}, "records": {"valor": {"value": top + 7, "slot": 0, "who": "Козак", "day": "2026-11-01"}, "level": {"value": 99}}, AccountScript.XP_GOLD_KEY: 1})
+	check(int(acc.stats["valor"]) == top and int(acc.records["valor"]["value"]) == top and int(acc.stats["kills"]) == 5 and int(acc.records["level"]["value"]) == 99, "завантажений рід: лічильник і рекорд звитяги опущено до стелі, решту не чіпано")
+	var acc2 = AccountScript.new()
+	var w = WorldState.new()
+	w.stats = {"valor": top + 3}
+	acc2.absorb_from_world(w)
+	check(int(acc2.stats["valor"]) == top, "старе збереження героя: перенесений у рід рекорд звитяги теж до стелі")
+	events.banner.disconnect(count)
+	p.free()
+	q.free()
+	# ---- Довідник ----
+	var vtext := ""
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			if str(e["title"]) == "Звитяги":
+				vtext = str(e["text"])
+	check(("Найбільша звитяга %d" % top) in vtext and "стоїть повна" in vtext, "довідник називає стелю звитяги")
+	# ---- Екран героя ----
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup"]:
+		game.world.hints[k] = true
+	var h = game.player
+	h.change_class("cossack")
+	h.level = Classes.BASE_LEVEL_MAX
+	h.stat_points = 0
+	h.skill_points = 0
+	h.perk_points = 0
+	game.enter_map()
+	await _frames(2)
+	var texts := func() -> Array:
+		_reveal_tabs(game)
+		var out := []
+		for l in game.hud.screen_root.find_children("*", "Label", true, false):
+			if "Звитяга" in l.text:
+				out.append(l.text)
+		return out
+	var cases := [[top, full, "найвища", ""], [top, {"dmg": Valor.LINE_MAX - 2, "hp": Valor.LINE_MAX, "ward": Valor.LINE_MAX, "skill": Valor.LINE_MAX, "luck": Valor.LINE_MAX}, "найвища", "вільних очок: 2"], [top - 1, {"dmg": Valor.LINE_MAX - 1, "hp": Valor.LINE_MAX, "ward": Valor.LINE_MAX, "skill": Valor.LINE_MAX, "luck": Valor.LINE_MAX}, "до наступної", ""]]
+	for cs in cases:
+		h.valor = int(cs[0])
+		h.valor_spent = cs[1].duplicate()
+		h.valor_xp = h.valor_next() if h.valor >= top else 0
+		h.recalc()
+		game.open_character()
+		await _frames(2)
+		var got: Array = texts.call()
+		var head := ""
+		for t in got:
+			if str(t).begins_with("Звитяга %d   •" % h.valor):
+				head = t
+		var no_next: bool = got.all(func(t): return not "до наступної" in str(t))
+		if h.valor >= top:
+			var pts_ok: bool = (str(cs[3]) in head) if str(cs[3]) != "" else not "вільних очок" in head
+			check(head.begins_with("Звитяга %d   •   найвища" % top) and pts_ok and no_next and got.any(func(t): return str(t) == "Звитяга %d: найвища" % top), "екран героя на стелі: «%s», наступної не обіцяє" % head)
+		else:
+			check("до наступної" in head and "вільних очок: 0" in head and not got.any(func(t): return "найвища" in str(t)), "екран героя до стелі: «%s»" % head)
+		game.close_character()
+		await _frames(2)
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false

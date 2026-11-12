@@ -13,6 +13,7 @@ extends RefCounted
 const Data := preload("res://scripts/data/data.gd")
 const Clock := preload("res://scripts/core/clock.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
+const Valor := preload("res://scripts/data/valor.gd")
 
 const CHEST_SIZE := 40
 const CHEST_PER_SKLAD := 20  # кожен рівень Складу на хуторі — ще стільки місць у скрині
@@ -54,6 +55,7 @@ func from_dict(d: Dictionary) -> void:
 	shop = d.get("shop", {})
 	next_uid = int(d.get("next_uid", 1000000))
 	Clock.adopt(float(d.get("clock", 0.0)))
+	_cap_valor()
 
 
 ## Підключити стан світу персонажа до спільних словників (посилання, не копії).
@@ -74,6 +76,18 @@ func absorb_from_world(world) -> void:
 		stats = world.stats
 	if challenges.is_empty() and not world.challenges.is_empty():
 		challenges = world.challenges
+	_cap_valor()
+
+
+## Старі збереження могли записати звитягу понад стелю (Valor.max_valor): лічильник викликів
+## і рекорд у «Літописі слави» опускаються до неї.
+func _cap_valor() -> void:
+	var top := Valor.max_valor()
+	if int(stats.get("valor", 0)) > top:
+		stats["valor"] = top
+	var rec = records.get("valor", {})
+	if rec is Dictionary and int(rec.get("value", 0)) > top:
+		rec["value"] = top
 
 
 # ---------- Скриня ----------

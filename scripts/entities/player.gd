@@ -472,6 +472,10 @@ func from_dict(d: Dictionary) -> void:
 	if xp_next != want:
 		xp = int(float(xp) / maxf(1.0, float(xp_next)) * want)
 		xp_next = want
+	# Старі збереження могли набрати звитяг понад усі лінії: зайве опускається до стелі, вкладені очки лишаються
+	if valor >= Valor.max_valor():
+		valor = Valor.max_valor()
+		valor_xp = mini(valor_xp, valor_next())
 	_normalize_buffs()
 	_refund_foreign_skills()
 	recalc()
@@ -885,15 +889,18 @@ func add_xp(value: int) -> void:
 
 
 ## Досвід на останньому рівні наповнює смугу звитяги; заповнена смуга дає очко (див. Valor).
+## На найбільшій звитязі (Valor.max_valor) очок більше нема: смуга лише наповнюється до краю.
 func _add_valor_xp(gained: int) -> void:
 	valor_xp += gained
-	while valor_xp >= valor_next():
+	while valor_xp >= valor_next() and valor < Valor.max_valor():
 		valor_xp -= valor_next()
 		valor += 1
 		if _in_combat():
 			Audio.play("levelup", 0.0)
 			combat.fx.ring(global_position, Color(1.0, 0.7, 0.35), 32, 420, 6, 0.6)
 		Events.banner.emit("Звитяга %d!\nНове очко: «Персонаж», вкладка «Загартування»" % valor, Color(1.0, 0.8, 0.4))
+	if valor >= Valor.max_valor():
+		valor_xp = mini(valor_xp, valor_next())
 
 
 ## Скільки досвіду вміщає нинішня смуга звитяги.

@@ -94,7 +94,9 @@ static func _hero(game) -> Control:
 		# останній рівень: досвід наповнює смугу звитяги
 		bar.max_value = maxf(1.0, float(p.valor_next()))
 		bar.value = float(p.valor_xp)
-		left.add_child(_kv("Звитяга %d: до наступної" % p.valor, "%s / %s" % [UI.num(p.valor_xp), UI.num(p.valor_next())], 15))
+		# на найбільшій звитязі наступної нема: смуга лише стоїть повна
+		var highest: bool = p.valor >= p.Valor.max_valor()
+		left.add_child(_kv("Звитяга %d: %s" % [p.valor, "найвища" if highest else "до наступної"], "%s / %s" % [UI.num(p.valor_xp), UI.num(p.valor_next())], 15))
 	else:
 		bar.max_value = maxf(1.0, float(p.xp_next))
 		bar.value = float(p.xp)
@@ -1025,7 +1027,11 @@ static func _valor_block(game, v: VBoxContainer) -> void:
 		v.add_child(UI.label("Звитяги відкриються на %d-му рівні: досвід далі наповнює смугу звитяги, а кожна смуга дає очко малих вічних бонусів." % cap, 15, UI.MUTED))
 		_named_valor(game, v)
 		return
-	var head := UI.label("Звитяга %d   •   вільних очок: %d   •   до наступної: %s / %s" % [p.valor, p.valor_points(), UI.num(p.valor_xp), UI.num(p.valor_next())], 19, UI.GOLD)
+	var head_text := "Звитяга %d   •   вільних очок: %d   •   до наступної: %s / %s" % [p.valor, p.valor_points(), UI.num(p.valor_xp), UI.num(p.valor_next())]
+	if p.valor >= Valor.max_valor():
+		# найбільша звитяга: наступної не обіцяємо, вільні очки — лише коли вони є
+		head_text = "Звитяга %d   •   найвища" % p.valor + (("   •   вільних очок: %d" % p.valor_points()) if p.valor_points() > 0 else "")
+	var head := UI.label(head_text, 19, UI.GOLD)
 	v.add_child(head)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
