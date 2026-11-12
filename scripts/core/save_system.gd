@@ -214,7 +214,7 @@ static func migrate(d: Dictionary) -> Dictionary:
 
 static func load_settings() -> Dictionary:
 	var cfg := ConfigFile.new()
-	var out := {"sound": true, "music": true, "autosell": false, "pickup": [true, true, true, true]}
+	var out := {"sound": true, "music": true, "autosell": false, "pickup": [true, true, true, true], "slot": 1}
 	if cfg.load(SETTINGS_PATH) == OK:
 		out["sound"] = cfg.get_value("audio", "sound", true)
 		out["music"] = cfg.get_value("audio", "music", true)
@@ -223,7 +223,20 @@ static func load_settings() -> Dictionary:
 		var mask: String = str(cfg.get_value("game", "pickup", "1111"))
 		for i in 4:
 			out["pickup"][i] = i >= mask.length() or mask[i] != "0"
+		out["slot"] = slot_num(cfg.get_value("game", "slot", 1))
 	return out
+
+
+## Номер слота з налаштувань: будь-яке сміття дає 1, число поза межами затискається в 1..MAX_SLOTS.
+static func slot_num(v) -> int:
+	var n := 1
+	if v is int:
+		n = v
+	elif v is float and is_finite(v):
+		n = int(v)
+	elif v is String and v.strip_edges().is_valid_int():
+		n = v.strip_edges().to_int()
+	return clampi(n, 1, MAX_SLOTS)
 
 
 static func save_settings(settings: Dictionary) -> void:
@@ -236,4 +249,6 @@ static func save_settings(settings: Dictionary) -> void:
 	for i in 4:
 		mask += "1" if i >= pick.size() or bool(pick[i]) else "0"
 	cfg.set_value("game", "pickup", mask)
+	# останній герой, яким грали; без номера в словнику лишається записаний раніше
+	cfg.set_value("game", "slot", slot_num(settings["slot"]) if settings.has("slot") else int(load_settings()["slot"]))
 	cfg.save(SETTINGS_PATH)

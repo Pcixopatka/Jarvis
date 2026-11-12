@@ -148,6 +148,7 @@ func _run() -> void:
 	await _suite_legends()
 	await _suite_grid_shops()
 	await _suite_audit()
+	await _suite_place_restore()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -5490,7 +5491,7 @@ func _suite_transfer_game() -> void:
 	check(int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 12, "згортання гри не затирає перенесене")
 	game._continue_game()
 	await _frames(3)
-	check(game.player != null and game.player.level == 12 and game.player.gold == 4321 and int(game.account.chest["gold"]) == 900 and game.state == game.State.CITY, "гра продовжується перенесеним героєм зі спільною скринею")
+	check(game.player != null and game.player.level == 12 and game.player.gold == 4321 and int(game.account.chest["gold"]) == 900 and game.state == game.State.MAP and game.map_here == "ridne_selo", "гра продовжується перенесеним героєм зі спільною скринею там, де він стояв")
 	# Передумав: повернути, як було
 	game._show_main_menu()
 	await _frames(2)
@@ -14698,6 +14699,184 @@ func _suite_audit() -> void:
 	game.close_character()
 	await _frames(40)
 	check(game.state == game.State.MAP and not cb.active, "закрив екран героя: з програної оборони виведено на мапу")
+
+	game.queue_free()
+	await _frames(2)
+	get_root().get_tree().paused = false
+	Data.sell_mult = 1.0
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Після виходу з гри герой стоїть там, де стояв; «Продовжити» пропонує героя, яким грали востаннє.
+func _suite_place_restore() -> void:
+	suite("Вхід у гру: місце героя й останній персонаж")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var GameScript = load("res://scripts/game/game.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+
+	# ---- Налаштування: номер останнього слота ----
+	var keep: Dictionary = SaveSystem.load_settings()
+	check(int(keep.get("slot", 0)) >= 1 and int(keep.get("slot", 0)) <= SaveSystem.MAX_SLOTS, "налаштування завжди мають номер слота в межах")
+	var s3: Dictionary = keep.duplicate(true)
+	s3["slot"] = 3
+	SaveSystem.save_settings(s3)
+	check(int(SaveSystem.load_settings()["slot"]) == 3, "номер слота переживає запис і читання налаштувань")
+	SaveSystem.save_settings({"sound": keep["sound"], "music": keep["music"], "autosell": keep["autosell"], "pickup": keep["pickup"]})
+	check(int(SaveSystem.load_settings()["slot"]) == 3, "запис налаштувань без номера слота лишає записаний")
+	var raw_ok := true
+	for pair in [["мотлох", 1], [99, SaveSystem.MAX_SLOTS], [-4, 1], [0, 1], [2.0, 2], ["4", 4], [[1, 2], 1], [null, 1]]:
+		var cfg := ConfigFile.new()
+		cfg.load(SaveSystem.SETTINGS_PATH)
+		cfg.set_value("game", "slot", pair[0])
+		cfg.save(SaveSystem.SETTINGS_PATH)
+		var got := int(SaveSystem.load_settings()["slot"])
+		if got != int(pair[1]):
+			raw_ok = false
+			print("    слот із налаштувань %s → %d, чекали %d" % [str(pair[0]), got, int(pair[1])])
+	check(raw_ok, "сміття в налаштуваннях дає 1, число поза межами затискається в 1..%d" % SaveSystem.MAX_SLOTS)
+	var cfg_old := ConfigFile.new()
+	cfg_old.load(SaveSystem.SETTINGS_PATH)
+	if cfg_old.has_section_key("game", "slot"):
+		cfg_old.erase_section_key("game", "slot")
+	cfg_old.save(SaveSystem.SETTINGS_PATH)
+	check(int(SaveSystem.load_settings()["slot"]) == 1, "старий файл налаштувань без номера слота дає перший")
+	SaveSystem.save_settings(keep)
+	check(int(SaveSystem.load_settings()["slot"]) == int(keep["slot"]), "налаштування пристрою повернуто, як були")
+
+	# ---- Кого пропонує «Продовжити» ----
+	var hero := {"slot": 0, "job": "cossack", "level": 5}
+	var sums := [{}, hero, {"slot": 3, "broken": true}, {}, hero]
+	check(GameScript.continue_slot(sums, 2) == 2 and GameScript.continue_slot(sums, 5) == 5, "запам'ятований герой є: «Продовжити» пропонує його")
+	check(GameScript.continue_slot(sums, 1) == 2 and GameScript.continue_slot(sums, 3) == 2 and GameScript.continue_slot(sums, 4) == 2, "запам'ятований слот порожній чи не читається: пропонується перший читабельний")
+	check(GameScript.continue_slot(sums, 0) == 2 and GameScript.continue_slot(sums, 99) == 2, "номер поза межами: перший читабельний")
+	check(GameScript.continue_slot([{}, {}, {"slot": 3, "broken": true}, {}, {}], 3) == 0 and GameScript.continue_slot([], 1) == 0, "читабельного героя нема: «Продовжити» не пропонується")
+
+	# ---- Довідник ----
+	var all_text := ""
+	for e in load("res://scripts/game/wiki_service.gd")._entries("basics"):
+		all_text += str(e["text"]) + "\n"
+	check("там, де стояв" in all_text and "яким грали востаннє" in all_text, "довідник: гра пам'ятає, де стояв герой і яким героєм грали востаннє")
+
+	# ================= У грі =================
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	check(game.slot == 1, "без слотів запам'ятований герой із налаштувань не береться")
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "kleinody", "duel", "defense", "bag_full", "mana_potion", "statuses", "peril_camp"]:
+		gw.hints[k] = true
+	game.player.level = 10
+	game.player.recalc()
+	game._save_settings()
+	check(int(SaveSystem.load_settings()["slot"]) == int(keep["slot"]), "гра без слотів, записуючи налаштування, номера слота не міняє")
+
+	# 1. На мапі в місцевості
+	game.map_here = "wild_field"
+	game.map_sel = ""
+	game.enter_map()
+	await _frames(2)
+	check(game.state == game.State.MAP and game.map_here == "wild_field", "герой стоїть на мапі в Дикому Полі")
+	var pl: Dictionary = SaveSystem.load_data(TEST_SAVE)["meta"].get("place", {})
+	check(str(pl.get("here", "")) == "wild_field" and pl.get("point", true) == false, "збереження знає, де стоїть герой")
+	game._show_main_menu()
+	game.travel_to = "kyiv"  # дорога попередньої сесії не має їхати далі
+	game._continue_game()
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_here == "wild_field" and game.map_sel == "wild_field" and not game.map_at_point, "після входу герой на мапі в тій самій місцевості, місце вибране")
+	check(not game.combat.active and game.city_id != "wild_field" and game.travel_to == "", "бій сам не почався, місто не відкрилось, дорога не їде")
+	gw = game.world
+
+	# 2. Вільна точка
+	var pt := Vector2(33.25, 50.5)
+	game.map_here = game._nearest_place(pt)
+	game.map_at_point = true
+	game.map_point = pt
+	game.enter_map()
+	await _frames(2)
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(3)
+	var cur_ll = game.hud.map_view.current_ll
+	check(game.state == game.State.MAP and game.map_at_point and game.map_point.is_equal_approx(pt), "вільна точка: герой там само на мапі")
+	check(cur_ll is Vector2 and cur_ll.is_equal_approx(pt) and game.hud.map_view.current == "", "вершник намальований у тій самій точці")
+
+	# 3. Місто, що не є останнім, з якого почав
+	game.enter_city("kyiv")
+	game.hud.close_dialogue()
+	await _frames(2)
+	game.world.last_city = "poltava"
+	game.save_game()
+	game._show_main_menu()
+	game._continue_game()
+	game.hud.close_dialogue()
+	await _frames(3)
+	check(game.state == game.State.CITY and game.city_id == "kyiv" and game.map_here == "kyiv", "у місті: після входу те саме місто, а не останнє відвідане")
+
+	# 4. Хутір
+	game.enter_camp()
+	await _frames(2)
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(3)
+	check(game.state == game.State.CAMP and game.map_here == Camp.CAMP_ID, "на хуторі: після входу знову на хуторі")
+
+	# 5. Гру закрили посеред бою
+	game.enter_map()
+	game.enter_location("wild_field")
+	await _frames(3)
+	check(game.combat.active, "бій у Дикому Полі почався")
+	game.save_game()
+	game._continue_game()  # перезапуск посеред бою
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_here == "wild_field" and game.map_sel == "wild_field" and not game.combat.active, "закрили посеред бою: герой на мапі біля входу, бою нема")
+	await _frames(30)
+	check(game.state == game.State.MAP and not game.combat.active, "і за мить бій теж не почався")
+
+	# 6. Старе збереження без запису місця й сміття в записі
+	game.world.last_city = "poltava"
+	game.map_here = "wild_field"
+	game.enter_map()
+	await _frames(2)
+	var base: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	var junk_ok := true
+	for junk in ["немає", "сміття", {}, {"here": "nema_takoho_mistsia"}, {"here": 5, "point": "так", "x": "a", "y": null}, {"here": "nema", "point": true, "x": NAN, "y": 1.0}]:
+		var d: Dictionary = base.duplicate(true)
+		if str(junk) == "немає":
+			d["meta"].erase("place")
+		else:
+			d["meta"]["place"] = junk
+		SaveSystem.save(d, TEST_SAVE)
+		game._show_main_menu()
+		game._continue_game()
+		game.hud.close_dialogue()
+		await _frames(2)
+		if not (game.state == game.State.CITY and game.city_id == "poltava"):
+			junk_ok = false
+			print("    запис місця %s → стан %d, місто %s" % [str(junk), game.state, game.city_id])
+	check(junk_ok, "старе збереження без запису місця чи з незнайомим місцем: останнє місто")
+	var nan_pt: Dictionary = base.duplicate(true)
+	nan_pt["meta"]["place"] = {"here": "wild_field", "point": true, "x": NAN, "y": 1.0}
+	SaveSystem.save(nan_pt, TEST_SAVE)
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(2)
+	check(game.state == game.State.MAP and game.map_here == "wild_field" and not game.map_at_point, "зіпсована точка, а місце знайоме: герой на мапі в цьому місці")
+	var far: Dictionary = base.duplicate(true)
+	far["meta"]["place"] = {"here": "wild_field", "point": true, "x": 9999.0, "y": -9999}
+	SaveSystem.save(far, TEST_SAVE)
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(2)
+	var mv = game.hud.map_view
+	check(game.state == game.State.MAP and game.map_at_point and game.map_point.x <= mv.LON1 - mv.EDGE + 0.001 and game.map_point.y >= mv.LAT0 + mv.EDGE - 0.001, "точка за межами мапи затискається в межі")
 
 	game.queue_free()
 	await _frames(2)

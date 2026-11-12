@@ -155,6 +155,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().quit_on_go_back = false  # системне «Назад» розбирає go_back(): воно не має мовчки закривати гру посеред бою
 	var settings := SaveSystem.load_settings()
+	if use_slots:
+		slot = int(settings.get("slot", 1))  # останній герой, яким грали
 	Audio.set_sound(settings["sound"])
 	Audio.set_music(settings["music"])
 
@@ -397,6 +399,7 @@ func new_game() -> void:
 	_load_account()
 	_attach_account()
 	_new_hero({})
+	_remember_slot()
 	_make_peasant()
 	CampService.apply_effects(world, player)
 	player.gold = 20
@@ -440,6 +443,7 @@ func _make_peasant() -> void:
 func save_game() -> void:
 	if player == null:
 		return
+	meta["place"] = {"here": map_here, "point": map_at_point, "x": map_point.x, "y": map_point.y}  # де стоїть герой
 	SaveSystem.save({"player": player.to_dict(), "world": world.to_dict(), "meta": meta}, save_path)
 	_save_account()
 
@@ -510,8 +514,8 @@ var fight_notice := ""  # що сказати після завантаженн�
 
 func _continue_game() -> void:
 	if load_game():
-		map_here = world.last_city
-		enter_city(world.last_city)
+		_remember_slot()
+		_restore_place()
 		if fight_notice != "":
 			hud.show_banner(fight_notice, UI.BAD)
 			fight_notice = ""
@@ -526,6 +530,73 @@ func _continue_game() -> void:
 		hud.show_banner("Збереження не читається.\nЙого не чіпали. Онови гру або видали героя в «Персонажі».", UI.BAD)
 	else:
 		new_game()
+
+
+## Після входу в гру герой стоїть там, де стояв, коли гру закрили. Бій сам не починається: якщо гру
+## закрили посеред бою, герой стоїть на мапі біля входу. Старе збереження без цього запису чи незнайоме
+## місце: останнє відвідане місто, як раніше.
+func _restore_place() -> void:
+	# дорога й бій попередньої сесії цьому героєві не належать
+	travel_to = ""
+	travel_paused = false
+	pending_event = {}
+	escort_go = ""
+	hud.map_view.travel = {}
+	if combat.active:
+		combat.leave()
+	var p = meta.get("place", null)
+	var here := ""
+	var at_point := false
+	var ll := Vector2.ZERO
+	if p is Dictionary:
+		here = str(p.get("here", ""))
+		var x = p.get("x", 0.0)
+		var y = p.get("y", 0.0)
+		if p.get("point", false) is bool and p.get("point", false) and (x is float or x is int) and (y is float or y is int) and is_finite(float(x)) and is_finite(float(y)):
+			var mv = hud.map_view
+			at_point = true
+			ll = Vector2(clampf(float(x), mv.LON0 + mv.EDGE, mv.LON1 - mv.EDGE), clampf(float(y), mv.LAT0 + mv.EDGE, mv.LAT1 - mv.EDGE))
+	var known: bool = Data.CITIES.has(here) or Data.LOCATIONS.has(here) or Acts.SPOTS.has(here) or here == Camp.CAMP_ID
+	# після бою, що міг лишити героя чи загін пораненими, вхід у гру лікує, як раніше лікувало місто
+	player.revive()
+	world.revive_companions()
+	if at_point:
+		map_here = here if known else _nearest_place(ll)
+		map_at_point = true
+		map_point = ll
+		map_sel = ""
+		enter_map()
+	elif known and Data.CITIES.has(here):
+		map_here = here
+		enter_city(here)
+	elif here == Camp.CAMP_ID:
+		enter_camp()
+	elif known:
+		map_here = here
+		map_sel = here
+		enter_map()
+	else:
+		map_here = world.last_city
+		enter_city(world.last_city)
+
+
+## Запам'ятати в налаштуваннях героя, яким грають: наступного запуску «Продовжити» пропонує його.
+func _remember_slot() -> void:
+	if use_slots:
+		_save_settings()
+
+
+## Кого пропонує «Продовжити»: запам'ятований слот, а якщо він порожній чи не читається, перший
+## читабельний. 0, коли продовжувати нема ким. sums: список із SaveSystem.slot_summaries().
+static func continue_slot(sums: Array, remembered: int) -> int:
+	var readable := func(i: int) -> bool:
+		return i >= 1 and i <= sums.size() and sums[i - 1] is Dictionary and not sums[i - 1].is_empty() and not sums[i - 1].get("broken", false)
+	if readable.call(remembered):
+		return remembered
+	for i in range(1, sums.size() + 1):
+		if readable.call(i):
+			return i
+	return 0
 
 
 # ======================= Режими =======================
@@ -2718,7 +2789,10 @@ func _show_main_menu() -> void:
 		for s_ in sums:
 			if not s_.is_empty():
 				any = true
-		if any and not sums[slot - 1].is_empty() and not sums[slot - 1].get("broken", false):
+		var pick := continue_slot(sums, slot)
+		if any and pick > 0:
+			slot = pick  # запам'ятований слот порожній чи не читається: пропонуємо першого читабельного героя
+			save_path = SaveSystem.slot_path(slot)
 			hud.add_button("Продовжити: " + _slot_title(sums[slot - 1]), _continue_game)
 		hud.add_button("Персонажі", _show_heroes_menu)
 		if not any:
@@ -2863,6 +2937,7 @@ func transfer_apply(profile: Dictionary) -> void:
 	if use_slots:
 		slot = int(profile["heroes"][0]["slot"])
 		save_path = SaveSystem.slot_path(slot)
+		_remember_slot()
 	_show_transfer_menu("Рід перенесено. Персонажів: %d." % profile["heroes"].size(), UI.GOOD)
 
 
@@ -3017,7 +3092,10 @@ func _show_pickup_menu(back: Callable) -> void:
 
 
 func _save_settings() -> void:
-	SaveSystem.save_settings({"sound": Audio.sound_on, "music": Audio.music_on, "autosell": combat.autosell, "pickup": combat.pickup_filter})
+	var s_ := {"sound": Audio.sound_on, "music": Audio.music_on, "autosell": combat.autosell, "pickup": combat.pickup_filter}
+	if use_slots:
+		s_["slot"] = slot  # тести без слотів запам'ятованого героя не чіпають
+	SaveSystem.save_settings(s_)
 
 
 # ======================= Клавіатура й система =======================
