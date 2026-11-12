@@ -330,7 +330,7 @@ static func _smith(game) -> Control:
 	return h
 
 
-# ---------------- Дорога: вибір Козак / Волхв ----------------
+# ---------------- Дорога: вибір Козак / Волхв / Стрілець ----------------
 
 static func _path_tab(game) -> Control:
 	var PS = game.PathService
@@ -338,7 +338,7 @@ static func _path_tab(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
 	var both: bool = PS.talked_all(w)
-	var intro := "Поговори з усіма трьома — осавулом Мироном, посланницею Зореславою й сотником Лесем — і обери свою дорогу. Не поспішай: вибір назавжди (змінити зможе лише Алатир-камінь)." if not both else "Ти вислухав обох. Обирай, коли будеш готовий — або повертайся пізніше."
+	var intro := "Поговори з усіма трьома — осавулом Мироном, посланницею Зореславою й сотником Лесем — і обери свою дорогу. Не поспішай: вибір назавжди (змінити зможе лише Алатир-камінь)." if not both else "Ти вислухав усіх трьох. Обирай, коли будеш готовий, або повертайся пізніше."
 	var il := UI.label(intro, 18, UI.GOLD if not both else UI.GOOD, false)
 	il.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(il)

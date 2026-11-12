@@ -222,7 +222,7 @@ func _ready() -> void:
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
 		if player.can_change_class() and player.is_peasant():
-			hud.show_banner("Майстерність %d!\nЧас обирати дорогу: Січ чи Карпати" % jl, UI.GOLD)
+			hud.show_banner("Майстерність %d!\nЧас обирати дорогу: Січ, Батурин чи Карпати" % jl, UI.GOLD)
 		elif player.can_change_class() and jl == player.Classes.JOB_CHANGE_AT[1]:
 			hud.show_banner("Майстерність %d!\nНаставники на Січі чекають на тебе" % jl, UI.GOLD)
 		elif state != State.PLAYING:
@@ -944,7 +944,7 @@ func _path_talk(cls: String) -> void:
 	hud.show_dialogue(dlg)
 
 
-## Остаточний вибір дороги: сюжет іде далі гілкою козака або волхва.
+## Остаточний вибір дороги: сюжет іде далі гілкою козака, волхва або стрільця.
 func _path_choose(cls: String) -> void:
 	var msgs := PathService.choose(world, player, cls)
 	if msgs.is_empty():

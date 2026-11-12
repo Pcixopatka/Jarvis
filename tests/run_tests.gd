@@ -10558,7 +10558,13 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root == null and game.hall_rows("sich")[0]["ready"], "кошовий чекає на звіт у курені й сам не заговорює")
 	_hall_talk(game)
 	await _frames(2)
-	check(game.hud.dialogue_root != null and game.hud.dialogue_root.choices.is_empty(), "кошовий радить поговорити з обома, а не питає одразу")
+	check(game.hud.dialogue_root != null and game.hud.dialogue_root.choices.is_empty(), "кошовий радить поговорити з усіма трьома, а не питає одразу")
+	var trial_txt := ""
+	for st in load("res://scripts/data/story.gd").CHAPTERS[0]["steps"]:
+		if st["id"] == "trial":
+			for ln in st["end"]:
+				trial_txt += str(ln[1]) + "\n"
+	check(trial_txt != "" and "Мирон" in trial_txt and "Зореслав" in trial_txt and "Лесь" in trial_txt and "троє" in trial_txt and not ("двоє" in trial_txt) and not ("обома" in trial_txt), "кошовий у пролозі називає всіх трьох представників: Мирона, Зореславу й Леся")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
 	check(game.PathService.choosing(game.world) and game.world.story["step"] == 3, "крок «Обери дорогу» активний")
