@@ -54,8 +54,10 @@ func _process(delta: float) -> void:
 		if _fetch_t <= 0.0:
 			_fetch_t = 0.3
 			_fetch = _nearest_pickup()
-		if _fetch != null and is_instance_valid(_fetch) and not _fetch.is_queued_for_deletion():
+		if _fetch != null and is_instance_valid(_fetch) and not _fetch.is_queued_for_deletion() and _can_fetch(_fetch):
 			_goal = _fetch.position
+		else:
+			_fetch = null  # ціль зникла або її вже не взяти: одразу назад до героя
 	var to: Vector2 = _goal - position
 	var dist := to.length()
 	if dist > 900.0:
@@ -110,12 +112,18 @@ func _nearest_pickup():
 	var best = null
 	var best_d := 320.0
 	for n in combat.entities.get_children():
-		if n.get_script() == combat.PickupScript and not n.is_queued_for_deletion():
+		if n.get_script() == combat.PickupScript and not n.is_queued_for_deletion() and _can_fetch(n):
 			var d: float = n.position.distance_to(player.position)
 			if d < best_d:
 				best_d = d
 				best = n
 	return best
+
+
+## Чи варто бігти до здобичі: герой може її зараз узяти (є місце, фільтр бере) і її не викинули вручну.
+## До решти улюбленець не біжить, щоб не стояти над нею без кінця.
+func _can_fetch(n) -> bool:
+	return not n.manual and combat.loot_block(n.kind, n.item, n.manual) == ""
 
 
 ## Прямокутник у «пікселях» спрайта з темним обводом; x віддзеркалюється, коли улюбленець дивиться ліворуч.

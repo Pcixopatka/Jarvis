@@ -150,6 +150,7 @@ func _run() -> void:
 	await _suite_audit()
 	await _suite_place_restore()
 	await _suite_hero_names()
+	await _suite_pet_fetch()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -15210,5 +15211,130 @@ func _suite_hero_names() -> void:
 	await _frames(2)
 	get_root().get_tree().paused = false
 	Data.sell_mult = 1.0
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_pet_fetch() -> void:
+	suite("Улюбленці не біжать до здобичі, якої не взяти")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var DS = load("res://scripts/game/divine_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Uniques = load("res://scripts/data/uniques.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	gp.level = 30
+	gp.recalc()
+	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	SH.state(gw)["coins"] = 100000
+	check(DS.buy(gw, gp, "khovanets"), "Хованця куплено")
+	gp.pet = "pes"
+	game.enter_location("wild_field")
+	await _frames(4)
+	_clear_enemies(game)
+	var c = game.combat
+	c.autosell = false
+	c.pickup_filter = [true, true, true, true]
+	var kh = null
+	var dog = null
+	for n in c.entities.get_children():
+		if n.get_script() == c.PetScript:
+			if n.kind == "khovanets":
+				kh = n
+			elif n.kind == "pes":
+				dog = n
+	check(kh != null and dog != null, "Хованець і пес біжать за героєм у бою")
+	if kh == null or dog == null:
+		game.queue_free()
+		await _frames(3)
+		return
+	var clear_ground := func() -> void:
+		for n in c.entities.get_children():
+			if n.get_script() == c.PickupScript:
+				n.queue_free()
+	var lay := func(kind: String, item: Dictionary, manual: bool = false):
+		var pk = c.PickupScript.new()
+		pk.combat = c
+		pk.kind = kind
+		pk.item = item
+		pk.value = 1
+		pk.manual = manual
+		pk.hold = 99.0
+		pk.position = gp.position + Vector2(0, -200)
+		c.entities.add_child(pk)
+		return pk
+	clear_ground.call()
+	await _frames(2)
+	# 1. Повний запас зілля: зілля на землі не ціль, улюбленці стоять біля героя
+	gp.potions = gp.potion_max()
+	var potion = lay.call("potion", {})
+	check(kh._nearest_pickup() == null and dog._nearest_pickup() == null, "повний запас зілля: ні Хованець, ні пес не беруть зілля на землі ціллю")
+	for i in 40:
+		gp.hp = gp.max_hp
+		gp.invuln = 1.0
+		await process_frame
+	check(is_instance_valid(potion) and kh.position.distance_to(gp.position) < 110.0 and kh.position.distance_to(potion.position) > 120.0 and kh._fetch == null, "Хованець стоїть біля героя, а не над зіллям")
+	check(dog.position.distance_to(gp.position) < 110.0 and dog.position.distance_to(potion.position) > 120.0 and dog._fetch == null, "пес стоїть біля героя, а не над зіллям")
+	# Ціль стала недоступною між перевірками: улюбленець одразу кидає її
+	kh._fetch = potion
+	kh._fetch_t = 10.0
+	dog._fetch = potion
+	dog._fetch_t = 10.0
+	await process_frame
+	check(kh._fetch == null and dog._fetch == null, "недоступну ціль улюбленець кидає в тому ж кадрі, не чекаючи наступної перевірки")
+	# 2. Запас не повний: те саме зілля стає ціллю
+	gp.potions = gp.potion_max() - 1
+	check(kh._nearest_pickup() == potion and dog._nearest_pickup() == potion, "у запасі є місце: зілля знову ціль")
+	clear_ground.call()
+	await _frames(2)
+	# 3. Повна торба: звичайна річ не ціль, золота лишається ціллю
+	gp.potions = 0
+	var guard := 0
+	while not gp.bag_full() and guard < 500:
+		gp.add_item(Data.gen_item(10, 1, "boots"))
+		guard += 1
+	var magic: Dictionary = Data.gen_item(10, 1, "belt")
+	var on_ground = lay.call("item", magic)
+	check(gp.bag_full() and c.loot_block("item", magic) == "full" and kh._nearest_pickup() == null and dog._nearest_pickup() == null, "повна торба: звичайна річ на землі не ціль")
+	var gold_item: Dictionary = Uniques.make("poias_baidy", 20)
+	var gold_ground = lay.call("item", gold_item)
+	check(Data.is_precious(gold_item) and kh._nearest_pickup() == gold_ground and dog._nearest_pickup() == gold_ground, "золоту річ беруть і в повну торбу: вона ціль")
+	clear_ground.call()
+	await _frames(2)
+	gp.inventory.clear()
+	# 4. Фільтр автопідбору й викинута власноруч річ
+	c.pickup_filter = [false, true, true, true]
+	var common: Dictionary = Data.gen_item(10, 0, "boots")
+	var common_ground = lay.call("item", common)
+	check(c.loot_block("item", common) == "filter" and kh._nearest_pickup() == null and dog._nearest_pickup() == null, "річ, якої не бере фільтр, не ціль")
+	c.pickup_filter = [true, true, true, true]
+	check(kh._nearest_pickup() == common_ground, "фільтр змінили: річ знову ціль")
+	common_ground.queue_free()
+	await _frames(1)
+	var thrown = lay.call("item", Data.gen_item(10, 1, "belt"), true)
+	check(thrown.manual and kh._nearest_pickup() == null and dog._nearest_pickup() == null, "викинута власноруч річ не ціль")
+	clear_ground.call()
+	# Довідник
+	var basics := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) in ["Божі дари", "Улюбленці"]:
+			basics += str(e["text"])
+	check("Хованець не біжить" in basics and "до тієї, якої зараз не взяти" in basics, "довідник: до здобичі, якої не взяти, Хованець і пес не біжать")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
