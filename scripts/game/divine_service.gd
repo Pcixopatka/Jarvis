@@ -21,19 +21,6 @@ static func owned(world, id: String) -> bool:
 	return bool(world.shop.get("divine", {}).get(id, false))
 
 
-## Чи є в роду хоч один дар.
-static func owns_any(world) -> bool:
-	for id in Divine.ORDER:
-		if owned(world, id):
-			return true
-	return false
-
-
-## Чи показувати гнізда дарів на екрані героя: коли дари продаються або хоч один уже куплено.
-static func shown(world) -> bool:
-	return on_sale or owns_any(world)
-
-
 static func worn(player, slot: String) -> String:
 	return str(player.divine.get(slot, ""))
 

@@ -856,9 +856,7 @@ func _shop_tab_index(title: String) -> int:
 	var names := ["Червінці"]
 	for kind in ShopService.Shop.KINDS:
 		names.append(str(ShopService.Shop.KIND_NAMES[kind]))
-	if DivineService.on_sale:
-		names.append("Божі дари")  # поки дари не продаються, вкладки нема (як і в UiShop.build)
-	names.append_array(["Вбрання", "Універсал"])
+	names.append_array(["Божі дари", "Вбрання", "Універсал"])
 	return maxi(0, names.find(title))
 
 

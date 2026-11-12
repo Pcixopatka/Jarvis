@@ -29,8 +29,7 @@ static func build(game) -> Control:
 	var pages := [["Червінці", func(): return _packs(game)]]
 	for kind in Shop.KINDS:
 		pages.append([Shop.KIND_NAMES[kind], (func(): return _sets(game)) if kind == "set" else _goods.bind(game, kind)])
-	if DivineService.on_sale:  # поки дари не продаються, вкладки нема (Game._shop_tab_index рахує так само)
-		pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
+	pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
 	pages.append(["Вбрання", func(): return _costumes(game)])
 	pages.append(["Універсал", func(): return _premium(game)])
 	var title := "Крамниця   •   %s: %s" % [Shop.COIN, UI.num(ShopService.coins(game.world))]
