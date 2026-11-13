@@ -154,7 +154,7 @@ static func _complete(world, player, id: String) -> Array:
 		msgs.append({"text": ", ".join(parts), "big": false})
 	if r.has("item"):
 		var d: Dictionary = r["item"]
-		var it := Data.gen_item(int(player.level), int(d["rarity"]), d["slot"], d.get("type", ""))
+		var it := Data.gen_item(int(d["ilvl"]), int(d["rarity"]), d["slot"], d.get("type", ""))  # рівень місця кроку + 1, як у сюжеті
 		it["name"] = d["name"]
 		it["up"] = int(d.get("up", 0))
 		if not player.add_item(it):

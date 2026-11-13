@@ -423,7 +423,7 @@ const PLACE_SCHEMA := {
 	"biome": {"type": "string", "required": true},  # краєвид (biomes.json): земля, шум, ресурс, значок
 	"pos": {"type": "vector", "required": true},  # [довгота, широта]
 	"level": {"type": "int", "required": true},  # рівень нечисті (для «scale» — найнижчий)
-	"scale": {"type": "bool"},  # далекий край: рівень росте разом із героєм (Data.loc_level)
+	"scale": {"type": "bool"},  # печера з босом: рівень бою росте разом із героєм (Data.loc_level); поле — ніколи
 	"region": {"type": "string"},  # далекий край (regions.json)
 	"land": {"type": "string"},  # нова земля надважкої печери (lands.json)
 	"peril": {"type": "int"},  # надважка печера: порядковий номер (1...), відкриваються по черзі
@@ -659,7 +659,7 @@ const REWARD_ITEM := {"type": "record", "fields": {
 	"slot": {"type": "string", "required": true},  # клітинка (gear_slots.json)
 	"type": {"type": "string"},  # вид зброї (weapons.json), лише для зброї
 	"rarity": {"type": "int", "required": true},  # rank із rarities.json
-	"ilvl": {"type": "int"},  # рівень речі (у переказах його нема: річ рівня героя)
+	"ilvl": {"type": "int"},  # рівень речі: рівень місця кроку + 1
 	"up": {"type": "int"},  # заточка
 	"name": {"type": "string", "required": true},
 }}
@@ -2341,6 +2341,10 @@ static func _mob_links(rows: Dictionary) -> Array:
 	for u in ids("golden"):
 		for b in row("golden", u).get("bosses", []):
 			need.call(b, "золота річ %s" % u, "boss")
+			# ступінь речі — ступінь її босів: бос вище в історії не дає нижчого ступеня, ніж бос перед ним
+			var bt := int(rows.get(str(b), _EMPTY).get("boss", _EMPTY).get("tier", 0))
+			if bt > 0 and bt != int(row("golden", u).get("tier", 0)):
+				out.append("золота річ %s: «tier» %d, а її бос «%s» має ступінь %d (boss.tier у mobs.json)" % [u, int(row("golden", u).get("tier", 0)), b, bt])
 	for a in ids("artifacts"):
 		need.call(row("artifacts", a).get("boss", ""), "артефакт %s" % a, "boss")
 	for s in ids("souls"):
@@ -2549,8 +2553,8 @@ static func _world_rules(name: String, rows: Dictionary) -> Array:
 					out.append("%s: надважка печера має і «peril», і «land»" % where)
 				if R.has("peril") and not dungeon:
 					out.append("%s: надважкою буває лише печера" % where)
-				if R.has("region") != R.get("scale", false):
-					out.append("%s: місце далекого краю має і «region», і «scale» (росте з героєм), а інші — жодного" % where)
+				if R.get("scale", false) and (not dungeon or R.has("peril") or R.get("endless", false)):
+					out.append("%s: «scale» (росте з героєм) буває лише в печери з босом, не надважкої й не безкінечної; поле має сталий рівень" % where)
 				if R.get("endless", false) != R.has("floors"):
 					out.append("%s: безкінечне місце («endless») описує поверхи в «floors», і лише воно" % where)
 				if R.get("tower", false) and not R.get("endless", false):
@@ -3068,7 +3072,7 @@ const QUEST_OBJECTIVES := {
 ## Які поля нагороди читає служба кожної таблиці (нагорода кроку, вибору й бонусу) і чи річ має свій рівень («ilvl»).
 const QUEST_REWARDS := {
 	"story": {"keys": ["gold", "xp", "rank", "class", "banner", "skills", "stats", "loyalty", "item"], "ilvl": true},
-	"legend_steps": {"keys": ["gold_lvl", "trophy", "item"], "ilvl": false},
+	"legend_steps": {"keys": ["gold_lvl", "trophy", "item"], "ilvl": true},
 	"saga": {"keys": ["gold", "trophy", "xp", "item"], "ilvl": true},
 	"side": {"keys": ["gold", "xp", "trophy", "loyalty", "res", "item"], "ilvl": true},
 }
@@ -3244,7 +3248,7 @@ static func _reward_rules(where: String, r: Dictionary, allowed: Array, ilvl: bo
 		var it: Dictionary = r["item"]
 		_not_blank(it, ["slot", "type", "name"], where + ".item", out)
 		if it.has("ilvl") != ilvl:
-			out.append("%s.item: «ilvl» %s" % [where, "потрібен" if ilvl else "не пишуть: річ рівня героя"])
+			out.append("%s.item: «ilvl» %s" % [where, "потрібен" if ilvl else "не пишуть"])
 		_positive(it, ["ilvl"], where + ".item", out)
 		_positive(it, ["up", "rarity"], where + ".item", out, true)
 

@@ -65,8 +65,9 @@ static func locked_reason(id: String, world, player) -> String:
 			if not _svc("depth_service").unlocked(world, lvl):
 				return _svc("depth_service").lock_text(world, lvl, "Відкриється", true).trim_suffix(".")
 		"far":
-			if lvl < int(E.get("level", 0)):
-				return "Відкриється з %d-го рівня" % int(E["level"])
+			var far_from: int = _svc("far_service").open_from()  # найнижчий рівень місць далеких країв
+			if lvl < far_from:
+				return "Відкриється з %d-го рівня" % far_from
 		"village_raid", "caravan", "wounded", "night", "treasure", "fair", "siege":
 			if peasant or _chapter(world) < 1:
 				return "Відкриється з першого розділу"
@@ -327,7 +328,7 @@ static func place(id: String, world, here: String = "") -> String:
 			var best := ""
 			var best_d := INF
 			for loc in Data.place_ids():
-				if Data.place(loc).get("scale", false):
+				if Data.place(loc).has("region"):  # далеке місце: має край
 					var d: float = _ll(here).distance_to(Data.place(loc)["pos"])
 					if d < best_d:
 						best_d = d

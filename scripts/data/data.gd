@@ -875,7 +875,7 @@ static func is_region(id: String) -> bool:
 
 
 ## Далекі краї в порядку показу (порядок файлу): чотири сторони світу довкола старої мапи,
-## три краї Московії та Семигород за Карпатами. Їхні місцевості ростуть із рівнем героя ("scale").
+## три краї Московії та Семигород за Карпатами. Місце краю має «region» (див. FarService.is_far).
 static func region_ids() -> Array:
 	return GameDB.ids("regions")
 
@@ -897,7 +897,18 @@ static func hall_name(city_id: String) -> String:
 	return str(city(city_id).get("hall", ""))
 
 
-## Рівень місцевості для героя. Далекі краї ("scale") ростуть разом із ним: рівень не нижчий за позначений.
+## Мета зачистки поля L (запис місця): «goal» самого запису, а без нього FIELD_GOAL_BASE + FIELD_GOAL_PER_LEVEL ×
+## рівень місця, але не більше far.goal_max (FarService.GOAL_MAX). Одне правило для бою, швидкого походу, місії й ночі:
+## рахується від рідного рівня місця, тож бій, підтягнутий місією чи ніччю, мети не роздуває.
+static func field_goal(L: Dictionary) -> int:
+	if L.has("goal"):
+		return int(L["goal"])
+	var cap: int = load("res://scripts/game/far_service.gd").GOAL_MAX
+	return mini(cap, FIELD_GOAL_BASE + int(L["level"]) * FIELD_GOAL_PER_LEVEL)
+
+
+## Рівень бою в місці для героя. Печера з босом («scale») росте разом із ним: рівень не нижчий за позначений,
+## тож бос дає золоту річ до кінця гри. Поле має сталий рівень (бій за місією підтягує QuestEngine.fight_mods).
 static func loc_level(L: Dictionary, hero_level: int) -> int:
 	return maxi(int(L["level"]), hero_level) if L.get("scale", false) else int(L["level"])
 

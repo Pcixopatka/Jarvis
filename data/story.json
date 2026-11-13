@@ -203,7 +203,7 @@
 				"slot": "weapon",
 				"type": "staff",
 				"rarity": 1,
-				"ilvl": 3,
+				"ilvl": 4,
 				"up": 0,
 				"name": "Посох Велемира"
 			}
@@ -295,7 +295,7 @@
 				"slot": "weapon",
 				"type": "bow",
 				"rarity": 1,
-				"ilvl": 3,
+				"ilvl": 4,
 				"up": 0,
 				"name": "Сердюцький лук"
 			}

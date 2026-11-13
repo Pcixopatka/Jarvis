@@ -257,7 +257,7 @@ func enter(id: String, companions: Array, plague_level: int = 0, extra: Dictiona
 	room = 1 if loc["type"] == "dungeon" else 0
 	run_time = 0.0
 	field_kills = 0
-	field_goal = int(loc.get("goal", Data.FIELD_GOAL_BASE + int(loc["level"]) * Data.FIELD_GOAL_PER_LEVEL))
+	field_goal = int(extra.get("goal", Data.field_goal(Data.place(id))))  # подія може задати свою мету; інакше — правило місця
 	field_cleared = false
 	spawn_timer = 1.0
 	player.unbreak_ready = true
@@ -1121,7 +1121,7 @@ func _update_field(delta: float) -> void:
 				kind = "zarazhenyi"  # зараза жене своїх солдатів
 			spawn_enemy(kind, loc["level"] + (1 if randf() < 0.15 else 0))
 			_maybe_elite(_last_enemy())
-			# Далекий край рівня героя: нечисть часто суне парами, щоб добре вдягнений герой не чекав на неї
+			# Бій, підтягнутий до героя (місія, ніч у полі): нечисть часто суне парами, щоб добре вдягнений герой не чекав на неї
 			if loc.has("hero_level") and randf() < FIELD_PAIR_CHANCE and alive_enemy_count() < _field_cap():
 				spawn_enemy(en[randi() % en.size()], loc["level"])
 				_maybe_elite(_last_enemy())
@@ -1133,8 +1133,8 @@ func _field_cap() -> int:
 	return FIELD_ALIVE_BASE + _pace_level() / FIELD_ALIVE_STEP
 
 
-## Від якого рівня рахувати, скільки нечисті тримати на арені. Далекі краї ростуть із героєм ("base_level" —
-## рівень самого краю), але юрба не має розростатися з ним: на 90-му рівні сотня ворогів задушила б телефон.
+## Від якого рівня рахувати, скільки нечисті тримати на арені. Печери з босом і бій за місією ростуть із героєм
+## ("base_level" — рівень самого місця), але юрба не має розростатися з ним: на 90-му рівні сотня ворогів задушила б телефон.
 func _pace_level() -> int:
 	return mini(int(loc.get("base_level", loc["level"])), PACE_MAX)
 

@@ -854,11 +854,15 @@ func enter_location(id: String) -> void:
 	if ChallengeService.pending(world, "trail"):
 		extra["trail_sure"] = true  # виклик просить стежку слідів — вона буде в цьому ж поході
 	if Data.is_place(id):
-		if extra.get("night", false) and not FarService.is_far(Data.place(id)):
-			extra.merge(FarService.night_mods(Data.place(id), player))  # нічний похід підтягується до героя
-		extra.merge(FarService.mods(Data.place(id), player))  # далекі краї ростуть із рівнем героя
+		var here: Dictionary = Data.place(id)
+		# нічний похід підтягується до героя; далекі печери й так ростуть із ним (як і досі, ніч їх не чіпає)
+		if extra.get("night", false) and not (FarService.is_far(here) and FarService.grows(here)):
+			extra.merge(FarService.night_mods(here, player))
+		extra.merge(FarService.mods(here, player))  # печери з босом ростуть із героєм, поле далекого краю — мета зачистки
 		extra.merge(PerilService.combat_mods(id))  # надважка печера: міцніший бос і його лють
-		extra.merge(QuestEngine.fight_mods(world, player, id), true)  # місце місії: бій не нижче рівня місії
+		var mission: Dictionary = QuestEngine.fight_mods(world, player, id)  # місце місії: бій не нижче рівня місії
+		if int(mission.get("level", 0)) > int(extra.get("level", 0)):
+			extra.merge(mission, true)  # печеру, що вже виросла з героєм, місія нижчого рівня не послаблює
 		var trial_lvl: int = SpecService.fight_level(world, player, id)  # місце випробування: бій не нижче рівня героя
 		if trial_lvl > 0:
 			extra.merge(QuestEngine.raise_mods(id, maxi(trial_lvl, int(extra.get("level", 0))), player), true)

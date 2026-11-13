@@ -1,6 +1,7 @@
 extends "res://tools/balance_sim.gd"
-## Далекі краї: бот проходить кожну нову місцевість і печеру на рівні краю та значно вище.
-## Місцевості міряються з героєм, тож час і шкода мають бути схожі на будь-якому рівні.
+## Далекі краї: бот проходить кожну місцевість і печеру краю на її рівні та значно вище.
+## Печери з босом міряються з героєм, тож час і шкода там мають бути схожі на будь-якому рівні; поле має
+## сталий рівень, тож вище за нього воно легшає.
 ## Запуск: SIM_CLASS=cossack SIM_LEVELS=0,30,66 godot --headless --path . -s res://tools/far_sim.gd --fixed-fps 60
 ## Рівень 0 означає «рівень самого краю». SIM_LOCS=oleshky,zmiinyi — лише ці місця.
 func _run() -> void:
@@ -17,7 +18,7 @@ func _run() -> void:
 		levels.append(int(l))
 	var all := []
 	for id in Data.place_ids():
-		if Data.place(id).get("scale", false):
+		if Data.place(id).has("region"):
 			all.append(id)
 	var locs: Array = _env_list("SIM_LOCS", all)
 	for loc_id in locs:

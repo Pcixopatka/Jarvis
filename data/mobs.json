@@ -81,7 +81,7 @@
 		"boss": {
 			"num": 2003,
 			"name": "Вовкулака-ватажок",
-			"tier": 1,
+			"tier": 2,
 			"mechanic": "boss/vovkulaka",
 			"wiki": {
 				"text": "Ватажок вовчої зграї, що стереже скарби Довбуша. Робить довгий ривок по прямій і кличе вовкулак.",
@@ -142,7 +142,7 @@
 		"boss": {
 			"num": 2004,
 			"name": "Чаклун Путіноїда",
-			"tier": 2,
+			"tier": 1,
 			"mechanic": "boss/chaklun",
 			"stones": ["zabuttia"],
 			"wiki": {
@@ -217,7 +217,7 @@
 		"boss": {
 			"num": 2006,
 			"name": "Путіноїд, кремлівський упир-цар",
-			"tier": 4,
+			"tier": 5,
 			"phase2": true,
 			"mechanic": "boss/putinoid",
 			"stones": ["alatyr", "zabuttia"],
@@ -277,7 +277,7 @@
 		"boss": {
 			"num": 2009,
 			"name": "Лихо Однооке",
-			"tier": 4,
+			"tier": 3,
 			"phase2": true,
 			"mechanic": "boss/lykho",
 			"stones": ["zabuttia"],
@@ -340,7 +340,7 @@
 		"boss": {
 			"num": 2012,
 			"name": "Вій, володар підземного мороку",
-			"tier": 4,
+			"tier": 2,
 			"phase2": true,
 			"mechanic": "boss/vii",
 			"stones": ["alatyr"],
@@ -447,7 +447,7 @@
 		"boss": {
 			"num": 2013,
 			"name": "Морський цар",
-			"tier": 4,
+			"tier": 3,
 			"phase2": true,
 			"mechanic": "boss/morskyi_tsar",
 			"wiki": {
@@ -468,7 +468,7 @@
 		"boss": {
 			"num": 2014,
 			"name": "Шубін, господар копалень",
-			"tier": 4,
+			"tier": 3,
 			"phase2": true,
 			"mechanic": "boss/shubin",
 			"wiki": {
@@ -490,7 +490,7 @@
 		"boss": {
 			"num": 2015,
 			"name": "Біла Пані Підгорецька",
-			"tier": 3,
+			"tier": 2,
 			"phase2": true,
 			"mechanic": "boss/bila_pani",
 			"wiki": {
@@ -967,7 +967,7 @@
 		"boss": {
 			"num": 2016,
 			"name": "Пушкар із Цар-гарматою",
-			"tier": 3,
+			"tier": 5,
 			"phase2": true,
 			"mechanic": "boss/pushkar",
 			"wiki": {
@@ -1030,7 +1030,7 @@
 		"boss": {
 			"num": 2019,
 			"name": "Карачун, дух найдовшої ночі",
-			"tier": 5,
+			"tier": 4,
 			"phase2": true,
 			"mechanic": "boss/karachun",
 			"wiki": {

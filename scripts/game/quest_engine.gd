@@ -547,7 +547,7 @@ static func raise_mods(loc_id: String, lvl: int, player) -> Dictionary:
 	if lvl <= base:
 		return {}
 	# мета зачистки рахується від рідного рівня місця: інакше на 99-му рівні просили б 535 вбивств
-	var goal: int = mini(load("res://scripts/game/far_service.gd").GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
+	var goal: int = Data.field_goal(Data.place(loc_id))
 	return {"level": lvl, "hero_level": int(player.level), "base_level": base, "goal": goal}
 
 

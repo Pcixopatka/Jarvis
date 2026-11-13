@@ -107,7 +107,7 @@ static func kills(L: Dictionary) -> int:
 		for room in range(1, int(L["rooms"]) + 1):
 			n += Data.DUNGEON_ROOM_BASE + room * Data.DUNGEON_ROOM_PER
 		return n
-	return int(L.get("goal", mini(FarService.GOAL_MAX, Data.FIELD_GOAL_BASE + int(L["level"]) * Data.FIELD_GOAL_PER_LEVEL)))
+	return Data.field_goal(L)
 
 
 ## Провести швидкий похід: видати здобич і зарахувати його. Повертає підсумок:

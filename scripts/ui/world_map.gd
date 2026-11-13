@@ -566,7 +566,7 @@ func _draw() -> void:
 		draw_circle(c, r, Color(0.96, 0.92, 0.8, 0.9))
 		draw_arc(c, r, 0, TAU, 24, Color(0.75, 0.2, 0.15) if danger else INK, 2.0)
 		_icon(_loc_icon(L), c, r * 1.5)
-		# далекі краї ростуть із героєм: позначка «16+» — із якого рівня туди можна
+		# печери з босом ростуть із героєм: позначка «21+» — із якого рівня туди можна; поле має сталий рівень
 		var lvl_text := ("%d+" % int(L["level"])) if L.get("scale", false) else str(L["level"])
 		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%s)" % [L["name"], lvl_text], label_fs, Color(0.6, 0.12, 0.08) if danger else INK])
 	var city_fs := int(clampf(18.0 * k, 13, 32))

@@ -46,7 +46,7 @@ static func hp(level: int) -> float:
 ## player — хто веде: нечисть підтягується до його рівня й сили (без нього — за рівнем місця, для довідок).
 static func battle_loc(q: Dictionary, player = null) -> Dictionary:
 	var L: Dictionary = Data.place(q["loc"])
-	var lvl := maxi(int(L["level"]), int(q.get("lvl", 0)) if L.get("scale", false) else 0)  # у далеких краях — за рівнем героя на час завдання
+	var lvl := Data.loc_level(L, int(q.get("lvl", 0)))  # печера, що росте з героєм, — за його рівнем на час завдання; поле — свій рівень
 	var lift := {}
 	var Far = load("res://scripts/game/far_service.gd")
 	if player != null:

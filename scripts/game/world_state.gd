@@ -146,7 +146,7 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 				locs.append(id)
 	var loc_id: String = locs[randi() % locs.size()]
 	var L: Dictionary = Data.place(loc_id)
-	# Далекі краї ростуть із героєм: нагорода за завдання туди — за його рівнем, обсяг — за рівнем краю
+	# Печера з босом росте з героєм: нагорода за завдання туди — за його рівнем, обсяг — за рівнем місця
 	var eff: int = Data.loc_level(L, hero_level)
 	var q := {"id": next_quest_id, "city": city, "loc": loc_id, "progress": 0, "lvl": eff}
 	next_quest_id += 1

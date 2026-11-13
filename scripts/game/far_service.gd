@@ -1,9 +1,10 @@
 extends RefCounted
-## Далекі краї: Сіверщина, Волинь і Поділля, Слобожанщина й Донеччина, Чорномор'я і Крим.
-## Їхні місцевості мають позначку "scale": рівень не нижчий за вказаний у даних і росте разом із героєм.
-## Сила нечисті — звичайна мірка її рівня (Data.enemy_std_*), досвід і здобич теж за рівнем. Тому сюди є чого
-## ходити і на 20-му рівні, і на 90-му, а краще спорядження тут справді відчувається.
-## Героєві, слабшому за позначений рівень, край не піддається: там звичайна нечисть цього рівня.
+## Далекі краї: Сіверщина, Волинь і Поділля, Слобожанщина й Донеччина, Чорномор'я і Крим, Московія, Семигород.
+## Далеке місце — те, що має «region» (край з regions.json): за ним ідуть правила краю (мета зачистки поля,
+## подія «Далекий край», печери для «Шляху козака», довідник і панель мапи).
+## Росте з героєм інше: позначка «scale». Її мають лише печери з босом (і далекі, і сюжетні): рівень бою
+## не нижчий за рівень печери й підтягується до героя (Data.loc_level), тож кожен бос до кінця гри дає свою
+## золоту річ. Поле має сталий рівень: нечисть і здобич там рівно цього рівня (крім бою за місією).
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
@@ -25,28 +26,33 @@ static var EVENT_FULL: int  # …до повної сили на цьому
 static var GOAL_MAX: int  # більше стількох нечисті на зачистку не просимо, хоч який рівень
 
 
+## Чи місце в далекому краї (має «region»).
 static func is_far(L: Dictionary) -> bool:
+	return L.has("region")
+
+
+## Чи місце росте з героєм (позначка «scale»: печера з босом).
+static func grows(L: Dictionary) -> bool:
 	return bool(L.get("scale", false))
 
 
-## Чи герой уже доріс до цього краю (тоді нечисть там його рівня).
+## Чи герой уже доріс до цієї печери (тоді нечисть і бос там його рівня).
 static func matched(L: Dictionary, player) -> bool:
-	return is_far(L) and player.level >= int(L["level"])
+	return grows(L) and player.level >= int(L["level"])
 
 
-## Додатки до опису місцевості для бою (змішуються з Data.place(id) у combat.enter).
-## Нечисть далекого краю має рівень героя. Її сила — звичайна мірка цього рівня (Data.enemy_std_*),
-## тож краще вдягненому героєві тут легше, а гірше вдягненому важче.
+## Додатки до опису місця для бою (змішуються з Data.place(id) у combat.enter).
+## Печера, що росте з героєм: нечисть має рівень героя, її сила — звичайна мірка цього рівня
+## (Data.enemy_std_*), тож краще вдягненому героєві тут легше, а гірше вдягненому важче.
+## Мета зачистки поля — одне правило для всіх полів (Data.field_goal), тут її нема.
 static func mods(L: Dictionary, player) -> Dictionary:
-	if not is_far(L):
-		return {}
 	var base := int(L["level"])
-	var out := {"base_level": base}
-	if L["type"] != "dungeon":
-		out["goal"] = mini(GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
-	if player.level >= base:
-		out["level"] = player.level
-		out["hero_level"] = player.level
+	var out := {}
+	if grows(L):
+		out["base_level"] = base
+		if player.level >= base:
+			out["level"] = player.level
+			out["hero_level"] = player.level
 	return out
 
 
@@ -106,8 +112,6 @@ static func night_mods(L: Dictionary, player) -> Dictionary:
 	if L["type"] != "dungeon" and player.level > base:
 		out["base_level"] = base
 		out["level"] = player.level
-		if not L.has("goal"):
-			out["goal"] = mini(GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
 	return out
 
 
@@ -130,6 +134,16 @@ static func places(region: String) -> Dictionary:
 		if Data.place(id).get("region", "") == region:
 			out["dungeons" if Data.place(id)["type"] == "dungeon" else "fields"].append(id)
 	return out
+
+
+## З якого рівня героя відкриваються далекі краї взагалі (подія «Далекі краї» на дошці подій): найнижчий
+## рівень серед місць, що мають край. Береться з даних, а не з запису події.
+static func open_from() -> int:
+	var lvl := 999
+	for id in Data.place_ids():
+		if Data.place(id).has("region"):
+			lvl = mini(lvl, int(Data.place(id)["level"]))
+	return lvl
 
 
 ## З якого рівня героя край відкривається: найнижчий рівень його місць.

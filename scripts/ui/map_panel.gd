@@ -16,7 +16,7 @@ const LEGEND := [
 	["", "!", Color(1.0, 0.8, 0.1, 0.5), "Бліда зірка чи «!» над містом: місія вже чекає там, але потрібен вищий рівень героя."],
 	["", "✓", Color(0.3, 0.8, 0.3), "Зелена галочка: місто, де здати виконане завдання чи взяти нагороду за розшук. Число поруч каже, скільки."],
 	["flag", "", Color.WHITE, "Прапорець: тут ти зараз."],
-	["", "(4)", Color(0.9, 0.85, 0.75), "Число в дужках: рівень місця. «16+» означає край, що росте разом із героєм."],
+	["", "(4)", Color(0.9, 0.85, 0.75), "Число в дужках: рівень місця. Поле має сталий рівень. «21+» стоїть лише біля печер із босом: вони ростуть разом із героєм."],
 	["", "◯", Color(0.75, 0.2, 0.15), "Червона рамка й назва: місце надто сильне для тебе."],
 	["", "◯", Color(1.0, 0.3, 0.2), "Червоне кільце, що пульсує, і напис «Облога!»: місто чи хутір треба боронити. Число каже, скільки походів воно ще протримається."],
 	["raid", "", Color.WHITE, "Великий значок із числом: подія світу. Набіг, валка, полон чи поранений чекають стільки походів."],
@@ -325,16 +325,16 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	var kind_text: String = ("Печера • %d кімнат • бос: %s" % [L["rooms"], GameDB.boss_name(L["boss"])]) if L["type"] == "dungeon" else "Дика місцевість"
 	v.add_child(_wrapped(kind_text, 17, UI.MUTED))
 	var danger: bool = L["level"] > player.level + 2
-	if L.get("scale", false):
-		var Far = load("res://scripts/game/far_service.gd")
-		var region: String = str(Data.region(str(L.get("region", ""))).get("name", "Далекий край"))
-		v.add_child(_wrapped("%s  •  з %d-го рівня%s" % [region, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
+	var Far = load("res://scripts/game/far_service.gd")
+	var where: String = (str(Data.region(str(L["region"])).get("name", "Далекий край")) + "  •  ") if L.has("region") else ""
+	if Far.grows(L):
+		v.add_child(_wrapped("%sз %d-го рівня%s" % [where, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
 		if Far.matched(L, player):
-			v.add_child(_wrapped("Далекий край: нечисть тут твого %d-го рівня, з повною силою, досвідом і здобиччю цього рівня." % player.level, 16, UI.GOOD))
+			v.add_child(_wrapped("Печера росте з тобою: нечисть і бос тут твого %d-го рівня, з повною силою, досвідом і здобиччю цього рівня." % player.level, 16, UI.GOOD))
 		else:
-			v.add_child(_wrapped("Далекий край: коли доростеш до %d-го рівня, він ростиме разом із тобою." % int(L["level"]), 16, UI.MUTED))
+			v.add_child(_wrapped("Печера росте з тобою: коли доростеш до %d-го рівня, бос стане твого рівня й далі даватиме свою золоту річ." % int(L["level"]), 16, UI.MUTED))
 	else:
-		v.add_child(_wrapped("Рівень місцевості: %d%s" % [L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
+		v.add_child(_wrapped("%sРівень місцевості: %d%s" % [where, L["level"], "  — небезпечно!" if danger else ""], 19, UI.BAD if danger else UI.TEXT))
 	_threat_line(v, player, Data.loc_level(L, int(player.level)))
 	v.add_child(_wrapped(L["desc"], 18, UI.TEXT))
 	var pl: int = load("res://scripts/game/plague_service.gd").level(world, sel)

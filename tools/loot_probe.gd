@@ -1,6 +1,7 @@
 extends SceneTree
 ## Здобич за годину. Розігрує багато годин бою за правилами самої гри (ті самі сталі й служби, що в Combat._drop_loot):
-## речі за рідкістю, золоті речі, артефакти, душі й камені долі в далекому полі та в печері далекого краю.
+## речі за рідкістю, золоті речі, артефакти, душі й камені долі в полі далекого краю свого рівня та в печері далекого краю.
+## Поле має сталий рівень, тож рахуємо так, наче герой ходить у поле свого рівня (поля стоять на кожному відрізку 1–80).
 ## Темп узято з симуляцій для героя в доброму спорядженні (docs/balance.md), плюс час на дорогу, здобич і місто.
 ##
 ## Запуск:  godot --headless --path . -s res://tools/loot_probe.gd
@@ -21,7 +22,6 @@ const DepthService := preload("res://scripts/game/depth_service.gd")
 ## Секунд бою на одну зачистку: герой у доброму спорядженні, місце свого рівня (tools/far_sim.gd).
 const PACE := {20: {"field": 100.0, "dungeon": 100.0}, 45: {"field": 135.0, "dungeon": 90.0},
 	75: {"field": 125.0, "dungeon": 40.0}, 98: {"field": 90.0, "dungeon": 50.0}}
-const FIELD_ID := "perekop"
 const DUNGEON_ID := "bakhmut_kopalni"
 const RARITY := ["звичайні", "добротні", "рідкісні", "легендарні"]
 
@@ -102,8 +102,7 @@ func _level(lvl: int, hours: int, overhead: float) -> void:
 	var pace: Dictionary = _pace(lvl)
 	var p = _hero(lvl)
 	# ---- Поле далекого краю ----
-	var FL: Dictionary = Data.place(FIELD_ID)
-	var goal: int = mini(110, Data.FIELD_GOAL_BASE + int(FL["level"]) * Data.FIELD_GOAL_PER_LEVEL)
+	var goal: int = mini(110, Data.FIELD_GOAL_BASE + lvl * Data.FIELD_GOAL_PER_LEVEL)  # поле свого рівня
 	var field_runs: float = 3600.0 / (float(pace["field"]) + overhead)
 	var reg = _foe("zarazhenyi", lvl, false)
 	var eli = _foe("zarazhenyi", lvl, false, true)

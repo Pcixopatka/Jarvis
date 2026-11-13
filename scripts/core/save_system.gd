@@ -230,7 +230,33 @@ static func migrate(d: Dictionary) -> Dictionary:
 			d["meta"]["job_bonus"] = got  # банер при першому вході (Game._continue_game)
 		v = 13
 	d["version"] = v
+	refresh_golden(d)
 	return d
+
+
+# ---------- Золоті речі: головний бонус за нинішнім ступенем ----------
+
+## Головний бонус золотої речі несе множник її ступеня (Uniques.make), а ступінь лежить у записі golden.json, не в
+## збереженні. Коли ступінь речі змінено в даних (ступені йдуть за рівнями босів), наявна річ того самого id і рівня
+## дістає головний бонус нового ступеня. Усе інше (властивості, перекований бонус, заточка) не змінюється. Діє при
+## кожному читанні збереження й нічого не міняє, якщо речі вже такі, як треба; версія збереження та сама.
+## Повертає, скільки речей змінено.
+static func refresh_golden(node) -> int:
+	var n := 0
+	if node is Array:
+		for x in node:
+			n += refresh_golden(x)
+	elif node is Dictionary:
+		if _is_item(node):
+			if Uniques.is_unique(node) and Uniques.has(str(node["unique"])):
+				var base: Dictionary = Uniques.make(str(node["unique"]), int(node.get("ilvl", 1)))["base"]
+				if var_to_str(base) != var_to_str(node["base"]):
+					node["base"] = base
+					return 1
+			return 0
+		for k in node:
+			n += refresh_golden(node[k])
+	return n
 
 
 # ---------- v13: вища майстерність ----------

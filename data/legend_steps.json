@@ -54,7 +54,7 @@
 		"reward": {
 			"gold_lvl": 150,
 			"trophy": 5,
-			"item": {"slot": "belt", "rarity": 3, "up": 1, "name": "Пояс Кожум'яки"}
+			"item": {"slot": "belt", "rarity": 3, "ilvl": 10, "up": 1, "name": "Пояс Кожум'яки"}
 		}
 	},
 	"dovbush_1": {
@@ -130,7 +130,7 @@
 		"reward": {
 			"gold_lvl": 250,
 			"trophy": 8,
-			"item": {"slot": "belt", "rarity": 3, "up": 2, "name": "Черес Довбуша"}
+			"item": {"slot": "belt", "rarity": 3, "ilvl": 22, "up": 2, "name": "Черес Довбуша"}
 		}
 	},
 	"solovei_1": {
@@ -201,7 +201,7 @@
 		"reward": {
 			"gold_lvl": 280,
 			"trophy": 8,
-			"item": {"slot": "amulet", "rarity": 3, "up": 2, "name": "Солов'їний манок"}
+			"item": {"slot": "amulet", "rarity": 3, "ilvl": 26, "up": 2, "name": "Солов'їний манок"}
 		}
 	},
 	"vii_1": {
@@ -270,7 +270,7 @@
 		"reward": {
 			"gold_lvl": 300,
 			"trophy": 10,
-			"item": {"slot": "amulet", "rarity": 3, "up": 3, "name": "Оберіг бурсака"}
+			"item": {"slot": "amulet", "rarity": 3, "ilvl": 30, "up": 3, "name": "Оберіг бурсака"}
 		}
 	},
 	"bila_pani_1": {
@@ -318,7 +318,7 @@
 		"reward": {
 			"gold_lvl": 300,
 			"trophy": 10,
-			"item": {"slot": "head", "rarity": 3, "up": 2, "name": "Вінець Білої Пані"}
+			"item": {"slot": "head", "rarity": 3, "ilvl": 33, "up": 2, "name": "Вінець Білої Пані"}
 		}
 	},
 	"shubin_1": {
@@ -373,7 +373,7 @@
 		"reward": {
 			"gold_lvl": 320,
 			"trophy": 10,
-			"item": {"slot": "body", "rarity": 3, "up": 3, "name": "Шахтарський кожух"}
+			"item": {"slot": "body", "rarity": 3, "ilvl": 43, "up": 3, "name": "Шахтарський кожух"}
 		}
 	},
 	"morskyi_tsar_1": {
@@ -420,7 +420,7 @@
 		"reward": {
 			"gold_lvl": 350,
 			"trophy": 12,
-			"item": {"slot": "boots", "rarity": 3, "up": 3, "name": "Чоботи морехода"}
+			"item": {"slot": "boots", "rarity": 3, "ilvl": 48, "up": 3, "name": "Чоботи морехода"}
 		}
 	},
 	"lykho_1": {
@@ -471,7 +471,7 @@
 		"reward": {
 			"gold_lvl": 420,
 			"trophy": 14,
-			"item": {"slot": "amulet", "rarity": 3, "up": 3, "name": "Оберіг від лиха"}
+			"item": {"slot": "amulet", "rarity": 3, "ilvl": 51, "up": 3, "name": "Оберіг від лиха"}
 		}
 	},
 	"lisovyi_did_1": {
@@ -522,7 +522,7 @@
 		"reward": {
 			"gold_lvl": 420,
 			"trophy": 14,
-			"item": {"slot": "boots", "rarity": 3, "up": 3, "name": "Постоли від блуду"}
+			"item": {"slot": "boots", "rarity": 3, "ilvl": 55, "up": 3, "name": "Постоли від блуду"}
 		}
 	},
 	"idolyshche_1": {
@@ -598,7 +598,7 @@
 		"reward": {
 			"gold_lvl": 520,
 			"trophy": 20,
-			"item": {"slot": "head", "rarity": 3, "up": 4, "name": "Шапка непроханого гостя"}
+			"item": {"slot": "head", "rarity": 3, "ilvl": 60, "up": 4, "name": "Шапка непроханого гостя"}
 		}
 	},
 	"karachun_1": {
@@ -654,7 +654,7 @@
 		"reward": {
 			"gold_lvl": 520,
 			"trophy": 20,
-			"item": {"slot": "body", "rarity": 3, "up": 4, "name": "Кожух сонцевороту"}
+			"item": {"slot": "body", "rarity": 3, "ilvl": 64, "up": 4, "name": "Кожух сонцевороту"}
 		}
 	},
 	"drakula_1": {
@@ -729,7 +729,7 @@
 		"reward": {
 			"gold_lvl": 500,
 			"trophy": 20,
-			"item": {"slot": "body", "rarity": 3, "up": 4, "name": "Плащ нічного мисливця"}
+			"item": {"slot": "body", "rarity": 3, "ilvl": 71, "up": 4, "name": "Плащ нічного мисливця"}
 		}
 	}
 }

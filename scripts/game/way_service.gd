@@ -218,7 +218,7 @@ static func _dungeon(player) -> String:
 	var easiest_lvl := 9999
 	for id in Data.place_ids():
 		var L: Dictionary = Data.place(id)
-		if L["type"] != "dungeon" or L.get("endless", false) or L.get("scale", false) or L.has("peril"):
+		if L["type"] != "dungeon" or L.get("endless", false) or L.has("region") or L.has("peril"):
 			continue
 		var lvl := int(L["level"])
 		if lvl < easiest_lvl:

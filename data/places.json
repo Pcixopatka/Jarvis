@@ -38,6 +38,7 @@
 		"biome": "cave",
 		"pos": [33.6, 47.2],
 		"level": 7,
+		"scale": true,
 		"rooms": 4,
 		"enemies": ["mavka", "upyr", "bolotianyk"],
 		"boss": "zmii",
@@ -70,6 +71,7 @@
 		"biome": "cave",
 		"pos": [33.0, 50.85],
 		"level": 12,
+		"scale": true,
 		"rooms": 5,
 		"enemies": ["upyr", "vovkulaka"],
 		"boss": "upyr",
@@ -135,6 +137,7 @@
 		"biome": "plague",
 		"pos": [35.4, 53.7],
 		"level": 17,
+		"scale": true,
 		"rooms": 6,
 		"enemies": ["zarazhenyi", "vovkulaka", "upyr"],
 		"boss": "chaklun",
@@ -148,6 +151,7 @@
 		"biome": "forest",
 		"pos": [29.6, 50.0],
 		"level": 27,
+		"scale": true,
 		"rooms": 4,
 		"enemies": ["mavka", "chort", "upyr"],
 		"boss": "vidma",
@@ -161,6 +165,7 @@
 		"biome": "cave",
 		"pos": [31.9, 50.3],
 		"level": 29,
+		"scale": true,
 		"rooms": 5,
 		"enemies": ["upyr", "chort", "zarazhenyi"],
 		"boss": "vii",
@@ -173,6 +178,7 @@
 		"biome": "cave",
 		"pos": [23.0, 49.05],
 		"level": 21,
+		"scale": true,
 		"rooms": 6,
 		"enemies": ["vovkulaka", "upyr", "bolotianyk"],
 		"boss": "vovkulaka",
@@ -195,6 +201,7 @@
 		"biome": "plague",
 		"pos": [30.4, 54.4],
 		"level": 38,
+		"scale": true,
 		"rooms": 6,
 		"enemies": ["zarazhenyi", "pishchalnyk", "chort"],
 		"boss": "koshchii",
@@ -281,6 +288,7 @@
 		"biome": "plague",
 		"pos": [37.62, 55.75],
 		"level": 80,
+		"scale": true,
 		"rooms": 7,
 		"enemies": ["zarazhenyi", "pishchalnyk", "chort", "upyr"],
 		"boss": "putinoid",
@@ -292,10 +300,9 @@
 		"type": "field",
 		"biome": "river",
 		"pos": [33.4, 52.0],
-		"level": 20,
-		"scale": true,
+		"level": 11,
 		"region": "siver",
-		"enemies": ["mavka", "potopelnyk", "bolotianyk"],
+		"enemies": ["mavka", "bolotianyk", "vovkulaka"],
 		"desc": "Заплавні луки над Десною. Гарні на око, та в кожній старці хтось сидить."
 	},
 	"putyvl_pushcha": {
@@ -305,7 +312,6 @@
 		"biome": "forest",
 		"pos": [34.35, 51.45],
 		"level": 22,
-		"scale": true,
 		"region": "siver",
 		"enemies": ["vovkulaka", "zlyden", "upyr"],
 		"desc": "Старий ліс за Сеймом. Злидні тут обдирають подорожніх швидше за розбійників."
@@ -316,8 +322,7 @@
 		"type": "field",
 		"biome": "swamp",
 		"pos": [33.8, 50.7],
-		"level": 24,
-		"scale": true,
+		"level": 16,
 		"region": "siver",
 		"enemies": ["bolotianyk", "zarazhenyi", "potopelnyk"],
 		"desc": "Багниста переправа, де колись загрузло ціле військо. Дехто з нього досі не вибрався."
@@ -343,8 +348,7 @@
 		"type": "field",
 		"biome": "river",
 		"pos": [23.85, 51.5],
-		"level": 26,
-		"scale": true,
+		"level": 18,
 		"region": "volyn",
 		"enemies": ["potopelnyk", "mavka", "bolotianyk"],
 		"desc": "Глибокі лісові озера. Рибалки кажуть, що сіті тут тягне хтось знизу."
@@ -371,7 +375,6 @@
 		"biome": "swamp",
 		"pos": [25.45, 50.85],
 		"level": 31,
-		"scale": true,
 		"region": "volyn",
 		"enemies": ["mara", "upyr", "zarazhenyi"],
 		"desc": "Поле давньої битви серед боліт. Мари блукають тут і вдень."
@@ -383,7 +386,6 @@
 		"biome": "river",
 		"pos": [28.45, 48.3],
 		"level": 36,
-		"scale": true,
 		"region": "volyn",
 		"enemies": ["potopelnyk", "pesyholovets", "chort"],
 		"desc": "Високі скелясті береги над Дністром. У печерах під ними зимують песиголовці."
@@ -409,10 +411,9 @@
 		"type": "field",
 		"biome": "mountain",
 		"pos": [38.1, 49.6],
-		"level": 39,
-		"scale": true,
+		"level": 10,
 		"region": "slobid",
-		"enemies": ["mara", "upyr", "kamiana_baba"],
+		"enemies": ["upyr", "mavka", "vovkulaka"],
 		"desc": "Крейдяні скелі над Дінцем із печерними келіями. Ченці пішли, а в келіях оселилось інше."
 	},
 	"kamiani_mohyly": {
@@ -421,11 +422,10 @@
 		"type": "field",
 		"biome": "steppe",
 		"pos": [38.15, 47.2],
-		"level": 40,
-		"scale": true,
+		"level": 8,
 		"region": "slobid",
-		"enemies": ["kamiana_baba", "pesyholovets", "zlyden"],
-		"desc": "Гранітні останці серед рівного степу. Кам'яні баби тут сходять зі своїх курганів."
+		"enemies": ["vovkulaka", "zarazhenyi", "upyr"],
+		"desc": "Гранітні останці серед рівного степу. Між брилами кубляться вовкулаки, а з курганів лізуть упирі."
 	},
 	"savur_mohyla": {
 		"num": 6234,
@@ -434,7 +434,6 @@
 		"biome": "steppe",
 		"pos": [39.1, 48.0],
 		"level": 41,
-		"scale": true,
 		"region": "slobid",
 		"enemies": ["pesyholovets", "kamiana_baba", "pishchalnyk"],
 		"desc": "Найвищий курган Донецького кряжа. Хто стоїть на ньому, бачить степ до самого моря."
@@ -460,11 +459,10 @@
 		"type": "field",
 		"biome": "sand",
 		"pos": [32.95, 46.6],
-		"level": 44,
-		"scale": true,
+		"level": 5,
 		"region": "pivden",
-		"enemies": ["pesyholovets", "zlyden", "kamiana_baba"],
-		"desc": "Справжня пустеля над Дніпром: бархани, спека й міражі. Колись тут стояла Олешківська Січ."
+		"enemies": ["zarazhenyi", "upyr", "mavka"],
+		"desc": "Справжня пустеля над Дніпром: бархани, спека й міражі, якими мавки заманюють подорожніх. Колись тут стояла Олешківська Січ."
 	},
 	"perekop": {
 		"num": 6237,
@@ -472,10 +470,9 @@
 		"type": "field",
 		"biome": "swamp",
 		"pos": [33.85, 45.95],
-		"level": 46,
-		"scale": true,
+		"level": 6,
 		"region": "pivden",
-		"enemies": ["potopelnyk", "bolotianyk", "mara"],
+		"enemies": ["bolotianyk", "upyr", "mavka"],
 		"desc": "Вузький перешийок між двома морями. Обабіч нього солоні болота Сивашу."
 	},
 	"tarkhankut": {
@@ -485,7 +482,6 @@
 		"biome": "sand",
 		"pos": [32.75, 45.35],
 		"level": 45,
-		"scale": true,
 		"region": "pivden",
 		"enemies": ["pesyholovets", "potopelnyk", "chort"],
 		"desc": "Дикий мис із білими кручами. У гротах під ними ховається те, що викинуло море."
@@ -526,7 +522,6 @@
 		"biome": "mountain",
 		"pos": [25.6, 47.0],
 		"level": 66,
-		"scale": true,
 		"region": "semyhorod",
 		"enemies": ["vovkulaka", "strygoi", "moroi"],
 		"desc": "Гірська дорога з Буковини в Семигород. Візники проїжджають її лише вдень і хрестяться на кожному повороті."
@@ -538,7 +533,6 @@
 		"biome": "forest",
 		"pos": [23.5, 46.77],
 		"level": 68,
-		"scale": true,
 		"region": "semyhorod",
 		"enemies": ["strygoi", "moroi", "mavka"],
 		"desc": "Ліс із кривими деревами, куди пастухи не женуть овець. Хто заночує тут, виходить сивим або не виходить зовсім."
@@ -549,8 +543,7 @@
 		"type": "field",
 		"biome": "village",
 		"pos": [25.46, 44.93],
-		"level": 69,
-		"scale": true,
+		"level": 70,
 		"region": "semyhorod",
 		"enemies": ["strygoi", "upyr", "vovkulaka"],
 		"desc": "Стара столиця Волощини. Княжий двір стоїть пусткою, а вночі вулицями ходять ті, кого поховали торік."
@@ -576,12 +569,11 @@
 		"type": "field",
 		"biome": "steppe",
 		"pos": [35.77, 52.69],
-		"level": 71,
-		"scale": true,
+		"level": 43,
 		"region": "oka",
-		"enemies": ["mertvyi_strilets", "upyr", "pesyholovets"],
+		"enemies": ["pishchalnyk", "upyr", "pesyholovets"],
 		"icon": "mound",
-		"desc": "Земляні вали над річкою Кромою. 1605 року жменька донських козаків отамана Корели кілька місяців трималася тут проти всього царського війська. Стрільці-мерці досі йдуть на приступ."
+		"desc": "Земляні вали над річкою Кромою. 1605 року жменька донських козаків отамана Корели кілька місяців трималася тут проти всього царського війська. Заражені пищальники досі йдуть на приступ."
 	},
 	"uhra": {
 		"num": 6246,
@@ -589,11 +581,10 @@
 		"type": "field",
 		"biome": "river",
 		"pos": [35.55, 54.7],
-		"level": 72,
-		"scale": true,
+		"level": 39,
 		"region": "oka",
-		"enemies": ["potopelnyk", "mertvyi_strilets", "kikimora"],
-		"desc": "Річка, на якій восени 1480 року два війська тижнями стояли одне проти одного й так і не зійшлися. Мерці й тепер стоять тут і стріляють через воду."
+		"enemies": ["potopelnyk", "pishchalnyk", "chort"],
+		"desc": "Річка, на якій восени 1480 року два війська тижнями стояли одне проти одного й так і не зійшлися. Заражені пищальники й тепер стоять тут і стріляють через воду."
 	},
 	"kulykove": {
 		"num": 6247,
@@ -601,11 +592,10 @@
 		"type": "field",
 		"biome": "steppe",
 		"pos": [38.66, 53.67],
-		"level": 74,
-		"scale": true,
+		"level": 28,
 		"region": "oka",
-		"enemies": ["boyaryn", "mara", "kamiana_baba"],
-		"desc": "Тут, у верхів'ях Дону, 1380 року розбили Мамая. Засадний полк, що вирішив битву, вів волинянин Боброк. Полеглі бояри встають із землі й ділять, кому яка вотчина."
+		"enemies": ["upyr", "mara", "chort"],
+		"desc": "Тут, у верхів'ях Дону, 1380 року розбили Мамая. Засадний полк, що вирішив битву, вів волинянин Боброк. Полеглі встають із землі упирями, а над полем блукають мари."
 	},
 	"zaseky": {
 		"num": 6248,
@@ -613,11 +603,10 @@
 		"type": "field",
 		"biome": "forest",
 		"pos": [36.85, 53.95],
-		"level": 75,
-		"scale": true,
+		"level": 25,
 		"region": "oka",
-		"enemies": ["vedmid", "lisovyk", "vovkulaka"],
-		"desc": "Смуга поваленого лісу, якою Москва віками відгороджувалась від степу. Тепер завалами никають шатуни, а лісовики водять подорожніх колами."
+		"enemies": ["vovkulaka", "zlyden", "upyr"],
+		"desc": "Смуга поваленого лісу, якою Москва віками відгороджувалась від степу. Тепер завалами никають вовкулаки, а злидні водять подорожніх колами."
 	},
 	"tula_zbroiarnia": {
 		"num": 6249,
@@ -640,8 +629,7 @@
 		"type": "field",
 		"biome": "swamp",
 		"pos": [40.15, 55.3],
-		"level": 78,
-		"scale": true,
+		"level": 79,
 		"region": "oka",
 		"enemies": ["kikimora", "bolotianyk", "potopelnyk"],
 		"desc": "Торфові болота за Окою, без краю й без дна. Кікімори прядуть тут туман, і хто в нього вступить, той грузне."
@@ -653,7 +641,6 @@
 		"biome": "forest",
 		"pos": [36.45, 56.5],
 		"level": 51,
-		"scale": true,
 		"region": "tvershchyna",
 		"enemies": ["kromeshnyk", "mertvyi_strilets", "upyr"],
 		"desc": "Стара поштова дорога з Москви на Твер. Колись нею мчала опричнина палити місто, і мертві кромішники мчать нею й тепер."
@@ -664,8 +651,7 @@
 		"type": "field",
 		"biome": "mountain",
 		"pos": [34.9, 56.45],
-		"level": 52,
-		"scale": true,
+		"level": 48,
 		"region": "tvershchyna",
 		"enemies": ["vedmid", "mara", "chort"],
 		"desc": "Тут над Волгою віками ламали білий камінь, а тепер каменоломні стоять порожні. У покинутих штольнях ховаються від морозу шатуни, а в темряві блукають мари."
@@ -677,7 +663,6 @@
 		"biome": "river",
 		"pos": [33.1, 57.15],
 		"level": 55,
-		"scale": true,
 		"region": "tvershchyna",
 		"enemies": ["potopelnyk", "kikimora", "mavka"],
 		"desc": "Велике лісове озеро із сотнею островів. Між островами легко заблукати, а з води за човном стежать потопельники."
@@ -704,7 +689,6 @@
 		"biome": "snow",
 		"pos": [34.55, 57.6],
 		"level": 53,
-		"scale": true,
 		"region": "tvershchyna",
 		"enemies": ["vedmid", "lisovyk", "mara"],
 		"desc": "Старий волок, де човни тягли суходолом від Волги на північ. Тепер його замело снігом, а заметами бродять шатуни, яким не спиться."
@@ -716,7 +700,6 @@
 		"biome": "swamp",
 		"pos": [39.45, 57.2],
 		"level": 58,
-		"scale": true,
 		"region": "zalissia",
 		"enemies": ["kikimora", "potopelnyk", "boyaryn"],
 		"desc": "Мілке озеро під Ростовом Великим, рідним містом Олешка Поповича. Ростов майже на три століття старший за Москву. Води тут по коліно, а мулу на кілька сажнів: хто загруз, той там і лишився."
@@ -727,8 +710,7 @@
 		"type": "field",
 		"biome": "river",
 		"pos": [38.33, 57.53],
-		"level": 60,
-		"scale": true,
+		"level": 64,
 		"region": "zalissia",
 		"enemies": ["kromeshnyk", "mara", "potopelnyk"],
 		"icon": "bell",
@@ -757,7 +739,6 @@
 		"biome": "village",
 		"pos": [41.0, 57.0],
 		"level": 57,
-		"scale": true,
 		"region": "zalissia",
 		"enemies": ["boyaryn", "zlyden", "upyr"],
 		"desc": "Село, де мертвий боярин досі збирає оброк. Злидні ходять від хати до хати й забирають останнє."
@@ -784,7 +765,6 @@
 		"biome": "snow",
 		"pos": [39.9, 57.68],
 		"level": 61,
-		"scale": true,
 		"region": "zalissia",
 		"enemies": ["vedmid", "vovkulaka", "lisovyk"],
 		"desc": "Мис над Волгою, де київський князь Ярослав Мудрий зарубав сокирою ведмедя й заклав місто Ярославль. Ведмідь із сокирою й тепер на гербі міста. А тутешні ведмеді відтоді не сплять."
