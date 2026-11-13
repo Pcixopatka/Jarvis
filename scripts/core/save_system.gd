@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 12
+const SAVE_VERSION := 13
 const Data := preload("res://scripts/data/data.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const SAVE_PATH := "user://hero.save"  # старий єдиний файл — стає слотом 1 при першому запуску
@@ -219,8 +219,42 @@ static func migrate(d: Dictionary) -> Dictionary:
 		# та номерів кроків переказів і саги — id зданих і початих кроків (world.missions).
 		migrate_quests(d["world"])
 		v = 12
+	if v == 12:
+		# v13: Селянин росте до 20-ї майстерності (було 10), перший клас — до 50-ї (було 40). Хто вже змінив
+		# клас, тих рівнів набрати не міг: за кожен пройдений клас — очки за рівні понад колишню вершину.
+		# Лише раз: далі збереження вже v13, а герой, створений на v13, сюди не потрапляє.
+		var got := job_bonus_v12(str(d["player"].get("job", "peasant")))
+		if got > 0:
+			d["player"]["skill_points"] = int(d["player"].get("skill_points", 0)) + got
+			d["meta"] = d.get("meta", {})
+			d["meta"]["job_bonus"] = got  # банер при першому вході (Game._continue_game)
+		v = 13
 	d["version"] = v
 	return d
+
+
+# ---------- v13: вища майстерність ----------
+
+## Вершина майстерності за ступенем до v13 (0 — Селянин, 1 — перший клас). Заморожено тут: у таблиці класів
+## уже нові числа, а міграція мусить знати старі.
+const V12_JOB_MAX := {0: 10, 1: 40}
+
+
+## Скільки очок умінь додати героєві зі збереження v12 класу job: за кожен клас, який він уже пройшов
+## (усі на його дорозі, крім нинішнього), — рівні від колишньої вершини до нинішньої («job_max» запису).
+## Селянинові й нинішньому класу нічого: ці рівні герой набере сам.
+static func job_bonus_v12(job: String) -> int:
+	var C = Data.Classes
+	if not C.has_class(job):
+		return 0
+	var line: Array = C.lineage(job)
+	var got := 0
+	for i in line.size() - 1:
+		var info: Dictionary = C.info(str(line[i]))
+		var tier := int(info["tier"])
+		if V12_JOB_MAX.has(tier):
+			got += maxi(0, int(info["job_max"]) - int(V12_JOB_MAX[tier])) * Data.SKILL_POINTS_PER_LEVEL
+	return got
 
 
 # ---------- v12: завдання за id кроків ----------

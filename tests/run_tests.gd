@@ -33,6 +33,7 @@ func _initialize() -> void:
 	# Купівлю червінців і божих дарів власник тимчасово вимкнув (Shop.COINS_ON_SALE, Divine.ON_SALE).
 	# Набори перевіряють справжню купівлю, тож тут продаж увімкнено; вимкнений стан перевіряє _suite_sale_off.
 	_set_sale(true)
+	_force_audio_on()
 	CityService = load("res://scripts/game/city_service.gd")
 	PlayerScript = load("res://scripts/entities/player.gd")
 	StoryService = load("res://scripts/game/story_service.gd")
@@ -182,8 +183,35 @@ func _run() -> void:
 	await _suite_valor_cap()
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
+	await _suite_job_limits()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
+
+
+var _kept_audio := {}  # звук і музика з налаштувань пристрою до прогону (порожньо — їх не міняли)
+
+
+## Перевірки звуку не мають залежати від налаштувань пристрою (user://settings.cfg): вимкнений там звук чи
+## музика (скажімо, після давнішого прогону) валив би їх. На час прогону обидва вмикаються, а по завершенні
+## (_finalize) повертаються такими, як були. Код гри не міняється: гра просто читає ці налаштування.
+func _force_audio_on() -> void:
+	var s := SaveSystem.load_settings()
+	if bool(s["sound"]) and bool(s["music"]):
+		return
+	_kept_audio = {"sound": bool(s["sound"]), "music": bool(s["music"])}
+	s["sound"] = true
+	s["music"] = true
+	SaveSystem.save_settings(s)
+
+
+func _finalize() -> void:
+	if _kept_audio.is_empty():
+		return
+	var s := SaveSystem.load_settings()
+	s["sound"] = _kept_audio["sound"]
+	s["music"] = _kept_audio["music"]
+	SaveSystem.save_settings(s)
+	_kept_audio = {}
 
 
 ## Увімкнути чи вимкнути продаж червінців і божих дарів (робочі значення служб). Довідник збирається заново.
@@ -1422,8 +1450,13 @@ func _suite_classes() -> void:
 		total += Classes.job_xp_for(0, jl)
 	p.add_xp(total)
 	check(p.job_level == 10 and p.skill_points == 9 and p.can_change_class(), "майстерність 10 за %d досвіду — 9 очок, можна обирати" % total)
+	var to_top := 0
+	for jl in range(10, p.job_max()):
+		to_top += Classes.job_xp_for(0, jl)
+	p.add_xp(to_top)
+	check(p.job_max() == 20 and p.job_level == 20 and p.skill_points == 19, "селянин росте й далі, до 20-ї майстерності: 19 очок")
 	p.add_xp(5000)
-	check(p.job_level == 10 and p.job_xp == 0, "на вершині класу майстерність стоїть")
+	check(p.job_level == 20 and p.job_xp == 0 and p.skill_points == 19, "на вершині класу майстерність стоїть")
 	check(p.learn_skill("hardy") and p.learn_skill("vyly"), "селянин вчить свою науку")
 	var hp_before: float = p.max_hp
 	p.learn_skill("hardy")
@@ -1538,7 +1571,7 @@ func _suite_classes() -> void:
 	var old = {"version": 7, "player": {"level": 12, "rank": "cossack", "skills": {"whirl": 5, "lightning": 3}, "perks": {"sharp": 3}}, "world": {"story": {"chapter": 0, "step": 2, "stage": "active", "progress": 0, "choices": {}}}}
 	var m = SaveSystem.migrate(old)
 	var mp: Dictionary = m["player"]
-	check(mp["job"] == "cossack" and mp["job_level"] == 12 and mp["skill_points"] == 20 and mp["perks"].is_empty() and mp["perk_points"] == 6, "міграція: колишній козак — клас «Козак», очки повернуто")
+	check(mp["job"] == "cossack" and mp["job_level"] == 12 and mp["skill_points"] == 20 + 10 and mp["perks"].is_empty() and mp["perk_points"] == 6, "міграція: колишній козак — клас «Козак», очки повернуто (і +10 за вищу майстерність Селянина, v13)")
 	check(m["world"]["missions"]["active"].has("oath") and m["world"]["missions"]["choices"]["trial"] == 0, "міграція: посвята — тепер козацька присяга (після кроку «Обери дорогу»)")
 	var oldp = SaveSystem.migrate({"version": 7, "player": {"level": 2, "rank": "peasant"}, "world": {}})
 	check(oldp["player"]["job"] == "peasant", "міграція: селянин лишається селянином")
@@ -1680,10 +1713,10 @@ func _suite_specs() -> void:
 		check(not t["start"].is_empty() and not t["end"].is_empty() and t["item"]["type"] in info["weapons"], "%s: розмови й зброя класу" % spec)
 		var obj: Dictionary = t["objective"]
 		check(not obj.has("loc") or Data.is_place(obj["loc"]), "%s: місце випробування існує" % spec)
-	p.job_level = 29
-	check(SS.available(p).is_empty() and not SS.start(w, p, "plastun"), "до 30-ї майстерності випробувань немає")
-	p.job_level = 30
-	check(SS.available(p).size() == 3 and SS.start(w, p, "plastun"), "з 30-ї — можна до наставника")
+	p.job_level = int(Classes.info("cossack")["change_at"]) - 1
+	check(SS.available(p).is_empty() and not SS.start(w, p, "plastun"), "до 40-ї майстерності випробувань немає")
+	p.job_level = int(Classes.info("cossack")["change_at"])
+	check(p.job_level == 40 and SS.available(p).size() == 3 and SS.start(w, p, "plastun"), "з 40-ї — можна до наставника")
 	check(SS.objective_line(w).begins_with("◆") and SS.target(w) == "", "мета пластуна — будь-де")
 	for i in 7:
 		SS.on_event(w, "elite", "")
@@ -1901,7 +1934,7 @@ func _suite_volkhv_specs() -> void:
 	var p = game.player
 	p.change_class("volkhv")
 	game._sync_class()
-	p.job_level = 30
+	p.job_level = int(p.class_info()["change_at"])
 	check(UiCity._city_specs(game, "verkhovyna") == ["znakhar"] and UiCity._city_specs(game, "sich").is_empty(), "у Верховині — наставник знахарів, на Січі для волхва нікого")
 	check(SS.start(game.world, p, "znakhar"), "випробування знахаря")
 	SS.on_event(game.world, "clear", "bryansk_forest")
@@ -10910,6 +10943,10 @@ func _suite_gameplay() -> void:
 	await _frames(2)
 	_hall_talk(game)
 	await _frames(2)
+	# Селянин іще не на вершині майстерності: перед присягою, що змінює клас, — попередження
+	check(game.hud.dialogue_root == null and game.hud.overlay.visible and int(game.class_warn.get("lost", 0)) == p.job_max() - p.job_level and p.job == "peasant", "перед присягою нижче вершини — попередження про %d очок" % int(game.class_warn.get("lost", 0)))
+	game.class_warn_confirm()
+	await _frames(2)
 	check(game.hud.dialogue_root != null, "посвята: урочиста розмова")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
@@ -11882,7 +11919,7 @@ func _suite_skill_trees() -> void:
 			for node in br["nodes"]:
 				n += int(node["max"])
 		return n
-	# Очок на вершині: майстерність Селянина 10, першого класу 40, спеціалізації 50 (по очку за рівень понад перший)
+	# Очок на вершині: майстерність Селянина 20, першого класу 50, спеціалізації 50 (по очку за рівень понад перший)
 	var tight := []
 	for cls in Classes.ids():
 		if int(Classes.info(cls)["tier"]) != 2:
@@ -11892,9 +11929,11 @@ func _suite_skill_trees() -> void:
 		for c in Classes.lineage(cls):
 			points += int(Classes.info(c)["job_max"]) - 1
 			ranks += int(ranks_of.call(c))
-		if float(ranks) < float(points) * 1.3:
+		# з вищою майстерністю (Селянин до 20-ї, перший клас до 50-ї) очок 117: запас рангів став меншим, ніж
+		# третина за старих меж (97 очок), але вивчити все однаково не вийде
+		if float(ranks) < float(points) * 1.15:
 			tight.append("%s %d/%d" % [cls, ranks, points])
-	check(tight.is_empty(), "у кожної спеціалізації рангів щонайменше на третину більше, ніж очок: %s" % str(tight))
+	check(tight.is_empty(), "у кожної спеціалізації рангів щонайменше на 15%% більше, ніж очок: %s" % str(tight))
 	var bad := []
 	var acts := 0
 	var passives := 0
@@ -12252,7 +12291,7 @@ func _suite_strilets() -> void:
 			trials_ok = trials_ok and Data.is_place(str(obj["loc"]))
 	check(trials_ok, "у кожної спеціалізації стрільця є наставник, випробування й зброя в нагороду")
 	v.job_level = int(C["strilets"]["change_at"])
-	check(v.job_level == 30 and Spec.available(v) == C["strilets"]["next"] and Spec.start(w, v, "sokolnyk"), "стрілець із майстерністю %d обирає спеціалізацію" % v.job_level)
+	check(v.job_level == 40 and Spec.available(v) == C["strilets"]["next"] and Spec.start(w, v, "sokolnyk"), "стрілець із майстерністю %d обирає спеціалізацію" % v.job_level)
 	for i in 6:
 		Spec.on_event(w, "elite", "")
 	check(str(Spec.state(w)["stage"]) == "turnin" and "Батурин" in Spec.objective_line(w) and not Spec.city_dialogue(w, "baturyn").is_empty() and Spec.city_dialogue(w, "sich").is_empty(), "шість еліт: посвята в наставника в Батурині, а не на Січі")
@@ -14738,7 +14777,7 @@ func _suite_audit() -> void:
 	check(thefts <= 1 and int(hw.camp.get("theft_day", -1)) == int(now_t / 86400.0), "за одну добу злодії приходять щонайбільше раз, скільки б разів не заходив у гру (%d)" % thefts)
 
 	# ---- Збереження: версія, безпечний запис, нечитаний слот, чужі поля ----
-	check(SaveSystem.SAVE_VERSION == 12 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 12 and int(SaveSystem.migrate({"version": 10, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 12 and int(SaveSystem.migrate({"version": 11, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 12, "формат збереження 12, дев'ятий, десятий і одинадцятий підхоплюються")
+	check(SaveSystem.SAVE_VERSION == 13 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 13 and int(SaveSystem.migrate({"version": 10, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 13 and int(SaveSystem.migrate({"version": 11, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 13 and int(SaveSystem.migrate({"version": 12, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 13, "формат збереження 13, дев'ятий, десятий, одинадцятий і дванадцятий підхоплюються")
 	var wpath := "user://test_write.save"
 	check(SaveSystem.write_var(wpath, {"a": 1}) and SaveSystem.write_var(wpath, {"a": 2}) and FileAccess.file_exists(wpath + ".bak") and not FileAccess.file_exists(wpath + ".tmp"), "запис іде через тимчасовий файл, попередній лишається копією")
 	SaveSystem.delete(wpath)
@@ -18414,8 +18453,8 @@ func _suite_class_db() -> void:
 	var rules_ok := true
 	for c in Classes.ids():
 		var C: Dictionary = Classes.info(c)
-		var want: int = {0: 10, 1: 30}.get(int(C["tier"]), -1)
-		rules_ok = rules_ok and int(C.get("change_at", -1)) == (want if not C["next"].is_empty() else -1) and int(C["job_max"]) == [10, 40, 50][int(C["tier"])]
+		var want: int = {0: 10, 1: 40}.get(int(C["tier"]), -1)
+		rules_ok = rules_ok and int(C.get("change_at", -1)) == (want if not C["next"].is_empty() else -1) and int(C["job_max"]) == [20, 50, 50][int(C["tier"])]
 	check(rules_ok, "з якого рівня майстерності йти далі й найвищий рівень — у записі кожного класу, як було за ступенем")
 	check(Classes.job_xp_for(0, 3) == 130 and Classes.job_xp_for(1, 10) == 1300 and Classes.job_xp_for(2, 49) == 51358 and Classes.job_xp_for(5, 1) == Classes.job_xp_for(2, 1), "крива досвіду майстерності — у ступенях (job_tiers.json); вищий ступінь бере останній")
 	var raw_c: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("classes")))
@@ -19214,7 +19253,7 @@ func _suite_quest_migration() -> void:
 	var wl = WorldState.new()
 	wl.from_dict(md["world"])
 	wl.hero_level = 15
-	check(md["version"] == 12 and not md["world"].has("story") and not md["world"].has("legends") and not md["world"].has("saga") and md["world"].has("missions"), "v11 → v12: поля story / legends / saga стали missions")
+	check(md["version"] == SaveSystem.SAVE_VERSION and not md["world"].has("story") and not md["world"].has("legends") and not md["world"].has("saga") and md["world"].has("missions"), "v11 → v12: поля story / legends / saga стали missions")
 	check(SS.current(wl)["id"] == "samples" and SS.stage(wl) == "active" and Q.progress(wl, "samples") == 2 and LSv.stage(wl, "vii") == "active" and Q.progress(wl, "vii_2") == 3 and not SgS.unlocked(wl) and SS.objective_line(wl).ends_with("2/5"), "після міграції — той самий крок і лічильники")
 	# Слоти: розділ і «пройдено» читаються з нового стану
 	SaveSystem.save(md, SaveSystem.slot_path(5))
@@ -19937,3 +19976,415 @@ func _gd_files(dir: String) -> Array:
 		if f.ends_with(".gd"):
 			out.append(dir + "/" + f)
 	return out
+
+
+# ======================= Майстерність: вища стеля, рання зміна класу =======================
+
+## Скільки очок умінь герой має загалом: невитрачені й вкладені (без подарованих сюжетом рангів).
+func _skill_total(p) -> int:
+	var n: int = int(p.skill_points)
+	for id in p.skills:
+		n += maxi(0, int(p.skills[id]) - int(p.skill_gifts.get(id, 0)))
+	return n
+
+
+## Вивчити все, що можна, у дереві класу (у порядку вимог), поки є очки.
+func _learn_tree(p, cls: String) -> void:
+	var Classes = p.Classes
+	var moved := true
+	while moved and p.skill_points > 0:
+		moved = false
+		for br in Classes.tree(cls):
+			for n in br["nodes"]:
+				if p.skill_points > 0 and p.can_learn_skill(n) and p.learn_skill(n["id"]):
+					moved = true
+
+
+## Тексти всіх написів під вузлом (вікно, екран).
+func _label_texts(node) -> String:
+	var out := []
+	if node == null or not is_instance_valid(node):
+		return ""
+	for l in node.find_children("*", "Label", true, false):
+		out.append(l.text)
+	return "\n".join(out)
+
+
+## Збереження героя класу job старої версії формату (v12): так його лишила попередня збірка гри.
+func _v12_hero(job: String, points: int, path: String) -> void:
+	var p = _new_player()
+	p.change_class(job)
+	p.job_level = 7
+	p.skills = {}  # без умінь: інакше чуже вміння стартового героя повернулось би очком під час читання
+	p.skill_gifts = {}
+	p.skill_points = points
+	p.nick = "Сірко"
+	SaveSystem.delete(path)
+	SaveSystem.write_var(path, {"player": p.to_dict(), "world": WorldState.new().to_dict(), "meta": {"playtime": 60.0}, "version": 12})
+	p.free()
+
+
+## Файли героїв на пристрої (слоти й давній файл без слота): забрати на час перевірки й повернути.
+func _hero_files_keep() -> Dictionary:
+	var keep := {}
+	var paths := [SaveSystem.SAVE_PATH]
+	for i in range(1, SaveSystem.MAX_SLOTS + 1):
+		paths.append(SaveSystem.slot_path(i))
+	for path in paths:
+		for suffix in ["", ".bak"]:
+			var f: String = path + suffix
+			keep[f] = FileAccess.get_file_as_bytes(f) if FileAccess.file_exists(f) else null
+			if FileAccess.file_exists(f):
+				DirAccess.remove_absolute(f)
+	return keep
+
+
+func _hero_files_restore(keep: Dictionary) -> void:
+	for f in keep:
+		if FileAccess.file_exists(f):
+			DirAccess.remove_absolute(f)
+		if keep[f] != null:
+			var w := FileAccess.open(f, FileAccess.WRITE)
+			w.store_buffer(keep[f])
+			w.close()
+
+
+func _suite_job_limits() -> void:
+	suite("Майстерність: вища стеля, рання зміна класу")
+	var Classes = load("res://scripts/data/classes.gd")
+	var ST = load("res://scripts/game/stone_service.gd")
+	var SS = load("res://scripts/game/spec_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var per: int = Data.SKILL_POINTS_PER_LEVEL
+	# ---- Дані ----
+	var P: Dictionary = Classes.info("peasant")
+	check(int(P["job_max"]) == 20 and int(P["change_at"]) == 10, "Селянин: майстерність до 20-ї, дорогу обирають з 10-ї")
+	var firsts_ok := true
+	for c in P["next"]:
+		firsts_ok = firsts_ok and int(Classes.info(c)["tier"]) == 1 and int(Classes.info(c)["job_max"]) == 50 and int(Classes.info(c)["change_at"]) == 40
+	check(firsts_ok and P["next"].size() == 3, "Козак, Волхв і Стрілець: майстерність до 50-ї, спеціалізацію обирають з 40-ї")
+	var specs_ok := true
+	for c in Classes.ids():
+		if int(Classes.info(c)["tier"]) == 2:
+			specs_ok = specs_ok and int(Classes.info(c)["job_max"]) == 50 and not Classes.info(c).has("change_at") and Classes.info(c)["next"].is_empty()
+	check(specs_ok, "спеціалізації: майстерність до 50-ї, далі нікуди")
+	check(per == 1 and Classes.plural(1, "очко", "очки", "очок") == "очко" and Classes.plural(3, "очко", "очки", "очок") == "очки" and Classes.plural(12, "очко", "очки", "очок") == "очок" and Classes.plural(21, "очко", "очки", "очок") == "очко", "очко за рівень; слово до числа: 1 очко, 3 очки, 12 очок, 21 очко")
+	# ---- Селянин росте до 20-ї, і не далі ----
+	var p = _new_player()
+	p.job = "peasant"
+	p.job_level = 1
+	p.job_xp = 0
+	p.skills = {}
+	p.skill_points = 0
+	p.recalc()
+	var at10 := 0
+	for jl in range(1, 10):
+		at10 += Classes.job_xp_for(0, jl)
+	p._add_job_xp(at10 - 1)
+	check(p.job_level == 9 and not p.can_change_class(), "на 9-й майстерності дороги ще не обирають")
+	p._add_job_xp(1)
+	check(p.job_level == 10 and p.can_change_class() and p.skill_points == 9 * per, "з 10-ї — можна обирати (9 очок)")
+	check(p.job_levels_left() == 10 and p.job_points_left() == 10 * per, "до вершини ще 10 рівнів і 10 очок")
+	p._add_job_xp(10000000)
+	check(p.job_level == 20 and p.job_xp == 0 and p.skill_points == 19 * per and p.can_change_class(), "Селянин доріс до 20-ї і далі не росте: 19 очок від першого рівня")
+	p._add_job_xp(10000000)
+	check(p.job_level == 20 and p.skill_points == 19 * per and p.job_points_left() == 0, "на вершині досвід майстерності більше нічого не дає")
+	# ---- Терплячий Селянин: зайві очки йдуть у дерево Козака ----
+	_learn_tree(p, "peasant")
+	var pr: Array = p.tree_progress("peasant")
+	var spare: int = 19 * per - int(pr[1])
+	check(pr[0] == pr[1] and spare > 0 and p.skill_points == spare, "селянське дерево вивчене до кінця (%d рангів), а %d очок лишилось" % [pr[1], spare])
+	p.change_class("cossack")
+	check(p.job == "cossack" and p.job_level == 1 and p.skill_points == spare, "з Козаком майстерність з 1, зайві очки лишились")
+	check(p.learn_skill("whirl") and p.skill_points == spare - 1, "зайве селянське очко вкладено в дерево Козака")
+	p.free()
+	# ---- Рання зміна на 10-й: очок за 11–20 нема й ніщо їх не верне ----
+	var e = _new_player()
+	e.job = "peasant"
+	e.job_level = 1
+	e.job_xp = 0
+	e.skills = {}
+	e.skill_points = 0
+	e.recalc()
+	e._add_job_xp(at10)
+	check(e.job_level == 10 and e.skill_points == 9 * per, "Селянин на 10-й: 9 очок")
+	e.learn_skill("hardy")
+	e.learn_skill("vyly")
+	e.change_class("cossack")
+	check(e.job == "cossack" and e.job_level == 1 and _skill_total(e) == 9 * per, "змінив клас на 10-й: усього 9 очок, а не 19")
+	var at40 := 0
+	for jl in range(1, 40):
+		at40 += Classes.job_xp_for(1, jl)
+	e._add_job_xp(at40 - 1)
+	check(e.job_level == 39 and not e.can_change_class() and SS.available(e).is_empty(), "Козак на 39-й: до наставника ще рано")
+	e._add_job_xp(1)
+	check(e.job_level == 40 and e.can_change_class() and SS.available(e).size() == 3 and e.job_max() == 50 and e.job_points_left() == 10 * per, "з 40-ї — до наставника; до вершини 50-ї ще 10 очок")
+	var earned: int = (9 + 39) * per
+	e.learn_skill("whirl")
+	e.learn_skill("sharp")
+	check(_skill_total(e) == earned, "Селянин до 10-ї й Козак до 40-ї: усього %d очок" % earned)
+	ST.grant(e, "zabuttia")
+	check(ST.reset_points(e) and _skill_total(e) == earned and e.skill_points == earned, "Камінь забуття вертає лише зароблене (%d), не очки за рівні, яких не було" % e.skill_points)
+	e.learn_skill("whirl")
+	ST.grant(e, "alatyr")
+	check(ST.change_path(e, "volkhv") and e.job == "volkhv" and e.job_level == 40 and _skill_total(e) == earned, "Алатир-камінь (Козак → Волхв): майстерність та сама, очок стільки ж")
+	ST.grant(e, "alatyr")
+	check(ST.change_path(e, "cossack") and e.job == "cossack", "і назад у Козака")
+	e.change_class("plastun")  # рання посвята на 40-й: очок за 41–50 нема
+	e._add_job_xp(10000)
+	var spec_lvl: int = e.job_level
+	earned += (spec_lvl - 1) * per
+	e.learn_skill("kydok")
+	e.learn_skill("whirl")
+	check(e.job == "plastun" and _skill_total(e) == earned, "пластун після ранньої посвяти: %d очок" % earned)
+	ST.grant(e, "alatyr")
+	var sp_before: int = e.skill_points
+	check(ST.change_path(e, "zaporozhets") and e.job == "zaporozhets" and e.job_level == spec_lvl and _skill_total(e) == earned and e.skill_points > sp_before, "камінь зміни спеціалізації (Пластун → Запорожець): вміння пластуна вертаються очками, нових очок не додає й не забирає")
+	ST.grant(e, "zabuttia")
+	check(ST.reset_points(e) and _skill_total(e) == earned and e.skill_points == earned, "Камінь забуття й тепер вертає лише зароблене")
+	var back = _new_player()
+	back.from_dict(e.to_dict())
+	check(_skill_total(back) == earned, "запис і читання героя очок не додають")
+	back.free()
+	e.free()
+	# ---- Перший клас: зайві очки йдуть і в пройдені дерева, вершина 50 ----
+	var k = _new_player()
+	k.change_class("strilets")
+	k.skills = {}
+	k.skill_points = 0
+	k._add_job_xp(10000000)
+	check(k.job_level == 50 and k.skill_points == 49 * per and k.can_change_class(), "Стрілець доріс до 50-ї: 49 очок")
+	k.free()
+	# ---- У грі: попередження перед ранньою зміною класу ----
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.ask_name = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for h in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "kleinody"]:
+		gw.hints[h] = true
+	# Підказка про нову дорогу — раз, коли вона відкрилась, а не на кожному рівні далі
+	game.enter_city("sich")
+	await _frames(2)
+	game.hud.close_dialogue()
+	gp.job_level = 9
+	gp.job_xp = 0
+	gp._add_job_xp(gp.job_next())
+	check(gp.job_level == 10 and "Час обирати дорогу" in str(game.hud.last_banner.get("text", "")), "на 10-й майстерності — підказка про вибір дороги")
+	gp._add_job_xp(gp.job_next())
+	check(gp.job_level == 11 and str(game.hud.last_banner.get("text", "")) == "Майстерність 11!", "на 11-й підказки про дорогу вже нема: «%s»" % str(game.hud.last_banner.get("text", "")))
+	gp._add_job_xp(gp.job_next())
+	check(gp.job_level == 12 and not "Час обирати" in str(game.hud.last_banner.get("text", "")), "і на 12-й нема")
+	# Сюжет чекає: Селянин на 12-й, присяга козака вже готова в ратуші
+	_quests_set(gw, "story", {"chapter": 0, "step": 4, "stage": "turnin", "progress": 0, "choices": {"trial": 0}})
+	check(StoryService.class_reward(StoryService.city_dialogue(gw, "sich")) == "cossack", "присяга козака змінює клас")
+	game.enter_city("sich")
+	await _frames(2)
+	_hall_talk(game, "story")
+	await _frames(2)
+	var warn_txt := _label_texts(game.hud.overlay_box)
+	check(game.hud.overlay.visible and game.hud.dialogue_root == null and int(game.class_warn.get("lost", 0)) == 8 * per and str(game.class_warn.get("to", "")) == "cossack", "Селянин на 12-й: перед присягою — вікно попередження, розмова ще не почалась")
+	check("Селянин: майстерність 12 із 20" in warn_txt and "на 8 рівнів, а це 8 очок умінь" in warn_txt and "назавжди" in warn_txt and ST.name_of("zabuttia") in warn_txt and ST.name_of("alatyr") in warn_txt and "Козак" in warn_txt, "у вікні — майстерність, скільки очок пропаде назавжди й що жоден камінь їх не верне:\n%s" % warn_txt)
+	var btns := []
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		btns.append(b.text)
+	check(btns == ["Так, змінити клас", "Ні, ще наберуся сили"], "кнопки «Так» і «Ні»: %s" % str(btns))
+	game.class_warn_cancel()
+	await _frames(2)
+	check(not game.hud.overlay.visible and game.class_warn.is_empty() and gp.job == "peasant" and gp.job_level == 12 and StoryService.stage(gw) == "turnin" and game.hall_rows("sich")[0]["ready"], "«Ні»: герой лишився Селянином, присяга чекає в ратуші")
+	_hall_talk(game, "story")
+	await _frames(2)
+	check(game.hud.overlay.visible and not game.class_warn.is_empty(), "удруге — знову попередження")
+	game.go_back(false)
+	await _frames(2)
+	check(not game.hud.overlay.visible and game.class_warn.is_empty() and gp.job == "peasant" and game.state == game.State.CITY, "«Назад» — те саме, що «Ні»: лишився в місті Селянином")
+	_hall_talk(game, "story")
+	await _frames(2)
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if b.text == "Так, змінити клас":
+			b.pressed.emit()
+	await _frames(2)
+	check(not game.hud.overlay.visible and game.hud.dialogue_root != null and gp.job == "peasant", "«Так»: почалась урочиста розмова (одне попередження, без другого)")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(gp.job == "cossack" and gp.job_level < 5 and game.class_warn.is_empty(), "після присяги — Козак, майстерність знову з початку")
+	if game.hud.dialogue_root != null:
+		game.hud.close_dialogue()
+	# Селянин на вершині: присяга без попередження
+	gp.job = "peasant"
+	gp.job_level = 20
+	game._sync_class()
+	_quests_set(gw, "story", {"chapter": 0, "step": 4, "stage": "turnin", "progress": 0, "choices": {"trial": 0}})
+	game.enter_city("sich")
+	await _frames(2)
+	_hall_talk(game, "story")
+	await _frames(2)
+	check(game.hud.dialogue_root != null and not game.hud.overlay.visible and game.class_warn.is_empty(), "на 20-й майстерності присяга без попередження")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(gp.job == "cossack", "Селянин на вершині став Козаком")
+	if game.hud.dialogue_root != null:
+		game.hud.close_dialogue()
+	# Спеціалізація: випробування з 40-ї таке саме, як із 50-ї; попередження — лише перед посвятою
+	gp.job_level = 40
+	game.enter_city("sich")
+	await _frames(2)
+	game.city_do("spec_start", "plastun")
+	await _frames(2)
+	check(game.hud.dialogue_root != null and not game.hud.overlay.visible and str(gw.spec_trial.get("stage", "")) == "active", "з 40-ї наставник дає випробування одразу, без попередження: воно ще нічого не змінює")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	var obj40: Dictionary = SS.objective(gw).duplicate()
+	for i in 8:
+		game._spec_event("elite", "")
+	check(str(gw.spec_trial.get("stage", "")) == "turnin" and gp.job == "cossack" and obj40 == SS.trial("plastun")["objective"], "випробування пройдено так само, як із 50-ї: та сама мета")
+	gp.job_level = 43
+	game.enter_city("sich")
+	await _frames(2)
+	_hall_talk(game, "spec")
+	await _frames(2)
+	warn_txt = _label_texts(game.hud.overlay_box)
+	check(game.hud.overlay.visible and game.hud.dialogue_root == null and int(game.class_warn.get("lost", 0)) == 7 * per and "Козак: майстерність 43 із 50" in warn_txt and "на 7 рівнів, а це 7 очок умінь" in warn_txt and "Пластун" in warn_txt, "перед посвятою на 43-й — попередження про 7 очок:\n%s" % warn_txt)
+	game.class_warn_cancel()
+	await _frames(2)
+	check(gp.job == "cossack" and str(gw.spec_trial.get("stage", "")) == "turnin" and not game.hall_rows("sich").filter(func(r): return str(r["kind"]) == "spec").is_empty(), "«Ні»: лишився Козаком, наставник чекає в ратуші")
+	_hall_talk(game, "spec")
+	await _frames(2)
+	game.class_warn_confirm()
+	await _frames(2)
+	check(game.hud.dialogue_root != null and gp.job == "cossack", "«Так»: розмова-посвята")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(gp.job == "plastun" and gp.job_level == 1 and gw.spec_trial.is_empty(), "посвячено в пластуни")
+	if game.hud.dialogue_root != null:
+		game.hud.close_dialogue()
+	gp.change_class("cossack")
+	gp.job_level = 50
+	game._sync_class()
+	gw.spec_trial = {"spec": "zaporozhets", "stage": "turnin", "progress": 0}
+	game.enter_city("sich")
+	await _frames(2)
+	_hall_talk(game, "spec")
+	await _frames(2)
+	check(game.hud.dialogue_root != null and not game.hud.overlay.visible and game.class_warn.is_empty(), "на 50-й посвята без попередження")
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(gp.job == "zaporozhets", "посвячено в запорожці")
+	if game.hud.dialogue_root != null:
+		game.hud.close_dialogue()
+	# ---- Екран героя: скільки ще можна набрати перед зміною класу ----
+	gp.change_class("peasant")
+	gp.job_level = 13
+	game._sync_class()
+	game.enter_city("sich")
+	await _frames(2)
+	game.skill_tree = "peasant"
+	game.open_character()
+	await _frames(2)
+	_reveal_tabs(game)
+	var scr := _label_texts(game.hud.screen_root)
+	check("Майстерність 13/20" in scr and "Можна обирати нову дорогу" in scr and "Ще можна набрати 7 рівнів майстерності й 7 очок умінь, але лише до зміни класу" in scr, "екран героя: на 13-й — скільки ще рівнів і очок до вершини")
+	game.close_character()
+	gp.job_level = 20
+	game.open_character()
+	await _frames(2)
+	_reveal_tabs(game)
+	scr = _label_texts(game.hud.screen_root)
+	check("Майстерність 20/20" in scr and "Можна обирати нову дорогу" in scr and not "Ще можна набрати" in scr, "на вершині — лише що можна обирати")
+	game.close_character()
+	gp.job_level = 6
+	game.open_character()
+	await _frames(2)
+	_reveal_tabs(game)
+	scr = _label_texts(game.hud.screen_root)
+	check("Майстерність 6/20" in scr and not "Ще можна набрати" in scr and not "Можна обирати нову дорогу" in scr, "до 10-ї — ні вибору, ні поради")
+	game.close_character()
+	# ---- Новий герой: жодних очок за давні межі ----
+	game.new_game()
+	game.hud.close_dialogue()
+	game.player.change_class("cossack")
+	var pts_new: int = game.player.skill_points
+	game.save_game()
+	var dn: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	check(int(dn["version"]) == 13 and int(dn["player"]["skill_points"]) == pts_new and not dn["meta"].has("job_bonus"), "герой, записаний цією версією, нічого не отримує, хоч і Козак")
+	# ---- Давні герої (v12): +10 за Селянина, ще +10 за перший клас, раз ----
+	check(SaveSystem.job_bonus_v12("peasant") == 0 and SaveSystem.job_bonus_v12("cossack") == 10 * per and SaveSystem.job_bonus_v12("volkhv") == 10 * per and SaveSystem.job_bonus_v12("plastun") == 20 * per and SaveSystem.job_bonus_v12("molfar") == 20 * per and SaveSystem.job_bonus_v12("nevidomyi") == 0, "надбавка: Селянину 0, першому класу 10, спеціалізації 20")
+	# без слота (так тести й давні збереження): через гру, з банером, і вдруге нічого
+	_v12_hero("plastun", 3, TEST_SAVE)
+	var d0: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	check(int(d0["version"]) == 13 and int(d0["player"]["skill_points"]) == 23 and int(d0["meta"]["job_bonus"]) == 20 * per, "давній пластун: +20 очок")
+	game._continue_game()
+	await _frames(2)
+	var bt: String = str(game.hud.last_banner.get("text", ""))
+	check(game.player.job == "plastun" and game.player.skill_points == 23 and "+20 очок умінь" in bt and "Селянин росте до 20-го рівня, перший клас — до 50-го" in bt and not game.meta.has("job_bonus"), "при першому вході — банер і очки: «%s»" % bt)
+	var d1: Dictionary = SaveSystem.load_data(TEST_SAVE)
+	check(int(d1["version"]) == 13 and int(d1["player"]["skill_points"]) == 23 and not d1["meta"].has("job_bonus"), "переведене збереження вже v13: очки записано, позначки банера нема")
+	var banners: int = game.hud.banner_count
+	game._continue_game()
+	await _frames(2)
+	check(game.player.skill_points == 23 and (game.hud.banner_count == banners or not "очок умінь (кнопка" in str(game.hud.last_banner.get("text", ""))) and SaveSystem.load_data(TEST_SAVE)["player"]["skill_points"] == 23, "удруге — ні очок, ні банера (банерів після входу: %d)" % (game.hud.banner_count - banners))
+	_v12_hero("peasant", 4, TEST_SAVE)
+	banners = game.hud.banner_count
+	game._continue_game()
+	await _frames(2)
+	check(game.player.job == "peasant" and game.player.skill_points == 4 and (game.hud.banner_count == banners or not "очок умінь (кнопка" in str(game.hud.last_banner.get("text", ""))), "давній Селянин нічого не отримує: доросте сам")
+	# п'ять слотів і давній файл без слота (hero.save) — кожен герой роду
+	var keep := _hero_files_keep()
+	var jobs := ["peasant", "cossack", "volkhv", "plastun", "molfar"]
+	var want := [0, 10, 10, 20, 20]
+	for i in jobs.size():
+		_v12_hero(jobs[i], 5, SaveSystem.slot_path(i + 1))
+	var sums: Array = SaveSystem.slot_summaries()
+	var slots_ok := sums.size() == 5
+	for i in jobs.size():
+		var ds: Dictionary = SaveSystem.load_data(SaveSystem.slot_path(i + 1))
+		slots_ok = slots_ok and str(sums[i].get("job", "")) == jobs[i] and int(ds["player"]["skill_points"]) == 5 + want[i] * per and int(ds["meta"].get("job_bonus", 0)) == want[i] * per
+	check(slots_ok, "п'ять слотів: Селянин +0, Козак і Волхв +10, Пластун і Мольфар +20")
+	var bad := []
+	for i in jobs.size():
+		game.save_path = SaveSystem.slot_path(i + 1)
+		var n0: int = game.hud.banner_count
+		game._continue_game()
+		await _frames(2)
+		var b: String = str(game.hud.last_banner.get("text", "")) if game.hud.banner_count > n0 else ""
+		if not (game.player.job == jobs[i] and game.player.skill_points == 5 + want[i] * per and (("+%d очок умінь" % (want[i] * per)) in b) == (want[i] > 0)):
+			bad.append("%s: %s, %d очок, «%s»" % [jobs[i], game.player.job, game.player.skill_points, b])
+		n0 = game.hud.banner_count
+		game._continue_game()
+		await _frames(2)
+		if game.player.skill_points != 5 + want[i] * per or (game.hud.banner_count > n0 and "очок умінь (кнопка" in str(game.hud.last_banner.get("text", ""))):
+			bad.append("%s удруге: %d очок" % [jobs[i], game.player.skill_points])
+	check(bad.is_empty(), "кожен слот при першому вході отримує своє раз, із банером; удруге — нічого: %s" % str(bad))
+	for i in jobs.size():
+		SaveSystem.delete(SaveSystem.slot_path(i + 1))
+	_v12_hero("volkhv", 2, SaveSystem.SAVE_PATH)
+	SaveSystem.migrate_single_to_slots()
+	var ds1: Dictionary = SaveSystem.load_data(SaveSystem.slot_path(1))
+	check(not SaveSystem.exists(SaveSystem.SAVE_PATH) and int(ds1["player"]["skill_points"]) == 12 and int(ds1["meta"]["job_bonus"]) == 10 * per, "давній файл без слота (hero.save) стає слотом 1 і теж отримує +10")
+	_hero_files_restore(keep)
+	game.save_path = TEST_SAVE
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	# ---- Довідник ----
+	var rule := ""
+	var top := ""
+	for s in WS.sections():
+		for en in s["entries"]:
+			if str(en["title"]) == "Майстерність і зміна класу":
+				rule = str(en["text"]) if s["id"] == "classes" else rule
+			if str(en["title"]) == "Очок менше, ніж умінь":
+				top = str(en["text"])
+	check(rule.contains("Селянин росте до %d-го рівня майстерності, а далі йти можна з %d-го" % [int(P["job_max"]), int(P["change_at"])]) and rule.contains("Козак, Стрілець і Волхв ростуть до 50-го рівня майстерності, а далі йти можна з 40-го") and rule.contains("Спеціалізації ростуть до 50-го"), "довідник: межі майстерності за ступенями — з таблиці класів")
+	check(rule.contains("пропадають назавжди") and rule.contains(ST.name_of("zabuttia")) and rule.contains(ST.name_of("alatyr")) and rule.contains("гра покаже, скільки очок пропаде") and rule.contains("зайві можна вкласти в дерево наступного класу"), "довідник: рання зміна класу коштує очок назавжди, перед нею — попередження, зайві очки Селянина йдуть далі")
+	check(rule.contains("Колись Селянин ріс лише до 10-го рівня, а перший клас до 40-го") and rule.contains("+10 за Селянина й ще +10, якщо вже були спеціалізацією"), "довідник: давнім героям дали очки за рівні, яких вони не могли набрати")
+	check(top.begins_with("На вершині герой має 117 очок умінь"), "довідник: на вершині 117 очок (19 + 49 + 49)")

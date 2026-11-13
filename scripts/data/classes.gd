@@ -233,6 +233,17 @@ static func fx_text(fx: Dictionary, rank: int = 1) -> String:
 	return ", ".join(parts)
 
 
+## Слово до числа: plural(1, "очко", "очки", "очок") — «очко», 3 — «очки», 5 і 11–14 — «очок».
+static func plural(n: int, one: String, few: String, many: String) -> String:
+	var d := absi(n) % 100
+	if d >= 11 and d <= 14:
+		return many
+	match d % 10:
+		1: return one
+		2, 3, 4: return few
+	return many
+
+
 static func node_name(id: String) -> String:
 	return find_node(id).get("name", id)
 

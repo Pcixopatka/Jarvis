@@ -226,9 +226,12 @@ func _ready() -> void:
 	Events.vii_blinded.connect(func(): _record("vii_blind"))
 	Events.job_level_up.connect(func(jl: int):
 		_story_event("job", str(jl))
-		if player.can_change_class() and player.is_peasant():
+		# про нову дорогу кажемо раз, коли вона щойно відкрилась («change_at»), а не на кожному рівні далі:
+		# хто хоче спершу дорости до вершини майстерності, той не мусить бачити це щоразу
+		var opened: bool = player.can_change_class() and jl == int(player.class_info()["change_at"])
+		if opened and player.is_peasant():
 			hud.show_banner("Майстерність %d!\nЧас обирати дорогу: Січ, Батурин чи Карпати" % jl, UI.GOLD)
-		elif player.can_change_class() and jl == int(player.class_info()["change_at"]):
+		elif opened:
 			hud.show_banner("Майстерність %d!\nНаставники на Січі чекають на тебе" % jl, UI.GOLD)
 		elif state != State.PLAYING:
 			hud.show_banner("Майстерність %d!" % jl, UI.GOLD))
@@ -531,9 +534,16 @@ func _continue_game() -> void:
 			hud.show_banner(fight_notice, UI.BAD)
 			fight_notice = ""
 			save_game()
+		var notes := []  # повідомлення міграцій (SaveSystem.migrate), кожне — раз
 		if meta.get("notice", "") == "classes":
 			meta.erase("notice")
-			hud.show_banner("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка «Персонаж»)", UI.GOLD)
+			notes.append("Нова система класів! Вміння й Загартування скинуто —\nочки повернуто, розподіли їх заново (кнопка «Персонаж»)")
+		if int(meta.get("job_bonus", 0)) > 0:
+			notes.append(job_bonus_text(int(meta["job_bonus"])))
+			meta.erase("job_bonus")
+			save_game()  # очки вже записано в героя: удруге ні вони, ні банер не з'являться
+		if not notes.is_empty():
+			hud.show_banner("\n".join(notes), UI.GOLD)
 		if ask_name and player.nick == "":
 			_ask_first_name(banners)  # герой зі збереження, де імен ще не було
 	elif SaveSystem.exists(save_path):
@@ -543,6 +553,15 @@ func _continue_game() -> void:
 		hud.show_banner("Збереження не читається.\nЙого не чіпали. Онови гру або видали героя в «Персонажі».", UI.BAD)
 	else:
 		new_game()
+
+
+## Банер для героя, що змінив клас ще за старих меж майстерності (міграція v13): скільки очок умінь додано й чому.
+## Нові межі — із записів класів.
+func job_bonus_text(got: int) -> String:
+	var C = ClassesData
+	var first: String = str(C.info("peasant")["next"][0])
+	return "Майстерність тепер вища: Селянин росте до %d-го рівня, перший клас — до %d-го.\nТи змінив клас ще за старих меж, тож маєш +%d %s умінь (кнопка «Персонаж»)" % [
+		int(C.info("peasant")["job_max"]), int(C.info(first)["job_max"]), got, C.plural(got, "очко", "очки", "очок")]
 
 
 ## Після входу в гру герой стоїть там, де стояв, коли гру закрили. Бій сам не починається: якщо гру
@@ -1118,10 +1137,14 @@ func _hall_continue(kind: String, npc: String, line: String = "") -> void:
 			return
 
 
-## Посвята в спеціалізацію після випробування.
-func _spec_dialogue(city: String) -> void:
+## Посвята в спеціалізацію після випробування. Посвята — мить, коли клас справді змінюється, тож
+## нижче вершини майстерності спершу попередження (warned — його вже прийнято).
+func _spec_dialogue(city: String, warned: bool = false) -> void:
 	var d := SpecService.city_dialogue(world, city)
 	if d.is_empty():
+		return
+	if not warned and class_warn_needed(str(d["spec"])):
+		_show_class_warn(str(d["spec"]), _spec_dialogue.bind(city, true))
 		return
 	var dlg = DialogueScript.new()
 	dlg.setup(d["lines"], [])
@@ -1138,6 +1161,55 @@ func _spec_dialogue(city: String) -> void:
 		if state == State.CITY and city_id == city:
 			_build_city())
 	hud.show_dialogue(dlg)
+
+
+# ---------- Зміна класу раніше вершини майстерності ----------
+
+## Відкрите попередження: {"to": новий клас, "lost": скільки очок умінь пропаде, "yes": що зробити після «Так»}.
+var class_warn := {}
+
+
+## Чи треба попередити перед переходом у клас to: герой іще не доріс до вершини майстерності свого класу,
+## тож очки за решту рівнів пропадуть назавжди. На вершині попередження нема.
+func class_warn_needed(to: String) -> bool:
+	return to != "" and to != player.job and player.job_points_left() > 0
+
+
+## Вікно-попередження перед ранньою зміною класу: скільки очок умінь пропаде назавжди (вершина майстерності
+## мінус нинішня). «Так» робить yes (розмову, що змінює клас), «Ні» чи «Назад» лишає все як було:
+## розмова чекає в ратуші, і до неї можна повернутися, коли майстерність доросте.
+func _show_class_warn(to: String, yes: Callable) -> void:
+	var lost: int = player.job_points_left()
+	var left: int = player.job_levels_left()
+	var C = player.Classes
+	class_warn = {"to": to, "lost": lost, "yes": yes}
+	_open_menu("class_warn", true)
+	hud.add_title("Змінити клас раніше вершини?", 44)
+	hud.add_title("%s: майстерність %d із %d" % [player.class_name_ua(), player.job_level, player.job_max()], 26, UI.GOLD)
+	hud.add_title("Новий клас — %s — почне майстерність з 1.\n%s міг би ще вирости на %d %s, а це %d %s умінь.\nВони пропадуть назавжди: їх не поверне ні %s,\nні %s, ні жодне інше скидання." % [
+		str(C.info(to)["name"]), player.class_name_ua(), left, C.plural(left, "рівень", "рівні", "рівнів"),
+		lost, C.plural(lost, "очко", "очки", "очок"), StoneService.name_of("zabuttia"), StoneService.name_of("alatyr")], 22, UI.TEXT)
+	hud.add_title("Відмовишся — усе лишиться як є, а до цієї розмови можна повернутися будь-коли.", 20, UI.MUTED)
+	hud.add_button("Так, змінити клас", class_warn_confirm, Vector2(620, 64))
+	hud.add_button("Ні, ще наберуся сили", class_warn_cancel, Vector2(620, 64))
+
+
+func class_warn_confirm() -> void:
+	if class_warn.is_empty():
+		return
+	var yes: Callable = class_warn["yes"]
+	class_warn = {}
+	hud.close_overlay()
+	yes.call()
+
+
+func class_warn_cancel() -> void:
+	if class_warn.is_empty():
+		return
+	class_warn = {}
+	hud.close_overlay()
+	if state == State.CITY:
+		_build_city()
 
 
 ## Перекази: оповідач у ратуші починає крок лінійки або дякує за виконаний (див. LegendService).
@@ -1243,9 +1315,15 @@ func _hero_dialogue(city: String) -> void:
 
 ## Сюжетна розмова в ратуші. Якщо той самий співрозмовник одразу має наступну справу, розмова триває.
 ## id — крок розмови ("" — перша сюжетна розмова міста).
-func _story_dialogue(city: String, id: String = "") -> void:
+## Розмова, що здає крок із новим класом у нагороду (присяга козака, посвята волхва чи стрільця), — мить,
+## коли клас справді змінюється: нижче вершини майстерності спершу попередження (warned — його вже прийнято).
+func _story_dialogue(city: String, id: String = "", warned: bool = false) -> void:
 	var d := StoryService.city_dialogue(world, city, id)
 	if d.is_empty():
+		return
+	var to := StoryService.class_reward(d)
+	if not warned and class_warn_needed(to):
+		_show_class_warn(to, _story_dialogue.bind(city, str(d["id"]), true))
 		return
 	var npc := _hall_npc(d["lines"])
 	var dlg = DialogueScript.new()
@@ -2792,6 +2870,7 @@ func _reset_session() -> void:
 	sell_multi = false
 	sell_marked.clear()
 	confirm_action = ""
+	class_warn = {}
 	_name_closed()
 	Data.sell_mult = 1.0
 
@@ -3370,6 +3449,9 @@ func go_back(from_system: bool) -> void:
 		return
 	if trader_open:
 		close_trader()
+		return
+	if not class_warn.is_empty() and hud.overlay.visible:
+		class_warn_cancel()  # попередження про ранню зміну класу: «Назад» — це «Ні»
 		return
 	match state:
 		State.PLAYING:

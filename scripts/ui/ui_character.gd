@@ -775,6 +775,11 @@ static func _skills(game) -> Control:
 		for c in p.class_info()["next"]:
 			names.append("%s (%s)" % [Classes.info(c)["name"], Data.place_name(str(Classes.info(c).get("where", "sich")))])
 		note = "Можна обирати нову дорогу: " + ", ".join(names) + ". Іди до наставника."
+		if p.job_points_left() > 0:
+			# рання зміна класу коштує очок назавжди: кажемо прямо, скільки ще можна набрати
+			var lv: int = p.job_levels_left()
+			note += "\nЩе можна набрати %d %s майстерності й %d %s умінь, але лише до зміни класу." % [
+				lv, Classes.plural(lv, "рівень", "рівні", "рівнів"), p.job_points_left(), Classes.plural(p.job_points_left(), "очко", "очки", "очок")]
 	var nl := UI.label(note, 13, UI.GOOD if p.can_change_class() else UI.MUTED, false)
 	nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	nl.custom_minimum_size = Vector2(170, 0)

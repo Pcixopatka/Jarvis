@@ -632,6 +632,17 @@ func job_next() -> int:
 	return Classes.job_xp_for(int(class_info()["tier"]), job_level)
 
 
+## Скільки рівнів майстерності нинішній клас іще може набрати до своєї вершини («job_max»).
+func job_levels_left() -> int:
+	return maxi(0, job_max() - job_level)
+
+
+## Скільки очок умінь іще дасть нинішній клас. Хто змінить клас раніше вершини, цих очок не матиме
+## ніколи: майстерність нового класу починається з 1, а жоден камінь чи інше скидання їх не вертає.
+func job_points_left() -> int:
+	return job_levels_left() * Data.SKILL_POINTS_PER_LEVEL
+
+
 ## Чи в руках зброя чарівника (сила від Характерництва): кнопка «Блок» тоді зветься «Оберіг».
 func is_mage() -> bool:
 	return Data.weapon_stat(weapon_type) == "spi"

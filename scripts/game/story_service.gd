@@ -144,6 +144,13 @@ static func city_dialogue(world, city: String, id: String = "") -> Dictionary:
 	return {}
 
 
+## Новий клас, який дасть розмова з city_dialogue (здача кроку з «class» у нагороді), або "".
+static func class_reward(d: Dictionary) -> String:
+	if d.is_empty() or str(d.get("kind", "")) != "end":
+		return ""
+	return str(QuestEngine.step(str(d["id"])).get("reward", {}).get("class", ""))
+
+
 ## Усі сюжетні розмови, що чекають у цьому місті, у порядку місій.
 static func city_dialogues(world, city: String) -> Array:
 	var out := []
