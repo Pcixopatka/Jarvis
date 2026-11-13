@@ -49,6 +49,46 @@ static func _kv(key: String, value: String, size: int = 16) -> Control:
 	return row
 
 
+const BAR_H := 20  # висота смуги досвіду й майстерності
+const BAR_GAP := 2  # проміжок між ними
+const BAR_FONT := 13
+
+
+## Смуга з написом зліва й числами справа поверх неї; однакова для досвіду й майстерності.
+static func _bar(key: String, value: String, cur: int, top: int) -> ProgressBar:
+	var bar := ProgressBar.new()
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, BAR_H)
+	bar.min_value = 0.0
+	bar.max_value = maxf(1.0, float(top))
+	bar.value = float(cur)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0.2, 0.17, 0.13)
+	bg.border_color = Color(0.42, 0.35, 0.24)
+	bg.set_border_width_all(1)
+	bg.set_corner_radius_all(4)
+	var fg := StyleBoxFlat.new()
+	fg.bg_color = Color(0.52, 0.4, 0.16)
+	fg.set_corner_radius_all(4)
+	bar.add_theme_stylebox_override("background", bg)
+	bar.add_theme_stylebox_override("fill", fg)
+	var row := HBoxContainer.new()
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 8
+	row.offset_right = -8
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for t in [key, value]:
+		var l := UI.label(t, BAR_FONT, UI.TEXT, false)
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.size_flags_vertical = Control.SIZE_FILL
+		l.add_theme_constant_override("outline_size", 4)
+		l.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
+		row.add_child(l)
+	row.get_child(0).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(row)
+	return bar
+
+
 static func _hero(game) -> Control:
 	var p = game.player
 	var sel: int = game.char_sel_uid
@@ -86,22 +126,20 @@ static func _hero(game) -> Control:
 	doll_box.add_child(load("res://scripts/ui/ui_divine.gd").slots_row(game, sel, CELL - 6))
 	top.add_child(doll_box)
 
-	var bar := ProgressBar.new()
-	bar.min_value = 0.0
-	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(0, 14)
+	# Дві смуги з написами на них: досвід (чи звитяга) і майстерність класу
+	var bars := VBoxContainer.new()
+	bars.add_theme_constant_override("separation", BAR_GAP)
+	left.add_child(bars)
 	if p.level >= p.Classes.BASE_LEVEL_MAX:
-		# останній рівень: досвід наповнює смугу звитяги
-		bar.max_value = maxf(1.0, float(p.valor_next()))
-		bar.value = float(p.valor_xp)
-		# на найбільшій звитязі наступної нема: смуга лише стоїть повна
+		# останній рівень: досвід наповнює смугу звитяги; на найбільшій звитязі смуга лише стоїть повна
 		var highest: bool = p.valor >= p.Valor.max_valor()
-		left.add_child(_kv("Звитяга %d: %s" % [p.valor, "найвища" if highest else "до наступної"], "%s / %s" % [UI.num(p.valor_xp), UI.num(p.valor_next())], 15))
+		bars.add_child(_bar("Звитяга %d: %s" % [p.valor, "найвища" if highest else "до наступної"], "%s / %s" % [UI.num(p.valor_xp), UI.num(p.valor_next())], p.valor_xp, p.valor_next()))
 	else:
-		bar.max_value = maxf(1.0, float(p.xp_next))
-		bar.value = float(p.xp)
-		left.add_child(_kv("Досвід до рівня %d" % (p.level + 1), "%s / %s" % [UI.num(p.xp), UI.num(p.xp_next)], 15))
-	left.add_child(bar)
+		bars.add_child(_bar("Досвід до рівня %d" % (p.level + 1), "%s / %s" % [UI.num(p.xp), UI.num(p.xp_next)], p.xp, p.xp_next))
+	if p.job_level < p.job_max():
+		bars.add_child(_bar("Майстерність до рівня %d" % (p.job_level + 1), "%s / %s" % [UI.num(p.job_xp), UI.num(p.job_next())], p.job_xp, p.job_next()))
+	else:
+		bars.add_child(_bar("Майстерність %d: найвища" % p.job_level, "", 1, 1))
 
 	# Очки характеристик: чотири коробки з «+»
 	var pts := HBoxContainer.new()

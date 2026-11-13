@@ -15326,12 +15326,43 @@ func _suite_grid_shops() -> void:
 	fbuy.pressed.emit()
 	await _frames(2)
 	check(FairS.bought(gw, fkey) == 1 and int(gp.resources[Camp.TROPHY]) == 5000 - int(fstock[fstock.size() - 1]["trophy"]), "кнопка картки вимінює товар за трофеї")
+	# ---- Екран героя: смуга майстерності під смугою досвіду ----
+	var was_job := [gp.job_level, gp.job_xp]
+	gp.job_level = 1
+	gp.job_xp = 7
+	var hero: Control = UChar._hero(game)
+	var hbars: Array = hero.get_child(0).find_children("*", "ProgressBar", true, false)
+	var bar_text := func(b: Control) -> Array:
+		var out := []
+		for l in b.find_children("*", "Label", true, false):
+			out.append(l.text)
+		return out
+	var xp_ok: bool = hbars.size() == 2 and bar_text.call(hbars[0]).has("Досвід до рівня %d" % (gp.level + 1))
+	check(xp_ok, "на першій смузі екрана героя напис «Досвід до рівня %d»" % (gp.level + 1))
+	var jt: Array = bar_text.call(hbars[1]) if hbars.size() == 2 else []
+	check(jt.has("Майстерність до рівня %d" % (gp.job_level + 1)) and jt.has("%s / %s" % [UKit.num(gp.job_xp), UKit.num(gp.job_next())]) and is_equal_approx(hbars[1].value, float(gp.job_xp)) and is_equal_approx(hbars[1].max_value, float(gp.job_next())),
+		"під смугою досвіду смуга майстерності з написом і числами на ній: %d / %d" % [gp.job_xp, gp.job_next()])
+	hero.free()
+	gp.job_level = gp.job_max()
+	gp.job_xp = 0
+	hero = UChar._hero(game)
+	hbars = hero.get_child(0).find_children("*", "ProgressBar", true, false)
+	var jtop: bool = hbars.size() == 2 and bar_text.call(hbars[1]).has("Майстерність %d: найвища" % gp.job_max())
+	check(jtop and hbars.size() == 2 and hbars[1].value == hbars[1].max_value and hbars[1].max_value == 1.0, "на вершині майстерності рядок «найвища» і повна смуга")
+	hero.free()
+	gp.job_level = was_job[0]
+	gp.job_xp = was_job[1]
 	# ---- Довідник ----
 	var arts := {}
 	for e in WS._entries("basics") + WS._entries("camp"):
 		arts[str(e["title"])] = str(e["text"])
 	check("клітинками зі значками" in arts.get("Крамниця міста", "") and "«Вибрати кілька»" in arts.get("Крамниця міста", "") and UCamp.CHEST_TAKE in arts.get("Скриня", "") and "Другий дотик" in arts.get("Скриня", ""), "довідник описує крамницю й скриню сіткою значків")
 	check("сіткою значків" in arts.get("Крамниця", "") and "намальований його бос" in arts.get("Крамниця", "") and "сіткою значків" in arts.get("Трофейний ярмарок", "") and "«Виміняти»" in arts.get("Трофейний ярмарок", ""), "довідник описує донатну крамницю й ярмарок сіткою значків")
+	var classes_text := ""
+	for e in WS._entries("basics"):
+		if str(e["text"]).begins_with("Гра починається селянином."):
+			classes_text = str(e["text"])
+	check("Смугу майстерності видно на екрані героя під смугою досвіду." in classes_text, "довідник каже, де видно смугу майстерності")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
