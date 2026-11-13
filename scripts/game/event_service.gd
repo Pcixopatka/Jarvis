@@ -158,12 +158,13 @@ static func tick(world, player) -> Array:
 	return msgs
 
 
-## Місцевості (не печери, не безкінечні) по силі герою.
+## Місцевості (не печери, не безкінечні) по силі герою й відкриті йому (Data.place_open). Звідси беруть місце
+## набіг, поранений, полон, ніч і скарб (і чутки шинку про ніч і скарб), а порадник — «Вирушай».
 static func reachable_locs(world, player) -> Array:
 	var out := []
 	for id in Data.place_ids():
 		var L: Dictionary = Data.place(id)
-		if L["type"] != "field" or L.get("endless", false):
+		if L["type"] != "field" or L.get("endless", false) or not Data.place_open(id, int(player.level)):
 			continue
 		var lvl := Data.loc_level(L, player.level)  # поле має сталий рівень: події там, де воно під силу героєві
 		if lvl <= player.level + 2 and lvl >= player.level - 6:
@@ -194,6 +195,8 @@ static func start(world, player, kind: String, target: String = "") -> String:
 				if locs.is_empty():
 					return ""
 				target = locs[randi() % locs.size()]
+			elif Data.is_place(target) and not Data.place_open(target, int(player.level)):
+				return ""  # подія лише там, куди героя пускають
 			ev["target"] = target
 			if kind == "captives":
 				ev["from"] = target

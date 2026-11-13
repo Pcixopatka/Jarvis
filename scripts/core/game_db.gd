@@ -3400,6 +3400,35 @@ static func quest_graph_problems(lines: Dictionary, tables: Dictionary) -> Array
 	return out
 
 
+## Місце мети кожного кроку відкрите героєві з рівнем місії (Data.place_open: поле — до трьох рівнів вище за героя,
+## печера з босом — з її рівня). Рівень місії — свій «min_level», а для першого кроку лінії — ще й не нижчий за
+## «min_level» лінії. Пізніший крок у слабшому місці — гаразд. Перевіряє справжні дані (_quest_graph_links), не вигадані графи.
+static func quest_place_problems(lines: Dictionary, tables: Dictionary) -> Array:
+	var out := []
+	var steps := {}
+	var where := {}
+	for t in QUEST_STEP_TABLES:
+		for id in tables.get(t, _EMPTY):
+			steps[id] = tables[t][id]
+			where[id] = "%s/%s" % [t, id]
+	var Data = load("res://scripts/data/data.gd")
+	for id in steps:
+		var R: Dictionary = steps[id]
+		var loc := str(R.get("objective", _EMPTY).get("loc", ""))
+		if not Data.is_place(loc):
+			continue
+		var need := int(R.get("min_level", 0))
+		var own_line := false
+		for a in R.get("after", []):
+			own_line = own_line or str(steps.get(str(a), _EMPTY).get("line", "")) == str(R.get("line", ""))
+		if not own_line:
+			need = maxi(need, int(lines.get(str(R.get("line", "")), _EMPTY).get("min_level", 0)))
+		need = maxi(need, 1)
+		if not Data.place_open(loc, need):
+			out.append("%s: місце мети «%s» героєві %d-го рівня ще закрите (пускають з %d-го): «min_level» кроку замалий" % [where[id], loc, need, Data.open_from(loc)])
+	return out
+
+
 static func _find_cycles(steps: Dictionary, id: String, color: Dictionary, path: Array, where: Dictionary, out: Array) -> void:
 	color[id] = 1
 	path.append(id)
@@ -3421,7 +3450,8 @@ static func _quest_graph_links(name: String, rows: Dictionary) -> Array:
 	var tables := {}
 	for t in QUEST_STEP_TABLES:
 		tables[t] = rows if t == name else table(t)
-	return quest_graph_problems(rows if name == "quest_lines" else table("quest_lines"), tables)
+	var lines: Dictionary = rows if name == "quest_lines" else table("quest_lines")
+	return quest_graph_problems(lines, tables) + quest_place_problems(lines, tables)
 
 
 ## Мета: місце є й підходить меті, ворог водиться там, місто — справжнє місто.

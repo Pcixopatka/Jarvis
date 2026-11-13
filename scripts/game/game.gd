@@ -674,6 +674,7 @@ func enter_map() -> void:
 		mv.focus_on(map_here)
 	mv.selected = map_sel
 	mv.hero_level = player.level
+	mv.held = world.held_places()  # закрите за рівнем, куди веде вже взяте, мапа малює відкритим
 	mv.targets = world.quest_targets()
 	for loc in HeroService.targets(world):
 		mv.targets[loc] = true
@@ -840,6 +841,9 @@ func _price_city(id: String) -> void:
 
 
 func enter_location(id: String) -> void:
+	if Data.is_place(id) and not world.can_enter(id, player.level):
+		_refuse_place(id)
+		return
 	map_here = id
 	_price_city("")
 	for cid in Data.city_ids():
@@ -877,6 +881,27 @@ func enter_location(id: String) -> void:
 	Audio.play("unsheathe", 0.05)
 	_refresh_auto_button()
 	hint("combat", "Ліва частина екрана — рух. Тримай «Удар» — козак сам б'є найближчу нечисть. Коли ворог червоніє — він замахується: тисни «Перекид»!")
+
+
+## Місце закрите за рівнем героя (Data.place_open): у бій не пускаємо, хоч би звідки прийшов наказ (панель,
+## «Далі», подорож). Герой стоїть на мапі біля входу, панель каже, з якого рівня відкриється.
+func _refuse_place(id: String) -> void:
+	map_here = id
+	map_at_point = false
+	map_sel = id
+	if state != State.MAP:
+		enter_map()
+	else:
+		hud.map_view.current = id
+		hud.map_view.current_ll = null
+		hud.map_view.selected = id
+		_build_map_panel()
+	hud.show_banner(refuse_text(id), UI.BAD)
+
+
+## Відмова на вході в закрите місце: «Кам'янецькі мури: ще зарано. Відкриється з 31-го рівня героя.»
+func refuse_text(id: String) -> String:
+	return "%s: ще зарано. %s" % [Data.place_name(id), Data.open_text(id, player.level)]
 
 
 # ======================= Крамниця Хованця =======================

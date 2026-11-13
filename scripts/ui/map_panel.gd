@@ -18,6 +18,7 @@ const LEGEND := [
 	["flag", "", Color.WHITE, "Прапорець: тут ти зараз."],
 	["", "(4)", Color(0.9, 0.85, 0.75), "Число в дужках: рівень місця. Поле має сталий рівень. «21+» стоїть лише біля печер із босом: вони ростуть разом із героєм."],
 	["", "◯", Color(0.75, 0.2, 0.15), "Червона рамка й назва: місце надто сильне для тебе."],
+	["", "◯", Color(0.23, 0.16, 0.1, 0.5), "Блідий значок, сіра рамка й підпис: туди ще не пускають. Поле відкривається, коли воно вище за тебе не більш як на {above} рівні, печера з босом — з її рівня, місто відкрите завжди. Доїхати можна, зайти — ні: панель каже, з якого рівня героя."],
 	["", "◯", Color(1.0, 0.3, 0.2), "Червоне кільце, що пульсує, і напис «Облога!»: місто чи хутір треба боронити. Число каже, скільки походів воно ще протримається."],
 	["raid", "", Color.WHITE, "Великий значок із числом: подія світу. Набіг, валка, полон чи поранений чекають стільки походів."],
 	["moon", "", Color.WHITE, "Місяць: нічний похід. Нечисть лютіша, здобич щедріша."],
@@ -43,7 +44,7 @@ static func build_legend(on_close: Callable) -> Control:
 		mark.custom_minimum_size = Vector2(44, 34)
 		mark.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 		h.add_child(mark)
-		var t := _wrapped(str(row[3]), 16, UI.TEXT)
+		var t := _wrapped(str(row[3]).replace("{above}", str(Data.FIELD_OPEN_ABOVE)), 16, UI.TEXT)
 		t.custom_minimum_size = Vector2(250, 0)
 		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		h.add_child(t)
@@ -274,7 +275,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	if sel == "":
 		v.add_child(UI.label("Мапа земель", 28, UI.GOLD, false))
 		v.add_child(UI.label("Торкнись місця на мапі.\nДотик до порожнього місця:\nгерой їде просто туди.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
-		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Хата з прапором — твій хутір", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут інша місія чи завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
+		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Хата з прапором — твій хутір", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут інша місія чи завдання", "Червоне коло — небезпечно\nдля твого рівня", "Блідий значок — туди ще зарано", "(число) — рівень місцевості"]:
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return v
 	if sel == Camp.CAMP_ID:
@@ -345,6 +346,11 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	for e in L["enemies"]:
 		names.append(GameDB.mob_name(e))
 	v.add_child(_wrapped("Нечисть: " + ", ".join(names), 17, UI.MUTED))
+	# Закрите за рівнем героя місце (Data.place_open): до нього можна доїхати мапою, та зайти — ні
+	var closed: String = "" if world.can_enter(sel, int(player.level)) else Data.open_text(sel, int(player.level))
+	if closed != "":
+		v.add_child(_wrapped(closed, 18, UI.BAD))
+		return v
 	var times: int = world.cleared.get(sel, 0)
 	var rep := "Можна проходити повторно для прокачки"
 	if times > 0:

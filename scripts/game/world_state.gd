@@ -131,14 +131,14 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 	for id in Data.place_ids():
 		if Data.place(id).get("endless", false) or Data.place(id).has("peril"):
 			continue  # Глибини й надважкі печери — не для доручень
-		if want_escort and Data.place(id)["type"] == "dungeon":
-			continue
+		if want_escort and (Data.place(id)["type"] == "dungeon" or not Data.place_open(id, hero_level)):
+			continue  # супровід, якого просить виклик, — лише туди, куди героя вже пускають
 		var l: int = Data.place(id)["level"]
 		if l >= lvl - 2 and l <= lvl + 3:
 			locs.append(id)
 	if locs.is_empty() and want_escort:
 		for id in Data.place_ids():
-			if Data.place(id)["type"] != "dungeon" and not Data.place(id).get("endless", false) and int(Data.place(id)["level"]) <= lvl + 3:
+			if Data.place(id)["type"] != "dungeon" and not Data.place(id).get("endless", false) and int(Data.place(id)["level"]) <= lvl + 3 and Data.place_open(id, hero_level):
 				locs.append(id)
 	if locs.is_empty():
 		for id in Data.place_ids():
@@ -183,12 +183,25 @@ func can_take() -> bool:
 	return quests.size() < Data.MAX_ACTIVE_QUESTS
 
 
+## З якого рівня героя завдання можна взяти: з того, з якого пускають у його місце (Data.open_from).
+func quest_open_from(q: Dictionary) -> int:
+	return Data.open_from(str(q.get("loc", "")))
+
+
+## Чи завдання з дошки можна взяти героєві рівня lvl: місце, куди воно веде, мусить бути відкрите. Закрите
+## висить на дошці сірим із відмовою «Ще зарано» (UiCity), узяти його не можна.
+func quest_open(q: Dictionary, lvl: int) -> bool:
+	return Data.place_open(str(q.get("loc", "")), lvl)
+
+
 func take(city: String, qid: int) -> bool:
 	if not can_take():
 		return false
 	var b := board(city)
 	for i in b.size():
 		if b[i]["id"] == qid:
+			if not quest_open(b[i], hero_level):
+				return false  # веде в закрите місце: висить на дошці, та взяти ще зарано
 			quests.append(b[i])
 			b.remove_at(i)
 			return true
@@ -242,6 +255,35 @@ func on_dungeon(loc_id: String) -> Array:
 			q["progress"] = q["count"]
 			msgs.append("Завдання виконано! Здай: %s" % Data.place_name(str(q["city"])))
 	return msgs
+
+
+## Місця, куди веде те, що герой уже тримає: невиконане завдання міста (і супровід), жива ціль розшуку, особиста
+## справа побратима, випробування наставника й активна мета місії. Таке місце пускає героя й тоді, коли за рівнем
+## воно закрите (Data.place_open): узяте до цієї версії гри доводиться до кінця, старе збереження не застрягає.
+func held_places() -> Dictionary:
+	var out := {}
+	for q in quests:
+		if not is_done(q):
+			out[str(q["loc"])] = true
+	for b in bounties.get("active", []):
+		if not bool(b.get("killed", false)):
+			out[str(b["loc"])] = true
+	for loc in load("res://scripts/game/hero_service.gd").targets(self):
+		out[str(loc)] = true
+	var trial: Dictionary = spec_trial
+	if not trial.is_empty() and str(trial.get("stage", "")) == "active":
+		out[str(load("res://scripts/game/spec_service.gd").target(self))] = true
+	var Q = load("res://scripts/game/quest_engine.gd")
+	for id in Q.missions(self):
+		if Q.stage(self, id) == "active":
+			out[str(Q.step(id).get("objective", {}).get("loc", ""))] = true
+	out.erase("")
+	return out
+
+
+## Чи пустять героя рівня lvl у місце id: за рівнем (Data.place_open) або тому, що туди веде вже взяте (held_places).
+func can_enter(id: String, lvl: int) -> bool:
+	return Data.place_open(id, lvl) or held_places().has(id)
 
 
 func quest_targets() -> Dictionary:

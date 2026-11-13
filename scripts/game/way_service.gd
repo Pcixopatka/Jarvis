@@ -210,21 +210,17 @@ static func go(step: Dictionary, world, player, here: String = "") -> Dictionary
 	return {"place": place, "tab": -1 if place != "" else TAB_JOURNAL}
 
 
-## Печера, що під силу герою: найвищого рівня серед не сильніших за нього (або найлегша).
+## Печера, що під силу герою: найвищого рівня серед відкритих йому (Data.place_open: печера — з її рівня);
+## поки жодна не відкрита — "" (крок веде на вкладку «Журнал»), а не до закритої печери.
 static func _dungeon(player) -> String:
 	var best := ""
 	var best_lvl := -1
-	var easiest := ""
-	var easiest_lvl := 9999
 	for id in Data.place_ids():
 		var L: Dictionary = Data.place(id)
 		if L["type"] != "dungeon" or L.get("endless", false) or L.has("region") or L.has("peril"):
 			continue
 		var lvl := int(L["level"])
-		if lvl < easiest_lvl:
-			easiest_lvl = lvl
-			easiest = id
-		if lvl <= int(player.level) and lvl > best_lvl:
+		if Data.place_open(id, int(player.level)) and lvl > best_lvl:
 			best_lvl = lvl
 			best = id
-	return best if best != "" else easiest
+	return best

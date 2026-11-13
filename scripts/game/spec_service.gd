@@ -31,9 +31,26 @@ static func available(player) -> Array:
 	return player.class_info()["next"].filter(func(c): return has_trial(c))
 
 
+## Місце випробування ("" — випробування не в місці: вполювати еліт).
+static func trial_place(spec: String) -> String:
+	return str(trial(spec).get("objective", {}).get("loc", ""))
+
+
+## З якого рівня героя наставник дає випробування: з того, з якого пускають у його місце (Data.open_from).
+static func open_from(spec: String) -> int:
+	return Data.open_from(trial_place(spec))
+
+
+## Чи випробування вже можна взяти за рівнем героя (місце відкрите; без місця — завжди).
+static func trial_open(spec: String, lvl: int) -> bool:
+	return Data.place_open(trial_place(spec), lvl)
+
+
 static func start(world, player, spec: String) -> bool:
 	if not spec in available(player):
 		return false
+	if not trial_open(spec, int(player.level)):
+		return false  # місце випробування ще закрите: наставник відмовляє («Ще зарано: приходь із N-го рівня»)
 	world.spec_trial = {"spec": spec, "stage": "active", "progress": 0}
 	return true
 

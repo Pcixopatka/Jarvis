@@ -18,6 +18,11 @@ const ICON_ORDER := ["castle", "hut", "tree", "pine", "mountain", "swamp", "cave
 const INK := Color(0.23, 0.16, 0.1)
 const BATTLE_EV := ["village_raid", "caravan", "sich_siege", "captives", "wounded"]
 const INK_SOFT := Color(0.35, 0.26, 0.17, 0.8)
+## Закрите місце: місце занять до свого рівня й поле чи печера, у які за рівнем героя ще не пускають
+## (Data.place_open). Один вигляд на обидва: сіра рамка, блідий значок, сірий підпис.
+const LOCKED_RING := Color(0.23, 0.16, 0.1, 0.4)
+const LOCKED_ICON := Color(1, 1, 1, 0.45)
+const LOCKED_LABEL := Color(0.23, 0.16, 0.1, 0.5)
 const SEA := Color(0.55, 0.66, 0.68)
 const LAND_UA := Color(0.93, 0.86, 0.68)
 const LAND_NEAR := Color(0.86, 0.8, 0.64)
@@ -203,6 +208,7 @@ var plague := {}  # id місцевості -> рівень зарази (0..3)
 var sieges := {}  # місто/хутір -> походів до падіння (облога)
 var events := []  # значки подій: [{"id", "ll", "icon", "label", "kind"}] (див. EventService.map_marks)
 var hero_level := 1
+var held := {}  # місця, куди веде вже взяте (WorldState.held_places): пускають і за рівнем закриті
 ## Подорож: {"from": id, "to": id, "t": 0..1} або порожньо. Фігурка їде дугою, камера слідує.
 var travel := {}
 var map_rect := Rect2()  # область для мапи на екрані
@@ -463,6 +469,14 @@ func _tap(pos: Vector2) -> void:
 
 # ---------- Малювання ----------
 
+## Чи мапа малює місце закритим (сіра рамка, блідий значок, сірий підпис): місце занять — до свого рівня,
+## поле чи печера — коли за рівнем героя туди ще не пускають (Data.place_open) і туди не веде вже взяте (held).
+func is_locked(id: String) -> bool:
+	if Acts.is_spot(id):
+		return hero_level < int(Acts.spot(id)["level"])
+	return Data.is_place(id) and not Data.place_open(id, hero_level) and not held.has(id)
+
+
 func _draw() -> void:
 	redraws += 1
 	_layout()
@@ -560,15 +574,16 @@ func _draw() -> void:
 		var L: Dictionary = Data.place(id)
 		var c := _proj(L["pos"])
 		_markers[id] = c
-		var danger: bool = L["level"] > hero_level + 2
+		var locked := is_locked(id)
+		var danger: bool = L["level"] > hero_level + 2 and not locked
 		var r := 16.0 * k
-		# Кружечок-печатка й піксельний значок місцевості
+		# Кружечок-печатка й піксельний значок місцевості; закрите місце — як закрите місце занять
 		draw_circle(c, r, Color(0.96, 0.92, 0.8, 0.9))
-		draw_arc(c, r, 0, TAU, 24, Color(0.75, 0.2, 0.15) if danger else INK, 2.0)
-		_icon(_loc_icon(L), c, r * 1.5)
+		draw_arc(c, r, 0, TAU, 24, LOCKED_RING if locked else (Color(0.75, 0.2, 0.15) if danger else INK), 2.0)
+		_icon(_loc_icon(L), c, r * 1.5, LOCKED_ICON if locked else Color.WHITE)
 		# печери з босом ростуть із героєм: позначка «21+» — із якого рівня туди можна; поле має сталий рівень
 		var lvl_text := ("%d+" % int(L["level"])) if L.get("scale", false) else str(L["level"])
-		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%s)" % [L["name"], lvl_text], label_fs, Color(0.6, 0.12, 0.08) if danger else INK])
+		labels.append([10, id, c + Vector2(0, r + label_fs + 2), "%s (%s)" % [L["name"], lvl_text], label_fs, LOCKED_LABEL if locked else (Color(0.6, 0.12, 0.08) if danger else INK)])
 	var city_fs := int(clampf(18.0 * k, 13, 32))
 	for id in Data.city_ids():
 		var C: Dictionary = Data.city(id)
@@ -587,11 +602,11 @@ func _draw() -> void:
 		var S: Dictionary = Acts.spot(sid)
 		var sc := _proj(S["pos"])
 		_markers[sid] = sc
-		var locked: bool = hero_level < int(S["level"])
+		var locked := is_locked(sid)
 		draw_circle(sc, 16.0 * k, Color(0.96, 0.92, 0.8, 0.9))
-		draw_arc(sc, 16.0 * k, 0, TAU, 24, Color(0.2, 0.4, 0.15) if not locked else Color(INK, 0.4), 2.0)
-		_icon(S["icon"], sc, 26.0 * k, Color.WHITE if not locked else Color(1, 1, 1, 0.45))
-		labels.append([12, sid, sc + Vector2(0, 16 * k + label_fs + 2), S["name"], label_fs, Color(0.2, 0.4, 0.15) if not locked else Color(INK, 0.5)])
+		draw_arc(sc, 16.0 * k, 0, TAU, 24, Color(0.2, 0.4, 0.15) if not locked else LOCKED_RING, 2.0)
+		_icon(S["icon"], sc, 26.0 * k, Color.WHITE if not locked else LOCKED_ICON)
+		labels.append([12, sid, sc + Vector2(0, 16 * k + label_fs + 2), S["name"], label_fs, Color(0.2, 0.4, 0.15) if not locked else LOCKED_LABEL])
 	_draw_labels(font, labels)
 
 	# Завдання й несюжетні місії; блідий «!» — місія чекає, поки герой підросте (як закриті місця занять)

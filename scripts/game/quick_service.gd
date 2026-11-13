@@ -65,6 +65,8 @@ static func applies(loc_id: String) -> bool:
 static func block_reason(world, player, loc_id: String) -> String:
 	if not applies(loc_id):
 		return "тут його не буває"
+	if not Data.place_open(loc_id, int(player.level)):
+		return "місце закрите: %s" % Data.open_text(loc_id, int(player.level)).to_lower().trim_suffix(".")
 	var times: int = int(world.cleared.get(loc_id, 0))
 	if times < MIN_CLEARS:
 		return "відкриється, коли пройдеш це місце %d рази (зараз %d)" % [MIN_CLEARS, times]

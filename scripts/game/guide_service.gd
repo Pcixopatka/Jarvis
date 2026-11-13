@@ -170,8 +170,11 @@ static func _level_tip(_world, player, id: String) -> Dictionary:
 	var need: int = Q.level_needed(id)
 	var miss: int = need - int(player.level)
 	var C = load("res://scripts/data/classes.gd")
+	var where: String = Q.giver_place(id)
+	if not Data.place_open(where, int(player.level)):
+		where = ""  # крок без того, хто дає, чекає в своєму місці, а воно ще закрите: туди «Далі» не веде
 	return _it("level", "%s Набери рівні: бракує %d %s" % [Q.mark(id), miss, C.plural(miss, "рівня", "рівнів", "рівнів")],
-		"Місія %s чекає з %d-го рівня" % [load("res://scripts/game/unlock_rule.gd").mission_name(id), need], Q.giver_place(id))
+		"Місія %s чекає з %d-го рівня" % [load("res://scripts/game/unlock_rule.gd").mission_name(id), need], where)
 
 
 ## Чи є куди вкласти очко вмінь (на дорозі героя лишились невивчені ранги).

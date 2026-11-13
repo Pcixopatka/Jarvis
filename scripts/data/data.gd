@@ -66,6 +66,7 @@ static func apply_settings() -> void:
 	FIELD_GOAL_PER_LEVEL = S_battle["field_goal_per_level"]
 	DUNGEON_ROOM_BASE = S_battle["dungeon_room_base"]
 	DUNGEON_ROOM_PER = S_battle["dungeon_room_per"]
+	FIELD_OPEN_ABOVE = S_battle["field_open_above"]
 	var S_loot := GameDB.settings("loot")
 	ITEM_DROP_CHANCE = S_loot["item_drop_chance"]
 	COIN_GOLD_RATIO = S_loot["coin_gold_ratio"]
@@ -222,6 +223,7 @@ static var COIN_GOLD_RATIO: float  # скільки гривень дає мон
 static var ITEM_DROP_CHANCE: float  # шанс речі з рядового ворога
 static var FIELD_GOAL_BASE: int  # скільки нечисті треба знищити для зачистки: основа
 static var FIELD_GOAL_PER_LEVEL: int  # і ще стільки за кожен рівень місцевості
+static var FIELD_OPEN_ABOVE: int  # у поле пускають, коли воно не вище за героя більш як на стільки рівнів
 static var BOSS_HP_MULT: float  # бос у стільки разів здоровіший за звичайного ворога свого виду
 static var BOSS_XP_MULT: int  # бос дає у стільки разів більше досвіду (ціле)
 static var BOSS_DMG_MULT: float  # бос б'є у стільки разів сильніше за рядового свого виду
@@ -911,6 +913,32 @@ static func field_goal(L: Dictionary) -> int:
 ## тож бос дає золоту річ до кінця гри. Поле має сталий рівень (бій за місією підтягує QuestEngine.fight_mods).
 static func loc_level(L: Dictionary, hero_level: int) -> int:
 	return maxi(int(L["level"]), hero_level) if L.get("scale", false) else int(L["level"])
+
+
+
+## З якого рівня героя пускають у місце id. Поле — на FIELD_OPEN_ABOVE рівнів вище за героя (рівень поля − 3, не нижче
+## 1-го); печера з босом — лише з власного рівня (для «N+» — N), без жодної надбавки. Місто, хутір, місця занять,
+## Башта, Глибини й надважкі печери мають свої замки (або їх не мають): тут для них 1. Одне правило на всю гру:
+## мапа й панель, Game.enter_location, завдання, розшук, випробування, події, порадник і довідник.
+static func open_from(id: String) -> int:
+	if not is_place(id):
+		return 1
+	var L: Dictionary = place(id)
+	if L.get("endless", false) or L.has("peril"):
+		return 1  # Башта, Глибини й надважкі печери — за своїми правилами (TowerService, DepthService, PerilService)
+	if L["type"] == "dungeon":
+		return maxi(1, int(L["level"]))
+	return maxi(1, int(L["level"]) - FIELD_OPEN_ABOVE)
+
+
+## Чи пускають героя рівня hero_level у місце id (див. open_from). Слабші за героя місця відкриті завжди.
+static func place_open(id: String, hero_level: int) -> bool:
+	return hero_level >= open_from(id)
+
+
+## Чому місце закрите, одним реченням: «Відкриється з 4-го рівня героя.» ("" — відкрите).
+static func open_text(id: String, hero_level: int) -> String:
+	return "" if place_open(id, hero_level) else "Відкриється з %d-го рівня героя." % open_from(id)
 
 ## Імена, множини й трофеї нечисті — у data/mobs.json (див. GameDB).
 

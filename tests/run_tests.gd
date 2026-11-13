@@ -131,6 +131,8 @@ func _run() -> void:
 	_suite_far_lands()
 	await _suite_far_lands_game()
 	_suite_place_levels()
+	_suite_place_open()
+	await _suite_place_open_game()
 	_suite_muscovy()
 	await _suite_muscovy_game()
 	_suite_uniques()
@@ -750,6 +752,7 @@ func _suite_city() -> void:
 	check(w.companions.size() == 1, "відпустити супутника")
 	# Здача завдання
 	var q: Dictionary = w.board("sich")[0]
+	w.hero_level = maxi(w.hero_level, w.quest_open_from(q))  # завдання беруть, коли його місце відкрите героєві
 	check(w.take("sich", q["id"]), "взяти завдання")
 	check(CityService.turn_in(w, p, q["id"]).is_empty(), "невиконане не здати")
 	q["progress"] = q["count"]
@@ -1993,6 +1996,7 @@ func _suite_volkhv_specs() -> void:
 	game._sync_class()
 	p.job_level = int(p.class_info()["change_at"])
 	check(UiCity._city_specs(game, "verkhovyna") == ["znakhar"] and UiCity._city_specs(game, "sich").is_empty(), "у Верховині — наставник знахарів, на Січі для волхва нікого")
+	p.level = SS.open_from("znakhar")  # Брянські ліси відкриті з 12-го: раніше наставник відмовляє
 	check(SS.start(game.world, p, "znakhar"), "випробування знахаря")
 	SS.on_event(game.world, "clear", "bryansk_forest")
 	check(SS.city_dialogue(game.world, "kapyshche").is_empty() and not SS.city_dialogue(game.world, "verkhovyna").is_empty(), "посвята — у Верховині")
@@ -4599,6 +4603,7 @@ func _suite_new_bosses() -> void:
 	p.recalc()
 	p.hp = p.max_hp
 	# ---------------- Відьма ----------------
+	p.level = Data.open_from("lysa_hora")  # у печеру з босом пускають лише з її рівня (сила героя — та сама, з 12-го)
 	game.enter_location("lysa_hora")
 	await _frames(3)
 	check(c.is_dungeon() and c.loc.get("night", false) and root.get_node("Audio").current_ambient == "night", "Лиса гора: нічна печера-галявина із цвіркунами")
@@ -4661,6 +4666,7 @@ func _suite_new_bosses() -> void:
 	game.enter_map()
 	await _frames(2)
 	# ---------------- Вій ----------------
+	p.level = Data.open_from("vii_church")
 	game.enter_location("vii_church")
 	await _frames(3)
 	_clear_enemies(game)
@@ -6985,6 +6991,376 @@ func _suite_far_lands() -> void:
 
 ## Поле має сталий рівень, печера з босом росте з героєм; поля закривають дірки в рівнях; ступінь золота — за
 ## рівнем боса; правила далеких країв тримаються за «region», а не за «scale».
+## Куди пускають (Data.open_from, Data.place_open): поле — до трьох рівнів вище за героя, печера з босом — з її рівня,
+## місто — завжди. Межі правила, місії й печери разом, сірі завдання й розшук, відмова наставника, побратим, крамниця
+## за рівнем героя, події лише у відкритих місцях, узяте раніше, швидкий похід, автобій, «Шлях козака», довідник.
+func _suite_place_open() -> void:
+	suite("Куди пускають: правило рівня місця")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var SS = load("res://scripts/game/spec_service.gd")
+	var BS = load("res://scripts/game/bounty_service.gd")
+	var HS = load("res://scripts/game/hero_service.gd")
+	var ES = load("res://scripts/game/event_service.gd")
+	var QS = load("res://scripts/game/quick_service.gd")
+	var CS = load("res://scripts/game/city_service.gd")
+	var Way = load("res://scripts/game/way_service.gd")
+	var Guide = load("res://scripts/game/guide_service.gd")
+	var EBs = load("res://scripts/game/events_board.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	# ---- Межі правила ----
+	check(Data.FIELD_OPEN_ABOVE == 3, "поле пускає на три рівні вище за героя (battle.field_open_above)")
+	var edges := [["wild_field", 1, true], ["rapids", 1, true], ["oleshky", 1, false], ["oleshky", 2, true], ["kamianets_walls", 30, false], ["kamianets_walls", 31, true],
+		["meshchera", 75, false], ["meshchera", 76, true], ["zmii_cave", 6, false], ["zmii_cave", 7, true], ["vii_church", 28, false], ["vii_church", 29, true],
+		["kremlin", 79, false], ["kremlin", 80, true], ["zamok_drakuly", 69, false], ["zamok_drakuly", 70, true], ["zmii_cave", 99, true], ["wild_field", 99, true],
+		["yelets", 1, true], ["kamianets", 1, true], [Camp.CAMP_ID, 1, true], ["varta", 1, true], ["bashta", 1, true], ["hlybyny", 1, true], ["devova_ushchelyna", 1, true]]
+	var edge_bad := []
+	for e in edges:
+		if Data.place_open(str(e[0]), int(e[1])) != bool(e[2]):
+			edge_bad.append("%s@%d" % [e[0], e[1]])
+	check(edge_bad.is_empty(), "межі: поле — рівень − 3 (не нижче 1-го), печера з босом — її рівень, місто, хутір, заняття, Башта, Глибини й надважкі — свої правила: %s" % str(edge_bad))
+	check(Data.open_from("oleshky") == 2 and Data.open_from("rapids") == 1 and Data.open_from("kamianets_walls") == 31 and Data.open_from("zmii_cave") == 7 and Data.open_from("kremlin") == 80 and Data.open_from("kyiv") == 1,
+		"з якого рівня: Олешківські піски 2, Дніпрові пороги 1, Кам'янецькі мури 31, Змієва печера 7, Кремль 80, місто 1")
+	check(Data.open_text("zmii_cave", 6) == "Відкриється з 7-го рівня героя." and Data.open_text("oleshky", 1) == "Відкриється з 2-го рівня героя." and Data.open_text("zmii_cave", 7) == "", "текст закритого місця: «Відкриється з N-го рівня героя.»; відкрите — без тексту")
+	var weaker := true
+	for id in Data.place_ids():
+		weaker = weaker and Data.place_open(id, maxi(1, int(Data.place(id)["level"])))
+	check(weaker, "місце свого рівня й слабше — відкрите завжди")
+	# ---- Місії й печери разом; місце кожної місії відкрите з її рівня ----
+	var cave_bad := []
+	var mission_bad := []
+	for id in Q.graph()["order"]:
+		var loc := str(Q.step(id).get("objective", {}).get("loc", ""))
+		if not Data.is_place(loc):
+			continue
+		var need: int = maxi(1, Q.level_needed(id))
+		if not Data.place_open(loc, need):
+			mission_bad.append("%s→%s@%d" % [id, loc, need])
+		if Q.kind_of(id) in ["story", "legend"] and Data.place(loc)["type"] == "dungeon" and Data.place(loc).has("boss") and int(Q.step(id)["min_level"]) != int(Data.place(loc)["level"]):
+			cave_bad.append(id)
+	check(mission_bad.is_empty() and GameDB.quest_place_problems(GameDB.table("quest_lines"), {"story": GameDB.table("story"), "legend_steps": GameDB.table("legend_steps"), "saga": GameDB.table("saga"), "side": GameDB.table("side")}).is_empty(),
+		"місце кожної місії відкрите героєві з рівнем місії: %s" % str(mission_bad))
+	check(cave_bad.is_empty() and int(Q.step("lair")["min_level"]) == 7 and int(Q.step("crypt")["min_level"]) == 12 and int(Q.step("to_chernihiv")["min_level"]) == 12 and int(Q.step("dovbush_3")["min_level"]) == 21,
+		"крок із босом — рівня печери (Змій 7, склеп 12, а за ним і Чернігів 12, Довбуш 21): %s" % str(cave_bad))
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("legend_steps")))
+	raw["vii_3"]["min_level"] = 28
+	var pr: Array = GameDB.validate("legend_steps", raw)
+	check(_has_problem(pr, ["legend_steps/vii_3", "vii_church", "пускають з 29-го"]), "перевірка даних ловить місію, чия печера ще закрита: %s" % str(pr))
+	raw = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("story")))
+	raw["walls"]["min_level"] = 30
+	pr = GameDB.validate("story", raw)
+	check(_has_problem(pr, ["story/walls", "kamianets_walls", "пускають з 31-го"]), "і місію, чиє поле вище за неї більш як на три рівні")
+	# ---- Завдання міста й супровід: у закрите місце не беруть ----
+	var w = WorldState.new()
+	w.hero_level = 5
+	var shut := {"id": 900, "city": "sich", "loc": "zmii_cave", "type": "dungeon", "target": "zmii_cave", "count": 1, "progress": 0, "text": "Очисти: Змієва печера", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 7}
+	var esc := {"id": 901, "city": "sich", "loc": "kamiani_mohyly", "type": "escort", "target": "", "count": 1, "progress": 0, "text": "Проведи (Кам'яні Могили)", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 8}
+	var fine := {"id": 902, "city": "sich", "loc": "rapids", "type": "kill", "target": "mavka", "count": 3, "progress": 0, "text": "Знищ мавок", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 4}
+	w.boards["sich"] = [shut, esc, fine]
+	check(not w.quest_open(shut, 5) and w.quest_open_from(shut) == 7 and w.quest_open(esc, 5) and w.quest_open(fine, 5), "дошка: печера 7-го закрита героєві 5-го (з 7-го), поле 8-го й 4-го — відкриті")
+	check(not w.take("sich", 900) and w.quests.is_empty(), "завдання в закрите місце не взяти")
+	check(w.take("sich", 901) and w.take("sich", 902) and w.quests.size() == 2, "завдання й супровід у відкриті місця беруться")
+	w.hero_level = 4
+	var esc2 := esc.duplicate()
+	esc2["id"] = 903
+	w.boards["sich"].append(esc2)
+	check(not w.quest_open(esc2, 4) and not w.take("sich", 903), "супровід у поле, вище за героя на чотири рівні, не взяти")
+	# узяте раніше пускає у своє місце, хоч би воно й закрилось за рівнем (старе збереження)
+	var held = WorldState.new()
+	held.hero_level = 3
+	held.quests.append(shut.duplicate())
+	check(held.held_places().has("zmii_cave") and held.can_enter("zmii_cave", 3) and not held.can_enter("crypt", 3), "узяте завдання пускає у своє місце; інше закрите лишається закритим")
+	held.quests[0]["progress"] = 1
+	check(not held.can_enter("zmii_cave", 3), "виконане завдання вже не тримає місця відкритим")
+	held.quests.clear()
+	BS.state(held)["active"].append({"id": 7, "city": "sich", "kind": "vovkulaka", "name": "Сірий", "loc": "oleshky", "affixes": [], "gold": 1, "glory": 6, "killed": false})
+	held.spec_trial = {"spec": "zaporozhets", "stage": "active", "progress": 0}
+	check(held.can_enter("oleshky", 1) and held.can_enter("berestechko", 1) and not held.can_enter("kamianets_walls", 1), "жива ціль розшуку й випробування теж пускають у своє місце")
+	_quests_set(held, "story", {"chapter": 1, "step": 5, "stage": "active", "progress": 0})
+	held.hero_level = 6
+	check(Q.stage(held, "lair") == "active" and held.can_enter("zmii_cave", 6), "активна мета місії зі старого збереження (Змій на 6-му) пускає в печеру")
+	# ---- Розшук ----
+	var p = _new_player()
+	p.level = BS.MIN_LEVEL
+	var bw = WorldState.new()
+	bw.hero_level = p.level
+	var s: Dictionary = BS.state(bw)
+	s["boards"]["sich"] = {"born": 0, "list": [{"id": 1, "city": "sich", "kind": "vovkulaka", "name": "Сірий", "loc": "kamiani_mohyly", "affixes": [], "gold": 1, "glory": 6, "killed": false},
+		{"id": 2, "city": "sich", "kind": "vovkulaka", "name": "Бурий", "loc": "rapids", "affixes": [], "gold": 1, "glory": 6, "killed": false}]}
+	check(not Data.place_open("kamiani_mohyly", p.level) and not BS.take(bw, "sich", 1, p) and BS.take(bw, "sich", 2, p), "розшук: ціль у закритому місці не взяти, у відкритому — так")
+	var cand_bad := []
+	for lvl in [4, 10, 30, 60]:
+		p.level = lvl
+		for c in Data.city_ids():
+			var cands: Array = BS.candidates(c, p)
+			for loc in cands:
+				if cands.size() > 1 and not Data.place_open(loc, lvl):
+					cand_bad.append("%s@%d" % [loc, lvl])
+	check(cand_bad.is_empty(), "нові оголошення розшуку беруть відкриті місця (запасне найближче поле, коли поруч нема, може висіти сірим): %s" % str(cand_bad))
+	# ---- Наставник ----
+	var sp = _new_player()
+	sp.change_class("cossack")
+	sp.job_level = int(sp.class_info()["change_at"])
+	sp.level = 27
+	var sw = WorldState.new()
+	check(SS.trial_place("zaporozhets") == "berestechko" and SS.open_from("zaporozhets") == 28 and not SS.trial_open("zaporozhets", 27) and not SS.start(sw, sp, "zaporozhets") and sw.spec_trial.is_empty(), "наставник відмовляє: Берестецьке поле відкриється з 28-го")
+	sp.level = 28
+	check(SS.start(sw, sp, "zaporozhets") and str(sw.spec_trial.get("spec", "")) == "zaporozhets", "з 28-го випробування запорожця дають")
+	check(SS.open_from("samopalnyk") == 31 and SS.open_from("kharakternyk") == 29 and SS.open_from("plastun") == 1, "самопальник — з 31-го (Кам'янецькі мури), характерник — з 29-го, пластун — без місця")
+	sp.free()
+	# ---- Побратим ----
+	var hw = WorldState.new()
+	hw.companions.append({"type": str(HS.info("oksana")["base"]), "hero": "oksana", "downed": false})
+	HS.st(hw, "oksana")["bond"] = 999
+	HS.st(hw, "oksana")["met"] = true
+	hw.hero_level = 10
+	var hd: Dictionary = HS.city_dialogue(hw, "chernihiv")
+	check(not HS.quest_open("oksana", 10) and str(hd.get("kind", "")) != "quest" and HS.st(hw, "oksana")["quest"] == "none", "побратим не просить про справу в закритому місці (Біловезька пуща — з 11-го)")
+	hw.hero_level = 11
+	hd = HS.city_dialogue(hw, "chernihiv")
+	check(str(hd.get("kind", "")) == "quest" and str(hd.get("hero", "")) == "oksana", "з 11-го — просить")
+	# ---- Крамниця: речі рівня героя ----
+	var shw = WorldState.new()
+	p.level = 30
+	var low_bad := []
+	for c in ["sich", "yelets", "kamianets"]:
+		shw.shop_dirty[c] = true
+		for it in CS.shop_stock(shw, p, c):
+			if int(it["ilvl"]) != 30:
+				low_bad.append("%s:%d" % [c, int(it["ilvl"])])
+	check(low_bad.is_empty(), "крамниця Січі (1-й), Кам'янця (33-й) і Єльця (72-й) продає речі 30-го рівня героєві 30-го: %s" % str(low_bad))
+	ES.state(shw)["fair"] = {"city": "sich", "left": 2}
+	shw.shop_dirty["sich"] = true
+	var fair_lv := []
+	for it in CS.shop_stock(shw, p, "sich"):
+		fair_lv.append(int(it["ilvl"]))
+	check(fair_lv.count(31) == 2 and fair_lv.count(30) == CS.SHOP_SIZE, "ярмарок: дві речі на рівень вищі за героя")
+	shw.shop_dirty["kyiv"] = false
+	shw.shops["kyiv"] = []
+	check(CS.shop_stock(shw, p, "kyiv").is_empty(), "без позначки shop_dirty товар не міняється")
+	# ---- Події лише у відкритих місцях ----
+	var ev_bad := []
+	var keep := [ES.NIGHT_CHANCE, ES.TREASURE_CHANCE, ES.CHANCE, ES.CALM]
+	ES.NIGHT_CHANCE = 1.0
+	ES.TREASURE_CHANCE = 1.0
+	ES.CHANCE = 1.0
+	ES.CALM = 0
+	seed(4242)
+	var ep = _new_player()
+	ep.change_class("cossack")
+	for lvl in [1, 10, 40]:
+		ep.level = lvl
+		var ew = WorldState.new()
+		_quests_set(ew, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
+		for i in 60:
+			ES.state(ew)["treasure"] = {}
+			ES.tick(ew, ep)
+			var a: Dictionary = ES.active(ew)
+			if not a.is_empty():
+				if Data.is_place(str(a["target"])) and not Data.place_open(str(a["target"]), lvl):
+					ev_bad.append("%s@%s/%d" % [a["kind"], a["target"], lvl])
+				ES.state(ew)["active"] = {}
+			for k in ["night", "treasure"]:
+				for loc in ES.state(ew)[k]:
+					if not Data.place_open(str(loc), lvl):
+						ev_bad.append("%s@%s/%d" % [k, loc, lvl])
+		for loc in ES.reachable_locs(ew, ep):
+			if not Data.place_open(str(loc), lvl):
+				ev_bad.append("reach@%s/%d" % [loc, lvl])
+		check(ES.start(ew, ep, "village_raid", "meshchera") == "" or Data.place_open("meshchera", lvl), "набіг на закрите поле не починається (герой %d-го)" % lvl)
+	ES.NIGHT_CHANCE = keep[0]
+	ES.TREASURE_CHANCE = keep[1]
+	ES.CHANCE = keep[2]
+	ES.CALM = keep[3]
+	check(ev_bad.is_empty(), "60 походів на 1-му, 10-му й 40-му: набіг, поранений, полон, ніч і скарб — лише у відкритих місцях: %s" % str(ev_bad))
+	var fw = WorldState.new()
+	fw.hero_level = 1
+	check(EBs.place("far", fw, "sich") == "", "«Далекі краї» героєві 1-го нікуди не ведуть: далекі місця ще закриті")
+	fw.hero_level = 10
+	var far10: String = EBs.place("far", fw, "sich")
+	check(far10 != "" and Data.place(far10).has("region") and Data.place_open(far10, 10), "героєві 10-го — до найближчого відкритого далекого місця (%s)" % far10)
+	# ---- Швидкий похід ----
+	var qw = WorldState.new()
+	qw.cleared["zmii_cave"] = 9
+	qw.cleared["oleshky"] = 9
+	p.level = 6
+	check(QS.block_reason(qw, p, "zmii_cave") == "місце закрите: відкриється з 7-го рівня героя", "швидкий похід у закрите (давно пройдене) місце: %s" % QS.block_reason(qw, p, "zmii_cave"))
+	p.level = 1
+	check(QS.block_reason(qw, p, "oleshky").begins_with("місце закрите"), "і в закрите поле")
+	# ---- «Шлях козака», порадник ----
+	p.level = 6
+	check(Way._dungeon(p) == "", "«Шлях козака»: героєві 6-го печери нема, крок веде в журнал, а не до закритої печери")
+	p.level = 7
+	check(Way._dungeon(p) == "zmii_cave", "з 7-го — Змієва печера")
+	var gw = WorldState.new()
+	var gbad := []
+	for lvl in [1, 3, 10, 25, 50, 79]:
+		p.level = lvl
+		var bp: String = Guide.best_place(gw, p, "sich")
+		if bp != "" and not Data.place_open(bp, lvl):
+			gbad.append("%s@%d" % [bp, lvl])
+	check(gbad.is_empty(), "«Вирушай» порадника — лише у відкрите місце: %s" % str(gbad))
+	p.free()
+	ep.free()
+	# ---- Довідник ----
+	WS._cache = []
+	var titles := {}
+	var order := []
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			titles[str(e["title"])] = e
+			order.append(str(e["title"]))
+	var oe: Dictionary = titles.get("Куди пускають", {})
+	var ot := str(oe.get("text", ""))
+	check(order.find("Куди пускають") == order.find("Рівень місця") + 1, "довідник: «Куди пускають» одразу за «Рівнем місця»")
+	check("не більш як на 3 рівні" in ot and "Поліські болота (13-й рівень) відкривається з 10-го" in ot and "Змієва печера («7+») — з 7-го" in ot and "міста теж" in ot, "довідник: поле — до трьох рівнів вище, печера — з її рівня, місто — завжди, з прикладами: %s" % ot.substr(0, 300))
+	check("сіра рамка, блідий значок і сірий підпис" in ot and "Доїхати до нього можна, зайти — ні" in ot and "речі твого рівня" in ot and "Ще зарано: приходь із N-го рівня" in ot and "Узяте раніше доводиться до кінця" in ot, "довідник: вигляд закритого місця, крамниця за рівнем героя, сірі завдання, узяте раніше")
+	check("пускають з 7-го рівня героя" in str(WS._loc_entry("zmii_cave", "")["sub"]) and "пускають з 2-го рівня героя" in str(WS._loc_entry("oleshky", "")["sub"]), "довідник місць: з якого рівня пускають")
+	check("туди ще не пускають" in str(titles.get("Мапа й дорога", {}).get("text", "")), "«Мапа й дорога» пояснює бліде місце")
+	var legend := ""
+	for row in load("res://scripts/ui/map_panel.gd").LEGEND:
+		legend += str(row[3]) + "\n"
+	check("туди ще не пускають" in legend and "{above}" in legend, "позначки мапи: бліде місце з сірою рамкою")
+
+
+## Куди пускають у справжній сцені: Game.enter_location відмовляє, мапа малює закрите блідим, панель каже з якого
+## рівня, дошка й розшук сірі, наставник відмовляє, бій у місці, куди веде вже взяте, — можна.
+func _suite_place_open_game() -> void:
+	suite("Куди пускають: у грі")
+	var UiCity = load("res://scripts/ui/ui_city.gd")
+	var MP = load("res://scripts/ui/map_panel.gd")
+	var BS = load("res://scripts/game/bounty_service.gd")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	await _frames(2)
+	for h in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "dungeon"]:
+		game.world.hints[h] = true
+	var p = game.player
+	var w = game.world
+	game.enter_map()
+	await _frames(2)
+	check(p.level == 1 and game.state == game.State.MAP, "герой 1-го рівня на мапі")
+	# ---- Вхід ----
+	game.enter_location("zmii_cave")
+	await _frames(2)
+	check(game.state == game.State.MAP and not game.combat.active and game.map_here == "zmii_cave" and str(game.hud.last_banner.get("text", "")) == "Змієва печера: ще зарано. Відкриється з 7-го рівня героя.",
+		"Game.enter_location не пускає в закриту печеру, герой на мапі біля входу: %s" % str(game.hud.last_banner.get("text", "")))
+	game.enter_location("oleshky")
+	await _frames(2)
+	check(game.state == game.State.MAP and not game.combat.active and str(game.hud.last_banner.get("text", "")) == "Олешківські піски: ще зарано. Відкриється з 2-го рівня героя.", "і в закрите поле")
+	game.enter_city("sich")
+	await _frames(2)
+	game.enter_location("zmii_cave")
+	await _frames(2)
+	check(game.state == game.State.MAP and not game.combat.active, "з міста теж не пускає: герой виходить на мапу")
+	game.enter_location("rapids")
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.active and game.combat.loc_id == "rapids", "у поле на три рівні вище — пускає")
+	game.enter_map()
+	await _frames(2)
+	# ---- Мапа ----
+	var mv = game.hud.map_view
+	var locked := []
+	for id in Data.place_ids():
+		if mv.is_locked(id):
+			locked.append(id)
+	check(mv.is_locked("zmii_cave") and mv.is_locked("oleshky") and not mv.is_locked("rapids") and not mv.is_locked("wild_field") and not mv.is_locked("bashta") and not mv.is_locked("hlybyny"),
+		"мапа малює закритим Змієву печеру й Олешківські піски, а Дніпрові пороги, Дике Поле, Башту й Глибини — ні (закритих: %d)" % locked.size())
+	check(mv.is_locked("varta") == (p.level < int(game.Acts.spot("varta")["level"])) and mv.LOCKED_RING == Color(mv.INK, 0.4) and mv.LOCKED_ICON == Color(1, 1, 1, 0.45) and mv.LOCKED_LABEL == Color(mv.INK, 0.5), "один вигляд для закритого місця й закритого місця занять")
+	# ---- Панель ----
+	var panel: Control = MP.build("oleshky", w, p, func(_id): pass)
+	var t: String = _texts_under(panel)
+	check("Відкриється з 2-го рівня героя." in t and not "Вирушити" in t and "Олешківські піски" in t, "панель закритого поля: «Відкриється з 2-го рівня героя.», кнопки входу нема")
+	panel.free()
+	panel = MP.build("zmii_cave", w, p, func(_id): pass)
+	t = _texts_under(panel)
+	check("Відкриється з 7-го рівня героя." in t and not "Вирушити" in t, "панель закритої печери: «Відкриється з 7-го рівня героя.»")
+	panel.free()
+	panel = MP.build("rapids", w, p, func(_id): pass)
+	check("Вирушити" in _texts_under(panel), "панель відкритого поля — з кнопкою «Вирушити»")
+	panel.free()
+	# ---- Узяте раніше: старе завдання в закрите місце ----
+	w.quests.append({"id": 990, "city": "sich", "loc": "zmii_cave", "type": "dungeon", "target": "zmii_cave", "count": 1, "progress": 0, "text": "Очисти: Змієва печера", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 7})
+	game.enter_map()
+	await _frames(2)
+	check(not mv.is_locked("zmii_cave"), "мапа: місце, куди веде вже взяте, не бліде")
+	panel = MP.build("zmii_cave", w, p, func(_id): pass)
+	check("Вирушити" in _texts_under(panel), "і панель пускає")
+	panel.free()
+	game.enter_location("zmii_cave")
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.loc_id == "zmii_cave", "узяте до цієї версії завдання доводиться до кінця: у печеру пускає")
+	game._on_dungeon_cleared("zmii_cave")
+	await _frames(1)
+	check(w.is_done(w.quests[-1]), "печеру зачищено — завдання виконано")
+	game.enter_map()
+	await _frames(2)
+	check(mv.is_locked("zmii_cave"), "виконане — і печера знову закрита")
+	w.quests.clear()
+	# ---- Дошка оголошень і розшук: сірі ----
+	p.level = BS.MIN_LEVEL
+	w.hero_level = p.level
+	w.boards["sich"] = [{"id": 991, "city": "sich", "loc": "zmii_cave", "type": "dungeon", "target": "zmii_cave", "count": 1, "progress": 0, "text": "Очисти: Змієва печера", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 7},
+		{"id": 992, "city": "sich", "loc": "rapids", "type": "kill", "target": "mavka", "count": 3, "progress": 0, "text": "Знищ мавок (Дніпрові пороги)", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 4},
+		{"id": 993, "city": "sich", "loc": "perekop", "type": "kill", "target": "mavka", "count": 3, "progress": 0, "text": "Знищ мавок (Перекоп)", "gold": 1, "xp": 1, "loyalty": 1, "lvl": 6}]
+	var qv: Control = UiCity._quests(game, "sich")
+	t = _texts_under(qv)
+	check(t.count(UiCity.HALL_WAIT % 7) == 1 and t.count("Взяти") == 2 and "Очисти: Змієва печера" in t, "дошка: завдання в Змієву печеру висить сірим із «Ще зарано: приходь із 7-го рівня», решта — «Взяти»")
+	var grey_ok := false
+	for l in qv.find_children("*", "Label", true, false):
+		if l.text == "Очисти: Змієва печера":
+			grey_ok = l.get_theme_color("font_color") == game.UI.MUTED
+	check(grey_ok, "рядок закритого завдання сірий")
+	qv.free()
+	game.enter_city("sich")
+	await _frames(2)
+	game.city_do("take", 991)
+	await _frames(1)
+	check(w.quests.is_empty(), "«Ще зарано» не береться й через city_do")
+	var bs: Dictionary = BS.state(w)
+	bs["age"] = 0
+	bs["boards"]["sich"] = {"born": 0, "list": [{"id": 61, "city": "sich", "kind": "vovkulaka", "name": "Сірий Лютий", "loc": "kamiani_mohyly", "affixes": ["fiery", "iron"], "gold": 1, "glory": 6, "killed": false}]}
+	var bv: Control = UiCity._bounty_tab(game, "sich")
+	t = _texts_under(bv)
+	check((UiCity.HALL_WAIT % 5) in t and not "Взяти" in t and "Сірий Лютий" in t, "розшук: ціль у Кам'яних Могилах (з 5-го) висить сірою з відмовою")
+	bv.free()
+	game.city_do("bounty_take", 61)
+	await _frames(1)
+	check(bs["active"].is_empty(), "і не береться")
+	# ---- Наставник ----
+	p.change_class("cossack")
+	game._sync_class()
+	p.job_level = int(p.class_info()["change_at"])
+	p.level = 27
+	w.hero_level = 27
+	var mv2: Control = UiCity._mentors(game, "sich")
+	t = _texts_under(mv2)
+	check((UiCity.HALL_WAIT % 28) in t and (UiCity.HALL_WAIT % 29) in t, "наставники на Січі: запорожець — «приходь із 28-го», характерник — «приходь із 29-го»")
+	mv2.free()
+	game.city_do("spec_start", "zaporozhets")
+	await _frames(1)
+	check(w.spec_trial.is_empty(), "наставник випробування не дає")
+	p.level = 29
+	w.hero_level = 29
+	mv2 = UiCity._mentors(game, "sich")
+	t = _texts_under(mv2)
+	check(not "Ще зарано" in t and t.count("Випробування") >= 3, "з 29-го всі три випробування на Січі можна взяти")
+	mv2.free()
+	game.hud.close_dialogue()
+	game.leave_city()
+	await _frames(2)
+	game.queue_free()
+	await _frames(2)
+
+
 func _suite_place_levels() -> void:
 	suite("Рівні місць і ступені золота")
 	var Far = load("res://scripts/game/far_service.gd")
@@ -7207,7 +7583,11 @@ func _suite_place_levels() -> void:
 	dlow.level = 99
 	var cave: String = Way._dungeon(dlow)
 	dlow.free()
-	check(far_ok and Data.place(EBs.place("far", w, "sich")).has("region") and cave != "" and not Data.place(cave).has("region") and Far.open_level("pivden") == 5, "далеке місце — те, що має край: подія «Далекі краї», печера «Шляху козака» (%s), відкриття краю" % cave)
+	var far_lvl: int = w.hero_level
+	w.hero_level = 99  # подія «Далекі краї» показує лише відкриті героєві далекі місця
+	var far_place: String = EBs.place("far", w, "sich")
+	w.hero_level = far_lvl
+	check(far_ok and Data.place(far_place).has("region") and cave != "" and not Data.place(cave).has("region") and Far.open_level("pivden") == 5, "далеке місце — те, що має край: подія «Далекі краї», печера «Шляху козака» (%s), відкриття краю" % cave)
 	# ---- Нагороди: річ на рівень вища за місце кроку ----
 	var reward_bad := []
 	for t in ["story", "legend_steps"]:
@@ -7911,6 +8291,7 @@ func _suite_uniques_game() -> void:
 		c.room = int(c.loc["rooms"])
 		c._spawn_room()
 	# Гідний бос далекого краю на сотій спробі дає золото напевно
+	p.level = Data.open_from("zmiinyi")  # у печеру з босом пускають лише з її рівня
 	game.enter_location("zmiinyi")
 	await _frames(3)
 	to_boss_room.call()
@@ -8165,7 +8546,9 @@ func _suite_artifacts() -> void:
 	gp.recalc()
 	gp.hp = gp.max_hp
 	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
+	gp.level = Data.open_from("zmiinyi")  # у печеру з босом пускають лише з її рівня; далі герой знову 40-го
 	game.enter_location("zmiinyi")
+	gp.level = 40
 	await _frames(3)
 	_clear_enemies(game)
 	if c.portal != null and is_instance_valid(c.portal):
@@ -9960,6 +10343,15 @@ func _suite_way() -> void:
 	for i in range(1, golds.size()):
 		rising = rising and golds[i] >= golds[i - 1] - 200
 	check(rising and golds[-1] > golds[0] * 10, "нагороди ростуть уздовж шляху: від %d до %d грн" % [golds[0], golds[-1]])
+	# Порядок: печера (з 7-го, перша печера з босом) стоїть просто перед босом лігва, щоб не тримати кроків, які герой
+	# 3–6-го рівня вже може зробити; гривні не спадають уздовж шляху
+	var order: Array = STEPS.map(func(x): return str(x["id"]))
+	check(order == ["first_fight", "equip", "stats", "skill", "quest", "turn_in", "sharpen", "companion", "camp", "class", "bounty", "duel", "vigil", "perk", "dungeon", "boss", "event", "spec", "tower"],
+		"порядок кроків шляху: печера перед босом лігва: %s" % str(order))
+	var mono := true
+	for i in range(1, golds.size()):
+		mono = mono and golds[i] >= golds[i - 1]
+	check(mono and int(STEPS[order.find("dungeon")]["reward"]["gold"]) == 1500 and int(STEPS[order.find("sharpen")]["reward"]["gold"]) == 500, "гривні кроків не спадають: %s" % str(golds))
 	# Свіжий герой: перший крок не виконано, далі по одному
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -11618,7 +12010,8 @@ func _suite_gameplay() -> void:
 	check(StoryService.stage(game.world) == "turnin", "сюжет: Дике Поле зараховано")
 	check(game.hud.map_view.story_target == "sich", "зірка на мапі веде на Січ")
 
-	# Печера з босом
+	# Печера з босом: пускають лише з її рівня
+	game.player.level = maxi(game.player.level, Data.open_from("zmii_cave"))
 	game.enter_location("zmii_cave")
 	frames = 0
 	var max_room = 1
@@ -19342,6 +19735,7 @@ func _suite_world_fights() -> void:
 		n += 1
 		seed(900 + n)
 		game.combat.custom_loc = {}
+		game.player.level = Data.open_from(id)  # герой того рівня, з якого в місце пускають (бій — на рівні місця, як і героєві 1-го)
 		game.enter_location(id)
 		game.player.hp = game.player.max_hp
 		await _frames(2)
@@ -19827,7 +20221,7 @@ func _suite_quest_engine() -> void:
 	pr = GameDB.validate("legend_steps", raw)
 	check(_has_problem(pr, ["legend_steps/vii_2", "«after» порожній"]) and _has_problem(pr, ["legend_steps/vii_3", "«min_level»"]) and not _has_problem(pr, ["legend_steps/vii_3", "«story» пишеться лише як true"]), "порожній «after», нульовий рівень; «story»: false у кроці можна: %s" % str(pr))
 	# Справжні дані: позначка сюжету сьогодні
-	check(Q.is_story("village") and Q.is_story("kremlin") and Q.is_story("saga_dev") and Q.is_story("vii_1") and Q.kind_of("vii_1") == "legend" and Q.level_needed("vii_1") == 26 and Q.level_needed("vii_2") == 27 and Q.level_needed("saga_dev") == 90 and Q.level_needed("saga_khala") == 0
+	check(Q.is_story("village") and Q.is_story("kremlin") and Q.is_story("saga_dev") and Q.is_story("vii_1") and Q.kind_of("vii_1") == "legend" and Q.level_needed("vii_1") == 27 and Q.level_needed("vii_2") == 27 and Q.level_needed("saga_dev") == 90 and Q.level_needed("saga_khala") == 0
 		and not Q.is_story("tower_intro") and Q.level_needed("tower_intro") == 38, "історія, перекази й сага — сюжетні, доручення — ні; рівень кроку свій, рівень лінії — на її першому кроці")
 	# Перестановка таблиць не міняє рушія: той самий стан — ті самі місії
 	var rl := {}
@@ -20326,7 +20720,7 @@ func _suite_unlock_rules() -> void:
 const CHAIN_ARCS := [
 	["Пролог", "village", "back_to_sich_s", 1, 3], ["Розділ I", "recruit", "lair", 3, 7], ["Кожум'яка", "kozhumiaka_1", "kozhumiaka_2", 8, 9],
 	["Розділ II", "kyiv_call", "sorcerer", 10, 17], ["Довбуш", "dovbush_1", "dovbush_3", 18, 21], ["Соловей", "solovei_1", "solovei_3", 22, 25],
-	["Вій", "vii_1", "vii_3", 26, 29], ["Біла Пані", "bila_pani_1", "bila_pani_2", 30, 32], ["Розділ III", "west_call", "tower", 33, 38],
+	["Вій", "vii_1", "vii_3", 27, 29], ["Біла Пані", "bila_pani_1", "bila_pani_2", 30, 32], ["Розділ III", "west_call", "tower", 33, 38],
 	["Шубін", "shubin_1", "shubin_2", 40, 42], ["Морський цар", "morskyi_tsar_1", "morskyi_tsar_2", 44, 47], ["Лихо", "lykho_1", "lykho_2", 48, 50],
 	["Лісовий Дід", "lisovyi_did_1", "lisovyi_did_2", 52, 54], ["Ідолище", "idolyshche_1", "idolyshche_3", 56, 59], ["Карачун", "karachun_1", "karachun_2", 60, 63],
 	["Дракула", "drakula_1", "drakula_3", 65, 70], ["Розділ IV", "rada", "gates", 72, 76], ["Розділ V", "kremlin", "kremlin", 80, 80],
@@ -20394,17 +20788,21 @@ func _suite_chain() -> void:
 	for st in SS.Story.steps(0):
 		prolog_ok = prolog_ok and int(st["min_level"]) == 1
 	check(prolog_ok and Q.step("oath")["if"] == "trial=0" and Q.step("to_baturyn")["if"] == "trial=2", "пролог без рівня, що спинив би новачка; гілки класів як були")
-	# ---- Бос на один рівень нижче свого місця ----
+	# ---- Крок із босом — рівня своєї печери: місія й печера відкриваються разом ----
 	var boss_bad := []
+	var boss_n := 0
 	for id in order:
 		var o: Dictionary = Q.step(id)["objective"]
-		if str(o["type"]) == "dungeon" and id != "kremlin" and Data.place(str(o["loc"])).has("boss"):
-			if int(Q.step(id)["min_level"]) != int(Data.place(str(o["loc"]))["level"]) - 1:
+		var bl: Dictionary = Data.place(str(o.get("loc", "")))
+		if bl.get("type", "") == "dungeon" and bl.has("boss"):
+			boss_n += 1
+			if int(Q.step(id)["min_level"]) != int(bl["level"]) or Data.open_from(str(o["loc"])) != int(Q.step(id)["min_level"]):
 				boss_bad.append(id)
-	for A in CHAIN_ARCS.slice(1, CHAIN_ARCS.size() - 1):
-		if int(Q.step(str(A[2]))["min_level"]) != int(A[4]) - 1:
+	for A in CHAIN_ARCS.slice(1, CHAIN_ARCS.size()):
+		var lo := str(Q.step(str(A[2]))["objective"].get("loc", ""))
+		if Data.place(lo).get("type", "") == "dungeon" and int(Q.step(str(A[2]))["min_level"]) != int(A[4]):
 			boss_bad.append(str(A[2]))
-	check(boss_bad.is_empty() and int(Q.step("kremlin")["min_level"]) == 80 and int(Data.place("kremlin")["level"]) == 80, "крок із босом — на рівень нижче свого місця (Кремль — 80/80): %s" % str(boss_bad))
+	check(boss_bad.is_empty() and boss_n == 19 and int(Q.step("lair")["min_level"]) == 7 and int(Q.step("tower")["min_level"]) == 38 and int(Q.step("kremlin")["min_level"]) == 80, "крок із босом — рівня своєї печери (Змій 7, Кощій 38, Кремль 80; кроків %d): %s" % [boss_n, str(boss_bad)])
 	# ---- Два фінали розведено ----
 	var kz: Dictionary = Q.step("kozhumiaka_2")["objective"]
 	var kb: Dictionary = Data.place("kyrylova_borozna")

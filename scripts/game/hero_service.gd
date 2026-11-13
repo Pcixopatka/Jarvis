@@ -54,6 +54,11 @@ static func can_meet(world, id: String, city: String) -> bool:
 	return not j.has("if") or StoryService.chose(world, j["if"])
 
 
+## Чи особисту справу побратима вже можна дати героєві рівня lvl: її місце відкрите (Data.place_open).
+static func quest_open(id: String, lvl: int) -> bool:
+	return load("res://scripts/data/data.gd").place_open(str(info(id)["quest"]["objective"].get("loc", "")), lvl)
+
+
 ## Розмова, яка чекає в місті: {"hero", "kind": "meet"/"quest"/"end", "lines", "choices"} або {}.
 static func city_dialogue(world, city: String) -> Dictionary:
 	for id in GameDB.hero_ids():
@@ -66,6 +71,8 @@ static func city_dialogue(world, city: String) -> Dictionary:
 			]}
 		if not in_party(world, id):
 			continue
+		if s["quest"] in ["none", "offer"] and not quest_open(id, int(world.hero_level)):
+			continue  # особиста справа веде в закрите місце: побратим попросить, коли герой доросте
 		if s["quest"] == "none" and s["bond"] >= int(h["quest_bond"]):
 			s["quest"] = "offer"
 		if s["quest"] == "offer":

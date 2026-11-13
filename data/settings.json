@@ -66,6 +66,7 @@
 		"field_goal_per_level": 5,
 		"dungeon_room_base": 6,
 		"dungeon_room_per": 3,
+		"field_open_above": 3,
 		"field_alive_base": 4,
 		"field_alive_step": 5,
 		"field_spawn_min": 1.0,

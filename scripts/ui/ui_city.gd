@@ -69,6 +69,15 @@ const HALL_TALK := "Поговорити"
 const HALL_WAIT := "Ще зарано:\nприходь із %d-го рівня"
 
 
+## Відмова «Ще зарано: приходь із N-го рівня» на місці кнопки: ратуша (місія чекає рівня), дошка оголошень і розшук
+## (завдання веде в закрите місце, Data.place_open), наставник (місце випробування ще закрите).
+static func _wait_note(need: int, width: int) -> Label:
+	var no := UI.label(HALL_WAIT % need, 17, UI.BAD, true)
+	no.custom_minimum_size = Vector2(width, 58)
+	no.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	return no
+
+
 ## Число на вкладці ратуші: скільки тут чекають на героя, з позначкою місії («★» — сюжетна, «!» — інша).
 ## Ті, хто відмовляє, поки героєві бракує рівня, не рахуються.
 static func _hall_count(game, rows: Array) -> String:
@@ -115,10 +124,7 @@ static func _hall(game, city: String, rows: Array) -> Control:
 		info.add_child(UI.label("Чекає, поки підростеш" if wait else ("Чекає з нагородою" if r["ready"] else "Має до тебе справу"), 15, UI.GOOD if r["ready"] else UI.MUTED, false))
 		row.add_child(info)
 		if wait:
-			var no := UI.label(HALL_WAIT % int(r["need"]), 17, UI.BAD, true)
-			no.custom_minimum_size = Vector2(190, 58)
-			no.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			row.add_child(no)
+			row.add_child(_wait_note(int(r["need"]), 190))
 		else:
 			row.add_child(UI.button(HALL_TALK, game.hall_talk.bind(str(r["kind"]), str(r["line"])), Vector2(190, 58), 20))
 		v.add_child(panel)
@@ -171,10 +177,14 @@ static func _quest_row(game, q: Dictionary, mode: String) -> Control:
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var done: bool = w.is_done(q)
 	var prog := "" if mode == "take" else ("   %d/%d" % [q["progress"], q["count"]])
-	info.add_child(UI.label(q["text"] + prog, 21, UI.GOOD if done and mode != "take" else UI.TEXT, false))
+	# завдання в закрите місце висить сірим: узяти ще зарано (WorldState.quest_open)
+	var shut: bool = mode == "take" and not w.quest_open(q, int(game.player.level))
+	info.add_child(UI.label(q["text"] + prog, 21, UI.MUTED if shut else (UI.GOOD if done and mode != "take" else UI.TEXT), false))
 	info.add_child(UI.label(_reward_text(q), 16, UI.MUTED, false))
 	row.add_child(info)
-	if mode == "take":
+	if shut:
+		row.add_child(_wait_note(w.quest_open_from(q), 170))
+	elif mode == "take":
 		row.add_child(UI.button("Взяти", _do(game, "take", q["id"]), Vector2(170, 58), 22, w.can_take()))
 	else:
 		if done:
@@ -484,6 +494,9 @@ static func _mentors(game, city: String) -> Control:
 			label = "Триває" if trial["stage"] == "active" else "Посвята"
 			ok = false
 		v.add_child(row)
+		if ok and not SS.trial_open(spec, int(p.level)):
+			row.add_child(_wait_note(SS.open_from(spec), 200))  # місце випробування ще закрите: наставник відмовляє
+			continue
 		row.add_child(UI.button(label, _do(game, "spec_start", spec), Vector2(200, 64), 18, ok))
 	if not trial.is_empty():
 		v.add_child(UI.label(SS.objective_line(w), 19, UI.GOLD, false))
@@ -864,9 +877,14 @@ static func _bounty_row(game, b: Dictionary, mode: String) -> Control:
 	var head := "☠ %s — %s" % [b["name"], Data.place_name(b["loc"])]
 	if mode == "killed":
 		head += "   (голову здобуто)"
-	info.add_child(UI.label(head, 21, UI.GOOD if mode == "killed" else UI.TEXT, false))
+	# ціль у закритому місці: оголошення висить сірим, узяти ще зарано (Data.place_open)
+	var shut: bool = mode == "take" and not Data.place_open(str(b["loc"]), int(game.player.level))
+	info.add_child(UI.label(head, 21, UI.MUTED if shut else (UI.GOOD if mode == "killed" else UI.TEXT), false))
 	info.add_child(UI.label("%s: %s.  Нагорода: %d грн, +%d слави, +30 лояльності" % [GameDB.mob_name(b["kind"]), BS.traits(b), b["gold"], b["glory"]], 16, UI.MUTED, false))
 	row.add_child(info)
+	if shut:
+		row.add_child(_wait_note(Data.open_from(str(b["loc"])), 170))
+		return row
 	match mode:
 		"take":
 			row.add_child(UI.button("Взяти", _do(game, "bounty_take", b["id"]), Vector2(170, 58), 22, BS.can_take(game.world)))

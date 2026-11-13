@@ -328,7 +328,7 @@ static func place(id: String, world, here: String = "") -> String:
 			var best := ""
 			var best_d := INF
 			for loc in Data.place_ids():
-				if Data.place(loc).has("region"):  # далеке місце: має край
+				if Data.place(loc).has("region") and Data.place_open(loc, int(world.hero_level)):  # далеке місце (має край), куди вже пускають
 					var d: float = _ll(here).distance_to(Data.place(loc)["pos"])
 					if d < best_d:
 						best_d = d

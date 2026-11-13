@@ -48,6 +48,9 @@ static func need_clears(world) -> int:
 static func block_reason(world, combat, loc_id: String) -> String:
 	if not applies(combat, loc_id):
 		return "тут б'ються власноруч"
+	var lvl: int = int(combat.player.level) if combat.get("player") != null else int(world.hero_level)
+	if not Data.place_open(loc_id, lvl):
+		return "місце закрите: %s" % Data.open_text(loc_id, lvl).to_lower().trim_suffix(".")
 	var times: int = int(world.cleared.get(loc_id, 0))
 	var need := need_clears(world)
 	if times < need:

@@ -25,14 +25,17 @@ static func apply_settings() -> void:
 	BUY_MARKUP = S["buy_markup"]
 
 
+## Товар крамниці міста. Речі — рівня героя, хоч би якого рівня було місто (місто відкрите завжди, тож і крам
+## там для того, хто прийшов); рідкість — за рівнем героя й лояльністю міста (кожен рівень лояльності — як три
+## рівні героя). Ярмарок додає дві рідкісні речі на рівень вище. Товар оновлюється, коли стоїть позначка
+## shop_dirty: Game.enter_location ставить її всім містам щоразу, як герой іде в бій.
 static func shop_stock(world, player: Player, city: String) -> Array:
 	if not world.shops.has(city) or world.shop_dirty.get(city, true):
-		var C: Dictionary = Data.city(city)
 		var loyal: int = world.loyalty_level(city)
-		var ilvl: int = maxi(C["level"], player.level - 1) + loyal
+		var ilvl: int = maxi(1, int(player.level))
 		var stock := []
 		for i in SHOP_SIZE:
-			stock.append(player.assign_uid(Data.gen_item(ilvl, Data.roll_rarity(C["level"] + loyal * 3))))
+			stock.append(player.assign_uid(Data.gen_item(ilvl, Data.roll_rarity(ilvl + loyal * 3))))
 		if load("res://scripts/game/event_service.gd").fair_city(world) == city:
 			for i in 2:  # ярмарок: купці привезли рідкісне
 				stock.append(player.assign_uid(Data.gen_item(ilvl + 1, 2)))

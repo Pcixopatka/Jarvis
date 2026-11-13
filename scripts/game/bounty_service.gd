@@ -129,6 +129,8 @@ static func take(world, city: String, id: int, player) -> bool:
 	var list: Array = board(world, city, player)
 	for i in list.size():
 		if int(list[i]["id"]) == id:
+			if not Data.place_open(str(list[i]["loc"]), int(player.level)):
+				return false  # ціль ходить у закритому місці: оголошення висить сірим, узяти ще зарано
 			state(world)["active"].append(list[i])
 			list.remove_at(i)
 			return true

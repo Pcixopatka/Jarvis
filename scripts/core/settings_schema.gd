@@ -85,6 +85,7 @@ const SCHEMAS := {
 		"field_goal_per_level": {"type": "int", "check": "nonneg", "about": "і ще стільки за кожен рівень місцевості"},
 		"dungeon_room_base": {"type": "int", "check": "count", "about": "ворогів у кімнаті печери: основа"},
 		"dungeon_room_per": {"type": "int", "check": "nonneg", "about": "і ще стільки за кожен номер кімнати"},
+		"field_open_above": {"type": "int", "check": "nonneg", "about": "у поле пускають, коли воно не вище за героя більш як на стільки рівнів (печеру з босом — лише з її рівня)"},
 		"field_alive_base": {"type": "int", "check": "count", "about": "нечисті водночас у дикій місцевості: основа (і ще одна за кожні field_alive_step рівнів)"},
 		"field_alive_step": {"type": "int", "check": "count", "about": "і ще одна нечисть за кожні стільки рівнів"},
 		"field_spawn_min": {"type": "float", "check": "pos", "about": "найменше секунд між появами нової нечисті"},
