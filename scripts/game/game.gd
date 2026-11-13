@@ -1089,8 +1089,11 @@ func hall_rows(city: String) -> Array:
 	for i in sds.size():
 		var sd: Dictionary = sds[i]
 		var chapter: String = StoryService.chapter_title(world)
+		var what: String = ("Історія. %s" % chapter) if chapter != "" else "Історія"
+		if QuestEngine.kind_of(str(sd["id"])) == "story":
+			what += ". %s" % QuestEngine.title(str(sd["id"]))  # назва кроку, як у переказу (у саги вона вже в назві розділу)
 		# «line» сюжетного рядка: "" — перша сюжетна розмова міста, далі — id кроку (hall_talk)
-		out.append(_hall_row("story", "" if i == 0 else str(sd["id"]), sd["lines"], ("Історія. %s" % chapter) if chapter != "" else "Історія", str(sd["kind"]) in ["end", "saga_end"], str(sd["id"])))
+		out.append(_hall_row("story", "" if i == 0 else str(sd["id"]), sd["lines"], what, str(sd["kind"]) in ["end", "saga_end"], str(sd["id"])))
 	var pd := SpecService.city_dialogue(world, city)
 	if not pd.is_empty():
 		out.append(_hall_row("spec", "", pd["lines"], "Посвята: випробування пройдено", true))
@@ -1119,7 +1122,7 @@ func _mission_what(id: String) -> String:
 	match QuestEngine.kind_of(id):
 		"story":
 			var ci: int = StoryService.Story.chapter_index(str(QuestEngine.step(id).get("chapter", "")))
-			return ("Історія. %s" % StoryService.Story.chapter_title(ci)) if ci >= 0 else "Історія"
+			return "%s. %s" % [("Історія. %s" % StoryService.Story.chapter_title(ci)) if ci >= 0 else "Історія", QuestEngine.title(id)]
 		"saga":
 			return "Історія. %s. %s" % [StoryService.SagaService.Saga.title(), QuestEngine.title(id)]
 		"legend":

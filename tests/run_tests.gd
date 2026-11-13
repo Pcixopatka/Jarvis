@@ -19597,6 +19597,21 @@ const CHAIN_ARCS := [
 	["Дракула", "drakula_1", "drakula_3", 65, 70], ["Розділ IV", "rada", "gates", 72, 76], ["Розділ V", "kremlin", "kremlin", 80, 80],
 ]
 
+## Передачі між ланками: [останні кроки ланки (у прологу — кінець гілки кожного класу), слово з її кінцевої
+## розмови (хто чи де дасть наступну ланку), перший крок наступної ланки, слово з його початкової розмови
+## (звідки герой прийшов)]. Слово шукаємо в останніх трьох репліках кінця й перших двох репліках початку.
+const CHAIN_HANDOFFS := [
+	[["oath", "back_to_sich", "back_to_sich_s"], "курінь", "recruit", "Присягу дав"], [["lair"], "Києва", "kozhumiaka_1", "Змій"],
+	[["kozhumiaka_2"], "Січ", "kyiv_call", "Кирилову борозну"], [["sorcerer"], "Яким", "dovbush_1", "ланцюг"],
+	[["dovbush_3"], "Лесь", "solovei_1", "З гір"], [["solovei_3"], "Полковник Гострий", "vii_1", "Путивльська дорога"],
+	[["vii_3"], "Львова", "bila_pani_1", "від полковника"], [["bila_pani_2"], "Києва", "west_call", "Підгірці"],
+	[["tower"], "Ізюмі", "shubin_1", "Кощієва вежа"], [["shubin_2"], "Хаджибею", "morskyi_tsar_1", "Бахмута"],
+	[["morskyi_tsar_2"], "коваль", "lykho_1", "Знову ми з тобою"], [["lykho_2"], "Твері", "lisovyi_did_1", "З Криму"],
+	[["lisovyi_did_2"], "Черкаського стану", "idolyshche_1", "ліс тебе відпустив"], [["idolyshche_3"], "Зореслава", "karachun_1", "на Січі"],
+	[["karachun_2"], "Верховину", "drakula_1", "за Костромою"], [["drakula_3"], "Січ", "rada", "з-за гір"],
+	[["gates"], "Кошовий", "kremlin", "Можайські болота"],
+]
+
 
 ## Історія — один ланцюжок із 18 ланок (розділи й перекази між ними), кожна ланка зі своїм рівнем героя.
 func _suite_chain() -> void:
@@ -19746,6 +19761,106 @@ func _suite_chain() -> void:
 			city_bad.append("%s(%d)>%s(%d)" % [c, int(Data.city(c)["level"]), id, cap])
 	check(city_bad.is_empty() and int(Data.city("sich")["level"]) == 1 and int(Data.city("kapyshche")["level"]) <= 3 and int(Data.city("baturyn")["level"]) <= 3, "міста не вищі за рівень ланки, що в них починається; Січ, Капище й Батурин — для прологу: %s" % str(city_bad))
 	p.free()
+	_chain_story_checks()
+
+
+## Історія одним ланцюжком — словами: назви кроків історії, передачі між ланками, рядки, що стали неправдою,
+## назва в замку Башти, у ратуші й журналі, запис довідника «Сюжетна черга».
+func _chain_story_checks() -> void:
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var SS = load("res://scripts/game/story_service.gd")
+	var TS = load("res://scripts/game/tower_service.gd")
+	var DS = load("res://scripts/game/depth_service.gd")
+	var JS = load("res://scripts/game/journal_service.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	# ---- Кожен крок історії має коротку назву ----
+	var untitled := []
+	var titles := {}
+	for id in GameDB.ids("story"):
+		var t := str(GameDB.row("story", id).get("title", ""))
+		var words: int = t.split(" ", false).size()
+		if words < 2 or words > 4 or titles.has(t) or t.contains("рівень"):
+			untitled.append("%s «%s»" % [id, t])
+		titles[t] = true
+		if Q.title(id) != t:
+			untitled.append(id + ": назва місії не з «title»")
+	check(GameDB.ids("story").size() == 34 and untitled.is_empty() and GameDB.STORY_SCHEMA["title"].get("required", false), "кожен із 34 кроків історії має свою назву на 2–4 слова (вона й назва місії): %s" % str(untitled))
+	# ---- Рядки, що стали неправдою в ланцюжку ----
+	var all_text := []
+	for id in GameDB.ids("story"):
+		for k in ["start", "end"]:
+			for l in GameDB.row("story", id)[k]:
+				all_text.append(str(l[1]))
+	for id in GameDB.ids("legend_steps"):
+		for k in ["start", "end"]:
+			for l in GameDB.row("legend_steps", id)[k]:
+				all_text.append(str(l[1]))
+	var joined := "\n".join(all_text)
+	check(not "Шлях до Кремля відкритий" in joined and not "Тоді час іти на Кремль" in joined and not "Досить чекати" in joined and not "гетьманові" in joined,
+		"нема рядків, що стали неправдою: «шлях до Кремля відкритий» (Чаклун), «час іти на Кремль» (Кощій), «досить чекати» (рада), «гетьманові» (Морський цар)")
+	# ---- Передачі між ланками: кінець ланки каже, до кого йти, початок наступної — звідки прийшов ----
+	var miss := []
+	for i in CHAIN_HANDOFFS.size():
+		var H: Array = CHAIN_HANDOFFS[i]
+		if not str(CHAIN_ARCS[i][2]) in H[0] or str(CHAIN_ARCS[i + 1][1]) != str(H[2]):
+			miss.append("таблиця %d" % i)
+		for last in H[0]:
+			var end: Array = Q.step(str(last))["end"]
+			if not end.slice(maxi(0, end.size() - 3)).any(func(l): return str(H[1]) in str(l[1])):
+				miss.append("%s: «%s»" % [last, H[1]])
+		var start: Array = Q.step(str(H[2]))["start"]
+		if not start.slice(0, 2).any(func(l): return str(H[3]) in str(l[1])):
+			miss.append("%s: «%s»" % [H[2], H[3]])
+	check(CHAIN_HANDOFFS.size() == CHAIN_ARCS.size() - 1 and miss.is_empty(), "17 передач між ланками: кінець ланки веде до наступного, початок наступної знає, звідки герой: %s" % str(miss))
+	# ---- Після Кощія: чому ще не Москва; рада спершу лічить зроблене ----
+	var tower_end := " ".join(Q.step("tower")["end"].map(func(l): return str(l[1])))
+	var named := []
+	for word in ["Шубін", "Морський цар", "Лихо", "Оковський ліс", "Ідолище", "Карачун", "упир"]:
+		if not word in tower_end:
+			named.append(word)
+	var rada: Array = Q.step("rada")["start"]
+	var go_at := -1
+	for j in rada.size():
+		if "йдемо на Москву" in str(rada[j][1]):
+			go_at = j
+	check(named.is_empty() and "Я першою" in str(Q.step("tower")["end"][-1][1]) and go_at >= 2 and "Лиха нема" in str(rada[1][1]), "після Кощія названо сім лих, що тримають землі за спиною; рада спершу лічить зроблене, тоді «йдемо на Москву»: %s" % str(named))
+	# ---- Назва кроку історії — у замку Башти, порадах, ратуші й журналі ----
+	var w = WorldState.new()
+	check(TS.lock_text(w, 1).contains("«%s»" % Q.step("tower")["title"]) and DS.lock_text(w, 1).contains("«%s»" % Q.step("kremlin")["title"]) and not TS.lock_text(w, 1).contains("рівень 38+"), "замки Башти й Глибин називають місію її назвою: %s" % TS.lock_text(w, 1))
+	var p = _new_player()
+	for id in Q.graph()["topo"]:
+		if id == "rada":
+			break
+		if Q.kind_of(id) in ["story", "legend"] and not Q.is_finished(w, id):
+			if id == "choose":
+				Q.set_choice(w, "trial", 0)
+			Q.complete(w, id)
+	p.level = 60
+	w.hero_level = 60
+	var jrow := {}
+	for r in JS.sections(w, p)[0]["rows"]:
+		if r.has("wait"):
+			jrow = r
+	check(Q.stage(w, "rada") == "level" and str(jrow.get("text", "")).begins_with("★ %s: Поговори: " % Q.step("rada")["title"]) and str(jrow["text"]).ends_with("потрібен рівень 72"), "журнал: крок історії, якому бракує рівня, — з назвою, як переказ: %s" % str(jrow.get("text", "")))
+	p.free()
+	# ---- Довідник: «Сюжетна черга» ----
+	var arcs: Array = WS.chain_arcs()
+	var arcs_ok: bool = arcs.size() == CHAIN_ARCS.size()
+	for i in mini(arcs.size(), CHAIN_ARCS.size()):
+		arcs_ok = arcs_ok and str(arcs[i]["first"]) == str(CHAIN_ARCS[i][1]) and int(arcs[i]["level"]) == int(CHAIN_ARCS[i][3])
+	var ce: Dictionary = WS.chain_entry()
+	var in_basics := false
+	for e in WS._entries("basics"):
+		in_basics = in_basics or str(e["title"]) == "Сюжетна черга"
+	var found := false
+	for e in WS.search("сюжетна черга"):
+		found = found or str(e["entry"]["title"]) == "Сюжетна черга"
+	var text := str(ce["text"])
+	var levels_ok := true
+	for A in arcs:
+		levels_ok = levels_ok and ("%s: з %d-го рівня" % [A["title"], int(A["level"])]) in text
+	check(arcs_ok and levels_ok and in_basics and found and "18 ланок" in str(ce["sub"]) and "«%s»" % Q.title("tower") in text and "«%s»" % Q.title("kremlin") in text and "з 38-го" in text and "з 80-го" in text,
+		"довідник «Сюжетна черга»: 18 ланок у порядку рушія, кожна з рівнем першої місії; Башта після Кощія, Глибини після фіналу")
 
 
 ## Старі герої після перестановки ланцюжка: поступ (id кроків) лишається. Історія — один ланцюжок, перекази

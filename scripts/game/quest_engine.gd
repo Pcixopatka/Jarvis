@@ -152,7 +152,8 @@ static func mark(id: String) -> String:
 	return STAR if is_story(id) else BANG
 
 
-## Назва місії: «title» кроку (перекази, сага, доручення), а в кроку історії, що назви не має, — текст мети.
+## Назва місії: «title» кроку (він є в кожного кроку історії, переказу, саги й доручення); крок без назви (лише
+## в перевірках на даних у пам'яті) — текст мети.
 static func title(id: String) -> String:
 	var R := step(id)
 	return str(R["title"]) if R.has("title") else str(R.get("objective", {}).get("text", id))

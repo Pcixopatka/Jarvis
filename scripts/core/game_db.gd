@@ -697,6 +697,7 @@ const STORY_SCHEMA := {
 	"min_level": {"type": "int"},  # з якого рівня героя крок відкривається
 	"story": {"type": "bool"},  # чи крок належить сюжетній лінії (без поля — як у лінії, «story» у quest_lines.json)
 	"if": {"type": "string"},  # "ключ=вибір": крок лише для тих, хто так обрав (гілка); інакше пропускається
+	"title": {"type": "string", "required": true},  # коротка назва місії (замки Башти й Глибин, порадник, ратуша, журнал)
 	"giver": {"type": "string", "required": true},  # хто дає крок (speakers.json)
 	"city": {"type": "string", "required": true},  # де з ним говорити; "" — крок без розмови на початку
 	"intro": {"type": "list", "of": QUEST_LINE},  # вступ нової гри (лише перший крок)

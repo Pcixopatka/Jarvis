@@ -84,7 +84,8 @@ static func sections(world, player) -> Array:
 		if waits.has(k):
 			waits[k].append(id)
 	for id in waits["story"]:
-		story_rows.append(_wait_row(id))
+		# крок історії — з назвою, як рядок переказу (у саги назви тут нема: «Попіл за вітром» — у заголовку)
+		story_rows.append(_wait_row(id, str(StoryService.QuestEngine.step(id).get("title", "")) if StoryService.QuestEngine.kind_of(id) == "story" else ""))
 	var ch_title: String = str(StoryService.chapter_title(world))
 	var teaser: String = SagaS.teaser(world) if waits["story"].is_empty() else ""
 	var story_sec := {"title": "Історія" + ("" if ch_title == "" else ". " + ch_title), "rows": story_rows, "chapters": chapters,
