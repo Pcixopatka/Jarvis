@@ -123,5 +123,10 @@
 		"num": 8715,
 		"kind": "side",
 		"title": "Башта й Глибини"
+	},
+	"hospodarstvo": {
+		"num": 8716,
+		"kind": "side",
+		"title": "Козацьке господарство"
 	}
 }

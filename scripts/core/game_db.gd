@@ -676,6 +676,7 @@ const REWARD_FIELDS := {
 	"skills": {"type": "map", "of": {"type": "int"}},  # уміння (skills.json) → ранг у подарунок
 	"stats": {"type": "map", "of": {"type": "int"}},  # характеристика (GameDB.STAT_IDS) → +очок у подарунок
 	"loyalty": {"type": "map", "of": {"type": "int"}},  # місто → очки лояльності
+	"res": {"type": "map", "of": {"type": "int"}},  # ресурс чи провіант (resources.json, не трофеї) → скільки
 	"item": REWARD_ITEM,
 }
 const REWARD_SCHEMA := {"type": "record", "fields": REWARD_FIELDS}
@@ -3069,7 +3070,7 @@ const QUEST_REWARDS := {
 	"story": {"keys": ["gold", "xp", "rank", "class", "banner", "skills", "stats", "loyalty", "item"], "ilvl": true},
 	"legend_steps": {"keys": ["gold_lvl", "trophy", "item"], "ilvl": false},
 	"saga": {"keys": ["gold", "trophy", "xp", "item"], "ilvl": true},
-	"side": {"keys": ["gold", "xp", "trophy", "loyalty", "item"], "ilvl": true},
+	"side": {"keys": ["gold", "xp", "trophy", "loyalty", "res", "item"], "ilvl": true},
 }
 ## Яка лінія (kind у quest_lines.json) у кроків кожної таблиці.
 const QUEST_LINE_KIND := {"story": "story", "legend_steps": "legend", "saga": "saga", "side": "side"}
@@ -3230,7 +3231,7 @@ static func _reward_rules(where: String, r: Dictionary, allowed: Array, ilvl: bo
 		if not k in allowed:
 			out.append("%s: служба не читає «%s» (читає %s)" % [where, k, str(allowed)])
 	_positive(r, ["gold", "gold_lvl", "xp", "trophy"], where, out, true)
-	for m in ["skills", "stats", "loyalty"]:
+	for m in ["skills", "stats", "loyalty", "res"]:
 		for k in r.get(m, _EMPTY):
 			if int(r[m][k]) <= 0:
 				out.append("%s: «%s.%s» має бути більшим за нуль" % [where, m, k])
@@ -3430,8 +3431,8 @@ static func _objective_links(where: String, o: Dictionary, out: Array) -> void:
 		return
 	var loc := str(o["loc"])
 	if t == "stat":
-		if not _has_row("places", loc) and not _has_row("cities", loc) and not _has_row("spots", loc):
-			out.append("%s: «objective.loc» — нема місця, міста чи місця занять «%s»" % [where, loc])
+		if not _has_row("places", loc) and not _has_row("cities", loc) and not _has_row("spots", loc) and loc != load("res://scripts/data/camp_data.gd").CAMP_ID:
+			out.append("%s: «objective.loc» — нема місця, міста, місця занять чи хутора «%s»" % [where, loc])
 		return
 	if t in ["visit", "choose"]:
 		if not _has_row("cities", loc):
@@ -3469,6 +3470,9 @@ static func _reward_links(where: String, r: Dictionary, out: Array) -> void:
 	for k in r.get("loyalty", _EMPTY):
 		if not _has_row("cities", k):
 			out.append("%s: «loyalty» — нема міста «%s» у cities.json" % [where, k])
+	for k in r.get("res", _EMPTY):
+		if not str(row("resources", k).get("kind", "")) in ["res", "food"]:
+			out.append("%s: «res» — «%s» не ресурс і не провіант у resources.json (трофеї — полем «trophy»)" % [where, k])
 	if r.has("item"):
 		_reward_item_links(where + ".item", r["item"], out)
 

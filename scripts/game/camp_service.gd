@@ -31,6 +31,14 @@ static func built_count(world) -> int:
 	return n
 
 
+## Скільки рівнів будівель стоїть на хуторі разом (лічильник «camp_level»: доручення «Перша будівля»).
+static func total_levels(world) -> int:
+	var n := 0
+	for id in state(world)["buildings"]:
+		n += int(state(world)["buildings"][id])
+	return n
+
+
 static func max_level(id: String) -> int:
 	return Camp.building(id)["levels"].size()
 

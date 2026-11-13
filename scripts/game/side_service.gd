@@ -8,6 +8,7 @@ extends RefCounted
 const Story := preload("res://scripts/data/story.gd")
 const Data := preload("res://scripts/data/data.gd")
 const QuestEngine := preload("res://scripts/game/quest_engine.gd")
+const Camp := preload("res://scripts/data/camp_data.gd")
 
 ## Види ліній, які журнал, ратуша й мапа показують як доручення.
 const KINDS := ["side"]
@@ -100,6 +101,8 @@ static func reward_text(st: Dictionary) -> String:
 		parts.append("досвіду %d" % int(r["xp"]))
 	if r.has("trophy"):
 		parts.append("%d трофеїв" % int(r["trophy"]))
+	for res in r.get("res", {}):
+		parts.append("%s: %d" % [Camp.res_name(res).to_lower(), int(r["res"][res])])
 	if r.has("item"):
 		parts.append("«%s»" % str(r["item"]["name"]))
 	return ", ".join(parts)
@@ -116,6 +119,9 @@ static func _complete(world, player, id: String) -> Array:
 	if r.has("trophy"):
 		player.resources["trophy"] = int(player.resources.get("trophy", 0)) + int(r["trophy"])
 		parts.append("+%d трофеїв" % int(r["trophy"]))
+	for res in r.get("res", {}):  # ресурси й провіант: дерево, трави, м'ясо, риба...
+		player.resources[res] = int(player.resources.get(res, 0)) + int(r["res"][res])
+		parts.append("%s +%d" % [Camp.res_name(res).to_lower(), int(r["res"][res])])
 	if not parts.is_empty():
 		msgs.append({"text": ", ".join(parts), "big": false})
 	if r.has("loyalty"):

@@ -603,7 +603,7 @@ func _restore_place() -> void:
 		map_here = here
 		enter_city(here)
 	elif here == Camp.CAMP_ID:
-		enter_camp()
+		enter_camp(false)  # гру відкрито там, де стояв: це не нова навідина на хутір
 	elif known:
 		map_here = here
 		map_sel = here
@@ -3748,7 +3748,8 @@ func _quit_app() -> void:
 
 # ======================= Хутір =======================
 
-func enter_camp() -> void:
+## arrived — герой справді приїхав на хутір (лічильник «hutir»); false — гру відкрито там, де він стояв.
+func enter_camp(arrived: bool = true) -> void:
 	_leave_combat()
 	_price_city("")
 	hud.close_overlay()
@@ -3767,6 +3768,11 @@ func enter_camp() -> void:
 	smith_msg = ""
 	confirm_action = ""
 	var back := _expedition_news(true)
+	# лічильники для викликів і доручень: навідини на хутір і скільки рівнів будівель на ньому стоїть
+	if arrived:
+		back.append_array(ChallengeService.record(world, player, "hutir"))
+	if CampService.total_levels(world) > 0:
+		back.append_array(ChallengeService.record(world, player, "camp_level", CampService.total_levels(world)))
 	_build_camp()
 	if not back.is_empty():
 		hud.show_banner("\n".join(back), UI.GOLD)
@@ -3802,7 +3808,9 @@ func camp_do(action: String, arg) -> void:
 		"build":
 			if CampService.build(world, player, arg):
 				Audio.play("quest", 0.0)
-				hud.show_banner("%s: рівень %d!" % [Camp.building(arg)["name"], CampService.level(world, arg)], UI.GOLD)
+				var built := ["%s: рівень %d!" % [Camp.building(arg)["name"], CampService.level(world, arg)]]
+				built.append_array(ChallengeService.record(world, player, "camp_level", CampService.total_levels(world)))
+				hud.show_banner("\n".join(built), UI.GOLD)
 		"select":
 			camp_sel_uid = arg
 			smith_msg = ""
@@ -3903,6 +3911,7 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("heal", 0.0)
 				if BUFF_NAMES.has(arg):
 					hud.show_banner("%s випито\nДіє ще %s бою" % [BUFF_NAMES[arg], UiCamp.buff_time(player.buff_left(arg))], UI.GOOD)
+				_record("brew")
 		"plant":
 			if GardenService.plant(world, player, arg[0], arg[1]):
 				Audio.play("rustle", 0.1)

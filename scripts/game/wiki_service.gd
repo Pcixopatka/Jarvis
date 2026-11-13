@@ -160,6 +160,7 @@ static func _basics() -> Array:
 	out.append(_e("Порадник: що робити далі", "кнопка «Далі» на мапі", "Не знаєш, куди йти? Унизу мапи стоїть кнопка «Далі» з головною порадою. Торкнись її, і мапа покаже потрібне місце або відкриється потрібна вкладка. Усі поради зібрано на вкладці «Журнал», у розділі «Що робити зараз»: до %d порад від найважливішої. Порядок такий: здати виконане, облоги й події з лічильником походів, історія, вільні очки, кращі речі в торбі, порада зміцнити спорядження (коли нечисть твого рівня тобі смертельна), нагороди за виклики, розшук, завдання міст, справи тижня й дня. Якщо нічого з цього нема, порадник пошле в місцевість твого рівня й до дошки завдань. Кнопка «?» біля масштабу пояснює позначки на мапі. Коли героєві відкривається нове заняття, гра каже про це на мапі." % load("res://scripts/game/guide_service.gd").MAX))
 	out.append(mission_entry())
 	out.append(chain_entry())
+	out.append(side_entry())
 	var Way = load("res://scripts/game/way_service.gd")
 	var way_lines := []
 	for i in Way.Path.steps().size():
@@ -960,6 +961,26 @@ static func chain_entry() -> Dictionary:
 	for i in arcs.size():
 		lines.append("%d. %s: з %d-го рівня" % [i + 1, arcs[i]["title"], int(arcs[i]["level"])])
 	return _e("Сюжетна черга", "%d %s історії" % [arcs.size(), Classes.plural(arcs.size(), "ланка", "ланки", "ланок")], "Історія йде однією чергою: місія за місією, і кожна відкривається зі свого рівня героя. Наступну дають, коли пройдено попередню й герой доріс до її рівня, а доти той, хто її дасть, відмовляє й каже, з якого рівня приходити. Розділи чергуються з переказами: переказ теж ланка історії, з такою самою зіркою. Ланки по черзі й рівень, з якого дають їхню першу місію:\n%s\nБашта Кощія відкривається після місії «%s» і з %d-го рівня героя, Глибини зарази — після фіналу, місії «%s», і з %d-го." % ["\n".join(lines), Q.title(TS.OPEN_AFTER), TS.OPEN_LEVEL, Q.title(DS.OPEN_AFTER), DS.OPEN_LEVEL])
+
+
+## «Доручення»: усі доручення з таблиць (кроки ліній виду «side») за рівнем, з якого їх дають (за рівного — у
+## порядку рушія): хто дає, де, з якого рівня й мета.
+static func side_entry() -> Dictionary:
+	var Q = _svc("quest_engine")
+	var ids := []
+	for line in Q.line_ids():
+		if str(GameDB.row("quest_lines", line).get("kind", "")) == "side":
+			ids.append_array(Q.line_steps(line))
+	var order := range(ids.size())
+	order.sort_custom(func(a, b): return Q.level_needed(ids[a]) < Q.level_needed(ids[b]) or (Q.level_needed(ids[a]) == Q.level_needed(ids[b]) and a < b))
+	var lines := []
+	for i in order:
+		var id: String = ids[i]
+		var st: Dictionary = Q.step(id)
+		var lvl: int = Q.level_needed(id)
+		lines.append("%d. «%s»: %s, %s, %s%s. %s." % [lines.size() + 1, Q.title(id), Story.npc_name(str(st["giver"])), Story.npc(str(st["giver"]), {}).get("role", ""),
+			Data.place_name(str(st["city"])), (", з %d-го рівня" % lvl) if lvl > 1 else "", st["objective"]["text"]])
+	return _e("Доручення", "%d %s зі знаком оклику" % [lines.size(), Classes.plural(lines.size(), "доручення", "доручення", "доручень")], "Доручення — необов'язкові місії поза історією, зі знаком оклику «%s». Їх дають у ратуші, і нічого далі вони не тримають: візьмеш, коли схочеш. Кожне показує, як улаштоване щось у грі, і дає невелику нагороду. Хто що дає:\n%s" % [Q.BANG, "\n".join(lines)])
 
 
 static func _rules() -> Array:

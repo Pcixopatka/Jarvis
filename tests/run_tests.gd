@@ -53,6 +53,7 @@ func _run() -> void:
 	_suite_quest_migration()
 	_suite_mission_rules()
 	_suite_side_db()
+	_suite_intro_side_db()
 	_suite_unlock_rules()
 	_suite_mission_reorder()
 	_suite_chain()
@@ -98,6 +99,7 @@ func _run() -> void:
 	await _suite_trade_game()
 	_suite_outdoor()
 	await _suite_outdoor_game()
+	await _suite_intro_side_game()
 	_suite_tavern()
 	await _suite_tavern_game()
 	_suite_trail()
@@ -2967,6 +2969,191 @@ func _suite_outdoor_game() -> void:
 	game.hud.close_dialogue()
 	await _frames(2)
 	check(OS2.eaten(p) == "kulish", "після герцю страва лишилась")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Доручення id у ратуші: поговорити й дочитати (узяти чи здати). Розмову, яку той самий мовець одразу
+## починає слідом (наступне його доручення), закриваємо, не дочитавши: її беруть окремо.
+func _intro_talk(game, id: String) -> bool:
+	var Q = load("res://scripts/game/quest_engine.gd")
+	game.enter_city(str(Q.step(id)["city"]))
+	await _frames(2)
+	if not _hall_talk(game, "side", id):
+		return false
+	await _frames(2)
+	if game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root):
+		game.hud.dialogue_root.finished.emit(-1)
+		await _frames(2)
+	game.hud.close_dialogue()
+	await _frames(1)
+	return true
+
+
+## Вступні доручення в справжній грі: ратуша, журнал, мапа; кожне виконується справжньою дією (приїзд на
+## хутір, будова, рибалка й полювання в мініграх, казан, зілляварня) і здається з нагородою.
+func _suite_intro_side_game() -> void:
+	suite("Доручення: вступ до занять у грі")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var JS = load("res://scripts/game/journal_service.gd")
+	var GS = load("res://scripts/game/guide_service.gd")
+	var CmS = load("res://scripts/game/camp_service.gd")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var w = game.world
+	var p = game.player
+	var OS2 = game.OutdoorService
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "camp", "hunt", "fish", "levelup", "way", "char", "res", "trail", "stones"]:
+		w.hints[k] = true
+	var side_rows := func(city: String) -> Array:
+		var out := []
+		for r in game.hall_rows(city):
+			if str(r["kind"]) in ["side", "wait"] and str(r["id"]) in INTRO_SIDE:
+				out.append("%s:%s" % [r["kind"], r["id"]])
+		return out
+	var jrow := func(title: String) -> String:
+		for sec in JS.sections(w, p):
+			if str(sec["title"]) == "Доручення":
+				for r in sec["rows"]:
+					if str(r["text"]).contains(title):
+						return str(r["text"])
+		return ""
+	check(side_rows.call("sich").is_empty(), "нова гра: у Січі доручень нема")
+	# ---- Хутір: щойно герой на Січі ----
+	Q.place_at(w, "trial")
+	check(side_rows.call("sich") == ["side:hutir_intro"], "на Січі: кобзар кличе на хутір: %s" % str(side_rows.call("sich")))
+	check(await _intro_talk(game, "hutir_intro") and Q.stage(w, "hutir_intro") == "active" and jrow.call("Свій хутір") == "! Свій хутір: Навідайся на свій хутір під Січчю", "узято; журнал: «%s»" % jrow.call("Свій хутір"))
+	game.enter_map()
+	await _frames(2)
+	check(game.hud.map_view.targets.has("hutir") and Q.target(w, "hutir_intro") == "hutir", "мапа: «!» над хутором")
+	game._arrive("hutir")
+	await _frames(2)
+	check(game.state == game.State.CAMP and Q.stage(w, "hutir_intro") == "turnin" and int(w.stats.get("hutir", 0)) == 1 and str(game.hud.last_banner.get("text", "")).contains("Повертайся"), "приїхав на хутір — мету виконано, банер кличе назад")
+	var wood0 := int(p.resources.get("wood", 0))
+	var gold0: int = p.gold
+	game.leave_camp()
+	check(await _intro_talk(game, "hutir_intro") and Q.is_done(w, "hutir_intro") and int(p.resources.get("wood", 0)) == wood0 + 20 and p.gold == gold0 + 50, "здано: +50 грн і 20 дерева")
+	# ---- Будова ----
+	check(side_rows.call("sich") == ["side:build_intro"], "кошовий радить будуватися")
+	check(await _intro_talk(game, "build_intro") and Q.stage(w, "build_intro") == "active", "узято: хутір порожній")
+	p.gold = maxi(p.gold, 150)
+	game._arrive("hutir")
+	await _frames(2)
+	check(Q.stage(w, "build_intro") == "active", "приїзд на порожній хутір будови не робить")
+	game.camp_do("build", "sklad")
+	check(CmS.level(w, "sklad") == 1 and Q.stage(w, "build_intro") == "turnin" and int(w.stats.get("camp_level", 0)) == 1 and str(game.hud.last_banner.get("text", "")).begins_with("Склад: рівень 1!"), "склад збудовано — мету виконано: %s" % str(game.hud.last_banner.get("text", "")))
+	game.leave_camp()
+	var herbs0 := int(p.resources.get("herbs", 0))
+	check(await _intro_talk(game, "build_intro") and Q.is_done(w, "build_intro") and int(p.resources.get("herbs", 0)) == herbs0 + 5, "здано: 5 трав")
+	# ---- Рибалка й полювання: після прологу й з 3-го рівня ----
+	p.change_class("cossack")
+	game._sync_class()
+	Q.set_choice(w, "trial", 0)
+	Q.place_at(w, "recruit")
+	p.level = 2
+	p.recalc()
+	check(side_rows.call("sich") == ["wait:fish_intro", "wait:hunt_intro"] and Q.level_needed("fish_intro") == 3, "пролог пройдено на 2-му: у ратуші «ще зарано» для рибалки й полювання: %s" % str(side_rows.call("sich")))
+	game.enter_map()
+	game.enter_spot("fish")
+	await _frames(2)
+	check(game.state == game.State.MAP, "і рибальська тоня ще закрита")
+	p.level = 3
+	p.recalc()
+	p.hp = p.max_hp
+	check(side_rows.call("sich") == ["side:fish_intro", "side:hunt_intro"], "з 3-го — обидва")
+	w.stats["ryba"] = 30  # давній герой уже ловив: лічок іде від миті, коли взяв
+	check(await _intro_talk(game, "fish_intro") and Q.stage(w, "fish_intro") == "active", "рибалку взято; давній улов не рахується")
+	game.enter_map()
+	await _frames(2)
+	check(game.hud.map_view.targets.has("fish"), "мапа: «!» над рибальською тонею")
+	game.enter_spot("fish")
+	await _frames(3)
+	var fg = game.hud.screen_root
+	var frames := 0
+	while game.state == game.State.ACTIVITY and frames < 6000:
+		match fg.phase:
+			"idle":
+				fg.press()
+				fg.release()
+			"bite":
+				fg.press()
+			"reel":
+				fg.holding = fg.tension < 0.5
+		fg.step(0.05)
+		await process_frame
+		frames += 1
+	check(game.state == game.State.MAP and OS2.food(p, "ryba") >= 1 and Q.stage(w, "fish_intro") == "turnin" and jrow.call("Перший улов") == "! Перший улов: Повертайся: Запорозька Січ", "улов у мінігрі — мету виконано; журнал: «%s»" % jrow.call("Перший улов"))
+	var ryba0: int = OS2.food(p, "ryba")
+	check(await _intro_talk(game, "fish_intro") and Q.is_done(w, "fish_intro") and OS2.food(p, "ryba") == ryba0 + 2, "здано: 2 риби")
+	check(await _intro_talk(game, "hunt_intro") and Q.stage(w, "hunt_intro") == "active", "полювання взято")
+	game.enter_map()
+	game.enter_spot("hunt")
+	await _frames(3)
+	var hg = game.hud.screen_root
+	frames = 0
+	while game.state == game.State.ACTIVITY and frames < 4000:
+		if hg.animal != "" and hg.fall_t <= 0.0 and hg.pos.x > 100.0 and hg.pos.x < hg.size.x - 100.0 and int(hg.h["arrows"]) > 0:
+			hg.shoot_at(hg.target_point())
+		await process_frame
+		frames += 1
+	check(game.state == game.State.MAP and OS2.food(p, "meat") >= 1 and Q.stage(w, "hunt_intro") == "turnin", "м'ясо з мінігри — мету виконано")
+	var meat0: int = OS2.food(p, "meat")
+	check(await _intro_talk(game, "hunt_intro") and Q.is_done(w, "hunt_intro") and OS2.food(p, "meat") == meat0 + 2, "здано: 2 м'яса")
+	check(Q.stage(w, "cook_intro") == "locked" and Q.stage(w, "brew_intro") == "locked", "без знайомства з Мотрею казана й зілля ще нема")
+	# ---- Казан і зілля: Мотря в Чигирині ----
+	Q.place_at(w, "potion")
+	check(side_rows.call("chyhyryn") == ["side:cook_intro", "side:brew_intro"], "Мотря дає казан і зілля: %s" % str(side_rows.call("chyhyryn")))
+	check(await _intro_talk(game, "cook_intro") and Q.stage(w, "cook_intro") == "active" and Q.stage(w, "brew_intro") == "offer", "казан узято (зілля — окремо)")
+	game.enter_map()
+	game._arrive("hutir")
+	await _frames(2)
+	check(OS2.can_cook(p, "pechenia"), "м'яса й риби з нагород стає на печеню")
+	game.camp_do("cook", "pechenia")
+	check(OS2.eaten(p) == "pechenia" and Q.stage(w, "cook_intro") == "turnin", "печеню зварено — мету виконано")
+	game.leave_camp()
+	herbs0 = int(p.resources.get("herbs", 0))
+	check(await _intro_talk(game, "cook_intro") and Q.is_done(w, "cook_intro") and int(p.resources.get("herbs", 0)) == herbs0 + 4, "здано: 4 трави")
+	check(await _intro_talk(game, "brew_intro") and Q.stage(w, "brew_intro") == "active", "зілля взято")
+	game.enter_map()
+	game._arrive("hutir")
+	await _frames(2)
+	p.gold = maxi(p.gold, 200)
+	p.resources["wood"] = maxi(int(p.resources.get("wood", 0)), 10)
+	p.resources["herbs"] = maxi(int(p.resources.get("herbs", 0)), 13)
+	game.camp_do("build", "zillia")
+	check(CmS.level(w, "zillia") == 1 and Q.stage(w, "brew_intro") == "active", "зілляварню збудовано, зілля ще нема")
+	p.potions = p.potion_max()
+	game.camp_do("brew", "heal")
+	check(Q.stage(w, "brew_intro") == "active" and int(w.stats.get("brew", 0)) == 0, "повного запасу не доллєш: зілля не зварено")
+	p.potions -= 1
+	game.camp_do("brew", "heal")
+	check(p.potions == p.potion_max() and Q.stage(w, "brew_intro") == "turnin" and int(w.stats.get("brew", 0)) == 1, "зілля здоров'я зварено — мету виконано")
+	game.leave_camp()
+	herbs0 = int(p.resources.get("herbs", 0))
+	check(await _intro_talk(game, "brew_intro") and Q.is_done(w, "brew_intro") and int(p.resources.get("herbs", 0)) == herbs0 + 6, "здано: 6 трав")
+	check(INTRO_SIDE.all(func(x): return Q.is_done(w, x)) and side_rows.call("sich").is_empty() and side_rows.call("chyhyryn").is_empty() and jrow.call("Свій хутір") == "", "усі шість здано: у ратушах і журналі їх більше нема")
+	# ---- Давній герой: хутір збудовано до краю, лічильник будов ще не писався ----
+	Q.state(w)["done"].erase("build_intro")
+	w.stats.erase("camp_level")
+	for b in game.Camp.building_ids():
+		CmS.state(w)["buildings"][b] = CmS.max_level(b)
+	check(await _intro_talk(game, "build_intro") and Q.stage(w, "build_intro") == "active", "давній герой узяв будову, а будувати вже нічого")
+	game.enter_map()
+	game._arrive("hutir")
+	await _frames(2)
+	check(int(w.stats.get("camp_level", 0)) == CmS.total_levels(w) and Q.stage(w, "build_intro") == "turnin", "на хуторі зараховано те, що стоїть (%d рівнів): мету виконано" % CmS.total_levels(w))
+	game.leave_camp()
+	check(await _intro_talk(game, "build_intro") and Q.is_done(w, "build_intro"), "і здано")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -9653,6 +9840,8 @@ func _suite_guide() -> void:
 	# порада без місця відкриває вкладку
 	DS.state(w)["sieges"].clear()
 	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
+	for sid in INTRO_SIDE:  # вступні доручення цей герой уже виконав: тут — порада про очки
+		load("res://scripts/game/quest_engine.gd").complete(w, sid)
 	p.stat_points = 2
 	game.enter_map()
 	await _frames(2)
@@ -19485,7 +19674,7 @@ func _suite_mission_rules() -> void:
 ## Доручення в таблицях: перевірка запису (мета «stat», нагорода, лінія) і порожня таблиця.
 func _suite_side_db() -> void:
 	suite("Доручення: таблиця")
-	check(GameDB.ids("side") == ["tower_intro", "depths_intro"] and GameDB.problems().is_empty(), "два доручення (Башта й Глибини), таблиця без проблем")
+	check(GameDB.ids("side") == ["tower_intro", "depths_intro"] + INTRO_SIDE and GameDB.problems().is_empty(), "доручення: Башта, Глибини й шість вступних до занять; таблиця без проблем")
 	var good := {"probe": {"num": 8751, "line": "story", "title": "Проба", "giver": "kobzar", "city": "sich", "start": [["kobzar", "Є діло."]],
 		"objective": {"type": "stat", "stat": "tower", "count": 1, "loc": "bashta", "text": "Перший поверх"}, "turn_in": "sich", "end": [["kobzar", "Дякую."]], "reward": {"gold": 10, "item": {"slot": "amulet", "rarity": 1, "ilvl": 5, "name": "Оберіг"}}}}
 	var pr := GameDB.validate("side", good)
@@ -19505,6 +19694,148 @@ func _suite_side_db() -> void:
 	ql["dor2"] = {"num": 8717, "kind": "side"}
 	pr = GameDB.validate("quest_lines", ql)
 	check(_has_problem(pr, ["quest_lines/dor2", "«title»"]) and not _has_problem(pr, ["quest_lines/dor:", "не має"]) and _has_problem(pr, ["quest_lines/dor", "нема жодного кроку"]), "лінія доручень: назва обов'язкова, рівень можна: %s" % str(pr))
+
+
+## Вступні доручення (лінія «hospodarstvo»): рибалка, полювання, хутір, будова, казан, зілляварня. Хто дає, де,
+## коли відкриваються (за справжніми умовами занять), порядок, нагороди, лічильники й запис довідника.
+const INTRO_SIDE := ["hutir_intro", "build_intro", "fish_intro", "hunt_intro", "cook_intro", "brew_intro"]
+
+
+func _suite_intro_side_db() -> void:
+	suite("Доручення: вступ до занять")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var CmS = load("res://scripts/game/camp_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var Camp = load("res://scripts/data/camp_data.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Story = load("res://scripts/data/story.gd")
+	# ---- Шість записів, мовці з прологу й розділу I, у своїх містах ----
+	var early := {}  # мовець → міста, де він говорить у пролозі й розділі I
+	for id in GameDB.ids("story"):
+		var R: Dictionary = GameDB.row("story", id)
+		if not str(R["chapter"]) in ["prolog", "zaraza"]:
+			continue
+		for k in ["intro", "start", "end"]:
+			for l in R.get(k, []):
+				var c := str(R["city"]) if k == "start" else str(R["turn_in"])
+				if not early.has(l[0]):
+					early[l[0]] = {}
+				early[l[0]][c] = true
+	var bad := []
+	for id in INTRO_SIDE:
+		var st: Dictionary = Q.step(id)
+		if st.is_empty() or Q.kind_of(id) != "side" or Q.line_of(id) != "hospodarstvo" or Q.mark(id) != "!" or Q.is_story(id):
+			bad.append(id + ": не доручення лінії hospodarstvo")
+			continue
+		if not early.has(str(st["giver"])) or not early[str(st["giver"])].has(str(st["city"])) or str(st["turn_in"]) != str(st["city"]):
+			bad.append(id + ": мовець не з прологу чи розділу I або не в своєму місті")
+		if st["start"].size() < 4 or st["start"].size() > 6 or st["end"].size() < 1 or st["end"].size() > 2:
+			bad.append(id + ": розмова не 4–6 реплік на початку чи 1–2 наприкінці")
+		if str(st["objective"]["type"]) != "stat" or int(st["objective"]["count"]) != 1 or not CS.is_stat(str(st["objective"]["stat"])):
+			bad.append(id + ": мета — не один раз лічильника")
+		for k in ["start", "end"]:
+			for l in st[k]:
+				if str(l[1]).contains("-го рівн") or str(l[1]).contains("рівень героя") or str(l[1]).contains("рівня героя") or str(l[1]).contains("кнопк") or str(l[1]).contains("вкладк"):
+					bad.append(id + ": репліка про рівень чи кнопки: " + str(l[1]))
+	check(bad.is_empty() and GameDB.ids("side").size() == 8 and GameDB.problems().is_empty(), "шість вступних доручень: мовці з прологу й розділу I у своїх містах, 4–6 реплік, мета — один раз: %s" % str(bad))
+	check(str(Q.step("hutir_intro")["giver"]) == "kobzar" and str(Q.step("build_intro")["giver"]) == "otaman" and str(Q.step("fish_intro")["giver"]) == "kobzar" and str(Q.step("hunt_intro")["giver"]) == "otaman"
+		and str(Q.step("cook_intro")["city"]) == "chyhyryn" and str(Q.step("brew_intro")["giver"]) == "znakharka", "хутір і рибалка — кобзар, будова й полювання — кошовий (Січ), казан і зілля — Мотря (Чигирин)")
+	# ---- Мети: справжні лічильники занять ----
+	var obj := {}
+	for id in INTRO_SIDE:
+		obj[id] = "%s@%s" % [Q.step(id)["objective"]["stat"], Q.step(id)["objective"].get("loc", "")]
+	check(obj == {"hutir_intro": "hutir@hutir", "build_intro": "camp_level@hutir", "fish_intro": "ryba@fish", "hunt_intro": "meat@hunt", "cook_intro": "cook@hutir", "brew_intro": "brew@hutir"}, "мети: навідини хутора, будова, улов, м'ясо, страва, зілля: %s" % str(obj))
+	check("hutir" in CS.STATS and "camp_level" in CS.STATS and "brew" in CS.STATS and "camp_level" in CS.HIGHEST and not "hutir" in CS.HIGHEST and not "brew" in CS.HIGHEST, "нові лічильники: hutir і brew — суми, camp_level — найвище (рівнів будівель на хуторі)")
+	var used := []
+	for t in ["daily", "weekly", "achievements"]:
+		for k in GameDB.ids(t):
+			if str(GameDB.row(t, k)["stat"]) in ["hutir", "camp_level", "brew"]:
+				used.append(t + "/" + k)
+	for st in load("res://scripts/data/way_data.gd").steps():
+		if str(st["check"].get("stat", "")) in ["hutir", "camp_level", "brew"]:
+			used.append("way/" + str(st["id"]))
+	check(used.is_empty(), "нові лічильники не чіпають викликів, досягнень і «Шляху козака»: %s" % str(used))
+	var wc = WorldState.new()
+	check(CmS.total_levels(wc) == 0, "порожній хутір: рівнів 0")
+	CmS.state(wc)["buildings"] = {"kurin": 2, "sklad": 1}
+	check(CmS.total_levels(wc) == 3, "курінь 2 і склад 1: рівнів 3")
+	# ---- Коли відкриваються: за справжніми умовами ----
+	check(Q.after("hutir_intro") == ["flee"] and Q.level_needed("hutir_intro") == 1 and Q.after("build_intro") == ["hutir_intro"] and Q.level_needed("build_intro") == 1, "хутір — щойно герой на Січі (після «%s»), будова — після хутора, обидва з 1-го" % Q.title("flee"))
+	check(Q.after("fish_intro") == ["back_to_sich_s"] and Q.after("hunt_intro") == ["back_to_sich_s"] and Q.level_needed("fish_intro") == int(Acts.spot("fish")["level"]) and Q.level_needed("hunt_intro") == int(Acts.spot("hunt")["level"]),
+		"рибалка й полювання — після прологу (дорогу обрано) і з рівня місця заняття (%d)" % int(Acts.spot("fish")["level"]))
+	check(Q.after("cook_intro") == ["hunt_intro", "fish_intro", "road"] and Q.after("brew_intro") == ["build_intro", "road"] and Q.level_needed("cook_intro") == 3 and Q.level_needed("brew_intro") == 3, "казан — після полювання, рибалки й знайомства з Мотрею; зілля — після будови й Мотрі")
+	var w = WorldState.new()
+	w.hero_level = 1
+	var stg := func(): return INTRO_SIDE.map(func(x): return Q.stage(w, x))
+	check(stg.call() == ["locked", "locked", "locked", "locked", "locked", "locked"], "нова гра: жодного доручення")
+	Q.place_at(w, "trial")
+	check(stg.call() == ["offer", "locked", "locked", "locked", "locked", "locked"], "на Січі: кобзар кличе на хутір")
+	Q.complete(w, "hutir_intro")
+	check(Q.stage(w, "build_intro") == "offer", "хутір бачив — кошовий радить будуватися")
+	Q.set_choice(w, "trial", 0)
+	Q.place_at(w, "recruit")
+	w.hero_level = 2
+	check(Q.stage(w, "fish_intro") == "level" and Q.stage(w, "hunt_intro") == "level" and Q.level_needed("fish_intro") == 3, "пролог пройдено на 2-му рівні: рибалка й полювання чекають 3-го")
+	w.hero_level = 3
+	check(Q.stage(w, "fish_intro") == "offer" and Q.stage(w, "hunt_intro") == "offer" and Q.stage(w, "cook_intro") == "locked", "з 3-го — рибалка й полювання; казан ще ні")
+	Q.complete(w, "fish_intro")
+	Q.complete(w, "hunt_intro")
+	check(Q.stage(w, "cook_intro") == "locked" and Q.stage(w, "brew_intro") == "locked", "без знайомства з Мотрею ні казана, ні зілля")
+	Q.place_at(w, "potion")
+	check(Q.stage(w, "cook_intro") == "offer" and Q.stage(w, "brew_intro") == "locked", "Мотря дає казан; зілля — лише коли збудовано першу будівлю")
+	Q.complete(w, "build_intro")
+	check(Q.stage(w, "brew_intro") == "offer", "і зілля")
+	# ---- Нагороди: невеликі й на наступний крок того самого заняття ----
+	var rw := {}
+	for id in INTRO_SIDE:
+		rw[id] = Q.step(id)["reward"]
+	check(int(rw["hutir_intro"]["res"]["wood"]) >= int(GameDB.row("buildings", "sklad")["levels"][0]["wood"]) and int(rw["hutir_intro"]["res"]["wood"]) >= int(GameDB.row("buildings", "kurin")["levels"][0]["wood"]), "хутір: дерева на першу будівлю")
+	var dish_ok := false
+	for r in Acts.recipe_ids():
+		var need: Dictionary = Acts.recipe(r)["need"]
+		var have := {"herbs": int(rw["build_intro"]["res"]["herbs"]), "meat": int(rw["hunt_intro"]["res"]["meat"]), "ryba": int(rw["fish_intro"]["res"]["ryba"])}
+		var ok := true
+		for k in need:
+			ok = ok and int(have.get(k, 0)) >= int(need[k])
+		dish_ok = dish_ok or ok
+	check(dish_ok and rw["cook_intro"]["res"].has("herbs") and int(rw["brew_intro"]["res"]["herbs"]) >= int(Camp.brew("heal")["herbs"]), "трави з будови, м'ясо з полювання й риба з рибалки — на першу страву; трави за казан і зілля — на наступне")
+	var rich := []
+	for id in INTRO_SIDE:
+		if int(rw[id].get("gold", 0)) > 100 or rw[id].has("xp") or rw[id].has("item"):
+			rich.append(id)
+	check(rich.is_empty(), "нагороди скромні: до 100 грн, без досвіду й речей: %s" % str(rich))
+	# ---- Перевірка поля «res» ----
+	var good := {"probe": {"num": 8790, "line": "hospodarstvo", "title": "Проба", "giver": "kobzar", "city": "sich", "start": [["kobzar", "Є діло."]],
+		"objective": {"type": "stat", "stat": "brew", "count": 1, "loc": "hutir", "text": "Звари"}, "turn_in": "sich", "end": [["kobzar", "Дякую."]], "reward": {"res": {"wood": 3, "meat": 2}}}}
+	check(GameDB.validate("side", good).is_empty(), "нагорода «res» (ресурс і провіант) і мета з позначкою над хутором — годяться")
+	var badr: Dictionary = good.duplicate(true)
+	badr["probe"]["reward"] = {"res": {"trophy": 2, "nema": 1, "herbs": 0}}
+	badr["probe"]["objective"]["loc"] = "nema"
+	var pr := GameDB.validate("side", badr)
+	check(_has_problem(pr, ["side/probe.reward", "«trophy»"]) and _has_problem(pr, ["side/probe.reward", "«nema»"]) and _has_problem(pr, ["«res.herbs»"]) and _has_problem(pr, ["side/probe", "«nema»", "хутора"]), "«res»: трофеї й невідоме не годяться, нуль теж; позначка в нікуди: %s" % str(pr))
+	var st2: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("story")))
+	st2["recruit"]["reward"]["res"] = {"wood": 5}
+	check(_has_problem(GameDB.validate("story", st2), ["story/recruit.reward", "«res»"]), "крок історії «res» не читає")
+	# ---- Нагорода словами ----
+	var SideS = load("res://scripts/game/side_service.gd")
+	check(SideS.reward_text(Q.step("hunt_intro")) == "40 грн, м'ясо: 2" and SideS.reward_text(Q.step("hutir_intro")) == "50 грн, дерево: 20", "журнал: «%s»" % SideS.reward_text(Q.step("hunt_intro")))
+	# ---- Довідник: усі доручення ----
+	var se: Dictionary = WS.side_entry()
+	var missing := []
+	for id in GameDB.ids("side"):
+		var R: Dictionary = GameDB.row("side", id)
+		var ln := "«%s»: %s, %s, %s" % [R["title"], Story.npc_name(str(R["giver"])), Story.npc(str(R["giver"]), {}).get("role", ""), Data.place_name(str(R["city"]))]
+		if not ln in str(se["text"]) or not str(R["objective"]["text"]) in str(se["text"]):
+			missing.append(id)
+	var in_basics := false
+	for e in WS.sections()[WS.index_of("basics")]["entries"]:
+		in_basics = in_basics or str(e["title"]) == "Доручення"
+	var found := false
+	for e in WS.search("доручення"):
+		found = found or str(e["entry"]["title"]) == "Доручення"
+	check(missing.is_empty() and in_basics and found and str(se["sub"]) == "8 доручень зі знаком оклику" and "з 38-го рівня" in str(se["text"]) and str(se["text"]).find("Свій хутір") < str(se["text"]).find("Кістяна башта"),
+		"довідник «Доручення»: усі %d доручень із таблиць (хто, де, мета), від раннього до пізнього: %s" % [GameDB.ids("side").size(), str(missing)])
 
 
 ## Башта й Глибини: умова відкриття в налаштуваннях (рівень і місія) і що буде з цифрами наступного кроку.
@@ -19993,7 +20324,11 @@ func _suite_mission_game() -> void:
 	for sec in JS.sections(w, p):
 		if str(sec["title"]) == "Доручення":
 			dsec = sec
-	check(not dsec.is_empty() and bool(dsec["rows"][0]["ready"]) and str(dsec["rows"][0]["text"]).begins_with("! Двоє заражених: Повертайся"), "журнал: розділ «Доручення», можна здати")
+	var drow := {}
+	for r in dsec.get("rows", []):
+		if str(r["text"]).begins_with("! Двоє заражених"):
+			drow = r
+	check(not drow.is_empty() and bool(drow["ready"]) and str(drow["text"]).begins_with("! Двоє заражених: Повертайся"), "журнал: розділ «Доручення», можна здати")
 	var gold0: int = p.gold
 	game.enter_city("sich")
 	await _frames(3)
@@ -20112,7 +20447,7 @@ func _suite_quest_db() -> void:
 	var SgS = load("res://scripts/game/saga_service.gd")
 	var probs := GameDB.problems()
 	check(probs.is_empty(), "у базі нема проблем%s" % ("" if probs.is_empty() else ": " + "; ".join(probs.slice(0, 5))))
-	var expect := {"speakers": 32, "story_chapters": 6, "story": 34, "quest_lines": 15, "legend_steps": 29, "saga": 5, "way": 19, "daily": 20, "weekly": 18, "achievements": 95, "spec_trials": 10}
+	var expect := {"speakers": 32, "story_chapters": 6, "story": 34, "quest_lines": 16, "legend_steps": 29, "saga": 5, "way": 19, "daily": 20, "weekly": 18, "achievements": 95, "spec_trials": 10}
 	var count_bad := []
 	for t in expect:
 		if GameDB.ids(t).size() != int(expect[t]):

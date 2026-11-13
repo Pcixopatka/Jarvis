@@ -17,10 +17,10 @@ const VERSION := 2
 
 ## Лічильники world.stats, які гра рахує (усі виклики record() у коді). Лише на них можуть посилатися
 ## виклики, досягнення й «Шлях козака» (перевіряє GameDB). Новий лічильник — виклик record() у коді й рядок тут.
-const STATS := ["ambush", "bond", "boss", "boss_day", "boss_week", "bounty", "bounty_kill", "charged", "cook", "craft",
+const STATS := ["ambush", "bond", "boss", "boss_day", "boss_week", "bounty", "bounty_kill", "brew", "camp_level", "charged", "cook", "craft",
 	"defense", "depth", "depth_clear", "dice", "dice_12", "dice_win", "duel", "duel_champion", "duel_free", "duel_streak", "dungeon",
 	"elite", "enchant", "escort", "escort_clean", "event", "expedition", "expedition_sent", "fair", "field", "fishing",
-	"glory", "harvest", "hetman", "holiday_reward", "holiday_token", "holiday_top", "hunt", "kill", "kleinod", "legend",
+	"glory", "harvest", "hetman", "holiday_reward", "holiday_token", "holiday_top", "hunt", "hutir", "kill", "kleinod", "legend",
 	"legend_step", "level", "meat", "muster", "muster_champion", "parry", "peril", "peril_bosses", "pet_level", "plant",
 	"ring", "ring_clear", "ring_fast", "rumor", "ryba", "saga", "set_full", "sharpen", "som", "spec", "tower",
 	"tower_floor", "trade_profit", "trade_sold", "trail", "travel", "valor", "vigil", "vigil_min", "vii_blind"]
@@ -28,7 +28,8 @@ const STATS := ["ambush", "bond", "boss", "boss_day", "boss_week", "bounty", "bo
 const STAT_PREFIXES := ["kill", "boss", "trail", "cook", "event"]
 ## Лічильники «найвищого досягнутого» (рівень, глибина, поверх Башти...): record() бере більше з двох, а не
 ## додає. Решта — суми. Так їх читають і місії з метою «stat» (QuestEngine.stat_value).
-const HIGHEST := ["level", "depth", "tower", "vigil", "glory", "duel_streak", "peril_bosses", "valor", "set_full", "saga", "legend"]
+## camp_level — скільки рівнів будівель стоїть на хуторі (CampService.total_levels; пишеться при будові й на хуторі).
+const HIGHEST := ["level", "depth", "tower", "vigil", "glory", "duel_streak", "peril_bosses", "valor", "set_full", "saga", "legend", "camp_level"]
 ## Що може просити виклик («need»): заняття, яке available() уміє перевірити.
 const NEEDS := ["vigil", "duel", "bounty", "ring", "muster", "tower", "depth", "hunt", "fish", "tavern", "escort", "trail", "event", "defense", "garden", "party"]
 
