@@ -108,6 +108,15 @@ static func objective_line(world) -> String:
 	return line
 
 
+## Рівень бою випробування в місці loc_id: рівень героя, коли туди веде його випробування (як колись перекази),
+## інакше 0. Бій підтягує QuestEngine.raise_mods: давнє місце не стає прогулянкою.
+static func fight_level(world, player, loc_id: String) -> int:
+	var s := state(world)
+	if s.is_empty() or s["stage"] != "active" or str(objective(world).get("loc", "")) != loc_id:
+		return 0
+	return int(player.level)
+
+
 static func target(world) -> String:
 	var s := state(world)
 	if s.is_empty():

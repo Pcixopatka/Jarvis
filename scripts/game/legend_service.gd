@@ -1,7 +1,8 @@
 extends RefCounted
 ## Перекази (див. Legends, data/quest_lines.json і data/legend_steps.json): квестові лінійки за легендами земель.
-## Що відкрито й що пройдено, вирішує QuestEngine (стан — world.missions): перший крок лінійки відкривається
-## з «min_level» лінії, наступні — коли здано попередній. Лінійки незалежні: герой веде кілька одразу.
+## Що відкрито й що пройдено, вирішує QuestEngine (стан — world.missions). Кожен переказ — ланка сюжетного
+## ланцюжка («story» лінії, зірка): його перший крок чекає на останній крок попередньої ланки («after») і
+## рівня героя («min_level»), наступні — на попередній крок лінійки, а на останній чекає наступна ланка.
 ## Ця служба веде розмови, нагороди й тексти кроків ліній виду «legend». Розмови показує Game._legend_dialogue.
 
 const Legends := preload("res://scripts/data/legends.gd")
@@ -229,7 +230,7 @@ static func done_count(world) -> int:
 	return n
 
 
-## Нечисть у місці, куди зараз веде переказ, міряється рівнем із героєм: стара печера не стає прогулянкою.
+## Бій у місці, куди зараз веде переказ, іде не нижче за рівень місії (QuestEngine.mission_level).
 ## Загальне правило для всіх місій — QuestEngine.fight_mods (гра бере його); тут — лише місії переказів.
 static func mods_for(world, player, loc_id: String) -> Dictionary:
 	return QuestEngine.fight_mods(world, player, loc_id, KINDS)

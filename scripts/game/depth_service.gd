@@ -9,7 +9,7 @@ const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
 const LOC_ID := "hlybyny"
-static var OPEN_LEVEL: int  # з якого рівня героя відкриті Глибини (0 — з будь-якого)
+static var OPEN_LEVEL: int  # з якого рівня героя відкриті Глибини (0 — з будь-якого; сьогодні — з 80-го)
 static var OPEN_AFTER: String  # після якої місії відкриті Глибини (сьогодні — «kremlin», перемога над Путіноїдом)
 static var BASE_LEVEL: int  # рівень нечисті на першій глибині
 

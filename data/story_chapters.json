@@ -16,7 +16,7 @@
 	"karpaty": {
 		"num": 8454,
 		"title": "Розділ III. Карпатська варта",
-		"cleanse": ["kamianets_walls", "chornohora", "dovbush_cave", "koshchii_tower"]
+		"cleanse": ["kamianets_walls", "chornohora", "dovbush_cave", "dnister_kruchi", "koshchii_tower"]
 	},
 	"pivnich": {
 		"num": 8455,

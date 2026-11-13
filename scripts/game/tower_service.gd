@@ -2,7 +2,7 @@ extends RefCounted
 ## «Башта Кощія» в Москві — безкінечний підйом. Поверх — одна арена: хвилі нечисті й міні-бос
 ## (іменована еліта з 2–3 властивостями); кожен п'ятий поверх — супербос. Вище — сильніше.
 ## Відкривається з рівня героя «open_level» і після місії «open_after» (налаштування «tower»; сьогодні — з
-## 15-го рівня, без місії). Стан — world.tower: {"max": найвищий відкритий, "best": найвищий пройдений}.
+## 38-го рівня, після перемоги над Кощієм у його вежі, крок «tower»). Стан — world.tower: {"max": найвищий відкритий, "best": найвищий пройдений}.
 ## За перше проходження поверху — нагорода; за супербоса — гарантований камінь долі й легендарна річ.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
@@ -103,7 +103,7 @@ static func open_at(world, lvl: int) -> bool:
 	return load("res://scripts/game/unlock_rule.gd").open(world, lvl, OPEN_LEVEL, OPEN_AFTER)
 
 
-## Чого бракує, щоб Башта відкрилась, одним реченням ("" — відкрита). Наприклад, «Відкриється з 15-го рівня героя.»
+## Чого бракує, щоб Башта відкрилась, одним реченням ("" — відкрита). Наприклад, «Відкриється з 38-го рівня героя.»
 static func lock_text(world, lvl: int, verb: String = "Відкриється", short: bool = false) -> String:
 	return load("res://scripts/game/unlock_rule.gd").text(world, lvl, OPEN_LEVEL, OPEN_AFTER, verb, short)
 

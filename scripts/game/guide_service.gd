@@ -82,11 +82,13 @@ static func items(world, player, here: String = "") -> Array:
 	var way_ready: int = int(Way.ready_count(world, player))
 	if way_ready > 0:
 		out.append(_it("way_claim", "Шлях козака: забери нагороду", "Виконано кроків: %d" % way_ready, "", TAB_JOURNAL))
-	# 4. Історія: кожна відкрита сюжетна місія рушія (сьогодні вона одна), далі доручення. Позначка — QuestEngine.mark
+	# 4. Історія: кожна відкрита ланка сюжетного ланцюжка (крок історії, саги чи переказу; сьогодні вона одна),
+	# далі доручення. Позначка — QuestEngine.mark
 	var Q = Story.QuestEngine
-	for id in Story.missions(world):
+	for id in Story.chain(world):
 		var target: String = Q.target(world, id)
-		out.append(_it("story", "%s Історія: %s" % [Q.mark(id), _clean(Story.mission_line(world, id))], ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
+		var head: String = "" if Q.kind_of(id) == "legend" else "Історія: "  # рядок переказу сам каже «Переказ «…»»
+		out.append(_it("story", "%s %s%s" % [Q.mark(id), head, _clean(Story.mission_line(world, id))], ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
 	var Side = _svc("side_service")
 	for id in Side.missions(world):
 		var target: String = Q.target(world, id)
@@ -132,8 +134,8 @@ static func items(world, player, here: String = "") -> Array:
 	for q in world.quests:
 		if not world.is_done(q):
 			out.append(_it("quest", "%s  %d/%d" % [str(q["text"]), int(q.get("progress", 0)), int(q.get("count", 1))], "Завдання від міста %s" % Data.place_name(str(q["city"])), str(q.get("loc", ""))))
-	# 9а. Місії, яким бракує лише рівня: набирай рівні. Кожна сюжетна й кожне доручення, а з решти (перекази) —
-	# лише найближча: їх багато з першого ж рівня
+	# 9а. Місії, яким бракує лише рівня: набирай рівні. Кожна сюжетна (зокрема переказ — ланка історії) і кожне
+	# доручення, а з решти — лише найближча
 	var near := ""
 	for id in Q.waiting(world):
 		if int(player.level) >= Q.level_needed(id):

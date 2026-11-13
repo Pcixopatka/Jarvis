@@ -523,17 +523,31 @@ static func fight_mods(world, player, loc_id: String, kinds: Array = []) -> Dict
 		if lvl > best:
 			best = lvl
 			who = id
-	if best <= base:
+	var r := raise_mods(loc_id, best, player)
+	if r.is_empty():
 		return {}
-	# мета зачистки рахується від рідного рівня місця: інакше на 99-му рівні просили б 535 вбивств
-	var goal: int = mini(load("res://scripts/game/far_service.gd").GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
-	var out := {"level": best, "hero_level": int(player.level), "base_level": base}
+	var out := {"level": r["level"], "hero_level": r["hero_level"], "base_level": r["base_level"]}
 	if kind_of(who) == "legend":
 		out["legend"] = line_of(who)
 	else:
 		out["mission"] = who
-	out["goal"] = goal
+	out["goal"] = r["goal"]
 	return out
+
+
+## Надбавки, що підтягують бій у місці loc_id до рівня lvl: {"level", "hero_level", "base_level", "goal"}
+## ({} — місце й так не слабше або це Башта чи Глибини). Те саме правило бере й випробування спеціалізації
+## (SpecService.fight_level).
+static func raise_mods(loc_id: String, lvl: int, player) -> Dictionary:
+	var Data = load("res://scripts/data/data.gd")
+	if not Data.is_place(loc_id) or Data.place(loc_id).get("endless", false):
+		return {}
+	var base: int = int(Data.place(loc_id)["level"])
+	if lvl <= base:
+		return {}
+	# мета зачистки рахується від рідного рівня місця: інакше на 99-му рівні просили б 535 вбивств
+	var goal: int = mini(load("res://scripts/game/far_service.gd").GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
+	return {"level": lvl, "hero_level": int(player.level), "base_level": base, "goal": goal}
 
 
 ## Куди веде місія (id міста чи місця; "" — нікуди): питає службу її лінії.

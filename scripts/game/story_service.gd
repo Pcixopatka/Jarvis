@@ -57,6 +57,22 @@ static func missions(world) -> Array:
 	return QuestEngine.missions_of(world, KINDS)
 
 
+## Ланки сюжетного ланцюжка, відкриті зараз: місії історії й саги та сюжетні перекази (переказ — ланка
+## історії між розділами), у порядку рушія. Доручення сюди не йдуть: у них свої рядки.
+static func chain(world) -> Array:
+	return QuestEngine.missions(world).filter(func(id): return _is_link(str(id)))
+
+
+## Ланки ланцюжка, яким бракує лише рівня героя (QuestEngine.waiting), у порядку рушія.
+static func chain_waiting(world) -> Array:
+	return QuestEngine.waiting(world).filter(func(id): return _is_link(str(id)))
+
+
+static func _is_link(id: String) -> bool:
+	var k := QuestEngine.kind_of(id)
+	return k in KINDS or (k == "legend" and QuestEngine.is_story(id))
+
+
 static func chapter_title(world) -> String:
 	if finished(world):
 		return SagaService.title(world) if SagaService.unlocked(world) else ""  # після Кремля — «Попіл за вітром»
@@ -292,20 +308,22 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 
 # ---------- Для інтерфейсу ----------
 
-## Рядок мети для списку завдань (із зіркою) або "": перша сюжетна місія.
+## Рядок мети для списку завдань (із зіркою) або "": перша ланка ланцюжка (chain; переказ теж).
 static func objective_line(world) -> String:
-	var ms := missions(world)
+	var ms := chain(world)
 	return mission_line(world, str(ms[0])) if not ms.is_empty() else ""
 
 
-## Куди зараз веде сюжет (id міста чи місцевості) — для зірки на мапі: перша сюжетна місія.
+## Куди зараз веде сюжет (id міста чи місцевості) — для зірки на мапі: перша ланка ланцюжка.
 static func target(world) -> String:
-	var ms := missions(world)
+	var ms := chain(world)
 	return QuestEngine.target(world, str(ms[0])) if not ms.is_empty() else ""
 
 
 ## Рядок мети місії id з позначкою (QuestEngine.mark: «★» — сюжетна, «!» — ні).
 static func mission_line(world, id: String) -> String:
+	if QuestEngine.kind_of(id) == "legend":  # рядок переказу — без позначки й назви лінії: додаємо їх тут
+		return "%s Переказ «%s»: %s" % [QuestEngine.mark(id), QuestEngine.line_title(QuestEngine.line_of(id)), QuestEngine.service("legend").mission_line(world, id)]
 	if QuestEngine.kind_of(id) != "story":
 		return QuestEngine.service(QuestEngine.kind_of(id)).mission_line(world, id)
 	var st := QuestEngine.step(id)

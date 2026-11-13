@@ -818,8 +818,8 @@ func enter_city(id: String) -> void:
 			continue  # місія, якій бракує рівня, на героя ще не чекає
 		if not str(r["name"]) in names:
 			names.append(str(r["name"]))
-		if str(r["kind"]) == "story":
-			city_tab_want = Data.hall_name(id)  # історія важлива: місто відкривається на вкладці ратуші
+		if str(r["kind"]) == "story" or str(r["mark"]) == QuestEngine.STAR:
+			city_tab_want = Data.hall_name(id)  # історія (і переказ — її ланка) важлива: місто відкривається на вкладці ратуші
 	if not names.is_empty():
 		back.append("%s: на тебе чекають\n%s" % [Data.hall_name(id), ", ".join(names.slice(0, 3))])
 	_build_city()
@@ -858,7 +858,10 @@ func enter_location(id: String) -> void:
 			extra.merge(FarService.night_mods(Data.place(id), player))  # нічний похід підтягується до героя
 		extra.merge(FarService.mods(Data.place(id), player))  # далекі краї ростуть із рівнем героя
 		extra.merge(PerilService.combat_mods(id))  # надважка печера: міцніший бос і його лють
-		extra.merge(QuestEngine.fight_mods(world, player, id), true)  # місце місії: бій не нижче рівня місії (перекази — рівня героя)
+		extra.merge(QuestEngine.fight_mods(world, player, id), true)  # місце місії: бій не нижче рівня місії
+		var trial_lvl: int = SpecService.fight_level(world, player, id)  # місце випробування: бій не нижче рівня героя
+		if trial_lvl > 0:
+			extra.merge(QuestEngine.raise_mods(id, maxi(trial_lvl, int(extra.get("level", 0))), player), true)
 		if PerilService.is_peril(id):
 			extra["peril_first"] = PerilService.cleared(world, id) == 0  # перша перемога дає річ набору напевно
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)

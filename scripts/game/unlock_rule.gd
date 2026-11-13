@@ -13,7 +13,7 @@ static func open(world, lvl: int, need_level: int, after: String) -> bool:
 
 
 ## «<verb> після місії «…» (Мирон, кошовий отаман, Січ) і з 38-го рівня героя.» ("" — відкрито).
-## verb — «Відкриється» чи «Відкриються»; short — «з 15-го рівня» без слова «героя» (дошка подій).
+## verb — «Відкриється» чи «Відкриються»; short — «з 38-го рівня» без слова «героя» (дошка подій).
 static func text(world, lvl: int, need_level: int, after: String, verb: String, short: bool = false) -> String:
 	var parts := []
 	if after != "" and not (world != null and QuestEngine.is_done(world, after)):

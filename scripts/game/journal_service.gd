@@ -9,6 +9,8 @@ const SpecService := preload("res://scripts/game/spec_service.gd")
 
 
 ## Що журнал каже про історію, коли її пройдено: гілка лишається на видноті, а герой знає, куди далі.
+## Що журнал каже в розділі історії, коли нинішня ланка — переказ (%s — його назва).
+const LINK_TEXT := "Історія веде через переказ «%s»: його крок — у розділі «Перекази» нижче."
 const DONE_TEXT := "Історію пройдено: Путіноїда здолано, зараза відступила. Далі чекають Глибини зарази під Кремлем, Башта Кощія, далекі краї, Московія, розшук і події."
 
 
@@ -89,6 +91,11 @@ static func sections(world, player) -> Array:
 		"empty": (DONE_TEXT if finished and (SagaS.finished(world) or not SagaS.unlocked(world)) else "") + ((" " + teaser) if finished and teaser != "" else "")}
 	if finished and not story_rows.is_empty() and story_rows.all(func(r): return r.has("wait")):
 		story_sec["note"] = DONE_TEXT  # лише місії, що чекають рівня: підсумок історії лишається на видноті
+	if story_rows.is_empty() and not finished:
+		# Ланка історії зараз — переказ: його рядок стоїть у «Переказах», а тут — куди дивитися
+		var links: Array = StoryService.chain(world) + StoryService.chain_waiting(world)
+		if not links.is_empty() and StoryService.QuestEngine.kind_of(str(links[0])) == "legend":
+			story_sec["empty"] = LINK_TEXT % StoryService.QuestEngine.line_title(StoryService.QuestEngine.line_of(str(links[0])))
 	out.append(story_sec)
 	# Побратими й посвята в спеціалізацію
 	var rows := []
@@ -99,7 +106,7 @@ static func sections(world, player) -> Array:
 		rows.append(_row(_clean(trial), "", "", "", trial.contains("Повертайся"), "Повертайся на посвяту", str(SpecService.target(world))))
 	if not rows.is_empty():
 		out.append({"title": "Побратими й посвята", "rows": rows, "empty": ""})
-	# Перекази: квестові лінійки за легендами земель
+	# Перекази: квестові лінійки за легендами земель (ланки історії між розділами, із зіркою)
 	var LegendS = load("res://scripts/game/legend_service.gd")  # рядки — відкриті місії переказів рушія
 	rows = []
 	var lms: Array = LegendS.missions(world)
