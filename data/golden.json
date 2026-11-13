@@ -463,5 +463,131 @@
 		"power": "vypad",
 		"params": {"window": 2.2, "bonus": 0.38},
 		"lore": "Олег прибив щит на брамі Царгорода, а шолом лишив удома. Хто його вдягне, той б'є першим."
+	},
+	"shablia_pidkovy": {
+		"num": 5041,
+		"name": "Шабля Підкови",
+		"slot": "weapon",
+		"type": "sabre",
+		"tier": 2,
+		"bosses": ["solovei", "vii"],
+		"affixes": {"str": 1.1, "crit": 1.0, "dmg_pct": 1.0},
+		"power": "hrim",
+		"params": {"radius": 230.0, "pct": 1.0, "stun": 0.4},
+		"lore": "Іван Підкова ламав руками підкову, звідти й прізвисько. З цією шаблею він 1577 року взяв Ясси й сів на молдавський престол."
+	},
+	"luk_mstyslava": {
+		"num": 5042,
+		"name": "Лук Мстислава",
+		"slot": "weapon",
+		"type": "bow",
+		"tier": 4,
+		"bosses": ["oprychnyk", "karachun"],
+		"affixes": {"agi": 1.0, "crit": 1.0, "dmg_pct": 1.0, "aspd": 1.0},
+		"power": "vypad",
+		"params": {"window": 2.0, "bonus": 0.3},
+		"lore": "Мстислав Тмутороканський здолав велетня Редедю у двобої перед обома військами. А під Лиственом із цього лука виборов собі пів Русі по лівий бік Дніпра."
+	},
+	"pistoli_honty": {
+		"num": 5043,
+		"name": "Пістолі Гонти",
+		"slot": "weapon",
+		"type": "pistols",
+		"tier": 4,
+		"bosses": ["lisovyi_did", "idolyshche"],
+		"affixes": {"agi": 1.1, "crit": 1.0, "dmg_pct": 1.0, "aspd": 1.0},
+		"power": "zvytiaha",
+		"params": {"dmg": 0.03, "max": 8.0, "dur": 6.0},
+		"lore": "Сотник Іван Гонта мав боронити Умань від гайдамаків, а 1768 року перейшов до Залізняка. Відтоді його пістолі стріляли за Коліївщину."
+	},
+	"poias_sulymy": {
+		"num": 5044,
+		"name": "Пояс Сулими",
+		"slot": "belt",
+		"tier": 4,
+		"bosses": ["lisovyi_did", "idolyshche"],
+		"affixes": {"str": 1.0, "hp": 1.0, "armor": 1.0, "dmg_pct": 1.0},
+		"power": "yadro",
+		"params": {"period": 5.0, "sec": 0.8, "r": 160.0},
+		"lore": "Фортецю Кодак поставили, щоб замкнути козакам Дніпро. Гетьман Іван Сулима 1635 року взяв її за одну ніч і зрівняв із землею."
+	},
+	"postoly_skovorody": {
+		"num": 5045,
+		"name": "Постоли Сковороди",
+		"slot": "boots",
+		"tier": 4,
+		"bosses": ["oprychnyk", "idolyshche"],
+		"affixes": {"spi": 1.0, "skill_cd": 1.0, "hp": 0.9, "armor": 0.9},
+		"power": "vypad",
+		"params": {"window": 2.0, "bonus": 0.28},
+		"lore": "У них Григорій Сковорода пішки обійшов усю Слобожанщину з сопілкою в торбі. На його могилі написано: «Світ ловив мене, та не спіймав»."
+	},
+	"posokh_stryboha": {
+		"num": 5046,
+		"name": "Посох Стрибога",
+		"slot": "weapon",
+		"type": "staff",
+		"tier": 5,
+		"bosses": ["putinoid", "drakula"],
+		"affixes": {"spi": 1.1, "skill_power": 1.0, "crit": 1.0, "dmg_pct": 1.0, "skill_cd": 0.9},
+		"power": "perun",
+		"params": {"chance": 0.38, "jumps": 5.0, "pct": 0.75, "icd": 0.4},
+		"lore": "Стрибог править вітрами. «Се вітри, Стрибожі внуки, віють з моря стрілами», — співає «Слово о полку Ігоревім»."
+	},
+	"pistoli_baiuraka": {
+		"num": 5047,
+		"name": "Пістолі Баюрака",
+		"slot": "weapon",
+		"type": "pistols",
+		"tier": 5,
+		"bosses": ["pushkar", "drakula"],
+		"affixes": {"agi": 1.1, "crit": 1.0, "dmg_pct": 1.0, "aspd": 1.0, "hp": 0.9},
+		"power": "vypad",
+		"params": {"window": 2.0, "bonus": 0.34},
+		"lore": "Василь Баюрак ходив із Довбушем, а по його смерті ще дев'ять років водив опришків Карпатами. Пістолі в нього забрали лише разом із ним самим."
+	},
+	"pantsyr_vyhovskoho": {
+		"num": 5048,
+		"name": "Панцир Виговського",
+		"slot": "body",
+		"tier": 5,
+		"bosses": ["putinoid", "pushkar"],
+		"affixes": {"vit": 1.0, "hp": 1.1, "dmg_pct": 0.9, "crit": 0.9, "skill_cd": 0.8},
+		"power": "pokrova",
+		"params": {"threshold": 0.5, "ward": 0.32, "dur": 6.0, "cd": 19.0},
+		"lore": "Під Конотопом 1659 року гетьман Іван Виговський заманив царську кінноту на болотисту заплаву й розбив ущент. Того дня він не скидав панцира до ночі."
+	},
+	"dukach_churai": {
+		"num": 5049,
+		"name": "Дукач Марусі Чурай",
+		"slot": "amulet",
+		"tier": 5,
+		"bosses": ["pushkar"],
+		"affixes": {"spi": 1.0, "vit": 1.0, "hp": 1.0, "skill_cd": 1.0, "xp": 1.0},
+		"power": "vidlunnia",
+		"params": {"chance": 0.3},
+		"lore": "Полтавка Маруся Чурай склала «Ой не ходи, Грицю» й «Засвіт встали козаченьки». Її пісні досі лунають довше за саму співачку."
+	},
+	"poias_doroshenka": {
+		"num": 5050,
+		"name": "Пояс Дорошенка",
+		"slot": "belt",
+		"tier": 5,
+		"bosses": ["pushkar"],
+		"affixes": {"str": 1.1, "hp": 1.0, "armor": 1.0, "dmg_pct": 1.0, "crit": 0.9},
+		"power": "zvytiaha",
+		"params": {"dmg": 0.03, "max": 10.0, "dur": 6.0},
+		"lore": "Гетьман Петро Дорошенко хотів зібрати обидва береги Дніпра під одну булаву. Десять років він тримав Правобережжя й склав булаву лише 1676 року."
+	},
+	"choboty_kishky": {
+		"num": 5051,
+		"name": "Чоботи Кішки",
+		"slot": "boots",
+		"tier": 5,
+		"bosses": ["drakula"],
+		"affixes": {"agi": 1.1, "aspd": 1.0, "crit": 1.0, "armor": 0.9, "hp": 0.9},
+		"power": "vypad",
+		"params": {"window": 2.0, "bonus": 0.32},
+		"lore": "Двадцять п'ять років Самійло Кішка був прикутий до весла турецької галери. А тоді визволив бранців, захопив галеру й привів її додому."
 	}
 }

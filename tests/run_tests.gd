@@ -7105,6 +7105,100 @@ func _suite_place_levels() -> void:
 	for t in range(1, Uniques.max_tier() + 1):
 		spread_ok = spread_ok and t_slots.has(t) and t_slots[t].size() >= 4
 	check(lonely.is_empty() and spread_ok, "кожен бос лігва має свою золоту річ, у кожному ступені щонайменше чотири види речей: %s" % str(lonely))
+	# ---- Покриття ступенів: зброя для кожної лінії класів у ступенях 1–5, усі клітинки у двох верхніх ----
+	# Лінія — головний клас (козак, волхв, стрілець) зі своєю зброєю й головною рисою (SetService.main_stat).
+	var Classes = load("res://scripts/data/classes.gd")
+	var lines := {"cossack": "str", "volkhv": "spi", "strilets": "agi"}
+	var cover_bad := []
+	for t in range(1, Uniques.TOP_COMMON_TIER + 1):
+		var have: Dictionary = t_slots.get(t, {})
+		for ln in lines:
+			var any_w := false
+			for wt in Classes.info(ln)["weapons"]:
+				any_w = any_w or have.has(wt)
+			if not any_w:
+				cover_bad.append("%d: зброя лінії %s" % [t, ln])
+		if t >= Uniques.TOP_COMMON_TIER - 1:
+			for s in Data.slots():
+				if s != "weapon" and not have.has(s):
+					cover_bad.append("%d: %s" % [t, s])
+	check(cover_bad.is_empty(), "у кожному ступені 1–%d є золота зброя для козака, волхва й стрільця, у двох верхніх — річ для кожної клітинки: %s" % [Uniques.TOP_COMMON_TIER, str(cover_bad)])
+	# Боси двох верхніх ступенів найчастіше дають щось кожній лінії: її зброю або річ із її головною рисою
+	var fav_bad := []
+	for b in own:
+		if GameDB.boss_tier(b) < Uniques.TOP_COMMON_TIER - 1 or GameDB.boss_tier(b) > Uniques.TOP_COMMON_TIER:
+			continue
+		for ln in lines:
+			var found := false
+			for id in Uniques.ids():
+				var D: Dictionary = Uniques.def(id)
+				if not b in D["bosses"]:
+					continue
+				if D["slot"] == "weapon":
+					found = found or str(D["type"]) in Classes.info(ln)["weapons"]
+				else:
+					found = found or D["affixes"].has(lines[ln])
+			if not found:
+				fav_bad.append("%s: %s" % [b, ln])
+	check(fav_bad.is_empty(), "кожен бос ступенів %d–%d найчастіше дає щось козакові, волхвові й стрільцю: %s" % [Uniques.TOP_COMMON_TIER - 1, Uniques.TOP_COMMON_TIER, str(fav_bad)])
+	# ---- Ступінь золота для героя: той, що дають боси його рівня (ярмарок і бос тижня) ----
+	var floors: Dictionary = Uniques.tier_floors()
+	var floors_ok: bool = floors.size() == Uniques.TOP_COMMON_TIER and not floors.has(Uniques.max_tier())
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
+		if L["type"] == "dungeon" and L.get("scale", false):
+			floors_ok = floors_ok and int(L["level"]) >= int(floors.get(GameDB.boss_tier(str(L["boss"])), 999))
+	check(floors_ok and floors == {1: 7, 2: 21, 3: 38, 4: 54, 5: 70}, "межі ступенів — найнижчий рівень босів кожного ступеня: %s" % str(floors))
+	var BossS = load("res://scripts/game/boss_service.gd")
+	var FairS = load("res://scripts/game/fair_service.gd")
+	var edge_bad := []
+	for pair in [[1, 1], [20, 1], [21, 2], [37, 2], [38, 3], [53, 3], [54, 4], [69, 4], [70, 5], [79, 5], [99, 5], [140, 5]]:
+		var got: Array = [Uniques.hero_tier(pair[0]), FairS.top_tier(pair[0]), BossS.weekly_tier(pair[0])]
+		if got != [pair[1], pair[1], pair[1]]:
+			edge_bad.append("%d → %s" % [pair[0], str(got)])
+	for lvl in range(1, 100):
+		var want := 1
+		for t in floors:
+			if lvl >= int(floors[t]):
+				want = maxi(want, int(t))
+		if Uniques.hero_tier(lvl) != want:
+			edge_bad.append("%d" % lvl)
+	check(edge_bad.is_empty(), "герой до 20-го рівня — перший ступінь, з 21-го — другий, з 38-го — третій, з 54-го — четвертий, з 70-го — п'ятий; ярмарок і бос тижня так само: %s" % str(edge_bad))
+	# Ярмарок і бос тижня на межі смуг справді дають ступінь босів рівня героя
+	var CSv = load("res://scripts/game/challenge_service.gd")
+	var now0 = CSv.now_override
+	var fair_bad := []
+	var fh = _new_player()
+	fh.change_class("strilets")
+	for lvl in [20, 21, 53, 54, 69, 70, 79]:
+		fh.level = lvl
+		var want: int = Uniques.hero_tier(lvl)
+		for wk in 6:
+			CSv.now_override = 1800000000 + wk * 7 * 86400
+			for e in FairS.stock(fh):
+				if e["kind"] == "unique" and (int(e["tier"]) > want or int(e["tier"]) < maxi(1, want - 1)):
+					fair_bad.append("%d: %s %d" % [lvl, e["id"], int(e["tier"])])
+	CSv.now_override = now0
+	check(fair_bad.is_empty(), "ярмарок привозить золото ступеня босів рівня героя й на один нижчого (герой 70-го — п'ятий ступінь, не четвертий): %s" % str(fair_bad))
+	var week_bad := []
+	var ww = WorldState.new()
+	for lvl in [20, 21, 54, 69, 70]:
+		for i in 25:
+			fh.level = lvl  # досвід із боса міг підняти рівень (річ рахується вже після досвіду)
+			fh.xp = 0
+			fh.inventory = []
+			ww.boss_hunt = {}
+			var rw: Dictionary = BossS.on_win(ww, fh, "week", 100.0)
+			for it in rw["items"]:
+				if it.has("unique") and int(Uniques.def(str(it["unique"]))["tier"]) > Uniques.hero_tier(lvl):
+					week_bad.append("%d: %s" % [lvl, it["unique"]])
+	var top70 := false
+	fh.level = 70
+	for i in 200:
+		var uid: String = load("res://scripts/game/loot_service.gd").pick(fh, BossS.weekly_tier(70), "pushkar")
+		top70 = top70 or int(Uniques.def(uid)["tier"]) == 5
+	fh.free()
+	check(week_bad.is_empty() and top70, "бос тижня дає золото не вище ступеня босів рівня героя, а героєві 70-го — і п'ятого: %s" % str(week_bad))
 	# ---- Правила далеких країв тримаються за край ----
 	var far_ok := true
 	for id in Data.place_ids():
@@ -7686,6 +7780,83 @@ func _suite_uniques() -> void:
 		var nm: String = str(Uniques.def(id)["name"])
 		wiki_ok = wiki_ok and titles.has(nm) and Uniques.power_name(id) in str(titles.get(nm, ""))
 	check(wiki_ok, "у довіднику є правила золота й кожна золота річ із її силою")
+	# Речі, що закрили прогалини ступенів: кожну кує, вдягає й носить герой свого класу, її бонуси й сила
+	# діють, бос дає її, картка показує ступінь і силу
+	var UIk = load("res://scripts/ui/ui_kit.gd")
+	var Cls = load("res://scripts/data/classes.gd")
+	var fresh := ["shablia_pidkovy", "luk_mstyslava", "pistoli_honty", "poias_sulymy", "postoly_skovorody", "posokh_stryboha",
+		"pistoli_baiuraka", "pantsyr_vyhovskoho", "dukach_churai", "poias_doroshenka", "choboty_kishky"]
+	var fresh_bad := []
+	for id in fresh:
+		var D: Dictionary = Uniques.def(id)
+		if D.is_empty():
+			fresh_bad.append(id + ": нема")
+			continue
+		var cls := "cossack"
+		if D["slot"] == "weapon":
+			for c in ["cossack", "volkhv", "strilets"]:
+				if str(D["type"]) in Cls.info(c)["weapons"]:
+					cls = c
+		elif D["affixes"].has("spi"):
+			cls = "volkhv"
+		elif D["affixes"].has("agi"):
+			cls = "strilets"
+		var h = _new_player()
+		h.change_class(cls)
+		h.level = 60
+		var it: Dictionary = Uniques.make(id, 60)
+		h.add_item(it)
+		var why := []
+		if not h.equip(int(it["uid"])) or not h.is_equipped(int(it["uid"])):
+			why.append("не вдягається")
+		for a in D["affixes"]:
+			if h.eq(a) <= 0.0:
+				why.append("бонус " + a)
+		var prim: String = Data.slot_primary(D["slot"])
+		if h.eq(prim) <= 0.0:
+			why.append("головний " + prim)
+		var pid := str(D["power"])
+		if not h.u_pow.has(pid) or h.u_pow[pid] != D["params"] or h.mech("power/" + pid) == null:
+			why.append("сила " + pid)
+		var card: Control = UIk.item_card(it)
+		var ctext := ""
+		for n in card.find_children("*", "Label", true, false):
+			ctext += n.text + "\n"
+		card.free()
+		var btn: Button = UIk.item_button(it, func(): pass)
+		if not (Uniques.tier_name(int(D["tier"])) in ctext and ("✦ " + Uniques.power_name(id)) in ctext and str(D["lore"]).left(20) in ctext and btn.text.begins_with("★ " + str(D["name"]))):
+			why.append("картка")
+		btn.free()
+		var dropped := 0
+		for b in D["bosses"]:
+			for i in 300:
+				if Loot.pick(h, int(D["tier"]), b) == id:
+					dropped += 1
+					break
+		if dropped != D["bosses"].size():
+			why.append("не падає з босів")
+		h.free()
+		if not why.is_empty():
+			fresh_bad.append("%s (%s): %s" % [id, cls, ", ".join(why)])
+	check(fresh_bad.is_empty(), "нові золоті речі: вдягає герой свого класу, бонуси й сила діють, картка зі ступенем і силою, падають зі своїх босів: %s" % str(fresh_bad))
+	# Друга фаза в довіднику — з даних (boss.phase2 у mobs.json): речення є в кожного боса з нею й нема в решти
+	var Wd = load("res://scripts/data/wiki_data.gd")
+	var boss_text := {}
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			if str(e.get("sub", "")).begins_with("Де: "):
+				boss_text[str(e["title"])] = str(e["text"])
+	var p2_bad := []
+	var p2_n := 0
+	for kind in GameDB.ids("mobs"):
+		if not GameDB.has_boss(kind):
+			continue
+		var has_line: bool = "На половині здоров'я лютішає й кличе підмогу." in str(boss_text.get(GameDB.boss_name(kind), ""))
+		if GameDB.is_phase2_boss(kind):
+			p2_n += 1
+		if not kind in Wd.boss_order() or has_line != GameDB.is_phase2_boss(kind):
+			p2_bad.append(kind)
+	check(p2_bad.is_empty() and p2_n >= 21, "довідник пише про другу фазу рівно в тих %d босів, що мають її в даних: %s" % [p2_n, str(p2_bad)])
 	var UI = load("res://scripts/ui/ui_kit.gd")
 	var card: Control = UI.item_card(sirko)
 	var ctext := ""
@@ -18347,7 +18518,7 @@ func _suite_item_db() -> void:
 	var probs := GameDB.problems()
 	check(probs.is_empty(), "у базі нема проблем%s" % ("" if probs.is_empty() else ": " + "; ".join(probs.slice(0, 5))))
 	var expect := {"gear_slots": 7, "rarities": 6, "weapons": 7, "armors": 15, "bonuses": 18, "sharpening": 10, "powers": 7,
-		"golden_tiers": 6, "set_effects": 10, "soul_effects": 21, "soul_tiers": 7, "gift_slots": 7, "shop_kinds": 4, "golden": 40,
+		"golden_tiers": 6, "set_effects": 10, "soul_effects": 21, "soul_tiers": 7, "gift_slots": 7, "shop_kinds": 4, "golden": 51,
 		"sets": 3, "artifacts": 25, "souls": 58, "enchants": 12, "gifts": 9, "costumes": 6, "coin_packs": 5}
 	var count_bad := []
 	for t in expect:

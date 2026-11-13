@@ -99,6 +99,34 @@ static func tier_fair(t: int) -> Dictionary:
 	return _tier(t).get("fair", _EMPTY)
 
 
+## З якого рівня починаються боси кожного ступеня: {ступінь: найнижчий рівень печери з босом цього ступеня}.
+## Беруться печери з босом із data/places.json, крім надважких і безкінечних (Башта, Глибини); шостий ступінь сюди не
+## входить (його дають лише надважкі боси).
+static func tier_floors() -> Dictionary:
+	var out := {}
+	for id in Data.place_ids():
+		var L: Dictionary = Data.place(id)
+		if str(L.get("type", "")) != "dungeon" or L.get("endless", false) or L.has("peril") or str(L.get("boss", "")) == "":
+			continue
+		var t: int = GameDB.boss_tier(str(L["boss"]))
+		if t < 1 or t > TOP_COMMON_TIER:
+			continue
+		out[t] = mini(int(out.get(t, L["level"])), int(L["level"]))
+	return out
+
+
+## Ступінь золота для героя рівня level: той, що дають боси цього рівня. Межі — найнижчий рівень босів кожного
+## ступеня (tier_floors); нижче за найпершу межу — перший ступінь, вище п'ятого не буває. За цим правилом
+## золото привозить ярмарок (FairService) і дає бос тижня (BossService).
+static func hero_tier(level: int) -> int:
+	var floors := tier_floors()
+	var t := 1
+	for k in floors:
+		if level >= int(floors[k]) and int(k) > t:
+			t = int(k)
+	return t
+
+
 static func is_unique(item: Dictionary) -> bool:
 	return item.has("unique") and has(str(item["unique"]))
 

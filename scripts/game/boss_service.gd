@@ -201,9 +201,10 @@ static func on_win(world, player, kind: String, seconds: float, boss: String = "
 	return {"msgs": msgs, "items": items, "record": record}
 
 
-## Ступінь золотої речі боса тижня: росте з рівнем героя, шостий лишається надважким печерам.
+## Ступінь золотої речі боса тижня: той, що дають боси рівня героя (Uniques.hero_tier); шостий лишається
+## надважким печерам.
 static func weekly_tier(level: int) -> int:
-	return clampi(1 + level / 20, 1, Uniques.TOP_COMMON_TIER)
+	return Uniques.hero_tier(level)
 
 
 static func best_time(world, boss: String) -> int:

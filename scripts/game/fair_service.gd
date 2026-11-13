@@ -58,9 +58,9 @@ static func unlocked(player) -> bool:
 	return not player.is_peasant() and int(player.level) >= MIN_LEVEL
 
 
-## Найвищий ступінь золота, який привозять героєві цього рівня.
+## Найвищий ступінь золота, який привозять героєві цього рівня: той, що дають боси його рівня (Uniques.hero_tier).
 static func top_tier(level: int) -> int:
-	return clampi(1 + level / 20, 1, Uniques.TOP_COMMON_TIER)
+	return Uniques.hero_tier(level)
 
 
 static func _shuffled(ids: Array, salt: String) -> Array:
