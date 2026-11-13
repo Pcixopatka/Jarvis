@@ -46,7 +46,7 @@ static func _it(kind: String, text: String, sub: String = "", place: String = ""
 
 
 static func _clean(line: String) -> String:
-	for mark in ["★ ", "✦ ", "◆ "]:
+	for mark in ["★ ", "! ", "✦ ", "◆ "]:
 		if line.begins_with(mark):
 			return line.substr(mark.length())
 	return line
@@ -82,10 +82,16 @@ static func items(world, player, here: String = "") -> Array:
 	var way_ready: int = int(Way.ready_count(world, player))
 	if way_ready > 0:
 		out.append(_it("way_claim", "Шлях козака: забери нагороду", "Виконано кроків: %d" % way_ready, "", TAB_JOURNAL))
-	# 4. Історія: кожна відкрита сюжетна місія рушія (сьогодні вона одна)
+	# 4. Історія: кожна відкрита сюжетна місія рушія (сьогодні вона одна), далі доручення. Позначка — QuestEngine.mark
+	var Q = Story.QuestEngine
 	for id in Story.missions(world):
-		var target: String = Story.QuestEngine.target(world, id)
-		out.append(_it("story", "Історія: %s" % _clean(Story.mission_line(world, id)), ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
+		var target: String = Q.target(world, id)
+		out.append(_it("story", "%s Історія: %s" % [Q.mark(id), _clean(Story.mission_line(world, id))], ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
+	var Side = _svc("side_service")
+	for id in Side.missions(world):
+		var target: String = Q.target(world, id)
+		out.append(_it("side", "%s Доручення: %s" % [Q.mark(id), _clean(Side.mission_line(world, id))], ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
+
 	# 5. «Шлях козака»: нинішній крок, якщо він ще не виконаний
 	if way_ready == 0 and not Way.finished(world):
 		var step: Dictionary = Way.current(world)
@@ -126,6 +132,18 @@ static func items(world, player, here: String = "") -> Array:
 	for q in world.quests:
 		if not world.is_done(q):
 			out.append(_it("quest", "%s  %d/%d" % [str(q["text"]), int(q.get("progress", 0)), int(q.get("count", 1))], "Завдання від міста %s" % Data.place_name(str(q["city"])), str(q.get("loc", ""))))
+	# 9а. Місії, яким бракує лише рівня: набирай рівні. Кожна сюжетна й кожне доручення, а з решти (перекази) —
+	# лише найближча: їх багато з першого ж рівня
+	var near := ""
+	for id in Q.waiting(world):
+		if int(player.level) >= Q.level_needed(id):
+			continue  # рівень уже є (рушій ще не бачив нового рівня героя): радити нема чого
+		if Q.is_story(id) or Q.kind_of(id) == "side":
+			out.append(_level_tip(world, player, id))
+		elif near == "" or Q.level_needed(id) < Q.level_needed(near):
+			near = id
+	if near != "":
+		out.append(_level_tip(world, player, near))
 	# 10. Справи тижня й дня, де ще є що взяти
 	var acts := 0
 	for r in _svc("events_board").rows(world, player, here):
@@ -142,6 +160,16 @@ static func items(world, player, here: String = "") -> Array:
 		var city: String = _svc("events_board")._near_city(here)
 		out.append(_it("board", "Візьми завдання: %s" % Data.place_name(city), "Дошка оголошень у місті: гривні, досвід і лояльність", city))
 	return out
+
+
+## Порада набрати рівні для місії id, якій бракує лише рівня: скільки бракує й до якої місії.
+static func _level_tip(_world, player, id: String) -> Dictionary:
+	var Q = _svc("quest_engine")
+	var need: int = Q.level_needed(id)
+	var miss: int = need - int(player.level)
+	var C = load("res://scripts/data/classes.gd")
+	return _it("level", "%s Набери рівні: бракує %d %s" % [Q.mark(id), miss, C.plural(miss, "рівня", "рівнів", "рівнів")],
+		"Місія %s чекає з %d-го рівня" % [load("res://scripts/game/unlock_rule.gd").mission_name(id), need], Q.giver_place(id))
 
 
 ## Чи є куди вкласти очко вмінь (на дорозі героя лишились невивчені ранги).

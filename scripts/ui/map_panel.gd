@@ -11,8 +11,9 @@ const CampService := preload("res://scripts/game/camp_service.gd")
 ## Панель Глибин зарази: вибір глибини й спуск.
 ## Що означають позначки на мапі. Рядок: [значок мапи або "", позначка текстом, колір, пояснення].
 const LEGEND := [
-	["", "★", Color(1.0, 0.85, 0.2), "Зірка: куди веде історія."],
-	["", "!", Color(1.0, 0.8, 0.1), "Знак оклику: мета завдання, розшуку чи посвяти."],
+	["", "★", Color(1.0, 0.85, 0.2), "Зірка: куди веде місія історії."],
+	["", "!", Color(1.0, 0.8, 0.1), "Знак оклику: інша місія (переказ, доручення), мета завдання, розшуку чи посвяти."],
+	["", "!", Color(1.0, 0.8, 0.1, 0.5), "Бліда зірка чи «!» над містом: місія вже чекає там, але потрібен вищий рівень героя."],
 	["", "✓", Color(0.3, 0.8, 0.3), "Зелена галочка: місто, де здати виконане завдання чи взяти нагороду за розшук. Число поруч каже, скільки."],
 	["flag", "", Color.WHITE, "Прапорець: тут ти зараз."],
 	["", "(4)", Color(0.9, 0.85, 0.75), "Число в дужках: рівень місця. «16+» означає край, що росте разом із героєм."],
@@ -94,8 +95,8 @@ static func build_depths(world, player, sel: int, on_change: Callable, on_go: Ca
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	v.add_child(UI.label("Глибини зарази", 28, UI.GOLD, false))
-	if not DS.unlocked(world):
-		v.add_child(_wrapped("Корені зарази під Кремлем. Відкриються після перемоги над Путіноїдом.", 18, UI.MUTED))
+	if not DS.unlocked(world, int(player.level)):
+		v.add_child(_wrapped("Корені зарази під Кремлем. %s" % DS.lock_text(world, int(player.level)), 18, UI.MUTED))
 		return v
 	var s: Dictionary = DS.state(world)
 	var mx: int = s["max"]
@@ -205,8 +206,8 @@ static func build_tower(world, player, sel: int, on_change: Callable, on_go: Cal
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	v.add_child(UI.label("Башта Кощія", 28, UI.GOLD, false))
-	if not TS.unlocked(player):
-		v.add_child(_wrapped("Кістяна башта посеред Москви: безкінечний підйом. Відкриється з %d-го рівня героя." % TS.OPEN_LEVEL, 18, UI.MUTED))
+	if not TS.unlocked(player, world):
+		v.add_child(_wrapped("Кістяна башта посеред Москви: безкінечний підйом. %s" % TS.lock_text(world, int(player.level)), 18, UI.MUTED))
 		return v
 	var s: Dictionary = TS.state(world)
 	var mx: int = s["max"]
@@ -273,7 +274,7 @@ static func build(sel: String, world, player: Player, on_go: Callable, story_tar
 	if sel == "":
 		v.add_child(UI.label("Мапа земель", 28, UI.GOLD, false))
 		v.add_child(UI.label("Торкнись місця на мапі.\nДотик до порожнього місця:\nгерой їде просто туди.\nЩипок або +/− — масштаб,\nпалець — рух мапою.", 19, UI.TEXT, false))
-		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Хата з прапором — твій хутір", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут твоє завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
+		for t in ["Фортеця — місто: крамниця, коваль,\nкорчма, завдання", "Хата з прапором — твій хутір", "Шаблі — дика місцевість", "Арка — печера з босом", "★ — куди веде історія", "«!» — тут інша місія чи завдання", "Червоне коло — небезпечно\nдля твого рівня", "(число) — рівень місцевості"]:
 			v.add_child(UI.label(t, 16, UI.MUTED, false))
 		return v
 	if sel == Camp.CAMP_ID:

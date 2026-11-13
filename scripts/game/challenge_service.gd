@@ -26,6 +26,9 @@ const STATS := ["ambush", "bond", "boss", "boss_day", "boss_week", "bounty", "bo
 	"tower_floor", "trade_profit", "trade_sold", "trail", "travel", "valor", "vigil", "vigil_min", "vii_blind"]
 ## Лічильники «префікс:id»: kill:<нечисть>, boss:<бос>, trail:<вид сліду>, cook:<страва>, event:<подія>.
 const STAT_PREFIXES := ["kill", "boss", "trail", "cook", "event"]
+## Лічильники «найвищого досягнутого» (рівень, глибина, поверх Башти...): record() бере більше з двох, а не
+## додає. Решта — суми. Так їх читають і місії з метою «stat» (QuestEngine.stat_value).
+const HIGHEST := ["level", "depth", "tower", "vigil", "glory", "duel_streak", "peril_bosses", "valor", "set_full", "saga", "legend"]
 ## Що може просити виклик («need»): заняття, яке available() уміє перевірити.
 const NEEDS := ["vigil", "duel", "bounty", "ring", "muster", "tower", "depth", "hunt", "fish", "tavern", "escort", "trail", "event", "defense", "garden", "party"]
 
@@ -127,9 +130,9 @@ static func available(need: String, world, player = null) -> bool:
 		"muster":
 			return chosen and lvl >= int(Acts.MUSTER_MIN_LEVEL)
 		"tower":
-			return lvl >= int(load("res://scripts/game/tower_service.gd").OPEN_LEVEL)
+			return load("res://scripts/game/tower_service.gd").open_at(world, lvl)
 		"depth":
-			return load("res://scripts/game/depth_service.gd").unlocked(world)
+			return load("res://scripts/game/depth_service.gd").open_at(world, lvl)
 		"hunt":
 			return chosen and lvl >= int(Acts.spot("hunt")["level"])
 		"fish":
@@ -210,7 +213,8 @@ static func pending(world, stat: String) -> bool:
 static func record(world, player, stat: String, amount: int = 1) -> Array:
 	var c := state(world, player)
 	var msgs := []
-	if stat in ["level", "depth", "tower", "vigil", "glory", "duel_streak", "peril_bosses", "valor", "set_full", "saga", "legend"]:  # найвище досягнуте, а не сума
+	var old := int(world.stats.get(stat, 0))
+	if stat in HIGHEST:  # найвище досягнуте, а не сума
 		world.stats[stat] = maxi(int(world.stats.get(stat, 0)), amount)
 	else:
 		world.stats[stat] = int(world.stats.get(stat, 0)) + amount
@@ -227,6 +231,9 @@ static func record(world, player, stat: String, amount: int = 1) -> Array:
 			c["ach"][a["id"]] = true
 			player.gold += int(a["gold"])
 			msgs.append("Досягнення: «%s»! +%d грн" % [a["name"], a["gold"]])
+	# місії з метою «stat» (доручення, кроки історії) рахують той самий лічильник
+	for m in load("res://scripts/game/quest_engine.gd").on_stat(world, player, stat, old):
+		msgs.append(str(m["text"]))
 	return msgs
 
 

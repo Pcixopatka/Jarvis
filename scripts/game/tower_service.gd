@@ -1,7 +1,8 @@
 extends RefCounted
 ## «Башта Кощія» в Москві — безкінечний підйом. Поверх — одна арена: хвилі нечисті й міні-бос
 ## (іменована еліта з 2–3 властивостями); кожен п'ятий поверх — супербос. Вище — сильніше.
-## Відкривається з 15-го рівня героя. Стан — world.tower: {"max": найвищий відкритий, "best": найвищий пройдений}.
+## Відкривається з рівня героя «open_level» і після місії «open_after» (налаштування «tower»; сьогодні — з
+## 15-го рівня, без місії). Стан — world.tower: {"max": найвищий відкритий, "best": найвищий пройдений}.
 ## За перше проходження поверху — нагорода; за супербоса — гарантований камінь долі й легендарна річ.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
@@ -10,6 +11,7 @@ const Data := preload("res://scripts/data/data.gd")
 
 const LOC_ID := "bashta"
 static var OPEN_LEVEL: int  # з якого рівня героя відкрита Башта
+static var OPEN_AFTER: String  # після якої місії відкрита Башта ("" — без місії)
 static var SUPER_EVERY: int  # кожен такий поверх — супербос
 static var BASE_LEVEL: int  # рівень нечисті поверху = це + номер поверху
 
@@ -47,6 +49,7 @@ static func _static_init() -> void:
 static func apply_settings() -> void:
 	var S := GameDB.settings("tower")
 	OPEN_LEVEL = S["open_level"]
+	OPEN_AFTER = S["open_after"]
 	SUPER_EVERY = S["super_every"]
 	BASE_LEVEL = S["base_level"]
 	WAVES_BASE = S["waves_base"]
@@ -90,8 +93,19 @@ static func state(world) -> Dictionary:
 	return world.tower
 
 
-static func unlocked(player) -> bool:
-	return player.level >= OPEN_LEVEL
+## world = null — без світу: Башта з місією в умові тоді закрита.
+static func unlocked(player, world = null) -> bool:
+	return open_at(world, int(player.level))
+
+
+## Чи Башта відкрита героєві цього рівня: рівень не менший за OPEN_LEVEL і місію OPEN_AFTER здано.
+static func open_at(world, lvl: int) -> bool:
+	return load("res://scripts/game/unlock_rule.gd").open(world, lvl, OPEN_LEVEL, OPEN_AFTER)
+
+
+## Чого бракує, щоб Башта відкрилась, одним реченням ("" — відкрита). Наприклад, «Відкриється з 15-го рівня героя.»
+static func lock_text(world, lvl: int, verb: String = "Відкриється", short: bool = false) -> String:
+	return load("res://scripts/game/unlock_rule.gd").text(world, lvl, OPEN_LEVEL, OPEN_AFTER, verb, short)
 
 
 static func is_super(floor_: int) -> bool:

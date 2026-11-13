@@ -77,16 +77,14 @@ static func block_reason(world, player, loc_id: String) -> String:
 	return ""
 
 
-## Чи це місце зараз мета кроку історії, переказу, особистої справи побратима чи посвяти.
+## Чи це місце зараз мета місії (історії, переказу, доручення), особистої справи побратима чи посвяти.
 ## Швидкий похід такі кроки не зараховує, тож сюди його не даємо: інакше нагорода є, а крок стоїть.
 static func step_target(world, loc_id: String) -> bool:
-	var SS = load("res://scripts/game/story_service.gd")
-	for id in SS.missions(world):  # кожна відкрита сюжетна місія
-		if str(SS.QuestEngine.target(world, id)) == loc_id:
+	var Q = load("res://scripts/game/quest_engine.gd")
+	for id in Q.missions(world):  # кожна відкрита місія рушія
+		if str(Q.target(world, id)) == loc_id:
 			return true
 	if str(load("res://scripts/game/spec_service.gd").target(world)) == loc_id:
-		return true
-	if loc_id in load("res://scripts/game/legend_service.gd").targets(world):
 		return true
 	return loc_id in load("res://scripts/game/hero_service.gd").targets(world)
 

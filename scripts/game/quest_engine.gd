@@ -12,7 +12,10 @@ extends RefCounted
 ##   він пройдений (так у пролозі розходяться гілки козака, волхва й стрільця).
 ## Відкритих місій може бути скільки завгодно водночас; у кожної свій етап і лічильник.
 ## Обов'язкова місія для іншої — та, що стоїть у її «after»; інших відмінностей між обов'язковою й
-## необов'язковою нема. «story» кроку (або його лінії) — чи місія сюжетна (позначка для інтерфейсу).
+## необов'язковою нема. «story» кроку (або його лінії) — чи місія сюжетна: зірка «★» усюди, де місію видно
+## (журнал, порадник, ратуша, мапа); решта місій — знак оклику «!» (mark).
+## Місія на етапі level (усе з «after» пройдено, та рівень героя замалий) теж видна: ратуша, журнал і порадник
+## кажуть, з якого рівня (waiting), а мапа — блідою позначкою.
 ##
 ## Стан героя — world.missions:
 ##   {"done": {id кроку: true} — здані кроки,
@@ -30,7 +33,11 @@ extends RefCounted
 const GameDB := preload("res://scripts/core/game_db.gd")
 
 ## Служба, що веде кроки кожного виду лінії («kind» у quest_lines.json).
-const KIND_SERVICES := {"story": "res://scripts/game/story_service.gd", "legend": "res://scripts/game/legend_service.gd", "saga": "res://scripts/game/saga_service.gd"}
+const KIND_SERVICES := {"story": "res://scripts/game/story_service.gd", "legend": "res://scripts/game/legend_service.gd", "saga": "res://scripts/game/saga_service.gd",
+	"side": "res://scripts/game/side_service.gd"}
+## Позначки місій: сюжетна й решта (mark).
+const STAR := "★"
+const BANG := "!"
 
 static var _db_graph := {}  # граф із таблиць бази (складається раз)
 static var _test_graph := {}  # граф, підставлений через use_graph (тести на вигаданих даних)
@@ -41,7 +48,7 @@ static var _view := {}
 
 # ---------- Граф ----------
 
-## Граф із ліній і кроків, що в пам'яті. lines — {id лінії: {"kind", "min_level"?, "story"?}} у порядку показу,
+## Граф із ліній і кроків, що в пам'яті. lines — {id лінії: {"kind", "min_level"?, "story"?, "title"?}} у порядку показу,
 ## steps — {id кроку: {"line", "after"?, "min_level"?, "story"?, "if"?, "start"?, "objective"?...}} у порядку показу.
 ## Перевіряти такі дані — GameDB.quest_graph_problems.
 static func make_graph(lines: Dictionary, steps: Dictionary) -> Dictionary:
@@ -49,7 +56,7 @@ static func make_graph(lines: Dictionary, steps: Dictionary) -> Dictionary:
 	for lid in lines:
 		var L: Dictionary = lines[lid]
 		g["line_order"].append(str(lid))
-		g["lines"][str(lid)] = {"kind": str(L.get("kind", "")), "min_level": int(L.get("min_level", 0)), "story": bool(L.get("story", false)), "steps": []}
+		g["lines"][str(lid)] = {"kind": str(L.get("kind", "")), "min_level": int(L.get("min_level", 0)), "story": bool(L.get("story", false)), "title": str(L.get("title", "")), "steps": []}
 	for id in steps:
 		var R: Dictionary = steps[id]
 		var lid := str(R.get("line", ""))
@@ -137,6 +144,23 @@ static func kind_of(id: String) -> String:
 ## Чи місія сюжетна («story» кроку, без нього — лінії).
 static func is_story(id: String) -> bool:
 	return bool(graph()["story"].get(id, false))
+
+
+## Позначка місії: «★» — сюжетна (is_story), «!» — будь-яка інша. Одна на всю гру: журнал, порадник,
+## ратуша, мапа й підказки беруть її звідси, тож зміна «story» у даних міняє позначку без коду.
+static func mark(id: String) -> String:
+	return STAR if is_story(id) else BANG
+
+
+## Назва місії: «title» кроку (перекази, сага, доручення), а в кроку історії, що назви не має, — текст мети.
+static func title(id: String) -> String:
+	var R := step(id)
+	return str(R["title"]) if R.has("title") else str(R.get("objective", {}).get("text", id))
+
+
+## Назва лінії («title» у quest_lines.json; "" — без назви, як в історії).
+static func line_title(line: String) -> String:
+	return str(graph()["lines"].get(line, {}).get("title", ""))
 
 
 ## Лінії в порядку показу.
@@ -236,11 +260,15 @@ static func _now(world) -> Dictionary:
 		if not open.has(id) and not fin.has(id) and g["line_of"].has(id):
 			open[id] = str(s["active"][id].get("stage", "active"))
 	var list := []
+	var wait := []
 	for id in g["order"]:
 		if open.has(id):
 			list.append(id)
+		elif low.has(id):
+			wait.append(id)
 	list.make_read_only()
-	_view = {"finished": fin, "open": open, "level": low, "list": list}
+	wait.make_read_only()
+	_view = {"finished": fin, "open": open, "level": low, "list": list, "wait": wait}
 	_view_key = key
 	return _view
 
@@ -248,6 +276,12 @@ static func _now(world) -> Dictionary:
 ## Відкриті місії (offer / active / turnin) у порядку: спершу сюжетні, далі за лініями й кроками. Лише читати.
 static func missions(world) -> Array:
 	return _now(world)["list"]
+
+
+## Місії, яким бракує лише рівня героя (етап level: усе з «after» пройдено), у порядку місій. Лише читати.
+## Ті, що далі в ланцюжку (ще чекають на інші кроки), сюди не потрапляють.
+static func waiting(world) -> Array:
+	return _now(world)["wait"]
 
 
 ## Відкриті місії ліній цих видів.
@@ -343,9 +377,14 @@ static func _entry(world, id: String) -> Dictionary:
 	return a[id]
 
 
-## Почати крок: мета виконується, лічильник з нуля.
+## Почати крок: мета виконується, лічильник з нуля. Мета «stat» із лічильником-сумою запам'ятовує, скільки
+## було на старті («base»): рахується те, що набралося відтоді.
 static func start(world, id: String) -> void:
-	state(world)["active"][id] = {"stage": "active", "progress": 0}
+	var e := {"stage": "active", "progress": 0}
+	var o: Dictionary = step(id).get("objective", {})
+	if str(o.get("type", "")) == "stat":
+		e["base"] = int(world.stats.get(str(o.get("stat", "")), 0))
+	state(world)["active"][id] = e
 
 
 ## Етап почату кроку: active чи turnin.
@@ -404,10 +443,124 @@ static func on_event(world, player, type: String, arg: String, kinds: Array = []
 	return msgs
 
 
+## Лічильник змінився (ChallengeService.record: old — скільки було до події). Мета «stat»: лічильник «найвищого»
+## (ChallengeService.HIGHEST — поверх Башти, глибина...) зараховується за нинішнім значенням, лічильник-сума —
+## від миті, коли місію взято («base»; крок, що почався сам, бере за основу old першої події).
+## Повертає повідомлення, як on_event.
+static func on_stat(world, player, stat: String, old: int) -> Array:
+	var msgs := []
+	for id in missions(world):
+		if stage(world, id) != "active":
+			continue
+		var o: Dictionary = step(id).get("objective", {})
+		if str(o.get("type", "")) != "stat" or str(o.get("stat", "")) != stat:
+			continue
+		var e := _entry(world, id)
+		if not e.has("base"):
+			e["base"] = old
+		msgs.append_array(_stat_check(world, player, id))
+	return msgs
+
+
+## Мету «stat» щойно взятої місії перевірити одразу: «найвищого» герой міг досягти ще до неї.
+static func check_stat(world, player, id: String) -> Array:
+	if str(step(id).get("objective", {}).get("type", "")) != "stat" or stage(world, id) != "active":
+		return []
+	return _stat_check(world, player, id)
+
+
+static func _stat_check(world, player, id: String) -> Array:
+	var n := count(id)
+	var v := stat_value(world, id)
+	set_progress(world, id, mini(v, n))
+	if v < n:
+		return []
+	return service(kind_of(id)).objective_met(world, player, id)
+
+
+## Скільки зроблено за метою «stat» просто зараз (для журналу).
+static func stat_value(world, id: String) -> int:
+	var o: Dictionary = step(id).get("objective", {})
+	var stat := str(o.get("stat", ""))
+	var now := int(world.stats.get(stat, 0))
+	if stat in load("res://scripts/game/challenge_service.gd").HIGHEST:
+		return now
+	var e: Dictionary = state(world)["active"].get(id, {})
+	return maxi(0, now - int(e.get("base", now)))
+
+
+# ---------- Рівень бою місії ----------
+
+## Рівень місії для бою в її місці: «min_level» самого кроку; без нього — як заведено для виду лінії
+## (перекази: рівень героя, коли він вищий за місце; історія, сага, доручення: нема).
+static func mission_level(id: String, hero_level: int, place_level: int) -> int:
+	var own := int(step(id).get("min_level", 0))
+	if own > 0:
+		return own
+	if kind_of(id) == "legend" and hero_level > place_level:
+		return hero_level
+	return 0
+
+
+## Бій у місці, куди веде активна місія, іде на рівні не нижчому за рівень місії (mission_level): стара печера
+## не стає прогулянкою. Кілька місій в одному місці — бере найвищий. Башту й Глибини (місця «endless») не
+## чіпає: там рівень бою — рівень поверху чи глибини. Повертає надбавки до місця для
+## Combat.enter ({} — місце й так не слабше): {"level", "hero_level", "base_level", "goal", "mission",
+## "legend" — лінія переказу, коли рівень дав переказ}. kinds — лише місії цих видів (порожній — усіх).
+static func fight_mods(world, player, loc_id: String, kinds: Array = []) -> Dictionary:
+	var Data = load("res://scripts/data/data.gd")
+	if not Data.is_place(loc_id) or Data.place(loc_id).get("endless", false):
+		return {}  # Башта й Глибини: рівень дає поверх чи глибина, а не місце (і не місія)
+	var base: int = int(Data.place(loc_id)["level"])
+	var best := 0
+	var who := ""
+	for id in missions(world):
+		if not kinds.is_empty() and not kind_of(id) in kinds:
+			continue
+		if stage(world, id) != "active" or str(step(id).get("objective", {}).get("loc", "")) != loc_id:
+			continue
+		var lvl := mission_level(id, int(player.level), base)
+		if lvl > best:
+			best = lvl
+			who = id
+	if best <= base:
+		return {}
+	# мета зачистки рахується від рідного рівня місця: інакше на 99-му рівні просили б 535 вбивств
+	var goal: int = mini(load("res://scripts/game/far_service.gd").GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
+	var out := {"level": best, "hero_level": int(player.level), "base_level": base}
+	if kind_of(who) == "legend":
+		out["legend"] = line_of(who)
+	else:
+		out["mission"] = who
+	out["goal"] = goal
+	return out
+
+
 ## Куди веде місія (id міста чи місця; "" — нікуди): питає службу її лінії.
 static func target(world, id: String) -> String:
 	var svc = service(kind_of(id))
 	return str(svc.mission_target(world, id)) if svc != null else ""
+
+
+## Де місія, якій бракує рівня, чекає героя: місто того, хто її дає (крок без розмови — місце мети).
+static func giver_place(id: String) -> String:
+	var R := step(id)
+	return str(R.get("city", "")) if str(R.get("city", "")) != "" else str(R.get("objective", {}).get("loc", ""))
+
+
+## Позначки мапи від місій: {"stars": {місце: true}, "marks": {...}, "dim_stars": {...}, "dim_marks": {...}}.
+## Зірка — сюжетна місія, «!» — решта (mark); бліді — місії, яким бракує рівня (у місті того, хто дає).
+static func map_marks(world) -> Dictionary:
+	var out := {"stars": {}, "marks": {}, "dim_stars": {}, "dim_marks": {}}
+	for id in missions(world):
+		var t := target(world, id)
+		if t != "":
+			out["stars" if is_story(id) else "marks"][t] = true
+	for id in waiting(world):
+		var t := giver_place(id)
+		if t != "":
+			out["dim_stars" if is_story(id) else "dim_marks"][t] = true
+	return out
 
 
 # ---------- Для налагодження й тестів ----------

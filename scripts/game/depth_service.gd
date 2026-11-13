@@ -9,6 +9,8 @@ const Data := preload("res://scripts/data/data.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
 const LOC_ID := "hlybyny"
+static var OPEN_LEVEL: int  # з якого рівня героя відкриті Глибини (0 — з будь-якого)
+static var OPEN_AFTER: String  # після якої місії відкриті Глибини (сьогодні — «kremlin», перемога над Путіноїдом)
 static var BASE_LEVEL: int  # рівень нечисті на першій глибині
 
 
@@ -37,6 +39,8 @@ static func _static_init() -> void:
 ## змінено під час гри.
 static func apply_settings() -> void:
 	var S := GameDB.settings("depths")
+	OPEN_LEVEL = S["open_level"]
+	OPEN_AFTER = S["open_after"]
 	BASE_LEVEL = S["base_level"]
 	LEVEL_STEP = S["level_step"]
 	ROOMS_BASE = S["rooms_base"]
@@ -67,9 +71,19 @@ static func state(world) -> Dictionary:
 	return world.depths
 
 
-## Глибини відкриваються після перемоги над Путіноїдом.
-static func unlocked(world) -> bool:
-	return StoryService.finished(world)
+## Глибини відкриваються після місії OPEN_AFTER (сьогодні — перемога над Путіноїдом) і з рівня OPEN_LEVEL.
+## lvl — рівень героя (-1 — world.hero_level, який гра ставить перед питаннями рушія).
+static func unlocked(world, lvl: int = -1) -> bool:
+	return open_at(world, lvl if lvl >= 0 else int(world.hero_level))
+
+
+static func open_at(world, lvl: int) -> bool:
+	return load("res://scripts/game/unlock_rule.gd").open(world, lvl, OPEN_LEVEL, OPEN_AFTER)
+
+
+## Чого бракує, щоб Глибини відкрились, одним реченням ("" — відкриті).
+static func lock_text(world, lvl: int, verb: String = "Відкриються", short: bool = false) -> String:
+	return load("res://scripts/game/unlock_rule.gd").text(world, lvl, OPEN_LEVEL, OPEN_AFTER, verb, short)
 
 
 ## Рівень нечисті на глибині: росте без межі, по два рівні на глибину.

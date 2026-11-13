@@ -297,8 +297,9 @@ static func _journal(game) -> Control:
 				var mark: String = {"done": "✓ ", "now": "★ ", "ahead": "· "}[ch["state"]]
 				flow.add_child(UI.label(mark + str(ch["title"]), 15, {"done": UI.GOOD, "now": UI.GOLD, "ahead": UI.MUTED}[ch["state"]], false))
 			v.add_child(flow)
-		if sec["rows"].is_empty() and str(sec["empty"]) != "":
-			var el := UI.label(sec["empty"], 16, UI.MUTED, false)
+		var note: String = str(sec["empty"]) if sec["rows"].is_empty() else str(sec.get("note", ""))
+		if note != "":
+			var el := UI.label(note, 16, UI.MUTED, false)
 			el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			v.add_child(el)
 		for r in sec["rows"]:
@@ -331,7 +332,7 @@ static func _journal(game) -> Control:
 				# завдання з місцем: дотик показує на мапі мету, а для виконаного — місто, де здати
 				_tap_card(card, line, "на мапі ›", _do(game, "place_show", [r["place"], r["text"]]))
 			v.add_child(card)
-	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». На мапі зірка веде за історією, «!» позначає мету завдання, а зелена галочка стоїть на місті, де здати виконане.", 15, UI.MUTED, false))
+	v.add_child(UI.label("Щоденні й тижневі виклики на вкладці «Виклики», заняття й події світу на вкладці «Події». Зірка «★» — місія історії, «!» — інша місія чи завдання; бліда позначка на мапі — місія чекає, поки підростеш. Зелена галочка стоїть на місті, де здати виконане.", 15, UI.MUTED, false))
 	v.get_child(v.get_child_count() - 1).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return v
 

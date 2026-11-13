@@ -59,11 +59,11 @@ static func locked_reason(id: String, world, player) -> String:
 			if world.companions.is_empty():
 				return "Найми супутника в корчмі"
 		"tower":
-			if not _svc("tower_service").unlocked(player):
-				return "Відкриється з %d-го рівня" % int(_svc("tower_service").OPEN_LEVEL)
+			if not _svc("tower_service").unlocked(player, world):
+				return _svc("tower_service").lock_text(world, lvl, "Відкриється", true).trim_suffix(".")
 		"depths":
-			if not _svc("depth_service").unlocked(world):
-				return "Відкриється після перемоги над Путіноїдом"
+			if not _svc("depth_service").unlocked(world, lvl):
+				return _svc("depth_service").lock_text(world, lvl, "Відкриється", true).trim_suffix(".")
 		"far":
 			if lvl < int(E.get("level", 0)):
 				return "Відкриється з %d-го рівня" % int(E["level"])

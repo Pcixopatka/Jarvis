@@ -210,6 +210,7 @@
 	"tower": {
 		"num": 11017,
 		"open_level": 15,
+		"open_after": "",
 		"super_every": 5,
 		"base_level": 14,
 		"waves_base": 2,
@@ -234,6 +235,8 @@
 	},
 	"depths": {
 		"num": 11018,
+		"open_level": 0,
+		"open_after": "kremlin",
 		"base_level": 22,
 		"level_step": 2,
 		"rooms_base": 4,

@@ -230,16 +230,6 @@ static func done_count(world) -> int:
 
 
 ## Нечисть у місці, куди зараз веде переказ, міряється рівнем із героєм: стара печера не стає прогулянкою.
-## Перша активна місія переказу, чия мета в цьому місці.
+## Загальне правило для всіх місій — QuestEngine.fight_mods (гра бере його); тут — лише місії переказів.
 static func mods_for(world, player, loc_id: String) -> Dictionary:
-	if not Data.is_place(loc_id):
-		return {}
-	var base: int = int(Data.place(loc_id)["level"])
-	if int(player.level) <= base:
-		return {}
-	for id in missions(world):
-		if QuestEngine.stage(world, id) == "active" and str(QuestEngine.step(id)["objective"].get("loc", "")) == loc_id:
-			# мета зачистки рахується від рідного рівня місця: інакше на 99-му рівні просили б 535 вбивств
-			var goal: int = mini(load("res://scripts/game/far_service.gd").GOAL_MAX, Data.FIELD_GOAL_BASE + base * Data.FIELD_GOAL_PER_LEVEL)
-			return {"level": int(player.level), "hero_level": int(player.level), "base_level": base, "legend": QuestEngine.line_of(id), "goal": goal}
-	return {}
+	return QuestEngine.fight_mods(world, player, loc_id, KINDS)

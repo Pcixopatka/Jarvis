@@ -194,7 +194,11 @@ var current := ""  # де зараз козак
 var current_ll = null  # Vector2, якщо козак стоїть не в місці, а просто на мапі (вільна точка)
 var targets := {}  # місцевості з активними завданнями
 var turn_ins := {}  # місто -> скільки виконаного там можна здати (зелена позначка з галочкою)
-var story_target := ""  # куди веде сюжет (зірка)
+var story_target := ""  # куди веде сюжет: перша сюжетна місія (зірка)
+var stars := {}  # місця решти сюжетних місій (теж зірка, QuestEngine.map_marks)
+var dim_stars := {}  # міста, де сюжетна місія чекає, поки герой підросте (бліда зірка)
+var dim_targets := {}  # те саме для решти місій (блідий «!»)
+const DIM := 0.5  # прозорість блідої позначки (як у закритих місць занять)
 var plague := {}  # id місцевості -> рівень зарази (0..3)
 var sieges := {}  # місто/хутір -> походів до падіння (облога)
 var events := []  # значки подій: [{"id", "ll", "icon", "label", "kind"}] (див. EventService.map_marks)
@@ -590,7 +594,12 @@ func _draw() -> void:
 		labels.append([12, sid, sc + Vector2(0, 16 * k + label_fs + 2), S["name"], label_fs, Color(0.2, 0.4, 0.15) if not locked else Color(INK, 0.5)])
 	_draw_labels(font, labels)
 
-	# Завдання
+	# Завдання й несюжетні місії; блідий «!» — місія чекає, поки герой підросте (як закриті місця занять)
+	for id in dim_targets:
+		if _markers.has(id) and not targets.has(id):
+			var c: Vector2 = _markers[id] + Vector2(16, -22) * k
+			draw_circle(c, 10 * k, Color(1.0, 0.8, 0.1, DIM))
+			_text(font, c + Vector2(0, 6 * k), "!", int(18 * k), Color(0.2, 0.1, 0.0, 0.8), false)
 	for id in targets:
 		if _markers.has(id):
 			var c: Vector2 = _markers[id] + Vector2(16, -22) * k
@@ -628,15 +637,15 @@ func _draw() -> void:
 		_icon(ev["icon"], ec + off + Vector2(0, bob), sz)
 		if ev["label"] != "":
 			_text(font, ec + off + Vector2(0, -sz * 0.7), ev["label"], int(clampf(14.0 * k, 11, 22)), Color(0.6, 0.12, 0.08))
-	# Сюжет — пульсуюча зірка
+	# Сюжет — пульсуюча зірка (над кожною сюжетною місією); бліда — сюжетна місія чекає, поки герой підросте
+	for id in dim_stars:
+		if _markers.has(id) and id != story_target and not stars.has(id):
+			_draw_star(_markers[id] + Vector2(-18, -26) * k, 13.0 * k, DIM)
+	for id in stars:
+		if _markers.has(id) and id != story_target:
+			_draw_star(_markers[id] + Vector2(-18, -26) * k, (13.0 + sin(_pulse * 1.5) * 2.0) * k, 1.0)
 	if _markers.has(story_target):
-		var sc: Vector2 = _markers[story_target] + Vector2(-18, -26) * k
-		var rr := (13.0 + sin(_pulse * 1.5) * 2.0) * k
-		var star := PackedVector2Array()
-		for i in 10:
-			star.append(sc + Vector2.from_angle(-PI / 2 + i * PI / 5) * (rr if i % 2 == 0 else rr * 0.45))
-		draw_colored_polygon(star, Color(1.0, 0.85, 0.2))
-		draw_polyline(star + PackedVector2Array([star[0]]), Color(0.4, 0.2, 0.0), 2.0, true)
+		_draw_star(_markers[story_target] + Vector2(-18, -26) * k, (13.0 + sin(_pulse * 1.5) * 2.0) * k, 1.0)
 	# Де козак: прапорець на місці або фігурка в дорозі
 	if not travel.is_empty():
 		_draw_traveler(k)
@@ -651,6 +660,15 @@ func _draw() -> void:
 	# Вибране місце
 	if _markers.has(selected):
 		draw_arc(_markers[selected], (24 + sin(_pulse) * 3) * k, 0, TAU, 32, Color(1, 1, 1, 0.9), 3.0)
+
+
+## Зірка сюжетної місії; alpha < 1 — бліда (місія чекає, поки герой підросте).
+func _draw_star(sc: Vector2, rr: float, alpha: float) -> void:
+	var star := PackedVector2Array()
+	for i in 10:
+		star.append(sc + Vector2.from_angle(-PI / 2 + i * PI / 5) * (rr if i % 2 == 0 else rr * 0.45))
+	draw_colored_polygon(star, Color(1.0, 0.85, 0.2, alpha))
+	draw_polyline(star + PackedVector2Array([star[0]]), Color(0.4, 0.2, 0.0, alpha), 2.0, true)
 
 
 ## Підпис по центру; ширина рахується за реальним розміром тексту.
@@ -702,7 +720,7 @@ func _draw_labels(font: Font, labels: Array) -> void:
 	for l in labels:
 		if l[1] == selected:
 			l[0] = 100
-		elif l[1] == story_target or targets.has(l[1]) or turn_ins.has(l[1]):
+		elif l[1] == story_target or stars.has(l[1]) or targets.has(l[1]) or turn_ins.has(l[1]):
 			l[0] += 30
 		elif l[1] == current:
 			l[0] += 20

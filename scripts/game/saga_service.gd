@@ -77,9 +77,9 @@ static func on_dialogue_done(world, player, kind: String, id: String = "") -> Ar
 		if int(world.cleared.get(str(st["objective"]["loc"]), 0)) > 0:
 			# цього боса герой уже здолав: оповідач про це знає
 			QuestEngine.set_stage(world, id, "turnin")
-			return [{"text": "★ Цього ворога ти вже здолав.\nПоговори ще раз: %s" % Data.place_name(str(st["city"])), "big": true}]
+			return [{"text": "%s Цього ворога ти вже здолав.\nПоговори ще раз: %s" % [QuestEngine.mark(id), Data.place_name(str(st["city"]))], "big": true}]
 		QuestEngine.start(world, id)
-		return [{"text": "★ " + str(st["objective"]["text"]), "big": true}]
+		return [{"text": "%s %s" % [QuestEngine.mark(id), str(st["objective"]["text"])], "big": true}]
 	if kind == "saga_end" and s == "turnin":
 		return _complete(world, player, id)
 	return []
@@ -88,12 +88,12 @@ static func on_dialogue_done(world, player, kind: String, id: String = "") -> Ar
 ## Мету кроку виконано (QuestEngine.on_event): повернутися до оповідача.
 static func objective_met(world, _player, id: String) -> Array:
 	QuestEngine.set_stage(world, id, "turnin")
-	return [{"text": "★ Мету виконано!\nПовертайся: %s" % Data.place_name(str(QuestEngine.step(id)["city"])), "big": true}]
+	return [{"text": "%s Мету виконано!\nПовертайся: %s" % [QuestEngine.mark(id), Data.place_name(str(QuestEngine.step(id)["city"]))], "big": true}]
 
 
 ## Мета саги — бос, «принести» в неї не буває (GameDB.QUEST_OBJECTIVES); для повноти.
 static func fetch_msg(_world, id: String) -> Dictionary:
-	return {"text": "★ %s" % str(QuestEngine.step(id)["objective"]["text"]), "big": false}
+	return {"text": "%s %s" % [QuestEngine.mark(id), str(QuestEngine.step(id)["objective"]["text"])], "big": false}
 
 
 static func _complete(world, player, id: String) -> Array:
@@ -133,15 +133,16 @@ static func objective_line(world) -> String:
 	return ""
 
 
-## Рядок мети місії саги id (із зіркою).
+## Рядок мети місії саги id з позначкою (QuestEngine.mark; сага сюжетна — «★»).
 static func mission_line(world, id: String) -> String:
 	var st := QuestEngine.step(id)
+	var m := QuestEngine.mark(id)
 	match QuestEngine.stage(world, id):
 		"offer":
-			return "★ Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(str(st["city"]))]
+			return "%s Поговори: %s (%s)" % [m, Story.npc_name(st["giver"]), Data.place_name(str(st["city"]))]
 		"turnin":
-			return "★ Повертайся: %s" % Data.place_name(str(st["city"]))
-	return "★ " + str(st["objective"]["text"])
+			return "%s Повертайся: %s" % [m, Data.place_name(str(st["city"]))]
+	return "%s %s" % [m, str(st["objective"]["text"])]
 
 
 ## Примітка для журналу, поки продовження ще закрите ("" — уже відкрите чи пройдене).

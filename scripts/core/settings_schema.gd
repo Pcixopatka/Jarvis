@@ -5,7 +5,8 @@ extends RefCounted
 ## нуля; count — ціле, не менше 1; level — рівень героя від 0 до стелі (experience.base_level_max); rarity — номер
 ## рідкості (rarities.json); tier — ступінь золота (golden_tiers.json); soul_tier — ступінь душі (soul_tiers.json);
 ## mults — непорожній перелік додатних множників; curve — точки мірки нечисті; zone — [від, до] у межах 0..1;
-## soul_chance — шанс душі за родом ворога (regular, elite, named, boss).
+## soul_chance — шанс душі за родом ворога (regular, elite, named, boss); step — id кроку завдань (історії,
+## переказу, саги, доручення) або "" (без місії).
 ## Порядок полів у схемі — порядок у файлі (tools/data_format.gd). Як модулі беруть ці числа — docs/data.md.
 
 const _NUM := {"type": "int", "required": true}  # сталий номер запису (11001...)
@@ -228,6 +229,7 @@ const SCHEMAS := {
 	"tower": {
 		"num": _NUM,
 		"open_level": {"type": "int", "check": "level", "about": "з якого рівня героя відкрита Башта"},
+		"open_after": {"type": "string", "check": "step", "about": "після якої місії (id кроку завдань) відкрита Башта; \"\" — без місії"},
 		"super_every": {"type": "int", "check": "count", "about": "кожен такий поверх — супербос"},
 		"base_level": {"type": "int", "check": "nonneg", "about": "рівень нечисті поверху = це + номер поверху"},
 		"waves_base": {"type": "int", "check": "count", "about": "хвиль на поверсі: base + поверх / waves_every, не більше waves_max"},
@@ -252,6 +254,8 @@ const SCHEMAS := {
 	},
 	"depths": {
 		"num": _NUM,
+		"open_level": {"type": "int", "check": "level", "about": "з якого рівня героя відкриті Глибини (0 — з будь-якого)"},
+		"open_after": {"type": "string", "check": "step", "about": "після якої місії (id кроку завдань) відкриті Глибини; \"\" — без місії"},
 		"base_level": {"type": "int", "check": "nonneg", "about": "рівень нечисті на першій глибині"},
 		"level_step": {"type": "int", "check": "nonneg", "about": "рівнів нечисті за кожну наступну глибину"},
 		"rooms_base": {"type": "int", "check": "count", "about": "кімнат: base + глибина / rooms_every, не більше rooms_max"},

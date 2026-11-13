@@ -23,7 +23,7 @@ static func build(game, city: String) -> Control:
 	# Перша вкладка: ратуша. Тут чекають ті, хто має до героя справу; число в назві каже, скільки їх.
 	var waiting: Array = game.hall_rows(city)
 	var pages := [
-		[Data.hall_name(city) + ((" (%d)" % waiting.size()) if not waiting.is_empty() else ""), func(): return _hall(game, city, waiting)],
+		[Data.hall_name(city) + _hall_count(game, waiting), func(): return _hall(game, city, waiting)],
 		["Завдання", func(): return _quests(game, city)],
 		["Крамниця", func(): return _shop(game, city)],
 		["Коваль", func(): return _smith(game)],
@@ -65,6 +65,20 @@ static func build(game, city: String) -> Control:
 # ---------------- Ратуша ----------------
 
 const HALL_TALK := "Поговорити"
+## Відмова того, хто дасть місію, поки героєві бракує рівня (замість кнопки «Поговорити»).
+const HALL_WAIT := "Ще зарано:\nприходь із %d-го рівня"
+
+
+## Число на вкладці ратуші: скільки тут чекають на героя, з позначкою місії («★» — сюжетна, «!» — інша).
+## Ті, хто відмовляє, поки героєві бракує рівня, не рахуються.
+static func _hall_count(game, rows: Array) -> String:
+	var n := 0
+	for r in rows:
+		n += 0 if str(r["kind"]) == "wait" else 1
+	if n == 0:
+		return ""
+	var mark: String = game.hall_badge(rows)
+	return " (%s%d)" % [(mark + " ") if mark != "" else "", n]
 
 ## Хто має справу до героя в цьому місті. Розмова починається лише з кнопки.
 static func _hall(game, city: String, rows: Array) -> Control:
@@ -74,17 +88,19 @@ static func _hall(game, city: String, rows: Array) -> Control:
 	var intro := UI.label("Тут чекають ті, хто має до тебе справу: люди з історії, побратими, наставники й оповідачі переказів. Розмова почнеться, коли сам підійдеш.", 17, UI.MUTED, false)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(intro)
-	if rows.is_empty():
+	if rows.all(func(r): return str(r["kind"]) == "wait"):
 		v.add_child(UI.label("Зараз на тебе ніхто не чекає.", 20, UI.TEXT, false))
 		var story_line: String = game.StoryService.objective_line(game.world)
 		if story_line != "":
 			var next := UI.label("Історія веде далі: %s" % story_line, 17, UI.MUTED, false)
 			next.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			v.add_child(next)
-		return v
+		if rows.is_empty():
+			return v
 	for r in rows:
+		var wait: bool = str(r["kind"]) == "wait"
 		var panel := PanelContainer.new()
-		panel.add_theme_stylebox_override("panel", UI.style(Color(0.16, 0.13, 0.1), UI.GOOD if r["ready"] else UI.GOLD, 10, 10))
+		panel.add_theme_stylebox_override("panel", UI.style(Color(0.16, 0.13, 0.1), UI.GOOD if r["ready"] else (UI.MUTED if wait else UI.GOLD), 10, 10))
 		var row := HBoxContainer.new()
 		row.add_theme_constant_override("separation", 12)
 		panel.add_child(row)
@@ -96,9 +112,15 @@ static func _hall(game, city: String, rows: Array) -> Control:
 		var what := UI.label(str(r["what"]), 17, UI.TEXT, false)
 		what.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		info.add_child(what)
-		info.add_child(UI.label("Чекає з нагородою" if r["ready"] else "Має до тебе справу", 15, UI.GOOD if r["ready"] else UI.MUTED, false))
+		info.add_child(UI.label("Чекає, поки підростеш" if wait else ("Чекає з нагородою" if r["ready"] else "Має до тебе справу"), 15, UI.GOOD if r["ready"] else UI.MUTED, false))
 		row.add_child(info)
-		row.add_child(UI.button(HALL_TALK, game.hall_talk.bind(str(r["kind"]), str(r["line"])), Vector2(190, 58), 20))
+		if wait:
+			var no := UI.label(HALL_WAIT % int(r["need"]), 17, UI.BAD, true)
+			no.custom_minimum_size = Vector2(190, 58)
+			no.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			row.add_child(no)
+		else:
+			row.add_child(UI.button(HALL_TALK, game.hall_talk.bind(str(r["kind"]), str(r["line"])), Vector2(190, 58), 20))
 		v.add_child(panel)
 	return v
 

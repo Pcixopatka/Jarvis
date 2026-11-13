@@ -51,6 +51,10 @@ func _run() -> void:
 	_suite_quest_db()
 	_suite_quest_engine()
 	_suite_quest_migration()
+	_suite_mission_rules()
+	_suite_side_db()
+	_suite_unlock_rules()
+	_suite_mission_reorder()
 	_suite_life_db()
 	_suite_settings_db()
 	await _suite_rival_mechanics()
@@ -184,6 +188,7 @@ func _run() -> void:
 	_suite_events_wiki()
 	await _suite_events_wiki_game()
 	await _suite_job_limits()
+	await _suite_mission_game()
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -8383,7 +8388,7 @@ func _suite_journal() -> void:
 	# Історія завжди перша, з місцем
 	var secs: Array = Journal.sections(w, p)
 	var story: Dictionary = secs[0]
-	check(str(story["title"]).begins_with("Історія") and story["rows"].size() == 1 and str(story["rows"][0]["text"]) != "" and not str(story["rows"][0]["text"]).begins_with("★") and str(story["rows"][0]["where"]) != "", "історія в журналі: що зробити й де (%s, %s)" % [story["rows"][0]["text"], story["rows"][0]["where"]])
+	check(str(story["title"]).begins_with("Історія") and story["rows"].size() == 1 and str(story["rows"][0]["text"]) != "" and str(story["rows"][0]["text"]).begins_with("★ ") and not str(story["rows"][0]["text"]).begins_with("★ ★") and str(story["rows"][0]["where"]) != "", "історія в журналі: що зробити й де, із зіркою сюжетної місії (%s, %s)" % [story["rows"][0]["text"], story["rows"][0]["where"]])
 	var cityq: Dictionary = find.call("Завдання міст")
 	check(cityq["rows"].is_empty() and "дошці оголошень" in str(cityq["empty"]) and Journal.ready_count(w, p) == 0, "без завдань журнал підказує, де їх узяти")
 	# Завдання міста: поступ, місце, місто, нагорода, готовність
@@ -8468,7 +8473,10 @@ func _suite_journal() -> void:
 	for ci in done_sec["chapters"].size():
 		# розділи головної історії пройдено; кроки «Попелу за вітром» ще попереду
 		all_done = all_done and str(done_sec["chapters"][ci]["state"]) == ("done" if ci < main_n else "ahead")
-	check(str(done_sec["title"]) == "Історія" and done_sec["rows"].is_empty() and all_done and done_sec["chapters"].size() > main_n and "Попіл за вітром" in str(done_sec["empty"]) and "Історію пройдено" in str(done_sec["empty"]) and "Глибини" in str(done_sec["empty"]), "після фіналу розділ «Історія» лишається: усе пройдено й сказано, що далі")
+	# «Попіл за вітром» чекає 90-го рівня: наступна місія вже видна рядком «потрібен рівень 90» (замість примітки саги)
+	var saga_wait: Array = done_sec["rows"]
+	check(str(done_sec["title"]) == "Історія" and saga_wait.size() == 1 and int(saga_wait[0]["wait"]) == 90 and str(saga_wait[0]["text"]).begins_with("★ Поговори: ") and str(saga_wait[0]["text"]).ends_with("— потрібен рівень 90")
+		and all_done and done_sec["chapters"].size() > main_n and "Історію пройдено" in str(done_sec["note"]) and "Глибини" in str(done_sec["note"]) and not "відкриється з" in str(done_sec["empty"]), "після фіналу розділ «Історія» лишається: усе пройдено, що далі й з якого рівня (%s)" % str(saga_wait))
 	game.open_character()
 	game.char_tab = 1
 	game._build_character()
@@ -10879,7 +10887,7 @@ func _suite_gameplay() -> void:
 	hall_tab = tc0.get_tab_title(tc0.current_tab)
 	for b in game.hud.screen_root.find_children("*", "Button", true, false):
 		hall_btn = hall_btn or (not b.is_queued_for_deletion() and b.text == load("res://scripts/ui/ui_city.gd").HALL_TALK)
-	check(hall_tab == "%s (1)" % Data.hall_name("sich") and hall_btn, "місто відкрилось на вкладці «%s» із кнопкою «Поговорити»" % hall_tab)
+	check(hall_tab == "%s (★ 1)" % Data.hall_name("sich") and hall_btn, "місто відкрилось на вкладці «%s» із кнопкою «Поговорити»" % hall_tab)
 	_hall_talk(game)
 	await _frames(2)
 	check(game.hud.dialogue_root != null, "кошовий зустрічає втікача")
@@ -14511,7 +14519,7 @@ func _suite_legends() -> void:
 		hall_lines.append(str(r["line"]))
 	check(game.hud.dialogue_root == null and hall_lines == ["kozhumiaka", "vii"] and kyiv_hall[0]["kind"] == "legend" and kyiv_hall[0]["name"] == Story.npc_name("kobzar") and "Кожум'яка" in str(kyiv_hall[0]["what"]), "у Києві ніхто не заговорює сам: у ратуші чекають кобзар і полковник із переказами")
 	var tck = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
-	check(tck.get_tab_title(0) == "Ратуша (2)" and Data.hall_name("kyiv") == "Ратуша" and Data.hall_name("sich") != "Ратуша", "перша вкладка міста «Ратуша (2)»; на Січі це курінь")
+	check(tck.get_tab_title(0) == "Ратуша (! 2)" and Data.hall_name("kyiv") == "Ратуша" and Data.hall_name("sich") != "Ратуша", "перша вкладка міста «Ратуша (! 2)»: двоє з переказами (знак оклику); на Січі це курінь")
 	check(_hall_talk(game, "legend", "vii"), "герой сам обирає, кого слухати: спершу полковника")
 	await _frames(2)
 	check(game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root), "полковник починає розмову про Вія")
@@ -19182,6 +19190,496 @@ func _suite_quest_engine() -> void:
 	check(Q.missions(w4).size() == before_ms.size() and Q.graph()["line_of"].has("village"), "назад до таблиць бази")
 
 
+## Крок доручення для вигаданих таблиць (той самий вигляд, що в side.json).
+func _side_step(after: Array, title: String, obj: Dictionary, extra: Dictionary = {}) -> Dictionary:
+	var r := {"line": "dor", "title": title, "giver": "kobzar", "city": "sich", "turn_in": "sich", "start": [["kobzar", "Є діло."]], "end": [["kobzar", "Дякую."]], "reward": {}, "objective": obj}
+	if not after.is_empty():
+		r["after"] = after
+	r.merge(extra, true)
+	return r
+
+
+## Тексти всіх написів під вузлом (Label і кнопки).
+func _texts_under(n: Node) -> String:
+	var out := []
+	for c in n.find_children("*", "Label", true, false):
+		out.append(c.text)
+	for c in n.find_children("*", "Button", true, false):
+		out.append(c.text)
+	return "\n".join(out)
+
+
+## Місії: позначка «★»/«!», місія, що чекає рівня, рівень бою місії, доручення з метою «stat», старі герої.
+## На вигаданих таблицях (QuestEngine.use_graph): справжніх доручень і рівнів на кроках історії ще нема.
+func _suite_mission_rules() -> void:
+	suite("Місії: позначки, рівень, доручення")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var JS = load("res://scripts/game/journal_service.gd")
+	var GS = load("res://scripts/game/guide_service.gd")
+	var Side = load("res://scripts/game/side_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var LS = load("res://scripts/game/legend_service.gd")
+	var SS = load("res://scripts/game/story_service.gd")
+	var Story = load("res://scripts/data/story.gd")
+	var GameS = load("res://scripts/game/game.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var talk := [["kobzar", "Слухай."]]
+	var bye := [["kobzar", "Дякую."]]
+	var kob: String = "%s (%s)" % [Story.npc_name("kobzar"), Data.place_name("sich")]
+	# ---- Позначка: одна функція, від даних ----
+	check(Q.mark("village") == "★" and Q.mark("kremlin") == "★" and Q.mark("saga_dev") == "★" and Q.mark("vii_1") == "!" and Q.mark("drakula_3") == "!", "сьогодні: історія й сага — зірка, перекази — знак оклику")
+	var flip_lines := {}
+	for k in GameDB.ids("quest_lines"):
+		flip_lines[k] = GameDB.row("quest_lines", k).duplicate()
+	flip_lines["vii"]["story"] = true
+	flip_lines["story"]["story"] = false
+	var flip_steps: Dictionary = GameDB.quest_steps().duplicate()
+	var v3: Dictionary = flip_steps["vii_3"].duplicate(true)
+	v3["story"] = false
+	flip_steps["vii_3"] = v3
+	Q.use_graph(Q.make_graph(flip_lines, flip_steps))
+	var wf = WorldState.new()
+	var pf = _new_player()
+	wf.hero_level = 15
+	pf.level = 15
+	check(Q.mark("vii_1") == "★" and Q.mark("vii_3") == "!" and Q.mark("village") == "!" and Q.mark("saga_dev") == "★", "«story» лінії чи кроку в даних міняє позначку без коду")
+	var fsecs: Array = JS.sections(wf, pf)
+	var vii_row := ""
+	for sec in fsecs:
+		for r in sec["rows"]:
+			if "Три ночі" in str(r["text"]):
+				vii_row = str(r["text"])
+	check(str(fsecs[0]["rows"][0]["text"]).begins_with("! ") and vii_row.begins_with("★ "), "журнал: позначка за даними (історія «!», Вій «★»): %s / %s" % [fsecs[0]["rows"][0]["text"], vii_row])
+	var fmm: Dictionary = Q.map_marks(wf)
+	check(fmm["stars"].has("kyiv") and fmm["marks"].has("ridne_selo") and not fmm["stars"].has("ridne_selo"), "мапа: позначка за даними: %s" % str(fmm))
+	var fg: Array = GS.items(wf, pf, "sich")
+	var fstory := ""
+	for it in fg:
+		if str(it["kind"]) == "story":
+			fstory = str(it["text"])
+	check(fstory.begins_with("! Історія: "), "порадник: позначка за даними: «%s»" % fstory)
+	check(SS.mission_line(wf, "village").begins_with("! ") and SS.objective_line(wf).begins_with("! "), "рядок мети (підказка над боєм) — теж за даними")
+	Q.use_graph({})
+	check(Q.mark("vii_1") == "!" and Q.mark("village") == "★", "назад до таблиць бази")
+	# Позначка вкладки ратуші: зірка, коли є сюжетна місія, інакше знак оклику; відмови не рахуються
+	check(GameS.hall_badge([{"kind": "legend", "mark": "!"}, {"kind": "story", "mark": "★"}]) == "★" and GameS.hall_badge([{"kind": "legend", "mark": "!"}, {"kind": "hero", "mark": ""}]) == "!"
+		and GameS.hall_badge([{"kind": "hero", "mark": ""}]) == "" and GameS.hall_badge([{"kind": "wait", "mark": "★"}]) == "", "вкладка ратуші: ★ / ! / без позначки")
+	# ---- Доручення й мета «stat» на вигаданих таблицях ----
+	# a → (обов'язкове доручення req) → b (з 5-го рівня) → c (з 9-го); opt — необов'язкове, far — з 10-го рівня; lv — крок історії з метою «stat»
+	var lines := {"main": {"kind": "story", "story": true}, "dor": {"kind": "side", "title": "Доручення кобзаря"}}
+	var story_steps := {
+		"a": _qstep("main", [], {"type": "clear", "loc": "wild_field", "text": "Перша мета"}),
+		"b": _qstep("main", ["a", "req"], {"type": "dungeon", "loc": "zmii_cave", "text": "Друга мета"}, {"min_level": 5, "start": talk, "end": bye, "turn_in": "sich"}),
+		"c": _qstep("main", ["b"], {"type": "clear", "loc": "rapids", "text": "Третя мета"}, {"min_level": 9, "start": talk}),
+		"lv": _qstep("main", ["b"], {"type": "stat", "stat": "level", "count": 4, "text": "Досягни 4-го рівня"}, {"start": talk, "end": bye, "turn_in": "sich"}),
+	}
+	var side_steps := {
+		"opt": _side_step(["a"], "Перший поверх Башти", {"type": "stat", "stat": "tower", "count": 3, "loc": "bashta", "text": "Підіймись на третій поверх Башти"}, {"reward": {"gold": 100, "xp": 50}}),
+		"req": _side_step(["a"], "Двоє заражених", {"type": "stat", "stat": "kill", "count": 2, "text": "Поклади двох ворогів"}, {"reward": {"trophy": 2}}),
+		"far": _side_step(["a"], "Лист до Києва", {"type": "visit", "loc": "kyiv", "text": "Їдь до Києва"}, {"min_level": 10, "reward": {"gold": 10}}),
+	}
+	var gp := GameDB.quest_graph_problems(lines, {"story": story_steps, "side": side_steps})
+	check(gp.is_empty(), "вигаданий граф з дорученнями без проблем: %s" % str(gp))
+	var all_steps: Dictionary = story_steps.duplicate()
+	all_steps.merge(side_steps)
+	Q.use_graph(Q.make_graph(lines, all_steps))
+	var w = WorldState.new()
+	var p = _new_player()
+	w.hero_level = 3
+	p.level = 3
+	check(Q.missions(w) == ["a"] and Q.waiting(w).is_empty(), "спершу лише a; ті, що далі в ланцюжку, не видно навіть як «потрібен рівень»")
+	Q.on_event(w, p, "clear", "wild_field")
+	check(Q.is_done(w, "a") and Q.missions(w) == ["opt", "req"] and Q.stage(w, "b") == "locked" and Q.waiting(w) == ["far"], "після a: два доручення поруч, b чекає обов'язкове req, far чекає рівня (%s, %s)" % [str(Q.missions(w)), str(Q.waiting(w))])
+	check(Q.mark("opt") == "!" and Q.kind_of("opt") == "side" and Side.missions(w) == ["opt", "req"], "доручення — знак оклику")
+	var sd: Array = Side.city_dialogues(w, "sich")
+	check(sd.size() == 2 and str(sd[0]["kind"]) == "side_start" and str(sd[0]["id"]) == "opt", "у ратуші Січі обидва доручення чекають розмови")
+	var dsec := {}
+	for sec in JS.sections(w, p):
+		if str(sec["title"]) == "Доручення":
+			dsec = sec
+	var dtexts := []
+	for r in dsec.get("rows", []):
+		dtexts.append(str(r["text"]))
+	check(dtexts.size() == 3 and dtexts[0] == "! Перший поверх Башти: Поговори: %s" % kob and dtexts[2] == "! Лист до Києва: Поговори: %s — потрібен рівень 10" % kob, "журнал: розділ «Доручення», знак оклику й «потрібен рівень»: %s" % str(dtexts))
+	var gmm: Dictionary = Q.map_marks(w)
+	check(gmm["marks"].has("sich") and gmm["dim_marks"].has("sich") and gmm["stars"].is_empty(), "мапа: доручення — «!» над Січчю (і блідий для far): %s" % str(gmm))
+	# Необов'язкове з «найвищим» лічильником: рахується нинішнє значення
+	w.stats["tower"] = 1
+	var m1: Array = Side.on_dialogue_done(w, p, "side_start", "opt")
+	check(Q.stage(w, "opt") == "active" and Q.progress(w, "opt") == 1 and str(m1[0]["text"]).begins_with("! "), "взяте доручення: поверх 1 уже зараховано (найвище досягнуте)")
+	CS.record(w, p, "tower", 2)
+	var orow := ""
+	for r in JS.sections(w, p).filter(func(x): return str(x["title"]) == "Доручення")[0]["rows"]:
+		if "Башти" in str(r["text"]):
+			orow = str(r["text"])
+	check(Q.progress(w, "opt") == 2 and orow.ends_with("2/3"), "журнал показує поступ мети «stat»: «%s»" % orow)
+	var tower_msgs: Array = CS.record(w, p, "tower", 3)
+	check(Q.stage(w, "opt") == "turnin" and tower_msgs.any(func(t): return "Доручення: мету виконано" in str(t)), "третій поверх: мету виконано, повертайся (%s)" % str(tower_msgs))
+	var gold0: int = p.gold
+	var fin: Array = Side.on_dialogue_done(w, p, "side_end", "opt")
+	check(Q.is_done(w, "opt") and p.gold == gold0 + 100 and fin.any(func(m): return "виконано" in str(m["text"])), "нагорода доручення: +100 грн")
+	# Обов'язкове з лічильником-сумою: рахується від миті, коли взято; поступ переживає збереження
+	w.stats["kill"] = 50
+	Side.on_dialogue_done(w, p, "side_start", "req")
+	check(int(w.missions["active"]["req"]["base"]) == 50 and Q.progress(w, "req") == 0, "сума: основа 50 на старті, поступ 0")
+	CS.record(w, p, "kill", 1)
+	check(Q.progress(w, "req") == 1 and Q.stage(w, "b") == "locked", "один ворог: 1/2, b ще закрита")
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	w2.hero_level = 3
+	check(Q.stage(w2, "req") == "active" and Q.progress(w2, "req") == 1 and int(w2.missions["active"]["req"]["base"]) == 50 and Q.is_done(w2, "opt"), "збережено посередині: етап, лічильник і основа ті самі")
+	CS.record(w2, p, "kill", 1)
+	check(Q.stage(w2, "req") == "turnin", "після завантаження другий ворог закриває мету")
+	var p_tr: int = int(p.resources.get("trophy", 0))
+	Side.on_dialogue_done(w2, p, "side_end", "req")
+	check(Q.is_done(w2, "req") and int(p.resources.get("trophy", 0)) == p_tr + 2 and Q.stage(w2, "b") == "level" and Q.waiting(w2) == ["b", "far"] and not "c" in Q.waiting(w2), "обов'язкове здано: b тепер чекає лише 5-го рівня, c далі в ланцюжку не видно")
+	# Місія, якій бракує рівня: журнал, порадник, мапа
+	var ssec: Dictionary = JS.sections(w2, p)[0]
+	check(ssec["rows"].size() == 1 and str(ssec["rows"][0]["text"]) == "★ Поговори: %s — потрібен рівень 5" % kob and int(ssec["rows"][0]["wait"]) == 5 and str(ssec["rows"][0]["place"]) == "sich", "журнал: наступна місія історії з «потрібен рівень 5»: %s" % str(ssec["rows"]))
+	var tips: Array = GS.items(w2, p, "sich").filter(func(x): return str(x["kind"]) == "level")
+	check(tips.size() == 2 and str(tips[0]["text"]) == "★ Набери рівні: бракує 2 рівнів" and "з 5-го рівня" in str(tips[0]["sub"]) and str(tips[0]["place"]) == "sich" and str(tips[1]["text"]) == "! Набери рівні: бракує 7 рівнів", "порадник: скільки рівнів бракує: %s" % str(tips))
+	check(Q.map_marks(w2)["dim_stars"].has("sich") and JS.total(w2, p) == JS.total(w2, p) and JS.ready_count(w2, p) == 0, "мапа: бліда зірка над Січчю")
+	var n_wait := 0
+	for sec in JS.sections(w2, p):
+		for r in sec["rows"]:
+			n_wait += 1 if r.has("wait") else 0
+	check(n_wait == 2 and JS.total(w2, p) == 0, "місії, що чекають рівня, не рахуються як справи журналу")
+	# Рівень дозволив: b відкрито; мета «stat» у кроці історії
+	w2.hero_level = 5
+	p.level = 5
+	check(Q.stage(w2, "b") == "offer" and Q.waiting(w2) == ["far"], "з 5-го рівня b пропонують")
+	Q.complete(w2, "b")
+	w2.stats["level"] = 5
+	var lvm: Array = SS.on_dialogue_done(w2, p, "start", -1, "lv")
+	check(Q.stage(w2, "lv") == "turnin" and lvm.size() >= 2 and str(lvm[0]["text"]).begins_with("★ "), "крок історії з метою «stat»: «найвищого» досягнуто ще до кроку — одразу повертайся (%s)" % str(lvm))
+	# Рівень бою місії
+	var pl = _new_player()
+	pl.level = 10
+	var wl = WorldState.new()
+	wl.hero_level = 10
+	Q.state(wl)["done"]["a"] = true
+	Q.state(wl)["done"]["req"] = true
+	Q.start(wl, "b")
+	var base_lvl: int = int(Data.place("zmii_cave")["level"])
+	Q.use_graph({})
+	var low := {}
+	for k in ["a", "req", "b"]:
+		low[k] = all_steps[k].duplicate(true)
+	low["b"]["min_level"] = 30
+	low["b2"] = _qstep("main", ["a"], {"type": "dungeon", "loc": "zmii_cave", "text": "Ще раз"}, {"min_level": 40, "start": talk})
+	low["b3"] = _qstep("main", ["a"], {"type": "dungeon", "loc": "zmii_cave", "text": "Ще й ще"}, {"min_level": 2, "start": talk})
+	low["b4"] = _qstep("main", ["a"], {"type": "clear", "loc": "wild_field", "text": "Без рівня"}, {"start": talk})
+	Q.use_graph(Q.make_graph(lines, low))
+	Q.start(wl, "b4")
+	check(Q.fight_mods(wl, pl, "wild_field").is_empty(), "крок історії без «min_level» місця не міняє (як сьогодні)")
+	var fm: Dictionary = Q.fight_mods(wl, pl, "zmii_cave")
+	check(int(fm.get("level", 0)) == 30 and int(fm["base_level"]) == base_lvl and int(fm["hero_level"]) == 10 and str(fm["mission"]) == "b" and int(fm["goal"]) > 0, "місія 30-го рівня веде в печеру %d-го: бій на 30-му: %s" % [base_lvl, str(fm)])
+	Q.start(wl, "b2")
+	Q.start(wl, "b3")
+	check(int(Q.fight_mods(wl, pl, "zmii_cave")["level"]) == 40 and str(Q.fight_mods(wl, pl, "zmii_cave")["mission"]) == "b2", "кілька місій в одному місці — найвищий рівень")
+	Q.use_graph({})
+	low["bt"] = _qstep("main", ["a"], {"type": "stat", "stat": "tower", "count": 1, "loc": "bashta", "text": "Башта"}, {"min_level": 60, "start": talk})
+	Q.use_graph(Q.make_graph(lines, low))
+	Q.start(wl, "bt")
+	check(Q.fight_mods(wl, pl, "bashta").is_empty(), "Башту місія не підтягує: там рівень поверху")
+	Q.use_graph({})
+	# Перекази: як було (рівень героя, коли він вищий за місце)
+	var wv = WorldState.new()
+	var pv = _new_player()
+	pv.level = 40
+	wv.hero_level = 40
+	_quests_set(wv, "legends", {"vii": {"step": 1, "stage": "active", "progress": 0}})
+	var vloc: String = str(Q.step("vii_2")["objective"]["loc"])
+	var lm: Dictionary = LS.mods_for(wv, pv, vloc)
+	check(lm == Q.fight_mods(wv, pv, vloc) and lm.keys() == ["level", "hero_level", "base_level", "legend", "goal"] and int(lm["level"]) == 40 and str(lm["legend"]) == "vii", "переказ: бій на рівні героя, ключі ті самі, що були: %s" % str(lm))
+	pv.level = 1
+	check(LS.mods_for(wv, pv, vloc).is_empty(), "герой нижчий за місце переказу: місце не міняється")
+	# ---- Довідник ----
+	var me: Dictionary = WS.mission_entry()
+	var found := false
+	for e in WS.search("знак оклику"):
+		found = found or str(e["entry"]["title"]) == str(me["title"])
+	check("«★»" in str(me["text"]) and "«!»" in str(me["text"]) and "потрібен рівень" in str(me["text"]) and "рівень місії" in str(me["text"]) and found, "довідник: позначки, рівень місії й рівень бою (%s)" % str(me["title"]))
+	p.free()
+	pf.free()
+	pl.free()
+	pv.free()
+
+
+## Доручення в таблицях: перевірка запису (мета «stat», нагорода, лінія) і порожня таблиця.
+func _suite_side_db() -> void:
+	suite("Доручення: таблиця")
+	check(GameDB.ids("side").is_empty() and GameDB.problems().is_empty(), "справжніх доручень ще нема, таблиця порожня й без проблем")
+	var good := {"probe": {"num": 8751, "line": "story", "title": "Проба", "giver": "kobzar", "city": "sich", "start": [["kobzar", "Є діло."]],
+		"objective": {"type": "stat", "stat": "tower", "count": 1, "loc": "bashta", "text": "Перший поверх"}, "turn_in": "sich", "end": [["kobzar", "Дякую."]], "reward": {"gold": 10, "item": {"slot": "amulet", "rarity": 1, "ilvl": 5, "name": "Оберіг"}}}}
+	var pr := GameDB.validate("side", good)
+	check(pr.size() == 1 and _has_problem(pr, ["side/probe", "не лінія «side»"]), "запис доручення читається; лінія мусить бути виду side: %s" % str(pr))
+	var bad: Dictionary = good.duplicate(true)
+	bad["probe"]["num"] = 8601
+	bad["probe"]["objective"] = {"type": "stat", "stat": "nema", "text": "x"}
+	bad["probe"]["reward"] = {"gold_lvl": 5}
+	bad["probe"]["turn_in"] = "nema"
+	pr = GameDB.validate("side", bad)
+	check(_has_problem(pr, ["side/probe", "«objective.count»"]) and _has_problem(pr, ["side/probe", "«nema»", "лічильника"]) and _has_problem(pr, ["side/probe.reward", "gold_lvl"]) and _has_problem(pr, ["side/probe", "«turn_in»"]) and _has_problem(pr, ["8601"]), "погане доручення: мета без «count», невідомий лічильник, чуже поле нагороди, «turn_in» у нікуди, номер не з проміжку: %s" % str(pr))
+	var st: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("story")))
+	st["recruit"]["objective"] = {"type": "stat", "stat": "dungeon", "count": 3, "text": "Пройди три печери"}
+	check(GameDB.validate("story", st).is_empty(), "мета «stat» годиться й крокові історії")
+	var ql: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("quest_lines")))
+	ql["dor"] = {"num": 8715, "kind": "side", "title": "Доручення", "min_level": 5}
+	ql["dor2"] = {"num": 8716, "kind": "side"}
+	pr = GameDB.validate("quest_lines", ql)
+	check(_has_problem(pr, ["quest_lines/dor2", "«title»"]) and not _has_problem(pr, ["quest_lines/dor:", "не має"]) and _has_problem(pr, ["quest_lines/dor", "нема жодного кроку"]), "лінія доручень: назва обов'язкова, рівень можна: %s" % str(pr))
+
+
+## Башта й Глибини: умова відкриття в налаштуваннях (рівень і місія) і що буде з цифрами наступного кроку.
+func _suite_unlock_rules() -> void:
+	suite("Башта й Глибини: умова відкриття")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var TS = load("res://scripts/game/tower_service.gd")
+	var DS = load("res://scripts/game/depth_service.gd")
+	var SS = load("res://scripts/game/story_service.gd")
+	var CS = load("res://scripts/game/challenge_service.gd")
+	var EB = load("res://scripts/game/events_board.gd")
+	var MP = load("res://scripts/ui/map_panel.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var RS = load("res://scripts/game/record_service.gd")
+	var w = WorldState.new()
+	var p = _new_player()
+	# ---- Сьогоднішні числа: як було ----
+	check(TS.OPEN_LEVEL == 15 and TS.OPEN_AFTER == "" and DS.OPEN_LEVEL == 0 and DS.OPEN_AFTER == "kremlin" and TS.level_of(1) == 15 and DS.level_of(1) == 22, "налаштування: Башта з 15-го без місії, Глибини після Кремля без рівня")
+	p.level = 14
+	check(not TS.unlocked(p, w) and TS.lock_text(w, 14) == "Відкриється з 15-го рівня героя." and not CS.available("tower", w, p) and EB.locked_reason("tower", w, p) == "Відкриється з 15-го рівня", "Башта до 15-го: текст як був")
+	p.level = 15
+	check(TS.unlocked(p, w) and TS.unlocked(p) and TS.lock_text(w, 15) == "" and CS.available("tower", w, p), "з 15-го Башта відкрита")
+	# Глибини: «після Кремля» — те саме, що «історію пройдено», на кожному етапі
+	var same := true
+	var cases := [{}, {"chapter": 2, "step": 3, "stage": "active", "progress": 1, "choices": {"trial": 0}}, {"chapter": 5, "step": 0, "stage": "turnin", "choices": {"trial": 1}}, {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 2}}, {"chapter": 6, "step": 0, "stage": "done"}]
+	for c in cases:
+		var wc = WorldState.new()
+		_quests_set(wc, "story", c)
+		same = same and DS.unlocked(wc) == SS.finished(wc) and DS.unlocked(wc, 1) == SS.finished(wc)
+	check(same, "Глибини відкриті рівно тоді, коли історію пройдено (як до цього кроку)")
+	var kname := "«%s» (%s, %s)" % [Q.title("kremlin"), load("res://scripts/data/story.gd").npc_name("otaman"), Data.place_name("chernihiv")]
+	check(DS.lock_text(w, 1) == "Відкриються після місії %s." % kname and EB.locked_reason("depths", w, p) == "Відкриється після місії %s" % kname, "закриті Глибини називають місію й того, хто її дає: %s" % DS.lock_text(w, 1))
+	# ---- Числа наступного кроку на копії налаштувань: Башта після Кощія з 38-го, Глибини після фіналу з 80-го ----
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("settings")))
+	var orig: Dictionary = raw.duplicate(true)
+	raw["tower"]["open_after"] = "tower"
+	raw["tower"]["open_level"] = 38
+	raw["tower"]["base_level"] = 37
+	raw["depths"]["open_after"] = "kremlin"
+	raw["depths"]["open_level"] = 80
+	raw["depths"]["base_level"] = 80
+	var put := GameDB.put_settings(raw)
+	check(put.is_empty() and TS.OPEN_AFTER == "tower" and TS.OPEN_LEVEL == 38 and DS.OPEN_LEVEL == 80, "нові числа ставляться: %s" % str(put))
+	check(TS.level_of(1) == 38 and TS.loc_for(1)["level"] == 38 and DS.level_of(1) == 80 and DS.loc_for(1)["level"] == 80 and TS.level_of(2) == 39 and DS.level_of(2) == 82, "поверх 1 — 38-й рівень, глибина 1 — 80-й")
+	var wt = WorldState.new()
+	var pt = _new_player()
+	pt.level = 40
+	var kosh := "«%s» (%s, %s)" % [Q.title("tower"), load("res://scripts/data/story.gd").npc_name("opryshok"), Data.place_name("lviv")]
+	check(not TS.unlocked(pt, wt) and TS.lock_text(wt, 40) == "Відкриється після місії %s." % kosh and not CS.available("tower", wt, pt), "40-й рівень без Кощія: закрито, текст називає місію: %s" % TS.lock_text(wt, 40))
+	_quests_set(wt, "story", {"chapter": 4, "step": 0, "stage": "offer", "choices": {"trial": 0}})
+	pt.level = 37
+	check(Q.is_done(wt, "tower") and not TS.unlocked(pt, wt) and TS.lock_text(wt, 37) == "Відкриється з 38-го рівня героя." and EB.locked_reason("tower", wt, pt) == "Відкриється з 38-го рівня", "Кощія здолано, але 37-й рівень: бракує рівня")
+	var wn = WorldState.new()
+	check(TS.lock_text(wn, 1) == "Відкриється після місії %s і з 38-го рівня героя." % kosh, "бракує й місії, й рівня: обидва")
+	pt.level = 38
+	check(TS.unlocked(pt, wt) and CS.available("tower", wt, pt) and EB.locked_reason("tower", wt, pt) == "", "після Кощія з 38-го — відкрито")
+	var panel: Control = MP.build_tower(wn, pt, 1, func(_x): pass, func(_x = null): pass)
+	check(kosh in _texts_under(panel) and not "Поверх 1" in _texts_under(panel), "панель Башти на мапі каже, чого бракує")
+	panel.free()
+	panel = MP.build_tower(wt, pt, 1, func(_x): pass, func(_x = null): pass)
+	check(not "Відкриється" in _texts_under(panel), "відкрита Башта — звичайна панель")
+	panel.free()
+	# Глибини: після фіналу й з 80-го
+	var wd = WorldState.new()
+	_quests_set(wd, "story", {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 0}})
+	check(SS.finished(wd) and not DS.unlocked(wd, 79) and DS.lock_text(wd, 79) == "Відкриються з 80-го рівня героя." and DS.unlocked(wd, 80) and not DS.unlocked(w, 80), "Глибини: історію пройдено й 80-й рівень — відкрито; без фіналу — ні")
+	pt.level = 79
+	check(not CS.available("depth", wd, pt) and EB.locked_reason("depths", wd, pt) == "Відкриється з 80-го рівня", "виклики й дошка подій беруть ту саму умову")
+	pt.level = 80
+	panel = MP.build_depths(wd, pt, 1, func(_x): pass, func(_x = null): pass)
+	check(CS.available("depth", wd, pt) and "Глибина 1" in _texts_under(panel), "з 80-го Глибини відкриті, панель показує глибину 1")
+	panel.free()
+	wd.depths = {"max": 3, "best": 2}
+	wd.tower = {"max": 5, "best": 4}
+	var rec: Dictionary = RS.hero_values(wd, pt)
+	check(int(rec["tower"]) == 4 and int(rec["depth"]) == 2, "рекорди беруть пройдений поверх і глибину, а не рівень")
+	check("після місії" in str(WS._loc_entry(TS.LOC_ID, "")["sub"]), "довідник: Башта після місії й з рівня")
+	var back := GameDB.put_settings(orig)
+	check(back.is_empty() and TS.OPEN_LEVEL == 15 and TS.OPEN_AFTER == "" and DS.OPEN_LEVEL == 0 and TS.level_of(1) == 15 and DS.level_of(1) == 22 and WS._loc_entry(TS.LOC_ID, "")["sub"] == "Башта • з 15-го рівня героя", "налаштування з файлу повернулися")
+	var bad: Dictionary = orig.duplicate(true)
+	bad["tower"]["open_after"] = "nema"
+	check(_has_problem(GameDB.validate("settings", bad), ["settings/tower.open_after", "«nema»"]), "«open_after» має бути справжнім кроком")
+	p.free()
+	pt.free()
+
+
+## Старі герої: після того, як ланцюжок переставлять, поступ (id кроків) лишається. Перевірка на копії
+## сьогоднішніх таблиць, переставленій у пам'яті: перекази вплетено в історію, розділ «Північ» іде перед Карпатами,
+## кроки мають «min_level».
+func _suite_mission_reorder() -> void:
+	suite("Місії: старі герої після перестановки")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var SS = load("res://scripts/game/story_service.gd")
+	var SgS = load("res://scripts/game/saga_service.gd")
+	var DS = load("res://scripts/game/depth_service.gd")
+	var lines := {}
+	for k in GameDB.ids("quest_lines"):
+		lines[k] = GameDB.row("quest_lines", k)
+	var steps := {}
+	var all: Dictionary = GameDB.quest_steps()
+	for k in all:
+		steps[k] = all[k].duplicate(true)
+	steps["kozhumiaka_1"]["after"] = ["recruit"]
+	steps["legend"]["after"] = ["recruit", "kozhumiaka_2"]
+	steps["kozhumiaka_1"]["story"] = true
+	steps["kozhumiaka_2"]["story"] = true
+	steps["rada"]["after"] = ["sorcerer"]
+	steps["west_call"]["after"] = ["gates"]
+	steps["kremlin"]["after"] = ["tower"]
+	var i := 0
+	for k in SS.Story.step_ids():
+		steps[k]["min_level"] = 1 + i * 2
+		i += 1
+	var gp := GameDB.quest_graph_problems(lines, {"story": steps})
+	Q.use_graph(Q.make_graph(lines, steps))
+	# Пройшов стару історію
+	var wa = WorldState.new()
+	wa.hero_level = 60
+	_quests_set(wa, "story", {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 0}})
+	check(SS.finished(wa) and DS.unlocked(wa) and Q.is_done(wa, "kremlin") and Q.stage(wa, "saga_dev") == "level" and SgS.teaser(wa) != "", "стару історію пройдено: вона пройдена й далі, Глибини відкриті, сага чекає свого рівня")
+	check(Q.stage(wa, "kozhumiaka_1") == "offer" and "kozhumiaka_1" in Q.missions(wa) and Q.mark("kozhumiaka_1") == "★" and Q.stage(wa, "dovbush_1") == "offer", "неграні перекази — відкриті місії (вплетений у ланцюжок — зі зіркою)")
+	wa.hero_level = 95
+	check(Q.stage(wa, "saga_dev") == "offer" and SgS.unlocked(wa), "сага відкривається, як і була")
+	# Посередині старої історії: здане лишається, відкрито перші незроблені, лічильник активного кроку цілий
+	var wb = WorldState.new()
+	wb.hero_level = 60
+	_quests_set(wb, "story", {"chapter": 3, "step": 2, "stage": "active", "progress": 3, "choices": {"trial": 1}})
+	check(Q.is_done(wb, "walls") and Q.is_done(wb, "sorcerer") and Q.stage(wb, "opryshky") == "active" and Q.progress(wb, "opryshky") == 3, "здане лишається, активний крок і його лічильник цілі")
+	check(Q.stage(wb, "rada") == "offer" and "rada" in Q.missions(wb) and Q.stage(wb, "kremlin") == "locked" and Q.stage(wb, "kozhumiaka_1") == "offer", "відкрито перші незроблені кроки нового ланцюжка: %s" % str(Q.missions(wb)))
+	wb.hero_level = 20
+	check(Q.stage(wb, "opryshky") == "active" and Q.stage(wb, "rada") == "level" and "rada" in Q.waiting(wb), "почате не закривається рівнем; нове з вищим рівнем чекає: %s" % str(Q.waiting(wb)))
+	var w2 = WorldState.new()
+	w2.from_dict(wb.to_dict())
+	w2.hero_level = 20
+	check(Q.progress(w2, "opryshky") == 3 and Q.waiting(w2) == Q.waiting(wb), "після збереження — те саме")
+	Q.use_graph({})
+	check(gp.is_empty(), "переставлена копія — справний граф: %s" % str(gp.slice(0, 3)))
+
+
+## Місії в грі: ратуша (позначка, відмова до рівня), вкладка ратуші, мапа (зірки, «!», бліді), доручення в ратуші й журналі.
+func _suite_mission_game() -> void:
+	suite("Місії в грі: позначки й відмова до рівня")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var JS = load("res://scripts/game/journal_service.gd")
+	var Leg = load("res://scripts/data/legends.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var w = game.world
+	var p = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "way", "levelup"]:
+		w.hints[k] = true
+	# ---- Нова гра, 1-й рівень: перекази Києва чекають рівня ----
+	game.enter_city("kyiv")
+	await _frames(3)
+	var rows: Array = game.hall_rows("kyiv")
+	var kinds := []
+	for r in rows:
+		kinds.append(str(r["kind"]))
+	var koz: Dictionary = rows[0] if not rows.is_empty() else {}
+	check(kinds == ["wait", "wait"] and str(koz["line"]) == "kozhumiaka_1" and int(koz["need"]) == 4 and str(koz["what"]) == "! Переказ «%s». %s" % [Leg.line("kozhumiaka")["title"], Q.title("kozhumiaka_1")] and str(koz["name"]) == load("res://scripts/data/story.gd").npc_name("kobzar"), "у Києві оповідачі вже тут, але чекають рівня: %s" % str(rows))
+	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var txt: String = _texts_under(game.hud.screen_root)
+	check(tc.get_tab_title(0) == "Ратуша" and "Ще зарано:\nприходь із 4-го рівня" in txt and "Ще зарано:\nприходь із 12-го рівня" in txt and "Чекає, поки підростеш" in txt and not "Поговорити" in txt, "ратуша: відмова з рівнем замість «Поговорити», вкладка без числа")
+	check(not _hall_talk(game, "legend") and game.hud.dialogue_root == null, "до відмови не підійдеш")
+	game.enter_map()
+	await _frames(2)
+	var mv = game.hud.map_view
+	check(mv.dim_targets.has("kyiv") and mv.dim_targets.has("lviv") and not mv.targets.has("kyiv") and mv.story_target == "ridne_selo" and mv.stars.has("ridne_selo"), "мапа: блідий «!» над містами оповідачів, зірка над метою історії")
+	# ---- 4-й рівень: Кожум'яка вже говорить, Вій ще ні ----
+	p.level = 4
+	game.enter_city("kyiv")
+	await _frames(3)
+	rows = game.hall_rows("kyiv")
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	check(str(rows[0]["kind"]) == "legend" and str(rows[0]["mark"]) == "!" and str(rows[0]["what"]).begins_with("! Переказ «") and str(rows[1]["kind"]) == "wait" and tc.get_tab_title(0) == "Ратуша (! 1)", "з 4-го рівня кобзар говорить, полковник ще чекає 12-го; вкладка «%s»" % tc.get_tab_title(0))
+	game.enter_map()
+	await _frames(2)
+	check(mv.targets.has("kyiv") and mv.dim_targets.has("kyiv"), "мапа: над Києвом звичайний «!» (а блідий для Вія під ним не малюється)")
+	# ---- Сюжетна місія в ратуші — зірка, і на вкладці теж ----
+	Q.complete(w, "village")
+	game.enter_city("sich")
+	await _frames(3)
+	rows = game.hall_rows("sich")
+	tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+	var story_row := {}
+	for r in rows:
+		if str(r["kind"]) == "story":
+			story_row = r
+	check(not story_row.is_empty() and str(story_row["what"]).begins_with("★ Історія") and str(tc.get_tab_title(0)).contains("(★ "), "сюжетна місія в ратуші й на вкладці — зірка: %s / %s" % [str(story_row.get("what", "")), tc.get_tab_title(0)])
+	# ---- Доручення в грі (вигадана лінія поверх таблиць бази) ----
+	var lines := {}
+	for k in GameDB.ids("quest_lines"):
+		lines[k] = GameDB.row("quest_lines", k)
+	lines["dor"] = {"kind": "side", "title": "Доручення кобзаря"}
+	var steps: Dictionary = GameDB.quest_steps().duplicate()
+	steps["probe"] = _side_step(["village"], "Двоє заражених", {"type": "stat", "stat": "kill", "count": 2, "loc": "wild_field", "text": "Поклади двох ворогів"}, {"reward": {"gold": 77}})
+	steps["probe_far"] = _side_step(["village"], "Далека справа", {"type": "visit", "loc": "kyiv", "text": "Їдь до Києва"}, {"min_level": 30})
+	Q.use_graph(Q.make_graph(lines, steps))
+	game.enter_city("sich")
+	await _frames(3)
+	rows = game.hall_rows("sich")
+	var side_row := {}
+	var far_row := {}
+	for r in rows:
+		if str(r["kind"]) == "side":
+			side_row = r
+		if str(r["kind"]) == "wait" and str(r["line"]) == "probe_far":
+			far_row = r
+	check(str(side_row.get("what", "")) == "! Доручення. Двоє заражених" and int(far_row.get("need", 0)) == 30 and str(far_row.get("what", "")) == "! Доручення. Далека справа", "доручення в ратуші — «!», далеке чекає 30-го рівня: %s" % str(rows))
+	check(_hall_talk(game, "side", "probe"), "до доручення можна підійти")
+	await _frames(2)
+	var guard := 0
+	while game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root) and guard < 6:
+		game.hud.dialogue_root.finished.emit(-1)
+		await _frames(2)
+		guard += 1
+	check(Q.stage(w, "probe") == "active", "доручення взято")
+	game._record("kill")
+	game._record("kill")
+	check(Q.stage(w, "probe") == "turnin", "мету «stat» виконано подіями гри (Game._record)")
+	var dsec := {}
+	for sec in JS.sections(w, p):
+		if str(sec["title"]) == "Доручення":
+			dsec = sec
+	check(not dsec.is_empty() and bool(dsec["rows"][0]["ready"]) and str(dsec["rows"][0]["text"]).begins_with("! Двоє заражених: Повертайся"), "журнал: розділ «Доручення», можна здати")
+	var gold0: int = p.gold
+	game.enter_city("sich")
+	await _frames(3)
+	check(_hall_talk(game, "side", "probe"), "той, хто дав, чекає з нагородою")
+	await _frames(2)
+	guard = 0
+	while game.hud.dialogue_root != null and is_instance_valid(game.hud.dialogue_root) and guard < 6:
+		game.hud.dialogue_root.finished.emit(-1)
+		await _frames(2)
+		guard += 1
+	check(Q.is_done(w, "probe") and p.gold == gold0 + 77, "доручення здано: +77 грн")
+	Q.use_graph({})
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
 ## Міграція збережень v11 → v12: старі номери кроків → id кроків рушія (через заморожений порядок).
 func _suite_quest_migration() -> void:
 	suite("Рушій завдань: старі збереження")
@@ -19957,6 +20455,8 @@ func _settings_bump(v, f: Dictionary):
 			return v + 1
 		"float":
 			return v * 0.5 + 0.001
+		"string":
+			return str(v) + "_x"
 		"list":
 			return v.map(func(x): return _settings_bump(x, f["of"]))
 		"map":

@@ -185,7 +185,9 @@ static func on_dialogue_done(world, player, kind: String, choice: int = -1, id: 
 		return []
 	if kind == "start":
 		QuestEngine.start(world, id)
-		return [{"text": "★ " + QuestEngine.step(id)["objective"]["text"], "big": true}]
+		var msgs := [{"text": "%s %s" % [QuestEngine.mark(id), QuestEngine.step(id)["objective"]["text"]], "big": true}]
+		msgs.append_array(QuestEngine.check_stat(world, player, id))  # мета «stat»: «найвищого» міг досягти й раніше
+		return msgs
 	if kind == "end" and QuestEngine.stage(world, id) == "turnin":
 		return _complete(world, player, id, choice)
 	return []
@@ -202,18 +204,18 @@ static func on_event(world, player, type: String, arg: String) -> Array:
 ## Мету «принести» поповнено (QuestEngine.on_event).
 static func fetch_msg(world, id: String) -> Dictionary:
 	var st := QuestEngine.step(id)
-	return {"text": "★ %s %d/%d" % [st["objective"]["item"], QuestEngine.progress(world, id), _count(st)], "big": false}
+	return {"text": "%s %s %d/%d" % [QuestEngine.mark(id), st["objective"]["item"], QuestEngine.progress(world, id), _count(st)], "big": false}
 
 
 ## Мету кроку виконано: повернутися до того, хто дав, або (без «turn_in») здати одразу.
 static func objective_met(world, player, id: String) -> Array:
 	var st := QuestEngine.step(id)
 	if str(st["turn_in"]) == "":
-		var msgs := [{"text": "★ Виконано: %s" % st["objective"]["text"], "big": true}]
+		var msgs := [{"text": "%s Виконано: %s" % [QuestEngine.mark(id), st["objective"]["text"]], "big": true}]
 		msgs.append_array(_complete(world, player, id, -1))
 		return msgs
 	QuestEngine.set_stage(world, id, "turnin")
-	return [{"text": "★ Мету виконано!\nПовертайся: %s" % Data.place_name(st["turn_in"]), "big": true}]
+	return [{"text": "%s Мету виконано!\nПовертайся: %s" % [QuestEngine.mark(id), Data.place_name(st["turn_in"])], "big": true}]
 
 
 # ---------- Нагороди ----------
@@ -302,18 +304,19 @@ static func target(world) -> String:
 	return QuestEngine.target(world, str(ms[0])) if not ms.is_empty() else ""
 
 
-## Рядок мети сюжетної місії id (із зіркою).
+## Рядок мети місії id з позначкою (QuestEngine.mark: «★» — сюжетна, «!» — ні).
 static func mission_line(world, id: String) -> String:
 	if QuestEngine.kind_of(id) != "story":
 		return QuestEngine.service(QuestEngine.kind_of(id)).mission_line(world, id)
 	var st := QuestEngine.step(id)
+	var m := QuestEngine.mark(id)
 	match QuestEngine.stage(world, id):
 		"offer":
-			return "★ Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(st["city"])]
+			return "%s Поговори: %s (%s)" % [m, Story.npc_name(st["giver"]), Data.place_name(st["city"])]
 		"turnin":
-			return "★ Повертайся: %s" % Data.place_name(st["turn_in"])
+			return "%s Повертайся: %s" % [m, Data.place_name(st["turn_in"])]
 	var obj: Dictionary = st["objective"]
-	var line: String = "★ " + obj["text"]
+	var line: String = "%s %s" % [m, obj["text"]]
 	if _count(st) > 1:
 		line += " %d/%d" % [QuestEngine.progress(world, id), _count(st)]
 	return line

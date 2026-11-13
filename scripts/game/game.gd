@@ -75,6 +75,7 @@ const AutoService := preload("res://scripts/game/auto_service.gd")
 const DivineService := preload("res://scripts/game/divine_service.gd")
 const Clock := preload("res://scripts/core/clock.gd")
 const LegendService := preload("res://scripts/game/legend_service.gd")
+const SideService := preload("res://scripts/game/side_service.gd")
 const UiDivine := preload("res://scripts/ui/ui_divine.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
@@ -681,14 +682,13 @@ func enter_map() -> void:
 		mv.targets[stg] = true
 	for loc in BountyService.targets(world):
 		mv.targets[loc] = true
-	for loc in LegendService.targets(world):
+	# Місії рушія: сюжетні — зірка, решта — «!» (QuestEngine.mark); бліді — місії, яким бракує рівня героя
+	var qm: Dictionary = QuestEngine.map_marks(world)
+	for loc in qm["marks"]:
 		mv.targets[loc] = true
-	# зірка — над першою сюжетною місією; інші сюжетні місії (коли їх кілька) — звичайні позначки
-	var story_ms: Array = StoryService.missions(world)
-	for i in range(1, story_ms.size()):
-		var t: String = QuestEngine.target(world, str(story_ms[i]))
-		if t != "":
-			mv.targets[t] = true
+	mv.stars = qm["stars"]
+	mv.dim_stars = qm["dim_stars"]
+	mv.dim_targets = qm["dim_marks"]
 	mv.turn_ins = {}
 	var places: Dictionary = load("res://scripts/game/journal_service.gd").turn_in_places(world)
 	for place in places:
@@ -814,6 +814,8 @@ func enter_city(id: String) -> void:
 	var waiting := hall_rows(id)
 	var names := []
 	for r in waiting:
+		if str(r["kind"]) == "wait":
+			continue  # місія, якій бракує рівня, на героя ще не чекає
 		if not str(r["name"]) in names:
 			names.append(str(r["name"]))
 		if str(r["kind"]) == "story":
@@ -856,7 +858,7 @@ func enter_location(id: String) -> void:
 			extra.merge(FarService.night_mods(Data.place(id), player))  # нічний похід підтягується до героя
 		extra.merge(FarService.mods(Data.place(id), player))  # далекі краї ростуть із рівнем героя
 		extra.merge(PerilService.combat_mods(id))  # надважка печера: міцніший бос і його лють
-		extra.merge(LegendService.mods_for(world, player, id), true)  # місце переказу міряється рівнем із героєм
+		extra.merge(QuestEngine.fight_mods(world, player, id), true)  # місце місії: бій не нижче рівня місії (перекази — рівня героя)
 		if PerilService.is_peril(id):
 			extra["peril_first"] = PerilService.cleared(world, id) == 0  # перша перемога дає річ набору напевно
 	combat.enter(id, _party_data(), PlagueService.level(world, id), extra)
@@ -1070,9 +1072,11 @@ func _path_choose(cls: String) -> void:
 # ======================= Ратуша: хто має справу до героя =======================
 
 ## Розмови в місті самі не починаються. Усі, хто має до героя справу (історія, побратими, наставник
-## після випробування, оповідачі переказів), чекають у ратуші: це перша вкладка міста (UiCity._hall).
-## Рядок: {"kind": "story"/"spec"/"hero"/"legend", "line": id лінійки переказу, "npc", "name", "role",
-## "what": чого він хоче, "ready": чи чекає з нагородою}.
+## після випробування, оповідачі переказів, доручення), чекають у ратуші: це перша вкладка міста (UiCity._hall).
+## Рядок: {"kind": "story"/"spec"/"hero"/"legend"/"side"/"wait", "line": id лінійки переказу (side — id доручення),
+## "npc", "name", "role", "what": чого він хоче (місія — з позначкою QuestEngine.mark), "ready": чи чекає з
+## нагородою, "id": місія рушія ("" — не місія), "mark": її позначка}. «wait» — місія, якій бракує лише рівня героя:
+## той, хто її дасть, уже тут, але відмовляє («need» — потрібний рівень).
 func hall_rows(city: String) -> Array:
 	var out := []
 	if player == null or world == null:
@@ -1083,7 +1087,7 @@ func hall_rows(city: String) -> Array:
 		var sd: Dictionary = sds[i]
 		var chapter: String = StoryService.chapter_title(world)
 		# «line» сюжетного рядка: "" — перша сюжетна розмова міста, далі — id кроку (hall_talk)
-		out.append(_hall_row("story", "" if i == 0 else str(sd["id"]), sd["lines"], ("Історія. %s" % chapter) if chapter != "" else "Історія", str(sd["kind"]) in ["end", "saga_end"]))
+		out.append(_hall_row("story", "" if i == 0 else str(sd["id"]), sd["lines"], ("Історія. %s" % chapter) if chapter != "" else "Історія", str(sd["kind"]) in ["end", "saga_end"], str(sd["id"])))
 	var pd := SpecService.city_dialogue(world, city)
 	if not pd.is_empty():
 		out.append(_hall_row("spec", "", pd["lines"], "Посвята: випробування пройдено", true))
@@ -1093,8 +1097,31 @@ func hall_rows(city: String) -> Array:
 		out.append(_hall_row("hero", "", hd["lines"], str(wants.get(str(hd["kind"]), "Хоче поговорити")), str(hd["kind"]) == "end"))
 	for ld in LegendService.city_dialogues(world, city):
 		var line: String = str(ld["line"])
-		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.line(line)["title"], QuestEngine.step(str(ld["id"]))["title"]], str(ld["kind"]) == "legend_end"))
+		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.line(line)["title"], QuestEngine.step(str(ld["id"]))["title"]], str(ld["kind"]) == "legend_end", str(ld["id"])))
+	for sd in SideService.city_dialogues(world, city):
+		out.append(_hall_row("side", str(sd["id"]), sd["lines"], "Доручення. %s" % QuestEngine.title(str(sd["id"])), str(sd["kind"]) == "side_end", str(sd["id"])))
+	# Місії, яким бракує лише рівня героя: той, хто їх дасть, відмовляє й каже, з якого рівня приходити
+	for id in QuestEngine.waiting(world):
+		var R: Dictionary = QuestEngine.step(id)
+		if str(R.get("city", "")) != city:
+			continue
+		var row := _hall_row("wait", id, [[str(R["giver"]), ""]], _mission_what(id), false, id)
+		row["need"] = QuestEngine.level_needed(id)
+		out.append(row)
 	return out
+
+
+## Чого хоче той, хто дає місію id (рядок ратуші без позначки): «Історія. Розділ…», «Переказ «…». …», «Доручення. …».
+func _mission_what(id: String) -> String:
+	match QuestEngine.kind_of(id):
+		"story":
+			var ci: int = StoryService.Story.chapter_index(str(QuestEngine.step(id).get("chapter", "")))
+			return ("Історія. %s" % StoryService.Story.chapter_title(ci)) if ci >= 0 else "Історія"
+		"saga":
+			return "Історія. %s. %s" % [StoryService.SagaService.Saga.title(), QuestEngine.title(id)]
+		"legend":
+			return "Переказ «%s». %s" % [QuestEngine.line_title(QuestEngine.line_of(id)), QuestEngine.title(id)]
+	return "Доручення. %s" % QuestEngine.title(id)
 
 
 ## Хто веде розмову: перший, хто говорить, крім самого героя.
@@ -1105,10 +1132,26 @@ func _hall_npc(lines: Array) -> String:
 	return ""
 
 
-func _hall_row(kind: String, line: String, lines: Array, what: String, ready: bool) -> Dictionary:
+## id — місія рушія, з якою прийшов цей рядок ("" — не місія): її позначка («★» чи «!») стає перед «what».
+func _hall_row(kind: String, line: String, lines: Array, what: String, ready: bool, id: String = "") -> Dictionary:
 	var npc := _hall_npc(lines)
 	var info: Dictionary = StoryService.Story.npc(npc, {"name": "Гонець", "role": ""})
-	return {"kind": kind, "line": line, "npc": npc, "name": str(info["name"]), "role": str(info.get("role", "")), "what": what, "ready": ready}
+	var mark: String = QuestEngine.mark(id) if id != "" else ""
+	return {"kind": kind, "line": line, "npc": npc, "name": str(info["name"]), "role": str(info.get("role", "")),
+		"what": ("%s %s" % [mark, what]) if mark != "" else what, "ready": ready, "id": id, "mark": mark}
+
+
+## Позначка на вкладці ратуші: «★», коли тут чекає сюжетна місія, «!» — інша місія; "" — місій нема.
+## Рядки «wait» (місії бракує рівня) не рахуються: справи ще нема.
+static func hall_badge(rows: Array) -> String:
+	var out := ""
+	for r in rows:
+		if str(r["kind"]) == "wait" or str(r.get("mark", "")) == "":
+			continue
+		if str(r["mark"]) == QuestEngine.STAR:
+			return QuestEngine.STAR
+		out = str(r["mark"])
+	return out
 
 
 ## Підійти до того, хто чекає в ратуші (кнопка «Поговорити»).
@@ -1124,6 +1167,8 @@ func hall_talk(kind: String, line: String = "") -> void:
 			_hero_dialogue(city_id)
 		"legend":
 			_legend_dialogue(city_id, line)
+		"side":
+			_side_dialogue(city_id, line)
 
 
 ## Після розмови: якщо той самий співрозмовник має що сказати далі (подякував і одразу дає нову справу),
@@ -1210,6 +1255,30 @@ func class_warn_cancel() -> void:
 	hud.close_overlay()
 	if state == State.CITY:
 		_build_city()
+
+
+## Доручення: той, хто дає, у ратуші починає його або дякує за виконане (див. SideService). id — яке доручення.
+func _side_dialogue(city: String, id: String) -> void:
+	world.hero_level = player.level
+	var d: Dictionary = SideService.city_dialogue(world, city, id)
+	if d.is_empty():
+		return
+	var npc := _hall_npc(d["lines"])
+	var dlg = DialogueScript.new()
+	dlg.setup(StoryService.lines(world, d["lines"]), [])
+	dlg.finished.connect(func(_c):
+		hud.close_dialogue()
+		var texts := []
+		for m in SideService.on_dialogue_done(world, player, str(d["kind"]), str(d["id"])):
+			texts.append(str(m["text"]))
+		if not texts.is_empty():
+			hud.show_banner("\n".join(texts.slice(0, 3)), UI.GOLD)
+			Audio.play("quest", 0.0)
+		save_game()
+		if state == State.CITY and city_id == city:
+			_build_city()
+			_hall_continue("side", npc))  # дав нове доручення одразу — розмова триває
+	hud.show_dialogue(dlg)
 
 
 ## Перекази: оповідач у ратуші починає крок лінійки або дякує за виконаний (див. LegendService).
@@ -1851,8 +1920,8 @@ func _show_travel_event(ev: Dictionary, on_done: Callable) -> void:
 # ======================= Глибини зарази =======================
 
 func start_depth(depth: int) -> void:
-	if not DepthService.unlocked(world):
-		hud.show_banner("Глибини відкриються після перемоги над Путіноїдом", UI.BAD)
+	if not DepthService.unlocked(world, player.level):
+		hud.show_banner("Глибини " + DepthService.lock_text(world, player.level, "відкриються").trim_suffix("."), UI.BAD)
 		return
 	depth = clampi(depth, 1, int(DepthService.state(world)["max"]))
 	combat.custom_loc = DepthService.loc_for(depth)
@@ -1893,8 +1962,8 @@ func _on_boss_hunt_won(kind: String) -> void:
 # ======================= Башта Кощія =======================
 
 func start_tower(floor_: int) -> void:
-	if not TowerService.unlocked(player):
-		hud.show_banner("Башта відкриється з %d-го рівня героя" % TowerService.OPEN_LEVEL, UI.BAD)
+	if not TowerService.unlocked(player, world):
+		hud.show_banner("Башта " + TowerService.lock_text(world, player.level, "відкриється").trim_suffix("."), UI.BAD)
 		return
 	floor_ = clampi(floor_, 1, int(TowerService.state(world)["max"]))
 	tower_sel = floor_

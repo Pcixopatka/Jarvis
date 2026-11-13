@@ -12,9 +12,10 @@ const SpecService := preload("res://scripts/game/spec_service.gd")
 const DONE_TEXT := "Історію пройдено: Путіноїда здолано, зараза відступила. Далі чекають Глибини зарази під Кремлем, Башта Кощія, далекі краї, Московія, розшук і події."
 
 
-## Рядок завдання без позначки на початку («★ », «✦ », «◆ »): у журналі їх замінює заголовок розділу.
+## Рядок завдання без позначки на початку («★ », «!», «✦ », «◆ »): у журналі їх замінює заголовок розділу,
+## а місіям рушія — їхня позначка (marked).
 static func _clean(line: String) -> String:
-	for mark in ["★ ", "✦ ", "◆ "]:
+	for mark in ["★ ", "! ", "✦ ", "◆ "]:
 		if line.begins_with(mark):
 			return line.substr(mark.length())
 	return line
@@ -23,6 +24,30 @@ static func _clean(line: String) -> String:
 ## place — id місця на мапі, куди зараз іти із цим завданням: мета, а для виконаного — місто, де здати ("" — нема).
 static func _row(text: String, where: String = "", from: String = "", reward: String = "", ready: bool = false, ready_text: String = "", place: String = "") -> Dictionary:
 	return {"text": text, "where": where, "from": from, "reward": reward, "ready": ready, "ready_text": ready_text, "place": place}
+
+
+## Рядок місії рушія з її позначкою (QuestEngine.mark: «★» — сюжетна, «!» — решта).
+static func marked(id: String, text: String) -> String:
+	return "%s %s" % [StoryService.QuestEngine.mark(id), _clean(text)]
+
+
+## Що сказати про місію, якій бракує лише рівня: з ким і де говорити (крок без розмови — його мета).
+static func waiting_text(id: String) -> String:
+	var Q = StoryService.QuestEngine
+	var R: Dictionary = Q.step(id)
+	if str(R.get("city", "")) == "":
+		return str(R.get("objective", {}).get("text", ""))
+	return "Поговори: %s (%s)" % [StoryService.Story.npc_name(str(R["giver"])), Data.place_name(str(R["city"]))]
+
+
+## Рядок журналу для місії, якій бракує рівня: «★ Поговори: … — потрібен рівень 90». head — назва перед текстом.
+static func _wait_row(id: String, head: String = "") -> Dictionary:
+	var Q = StoryService.QuestEngine
+	var at: String = Q.giver_place(id)
+	var text := "%s%s — потрібен рівень %d" % [("%s: " % head) if head != "" else "", waiting_text(id), Q.level_needed(id)]
+	var r := _row(marked(id, text), Data.place_name(at) if at != "" else "", "", "", false, "", at)
+	r["wait"] = Q.level_needed(id)
+	return r
 
 
 static func sections(world, player) -> Array:
@@ -48,10 +73,23 @@ static func sections(world, player) -> Array:
 	for id in StoryService.missions(world):
 		var target: String = StoryService.QuestEngine.target(world, id)
 		var back: bool = StoryService.QuestEngine.stage(world, id) == "turnin"
-		story_rows.append(_row(_clean(StoryService.mission_line(world, id)), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
+		story_rows.append(_row(marked(id, StoryService.mission_line(world, id)), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
+	# Наступна сюжетна місія, якій бракує лише рівня: видно, що далі й чому ще закрито (вона замінює примітку саги)
+	var waits := {"story": [], "legend": [], "side": []}
+	for id in StoryService.QuestEngine.waiting(world):
+		var k: String = StoryService.QuestEngine.kind_of(id)
+		k = "story" if k in StoryService.KINDS else k
+		if waits.has(k):
+			waits[k].append(id)
+	for id in waits["story"]:
+		story_rows.append(_wait_row(id))
 	var ch_title: String = str(StoryService.chapter_title(world))
-	out.append({"title": "Історія" + ("" if ch_title == "" else ". " + ch_title), "rows": story_rows, "chapters": chapters,
-		"empty": (DONE_TEXT if finished and (SagaS.finished(world) or not SagaS.unlocked(world)) else "") + ((" " + SagaS.teaser(world)) if finished and SagaS.teaser(world) != "" else "")})
+	var teaser: String = SagaS.teaser(world) if waits["story"].is_empty() else ""
+	var story_sec := {"title": "Історія" + ("" if ch_title == "" else ". " + ch_title), "rows": story_rows, "chapters": chapters,
+		"empty": (DONE_TEXT if finished and (SagaS.finished(world) or not SagaS.unlocked(world)) else "") + ((" " + teaser) if finished and teaser != "" else "")}
+	if finished and not story_rows.is_empty() and story_rows.all(func(r): return r.has("wait")):
+		story_sec["note"] = DONE_TEXT  # лише місії, що чекають рівня: підсумок історії лишається на видноті
+	out.append(story_sec)
 	# Побратими й посвята в спеціалізацію
 	var rows := []
 	for line in HeroService.objective_lines(world):
@@ -64,12 +102,28 @@ static func sections(world, player) -> Array:
 	# Перекази: квестові лінійки за легендами земель
 	var LegendS = load("res://scripts/game/legend_service.gd")  # рядки — відкриті місії переказів рушія
 	rows = []
-	for lr in LegendS.rows(world):
+	var lms: Array = LegendS.missions(world)
+	var lrs: Array = LegendS.rows(world)
+	for i in lrs.size():
+		var lr: Dictionary = lrs[i]
 		var lplace: String = str(lr["target"])
-		rows.append(_row("%s: %s" % [lr["title"], lr["text"]], Data.place_name(lplace) if lplace != "" else "", "", str(lr["reward"]),
+		rows.append(_row(marked(str(lms[i]), "%s: %s" % [lr["title"], lr["text"]]), Data.place_name(lplace) if lplace != "" else "", "", str(lr["reward"]),
 			bool(lr["back"]), "Оповідач чекає з нагородою", lplace))
+	for id in waits["legend"]:
+		rows.append(_wait_row(id, "%s. %s" % [StoryService.QuestEngine.line_title(StoryService.QuestEngine.line_of(id)), StoryService.QuestEngine.title(id)]))
 	if not rows.is_empty():
 		out.append({"title": "Перекази (%d із %d розказано)" % [LegendS.done_count(world), LegendS.Legends.order().size()], "rows": rows, "empty": ""})
+	# Доручення: місії поза історією й переказами (SideService)
+	var SideS = load("res://scripts/game/side_service.gd")
+	rows = []
+	for sr in SideS.rows(world):
+		var splace: String = str(sr["target"])
+		rows.append(_row(marked(str(sr["id"]), "%s: %s" % [sr["title"], _clean(str(sr["text"]))]), Data.place_name(splace) if splace != "" else "", "", str(sr["reward"]),
+			bool(sr["back"]), "Повертайся по нагороду", splace))
+	for id in waits["side"]:
+		rows.append(_wait_row(id, StoryService.QuestEngine.title(id)))
+	if not rows.is_empty():
+		out.append({"title": "Доручення", "rows": rows, "empty": ""})
 	# Завдання міст
 	rows = []
 	for q in world.quests:
@@ -136,5 +190,6 @@ static func ready_count(world, player) -> int:
 static func total(world, player) -> int:
 	var n := 0
 	for sec in sections(world, player):
-		n += sec["rows"].size()
+		for r in sec["rows"]:
+			n += 0 if r.has("wait") else 1  # місія, що чекає рівня, — ще не справа
 	return n
