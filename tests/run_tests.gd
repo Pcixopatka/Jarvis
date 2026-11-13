@@ -15986,6 +15986,18 @@ func _suite_hero_names() -> void:
 	btns["Готово"].pressed.emit()
 	await _frames(2)
 	check(game.naming == "new" and game.player == null and game.name_why.text == NS.BAD_TEXT, "лайка: причина нейтральна")
+	# Полю не можна власного max_length: Android рахує межу клавіатури, коли вона відкривається, і віднімає
+	# текст, що вже в полі (жереб), хоч гравець пише поверх. Гравцеві лишалось 16 мінус довжина жеребу.
+	# Довжину стереже лише перевірка імені: причина під полем і відмова «Готово».
+	check(game.name_edit.max_length == 0, "нова гра: поле імені без власної межі довжини (Android)")
+	var long17 := "Тарас Вернигорчук"
+	var long16 := "Тарас Вернигорич"
+	game.name_edit.text = long17
+	game.name_edit.text_changed.emit(long17)
+	check(long17.length() == 17 and game.name_edit.text == long17 and "Задовге" in game.name_why.text, "17 знаків: поле їх тримає, під ним причина «Задовге»")
+	btns["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "new" and game.player == null and "Задовге" in game.name_why.text, "«Готово» 17 знаків не приймає")
 	# поле й причина у верхній половині екрана, кнопки поруч
 	var vh: float = game.get_viewport().get_visible_rect().size.y
 	var er: Rect2 = game.name_edit.get_global_rect()
@@ -16046,6 +16058,7 @@ func _suite_hero_names() -> void:
 	await _frames(2)
 	btns = _overlay_buttons(game)
 	check(game.naming == "first" and game.hud.overlay.visible and btns.has("Готово") and not btns.has("Назад") and NS.check(game.name_edit.text) == "", "старий герой без імені: після входу екран імені з жеребом, без «Назад»")
+	check(game.name_edit.max_length == 0, "перше ім'я: поле без власної межі довжини (Android)")
 	check(game.hud.overlay.color.a == 1.0, "екран імені: тло суцільне, нічого не просвічує (%.2f)" % game.hud.overlay.color.a)
 	var banners_entry: int = game.hud.banner_count
 	game.go_back(true)
@@ -16102,6 +16115,30 @@ func _suite_hero_names() -> void:
 	_overlay_buttons(game)["Готово"].pressed.emit()
 	await _frames(2)
 	check(game.naming == "rename" and "служби" in game.name_why.text, "ім'я служби гри не приймається")
+	check(game.name_edit.max_length == 0, "перейменування: поле без власної межі довжини (Android)")
+	game.name_edit.text = long17
+	game.name_edit.text_changed.emit(long17)
+	_overlay_buttons(game)["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "rename" and "Задовге" in game.name_why.text and str(SaveSystem.load_data(TEST_SAVE)["player"]["nick"]) == offered, "перейменування: 17 знаків не приймається, у файлі старе ім'я")
+	# Гравець торкається поля з жеребом (усе виділяється) і пише своє поверх: усі 16 знаків влазять
+	game.name_edit.text = offered
+	game.name_edit.release_focus()
+	game.name_edit.grab_focus()
+	await _frames(1)
+	var sel_all: bool = game.name_edit.has_selection() and game.name_edit.get_selected_text() == offered
+	for ch in long16:
+		var ev := InputEventKey.new()
+		ev.pressed = true
+		ev.unicode = ch.unicode_at(0)
+		get_root().push_input(ev)
+	await _frames(1)
+	check(sel_all and game.name_edit.text == long16 and NS.check(game.name_edit.text) == "", "дотик виділяє жереб, набране поверх стає ім'ям повністю (%s)" % game.name_edit.text)
+	_overlay_buttons(game)["Готово"].pressed.emit()
+	await _frames(2)
+	check(game.naming == "" and str(SaveSystem.load_data(TEST_SAVE)["player"]["nick"]) == long16 and game.player.nick == long16, "16 знаків приймається: ім'я у файлі й у героя")
+	game._ask_rename(1)
+	await _frames(2)
 	game.name_edit.text = "Вернигора"
 	_overlay_buttons(game)["Готово"].pressed.emit()
 	await _frames(2)

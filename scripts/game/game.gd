@@ -3210,7 +3210,9 @@ func _name_screen(kind: String, start: String, back: Callable, done: Callable, s
 	hud.add_title("Нове ім'я героя" if kind == "rename" else "Як тебе звати?", 44)
 	hud.add_title(sub, 20, UI.TEXT)
 	name_edit = LineEdit.new()
-	name_edit.max_length = NameService.MAX_LEN
+	# max_length полю не ставимо: Android рахує межу клавіатури один раз, коли вона відкривається,
+	# віднімаючи текст, що вже стоїть у полі (жереб), хоч гравець пише поверх нього. Тоді «16» стає «5».
+	# Довжину стереже NameService.check: причина червоним під полем, а «Готово» задовге не приймає.
 	name_edit.text = start
 	name_edit.custom_minimum_size = Vector2(520, 68)
 	name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
