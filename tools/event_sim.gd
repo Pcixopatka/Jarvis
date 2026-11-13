@@ -48,7 +48,8 @@ func _run() -> void:
 				seed(7717 * s + lvl * 13 + hash(kind))
 				_build_hero(lvl)
 				var p = game.player
-				game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+				game.world.missions = {}
+				game.QuestEngine.place_at(game.world, "rada", "active")  # розділ IV: «Похід на Північ»
 				for k in ["escort", "defense", "combat", "block", "elite", "ambush", "event_village_raid", "event_sich_siege", "boss", "item"]:
 					game.world.hints[k] = true
 				var L: Dictionary = _loc_for(kind, p)

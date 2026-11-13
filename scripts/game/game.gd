@@ -13,6 +13,7 @@ const WorldState := preload("res://scripts/game/world_state.gd")
 const CityService := preload("res://scripts/game/city_service.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
+const QuestEngine := preload("res://scripts/game/quest_engine.gd")
 const HeroService := preload("res://scripts/game/hero_service.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const TravelService := preload("res://scripts/game/travel_service.gd")
@@ -663,6 +664,12 @@ func enter_map() -> void:
 		mv.targets[loc] = true
 	for loc in LegendService.targets(world):
 		mv.targets[loc] = true
+	# зірка — над першою сюжетною місією; інші сюжетні місії (коли їх кілька) — звичайні позначки
+	var story_ms: Array = StoryService.missions(world)
+	for i in range(1, story_ms.size()):
+		var t: String = QuestEngine.target(world, str(story_ms[i]))
+		if t != "":
+			mv.targets[t] = true
 	mv.turn_ins = {}
 	var places: Dictionary = load("res://scripts/game/journal_service.gd").turn_in_places(world)
 	for place in places:
@@ -995,7 +1002,7 @@ func _on_enemy_killed(e: Node2D) -> void:
 
 ## Передає подію сюжету й показує гравцеві, що змінилося.
 func _story_event(type: String, arg: String) -> void:
-	for m in StoryService.on_event(world, player, type, arg) + LegendService.on_event(world, player, type, arg):
+	for m in QuestEngine.on_event(world, player, type, arg):  # усі лінії: спершу сюжетні місії, далі перекази
 		if m["big"]:
 			hud.show_banner(m["text"], UI.GOLD)
 			Audio.play("quest", 0.0)
@@ -1052,10 +1059,12 @@ func hall_rows(city: String) -> Array:
 	if player == null or world == null:
 		return out
 	world.hero_level = player.level
-	var sd := StoryService.city_dialogue(world, city)
-	if not sd.is_empty():
+	var sds: Array = StoryService.city_dialogues(world, city)
+	for i in sds.size():
+		var sd: Dictionary = sds[i]
 		var chapter: String = StoryService.chapter_title(world)
-		out.append(_hall_row("story", "", sd["lines"], ("Історія. %s" % chapter) if chapter != "" else "Історія", str(sd["kind"]) in ["end", "saga_end"]))
+		# «line» сюжетного рядка: "" — перша сюжетна розмова міста, далі — id кроку (hall_talk)
+		out.append(_hall_row("story", "" if i == 0 else str(sd["id"]), sd["lines"], ("Історія. %s" % chapter) if chapter != "" else "Історія", str(sd["kind"]) in ["end", "saga_end"]))
 	var pd := SpecService.city_dialogue(world, city)
 	if not pd.is_empty():
 		out.append(_hall_row("spec", "", pd["lines"], "Посвята: випробування пройдено", true))
@@ -1065,7 +1074,7 @@ func hall_rows(city: String) -> Array:
 		out.append(_hall_row("hero", "", hd["lines"], str(wants.get(str(hd["kind"]), "Хоче поговорити")), str(hd["kind"]) == "end"))
 	for ld in LegendService.city_dialogues(world, city):
 		var line: String = str(ld["line"])
-		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.line(line)["title"], LegendService.current(world, line)["title"]], str(ld["kind"]) == "legend_end"))
+		out.append(_hall_row("legend", line, ld["lines"], "Переказ «%s». %s" % [LegendService.Legends.line(line)["title"], QuestEngine.step(str(ld["id"]))["title"]], str(ld["kind"]) == "legend_end"))
 	return out
 
 
@@ -1089,7 +1098,7 @@ func hall_talk(kind: String, line: String = "") -> void:
 		return
 	match kind:
 		"story":
-			_story_dialogue(city_id)
+			_story_dialogue(city_id, line)
 		"spec":
 			_spec_dialogue(city_id)
 		"hero":
@@ -1144,7 +1153,7 @@ func _legend_dialogue(city: String, line: String = "") -> void:
 	dlg.finished.connect(func(_c):
 		hud.close_dialogue()
 		var texts := []
-		for m in LegendService.on_dialogue_done(world, player, str(d["kind"]), str(d["line"])):
+		for m in LegendService.on_dialogue_done(world, player, str(d["kind"]), str(d["line"]), str(d["id"])):
 			texts.append(str(m["text"]))
 		if str(d["kind"]) == "legend_end":
 			_record("legend_step")
@@ -1233,8 +1242,9 @@ func _hero_dialogue(city: String) -> void:
 
 
 ## Сюжетна розмова в ратуші. Якщо той самий співрозмовник одразу має наступну справу, розмова триває.
-func _story_dialogue(city: String) -> void:
-	var d := StoryService.city_dialogue(world, city)
+## id — крок розмови ("" — перша сюжетна розмова міста).
+func _story_dialogue(city: String, id: String = "") -> void:
+	var d := StoryService.city_dialogue(world, city, id)
 	if d.is_empty():
 		return
 	var npc := _hall_npc(d["lines"])
@@ -1242,7 +1252,7 @@ func _story_dialogue(city: String) -> void:
 	dlg.setup(d["lines"], d["choices"])
 	dlg.finished.connect(func(choice: int):
 		hud.close_dialogue()
-		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice)
+		var msgs := StoryService.on_dialogue_done(world, player, d["kind"], choice, str(d["id"]))
 		if str(d["kind"]) == "saga_end":
 			_record("saga", StoryService.SagaService.done_count(world))
 		CampService.apply_effects(world, player)  # вибір міг дати постійний наслідок

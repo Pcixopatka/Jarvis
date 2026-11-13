@@ -40,14 +40,9 @@ static func power(world, id: String) -> float:
 	return float(h["bonded"]) if st(world, id)["quest"] == "done" else float(h["mult"])
 
 
+## Чи крок історії вже пройдено (здано або пропущено): після нього побратим чекає на зустріч.
 static func _step_done(world, step_id: String) -> bool:
-	var s := StoryService.state(world)
-	if s["stage"] == "done":
-		return true
-	var at: Vector2i = StoryService.Story.position(step_id)
-	if at.x < 0:
-		return false
-	return at.x < int(s["chapter"]) or (at.x == int(s["chapter"]) and at.y < int(s["step"]))
+	return StoryService.QuestEngine.is_finished(world, step_id)
 
 
 ## Хто чекає на зустріч у цьому місті.

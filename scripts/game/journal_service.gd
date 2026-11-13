@@ -30,26 +30,25 @@ static func sections(world, player) -> Array:
 	# Історія: уся гілка розділами. Розділ є завжди, і коли історію вже пройдено:
 	# "chapters" — [{"title", "state"}], state: done (пройдено), now (нинішній), ahead (попереду).
 	var Story = StoryService.Story
-	var ss: Dictionary = StoryService.state(world)
-	var finished: bool = str(ss["stage"]) == "done"
+	var finished: bool = StoryService.finished(world)
+	var at: int = StoryService.chapter_index(world)
 	var chapters := []
 	for i in Story.chapter_count():
 		chapters.append({"title": Story.chapter_title(i),
-			"state": "done" if finished or i < int(ss["chapter"]) else ("now" if i == int(ss["chapter"]) else "ahead")})
+			"state": "done" if finished or i < at else ("now" if i == at else "ahead")})
 	# Після Кремля історія триває: кроки «Попелу за вітром» ідуть у тому самому списку розділів
 	var SagaS = StoryService.SagaService
 	if finished:
-		var saga_done: int = SagaS.done_count(world)
-		var saga_steps: Array = SagaS.Saga.steps()
-		for i in saga_steps.size():
-			chapters.append({"title": "%s. %s" % [SagaS.Saga.title(), saga_steps[i]["title"]],
-				"state": "done" if i < saga_done else ("now" if i == saga_done and SagaS.unlocked(world) else "ahead")})
-	var story: String = StoryService.objective_line(world)
+		for st in SagaS.Saga.steps():
+			var sid := str(st["id"])
+			chapters.append({"title": "%s. %s" % [SagaS.Saga.title(), st["title"]],
+				"state": "done" if StoryService.QuestEngine.is_finished(world, sid) else ("now" if StoryService.QuestEngine.is_open(world, sid) else "ahead")})
+	# Рядок на кожну відкриту сюжетну місію рушія (сьогодні вона одна: нинішній крок історії чи саги)
 	var story_rows := []
-	if story != "":
-		var target: String = StoryService.target(world)
-		var back: bool = str(ss["stage"]) == "turnin" or (finished and str(SagaS.state(world)["stage"]) == "turnin")
-		story_rows.append(_row(_clean(story), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
+	for id in StoryService.missions(world):
+		var target: String = StoryService.QuestEngine.target(world, id)
+		var back: bool = StoryService.QuestEngine.stage(world, id) == "turnin"
+		story_rows.append(_row(_clean(StoryService.mission_line(world, id)), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
 	var ch_title: String = str(StoryService.chapter_title(world))
 	out.append({"title": "Історія" + ("" if ch_title == "" else ". " + ch_title), "rows": story_rows, "chapters": chapters,
 		"empty": (DONE_TEXT if finished and (SagaS.finished(world) or not SagaS.unlocked(world)) else "") + ((" " + SagaS.teaser(world)) if finished and SagaS.teaser(world) != "" else "")})
@@ -63,7 +62,7 @@ static func sections(world, player) -> Array:
 	if not rows.is_empty():
 		out.append({"title": "Побратими й посвята", "rows": rows, "empty": ""})
 	# Перекази: квестові лінійки за легендами земель
-	var LegendS = load("res://scripts/game/legend_service.gd")
+	var LegendS = load("res://scripts/game/legend_service.gd")  # рядки — відкриті місії переказів рушія
 	rows = []
 	for lr in LegendS.rows(world):
 		var lplace: String = str(lr["target"])

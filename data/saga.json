@@ -2,6 +2,7 @@
 	"saga_dev": {
 		"num": 8801,
 		"line": "saga",
+		"after": ["kremlin"],
 		"title": "Велет з ущелини",
 		"giver": "kobzar",
 		"city": "sich",
@@ -26,7 +27,7 @@
 	"saga_khala": {
 		"num": 8802,
 		"line": "saga",
-		"after": "saga_dev",
+		"after": ["saga_dev"],
 		"title": "Буря над Дунаєм",
 		"giver": "hanna",
 		"city": "kamianets",
@@ -49,7 +50,7 @@
 	"saga_velnias": {
 		"num": 8803,
 		"line": "saga",
-		"after": "saga_khala",
+		"after": ["saga_khala"],
 		"title": "Вогні на городищі",
 		"giver": "litopysets",
 		"city": "chernihiv",
@@ -73,7 +74,7 @@
 	"saga_baba": {
 		"num": 8804,
 		"line": "saga",
-		"after": "saga_velnias",
+		"after": ["saga_velnias"],
 		"title": "Золото, що ожило",
 		"giver": "velemyr",
 		"city": "kapyshche",
@@ -97,7 +98,7 @@
 	"saga_chornoboh": {
 		"num": 8805,
 		"line": "saga",
-		"after": "saga_baba",
+		"after": ["saga_baba"],
 		"title": "Де кінчається світ",
 		"giver": "otaman",
 		"city": "sich",

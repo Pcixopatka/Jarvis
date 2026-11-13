@@ -1,11 +1,10 @@
 extends RefCounted
-## Історія: зручні виклики над таблицями data/story.json (кроки в порядку історії), data/story_chapters.json
-## (розділи) і data/speakers.json (мовці розмов). Самих даних тут нема: поля кроку описано в docs/data.md
-## і в GameDB.STORY_SCHEMA, правила — у StoryService.
+## Історія: зручні виклики над таблицями data/story.json (кроки), data/story_chapters.json (розділи) і
+## data/speakers.json (мовці розмов). Самих даних тут нема: поля кроку описано в docs/data.md і в
+## GameDB.STORY_SCHEMA, що відкрито — вирішує QuestEngine за «after», розмови й нагороди — StoryService.
 ##
-## Збереження тримає номер розділу (місце в story_chapters.json) і номер кроку в розділі (місце серед
-## кроків цього розділу в story.json), тож порядок записів у файлах — це порядок історії.
-## Покажчики (кроки розділу, місце кроку) складаються раз і лише для читання.
+## Порядок записів у файлах — лише порядок показу (розділи в журналі, «Літопис»); збереження тримає id
+## кроків. Покажчики (кроки розділу, місце кроку) складаються раз і лише для читання.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
@@ -65,11 +64,16 @@ static func chapter(i: int) -> Dictionary:
 	return GameDB.row("story_chapters", c[i]) if i >= 0 and i < c.size() else {}
 
 
+## Номер розділу за id (-1 — нема такого).
+static func chapter_index(id: String) -> int:
+	return GameDB.ids("story_chapters").find(id)
+
+
 static func chapter_title(i: int) -> String:
 	return str(chapter(i)["title"])
 
 
-## Кроки розділу в порядку історії (лише для читання).
+## Кроки розділу в порядку показу (лише для читання).
 static func steps(i: int) -> Array:
 	_index()
 	return _steps[i]
@@ -80,7 +84,7 @@ static func step(id: String) -> Dictionary:
 	return GameDB.row("story", id)
 
 
-## Усі кроки в порядку історії.
+## Усі кроки в порядку показу.
 static func step_ids() -> Array:
 	return GameDB.ids("story")
 
@@ -91,6 +95,6 @@ static func position(id: String) -> Vector2i:
 	return _pos.get(id, Vector2i(-1, -1))
 
 
-## Під яким ключем зберігається вибір кроку (story.choices).
+## Під яким ключем зберігається вибір кроку (world.missions.choices, див. QuestEngine).
 static func choice_key(st: Dictionary) -> String:
 	return str(st.get("choice_key", st["id"]))

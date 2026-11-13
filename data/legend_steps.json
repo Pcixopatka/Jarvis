@@ -28,7 +28,7 @@
 	"kozhumiaka_2": {
 		"num": 9252,
 		"line": "kozhumiaka",
-		"after": "kozhumiaka_1",
+		"after": ["kozhumiaka_1"],
 		"title": "Борозна до моря",
 		"giver": "kobzar",
 		"city": "kyiv",
@@ -70,7 +70,7 @@
 	"dovbush_2": {
 		"num": 9254,
 		"line": "dovbush",
-		"after": "dovbush_1",
+		"after": ["dovbush_1"],
 		"title": "Сторожа скарбу",
 		"giver": "yakym",
 		"city": "molfar_hut",
@@ -93,7 +93,7 @@
 	"dovbush_3": {
 		"num": 9255,
 		"line": "dovbush",
-		"after": "dovbush_2",
+		"after": ["dovbush_2"],
 		"title": "Печера, що не відпускає",
 		"giver": "yakym",
 		"city": "molfar_hut",
@@ -138,7 +138,7 @@
 	"solovei_2": {
 		"num": 9257,
 		"line": "solovei",
-		"after": "solovei_1",
+		"after": ["solovei_1"],
 		"title": "Свист, від якого гнуться дуби",
 		"giver": "les",
 		"city": "baturyn",
@@ -160,7 +160,7 @@
 	"solovei_3": {
 		"num": 9258,
 		"line": "solovei",
-		"after": "solovei_2",
+		"after": ["solovei_2"],
 		"title": "Хатка на курячих ніжках",
 		"giver": "les",
 		"city": "baturyn",
@@ -199,7 +199,7 @@
 	"vii_2": {
 		"num": 9260,
 		"line": "vii",
-		"after": "vii_1",
+		"after": ["vii_1"],
 		"title": "Друга ніч: крейдяне коло",
 		"giver": "polkovnyk",
 		"city": "kyiv",
@@ -223,7 +223,7 @@
 	"vii_3": {
 		"num": 9261,
 		"line": "vii",
-		"after": "vii_2",
+		"after": ["vii_2"],
 		"title": "Третя ніч: «Підніміть мені повіки»",
 		"giver": "polkovnyk",
 		"city": "kyiv",
@@ -266,7 +266,7 @@
 	"bila_pani_2": {
 		"num": 9263,
 		"line": "bila_pani",
-		"after": "bila_pani_1",
+		"after": ["bila_pani_1"],
 		"title": "Замурована",
 		"giver": "chumak",
 		"city": "lviv",
@@ -310,7 +310,7 @@
 	"shubin_2": {
 		"num": 9265,
 		"line": "shubin",
-		"after": "shubin_1",
+		"after": ["shubin_1"],
 		"title": "Найглибший штрек",
 		"giver": "koval",
 		"city": "izium",
@@ -356,7 +356,7 @@
 	"morskyi_tsar_2": {
 		"num": 9267,
 		"line": "morskyi_tsar",
-		"after": "morskyi_tsar_1",
+		"after": ["morskyi_tsar_1"],
 		"title": "Палац під островом",
 		"giver": "chumak",
 		"city": "khadzhybei",
@@ -401,7 +401,7 @@
 	"lykho_2": {
 		"num": 9269,
 		"line": "lykho",
-		"after": "lykho_1",
+		"after": ["lykho_1"],
 		"title": "Друге око",
 		"giver": "koval",
 		"city": "khadzhybei",
@@ -447,7 +447,7 @@
 	"lisovyi_did_2": {
 		"num": 9271,
 		"line": "lisovyi_did",
-		"after": "lisovyi_did_1",
+		"after": ["lisovyi_did_1"],
 		"title": "Вищий за сосну, нижчий за траву",
 		"giver": "oksana",
 		"city": "tver",
@@ -489,7 +489,7 @@
 	"idolyshche_2": {
 		"num": 9273,
 		"line": "idolyshche",
-		"after": "idolyshche_1",
+		"after": ["idolyshche_1"],
 		"title": "Чуже вбрання",
 		"giver": "sava",
 		"city": "cherkaskyi_stan",
@@ -514,7 +514,7 @@
 	"idolyshche_3": {
 		"num": 9274,
 		"line": "idolyshche",
-		"after": "idolyshche_2",
+		"after": ["idolyshche_2"],
 		"title": "Гість до столу",
 		"giver": "sava",
 		"city": "cherkaskyi_stan",
@@ -563,7 +563,7 @@
 	"karachun_2": {
 		"num": 9276,
 		"line": "karachun",
-		"after": "karachun_1",
+		"after": ["karachun_1"],
 		"title": "Сонцеворот",
 		"giver": "zoreslava",
 		"city": "cherkaskyi_stan",
@@ -609,7 +609,7 @@
 	"drakula_2": {
 		"num": 9278,
 		"line": "drakula",
-		"after": "drakula_1",
+		"after": ["drakula_1"],
 		"title": "Осика й часник",
 		"giver": "paraska",
 		"city": "verkhovyna",
@@ -636,7 +636,7 @@
 	"drakula_3": {
 		"num": 9279,
 		"line": "drakula",
-		"after": "drakula_2",
+		"after": ["drakula_2"],
 		"title": "Замок над прірвою",
 		"giver": "opryshok",
 		"city": "verkhovyna",

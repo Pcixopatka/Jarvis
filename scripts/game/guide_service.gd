@@ -82,11 +82,10 @@ static func items(world, player, here: String = "") -> Array:
 	var way_ready: int = int(Way.ready_count(world, player))
 	if way_ready > 0:
 		out.append(_it("way_claim", "Шлях козака: забери нагороду", "Виконано кроків: %d" % way_ready, "", TAB_JOURNAL))
-	# 4. Історія
-	var line: String = Story.objective_line(world)
-	if line != "":
-		var target: String = Story.target(world)
-		out.append(_it("story", "Історія: %s" % _clean(line), ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
+	# 4. Історія: кожна відкрита сюжетна місія рушія (сьогодні вона одна)
+	for id in Story.missions(world):
+		var target: String = Story.QuestEngine.target(world, id)
+		out.append(_it("story", "Історія: %s" % _clean(Story.mission_line(world, id)), ("Де: %s" % Data.place_name(target)) if target != "" else "", target))
 	# 5. «Шлях козака»: нинішній крок, якщо він ще не виконаний
 	if way_ready == 0 and not Way.finished(world):
 		var step: Dictionary = Way.current(world)

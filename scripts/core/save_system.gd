@@ -4,7 +4,7 @@ extends RefCounted
 ## - Запис іде в тимчасовий файл, а потім атомарно замінює основний,
 ##   попередня версія лишається як .bak — збій під час запису не зіпсує прогрес.
 
-const SAVE_VERSION := 11
+const SAVE_VERSION := 12
 const Data := preload("res://scripts/data/data.gd")
 const Uniques := preload("res://scripts/data/uniques.gd")
 const SAVE_PATH := "user://hero.save"  # старий єдиний файл — стає слотом 1 при першому запуску
@@ -27,10 +27,11 @@ static func slot_summaries() -> Array:
 			out.append({"slot": i, "broken": true} if exists(slot_path(i)) else {})
 			continue
 		var p: Dictionary = d.get("player", {})
-		var w: Dictionary = d.get("world", {})
-		var st: Dictionary = w.get("story", {})
+		var w = load("res://scripts/game/world_state.gd").new()
+		w.missions = d.get("world", {}).get("missions", {})
+		var SS = load("res://scripts/game/story_service.gd")
 		out.append({"slot": i, "job": p.get("job", "cossack"), "level": int(p.get("level", 1)), "job_level": int(p.get("job_level", 1)),
-			"rank": p.get("rank", ""), "chapter": int(st.get("chapter", 0)), "done": st.get("stage", "") == "done",
+			"rank": p.get("rank", ""), "chapter": int(SS.chapter_index(w)), "done": bool(SS.finished(w)),
 			"playtime": float(d.get("meta", {}).get("playtime", 0.0)),
 			"nick": load("res://scripts/game/name_service.gd").from_save(p.get("nick", ""))})
 	return out
@@ -213,8 +214,97 @@ static func migrate(d: Dictionary) -> Dictionary:
 		# (вдягнені, у торбі, у крамницях і будь-де ще) перераховуються під нові числа.
 		rescale_items_xp_gold(d)
 		v = 11
+	if v == 11:
+		# v12: завдання всіх ліній веде один рушій (QuestEngine): замість номерів розділу й кроку історії
+		# та номерів кроків переказів і саги — id зданих і початих кроків (world.missions).
+		migrate_quests(d["world"])
+		v = 12
 	d["version"] = v
 	return d
+
+
+# ---------- v12: завдання за id кроків ----------
+# Порядок кроків, яким їх вела гра до v12, заморожено тут: старі номери читаються лише через ці списки,
+# тож таблиці можна переставляти й доповнювати, не ламаючи старих збережень.
+
+## Розділи історії до v12 (місце розділу в story_chapters.json) → id кроків у розділі (місце кроку).
+const V11_STORY := [
+	["village", "flee", "trial", "choose", "oath", "to_carpathians", "volkhv_trial", "back_to_sich", "to_baturyn", "strilets_trial", "back_to_sich_s"],
+	["recruit", "legend", "road", "potion", "camp", "lair"],
+	["kyiv_call", "crypt", "to_chernihiv", "samples", "scouts", "border", "sorcerer"],
+	["west_call", "walls", "opryshky", "dovbush", "tower"],
+	["rada", "smolensk", "orders", "gates"],
+	["kremlin"],
+]
+## Кроки гілок прологу до v12 і їхні умови: такий крок, якщо гравець обрав іншу дорогу, гра пропускала.
+const V11_STORY_IF := {"oath": "trial=0", "to_carpathians": "trial=1", "volkhv_trial": "trial=1", "back_to_sich": "trial=1",
+	"to_baturyn": "trial=2", "strilets_trial": "trial=2", "back_to_sich_s": "trial=2"}
+## Перекази до v12: лінійка → id кроків за номером кроку.
+const V11_LEGENDS := {
+	"kozhumiaka": ["kozhumiaka_1", "kozhumiaka_2"],
+	"dovbush": ["dovbush_1", "dovbush_2", "dovbush_3"],
+	"solovei": ["solovei_1", "solovei_2", "solovei_3"],
+	"vii": ["vii_1", "vii_2", "vii_3"],
+	"bila_pani": ["bila_pani_1", "bila_pani_2"],
+	"shubin": ["shubin_1", "shubin_2"],
+	"morskyi_tsar": ["morskyi_tsar_1", "morskyi_tsar_2"],
+	"lykho": ["lykho_1", "lykho_2"],
+	"lisovyi_did": ["lisovyi_did_1", "lisovyi_did_2"],
+	"idolyshche": ["idolyshche_1", "idolyshche_2", "idolyshche_3"],
+	"karachun": ["karachun_1", "karachun_2"],
+	"drakula": ["drakula_1", "drakula_2", "drakula_3"],
+}
+## «Попіл за вітром» до v12: id кроків за номером кроку.
+const V11_SAGA := ["saga_dev", "saga_khala", "saga_velnias", "saga_baba", "saga_chornoboh"]
+
+
+## Світ збереження v11 → v12: world.story / legends / saga (номери) → world.missions (id кроків).
+static func migrate_quests(w: Dictionary) -> void:
+	w["missions"] = quests_from_v11(w.get("story", {}), w.get("legends", {}), w.get("saga", {}))
+	for k in ["story", "legends", "saga"]:
+		w.erase(k)
+
+
+## Стан рушія завдань зі старих станів. story: {"chapter", "step", "stage", "progress", "choices"} ({} — нова
+## гра), legends: {лінійка: {"step", "stage", "progress"}}, saga: {"step", "stage"}. stage: offer / active /
+## turnin / done. Пройдене стає зданим (крок гілки, якої гравець не обирав, — ні: рушій сам бачить його
+## пропущеним), нинішній крок на етапі active чи turnin — початим зі своїм лічильником, offer — нічим
+## (рушій сам бачить його відкритим).
+static func quests_from_v11(story: Dictionary, legends: Dictionary, saga: Dictionary) -> Dictionary:
+	var m := {"done": {}, "active": {}, "choices": {}}
+	var made: Dictionary = story.get("choices", {})
+	for k in made:
+		m["choices"][str(k)] = int(made[k])
+	if not story.is_empty():
+		var stage := str(story.get("stage", "offer"))
+		var at := Vector2i(int(story.get("chapter", 0)), int(story.get("step", 0)))
+		if stage == "done":
+			at = Vector2i(V11_STORY.size(), 0)
+		for c in V11_STORY.size():
+			for i in V11_STORY[c].size():
+				var id: String = V11_STORY[c][i]
+				if c < at.x or (c == at.x and i < at.y):
+					var cond: String = V11_STORY_IF.get(id, "")
+					if cond == "" or int(m["choices"].get(cond.get_slice("=", 0), -1)) == int(cond.get_slice("=", 1)):
+						m["done"][id] = true
+				elif c == at.x and i == at.y and stage in ["active", "turnin"]:
+					m["active"][id] = {"stage": stage, "progress": int(story.get("progress", 0))}
+	for line in V11_LEGENDS:
+		if legends.has(line) and legends[line] is Dictionary:
+			_v11_line(m, V11_LEGENDS[line], legends[line])
+	if not saga.is_empty():
+		_v11_line(m, V11_SAGA, saga)
+	return m
+
+
+static func _v11_line(m: Dictionary, ids: Array, s: Dictionary) -> void:
+	var stage := str(s.get("stage", "offer"))
+	var at := ids.size() if stage == "done" else int(s.get("step", 0))
+	for i in ids.size():
+		if i < at:
+			m["done"][ids[i]] = true
+		elif i == at and stage in ["active", "turnin"]:
+			m["active"][ids[i]] = {"stage": stage, "progress": int(s.get("progress", 0))}
 
 
 ## Чи це річ спорядження (а не, скажімо, оголошення розшуку з масивом "affixes").

@@ -137,7 +137,7 @@ static func available(need: String, world, player = null) -> bool:
 		"tavern", "escort", "trail":
 			return chosen
 		"event":
-			return chosen and int(load("res://scripts/game/story_service.gd").state(world)["chapter"]) >= 1
+			return chosen and int(load("res://scripts/game/story_service.gd").chapter_index(world)) >= 1
 		"defense":
 			# облягають міста, до яких підповзла зараза, або розбудований хутір
 			if not chosen:

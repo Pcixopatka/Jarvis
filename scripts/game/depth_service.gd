@@ -69,7 +69,7 @@ static func state(world) -> Dictionary:
 
 ## Глибини відкриваються після перемоги над Путіноїдом.
 static func unlocked(world) -> bool:
-	return StoryService.state(world)["stage"] == "done"
+	return StoryService.finished(world)
 
 
 ## Рівень нечисті на глибині: росте без межі, по два рівні на глибину.

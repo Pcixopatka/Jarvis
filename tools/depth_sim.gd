@@ -13,7 +13,8 @@ func _run() -> void:
 		var d: int = maxi(1, (lvl - 22) / 2 + 1)
 		_build_hero(lvl)
 		var p = game.player
-		game.world.story = {"chapter": 6, "step": 0, "stage": "done"}
+		game.world.missions = {}
+		game.QuestEngine.finish_line(game.world, "story")
 		game.world.depths = {"max": d, "best": d - 1}
 		game.world.hints = {"combat": true, "block": true, "elite": true, "boss": true, "item": true, "map": true, "depths": true, "stones": true}
 		var xp0 = _total_xp(p)

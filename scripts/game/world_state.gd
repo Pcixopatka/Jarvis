@@ -18,7 +18,7 @@ var next_quest_id := 1
 var shops := {}  # місто -> товари; оновлюються після походів (shop_dirty)
 var shop_dirty := {}  # зберігаються разом зі світом: вихід у головне меню товар не перекидає
 var hints := {}  # які підказки вже показано
-var story := {}  # стан сюжету (див. StoryService)
+var missions := {}  # завдання всіх ліній: здані й початі кроки, вибори (див. QuestEngine)
 var camp := {}  # хутір: будівлі, пасіка (див. CampService)
 var boosts := {}  # нагороди за рекламу: xp2 (секунди), safe_sharpen (жетони)
 var ads := {}  # денні ліміти реклами
@@ -48,8 +48,6 @@ var spec_trial := {}  # випробування в наставника (див
 var travel := {}  # події в дорозі: перерва між пригодами (див. TravelService)
 var plague := {}  # живий світ: рівні зарази місцевостей (див. PlagueService)
 var heroes := {}  # побратими: зустріч, дружба, особисті завдання (див. HeroService)
-var legends := {}  # перекази: поступ квестових лінійок за легендами земель (див. LegendService)
-var saga := {}  # «Попіл за вітром»: продовження сюжету після Кремля (див. SagaService)
 var fair := {}  # трофейний ярмарок: що взято цього тижня (див. FairService)
 var boss_hunt := {}  # бос дня й бос тижня: кого вже переможено й найкращий час (див. BossService)
 var peril := {}  # надважкі печери: пройдені, найкращий час, звання (див. PerilService)
@@ -271,8 +269,8 @@ func has_companion(type: String) -> bool:
 # ---------- Збереження ----------
 
 func to_dict() -> Dictionary:
-	return {"shops": shops, "shop_dirty": shop_dirty, "legends": legends, "saga": saga, "fair": fair, "boss_hunt": boss_hunt, "peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
-		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "story": story, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "ring": ring, "muster": muster, "trade": trade, "outdoors": outdoors, "tavern": tavern, "way": way}
+	return {"shops": shops, "shop_dirty": shop_dirty, "fair": fair, "boss_hunt": boss_hunt, "peril": peril, "loyalty": loyalty, "boards": boards, "quests": quests, "companions": companions,
+		"cleared": cleared, "last_city": last_city, "next_quest_id": next_quest_id, "hints": hints, "missions": missions, "camp": camp, "boosts": boosts, "ads": ads, "heroes": heroes, "plague": plague, "travel": travel, "defense": defense, "stats": stats, "challenges": challenges, "spec_trial": spec_trial, "depths": depths, "path_talks": path_talks, "tower": tower, "events": events, "glory": glory, "duel": duel, "bounties": bounties, "vigil": vigil, "ring": ring, "muster": muster, "trade": trade, "outdoors": outdoors, "tavern": tavern, "way": way}
 
 
 func from_dict(d: Dictionary) -> void:
@@ -281,8 +279,6 @@ func from_dict(d: Dictionary) -> void:
 	peril = d.get("peril", {})
 	boss_hunt = d.get("boss_hunt", {})
 	fair = d.get("fair", {})
-	saga = d.get("saga", {})
-	legends = d.get("legends", {})
 	loyalty = d.get("loyalty", {})
 	boards = d.get("boards", {})
 	quests = d.get("quests", [])
@@ -291,7 +287,7 @@ func from_dict(d: Dictionary) -> void:
 	last_city = d.get("last_city", "sich")
 	next_quest_id = d.get("next_quest_id", 1)
 	hints = d.get("hints", {})
-	story = d.get("story", {})
+	missions = d.get("missions", {})
 	camp = d.get("camp", {})
 	boosts = d.get("boosts", {})
 	ads = d.get("ads", {})

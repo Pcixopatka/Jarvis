@@ -91,7 +91,7 @@ static func tick(world, player) -> Array:
 		s["sieges"][target] = int(s["sieges"][target]) - 1
 		if int(s["sieges"][target]) <= 0:
 			msgs.append(lose(world, player, target, true))
-	if player.is_peasant() or int(StoryService.state(world)["chapter"]) < 1:
+	if player.is_peasant() or StoryService.chapter_index(world) < 1:
 		return msgs
 	if not s["sieges"].is_empty():
 		return msgs

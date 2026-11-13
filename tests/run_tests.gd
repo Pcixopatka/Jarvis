@@ -48,6 +48,8 @@ func _run() -> void:
 	_suite_world_db()
 	_suite_class_db()
 	_suite_quest_db()
+	_suite_quest_engine()
+	_suite_quest_migration()
 	_suite_life_db()
 	_suite_settings_db()
 	await _suite_rival_mechanics()
@@ -212,6 +214,24 @@ func _tree_ranks(Classes, cls: String) -> int:
 		for n in br["nodes"]:
 			total += int(n["max"])
 	return total
+
+
+## Поставити поступ завдань так, як його писали номерами до v12: part — "story" ({"chapter", "step",
+## "stage", "progress", "choices"}), "legends" ({лінійка: {"step", "stage", "progress"}}) чи "saga" ({"step",
+## "stage"}). Номери перекладає міграція збережень (SaveSystem.quests_from_v11) у кроки рушія; поступ інших
+## частин лишається (у «legends» з one_line — і поступ інших лінійок).
+func _quests_set(w, part: String, v: Dictionary, one_line: bool = false) -> void:
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var m: Dictionary = SaveSystem.quests_from_v11(v if part == "story" else {}, v if part == "legends" else {}, v if part == "saga" else {})
+	var keep: Dictionary = Q.state(w).duplicate(true)
+	for k in ["done", "active"]:
+		for id in keep[k]:
+			var mine: bool = Q.kind_of(id) == "story" if part == "story" else (Q.kind_of(id) == "saga" if part == "saga" else (v.has(Q.line_of(id)) if one_line else Q.kind_of(id) == "legend"))
+			if not mine:
+				m[k][id] = keep[k][id]
+	if part != "story":
+		m["choices"] = keep["choices"]
+	w.missions = m
 
 
 func _new_player():
@@ -631,15 +651,15 @@ func _suite_save() -> void:
 	check(m.get("version", 0) == SaveSystem.SAVE_VERSION and m.has("meta") and m["world"].has("hints"), "міграція v2 → поточна")
 	check(m["player"]["xp_next"] == Data.xp_for_level(m["player"]["level"]), "міграція перераховує поріг досвіду")
 	var v6 = SaveSystem.migrate({"version": 6, "player": p.to_dict(), "world": {"story": {"chapter": 1, "step": 3, "stage": "active", "progress": 0}}})
-	check(v6["world"]["story"]["chapter"] == 2 and v6["world"]["story"]["step"] == 3, "міграція v7: розділ зсувається через пролог")
+	check(v6["world"]["missions"]["active"].has("samples") and not v6["world"].has("story"), "міграція v7: розділ зсувається через пролог (далі v12: розділ II, крок 3 — «samples»)")
 	var v6d = SaveSystem.migrate({"version": 6, "player": {}, "world": {"story": {"chapter": 2, "step": 0, "stage": "done"}}})
-	check(v6d["world"]["story"]["chapter"] == 2, "завершений сюжет не зсувається")
+	check(v6d["world"]["missions"]["done"].has("kremlin") and v6d["world"]["missions"]["active"].is_empty(), "завершений сюжет не зсувається")
 	var v8a = SaveSystem.migrate({"version": 8, "player": p.to_dict(), "world": {"story": {"chapter": 0, "step": 3, "stage": "active", "progress": 0, "choices": {"trial": 0}}}})
-	check(v8a["world"]["story"]["step"] == 4, "міграція v9: присяга зсувається за кроком «Обери дорогу»")
+	check(v8a["world"]["missions"]["active"].has("oath") and v8a["world"]["missions"]["done"].has("choose"), "міграція v9: присяга зсувається за кроком «Обери дорогу»")
 	var v8b = SaveSystem.migrate({"version": 8, "player": p.to_dict(), "world": {"story": {"chapter": 0, "step": 2, "stage": "turnin", "progress": 10, "choices": {}}}})
-	check(v8b["world"]["story"]["step"] == 3 and v8b["world"]["story"]["stage"] == "active", "міграція v9: хто чекав вибору — йде до Мирона й Зореслави")
+	check(v8b["world"]["missions"]["active"].get("choose", {}).get("stage", "") == "active" and v8b["world"]["missions"]["done"].has("trial"), "міграція v9: хто чекав вибору — йде до Мирона й Зореслави")
 	var v8c = SaveSystem.migrate({"version": 8, "player": p.to_dict(), "world": {"story": {"chapter": 2, "step": 1, "stage": "active", "progress": 0}}})
-	check(v8c["world"]["story"]["step"] == 1, "міграція v9: пізні розділи не чіпає")
+	check(v8c["world"]["missions"]["active"].has("crypt"), "міграція v9: пізні розділи не чіпає")
 	check(SaveSystem.migrate({"version": 1, "player": {}, "world": {}}).is_empty(), "v1 не підтримується")
 	check(SaveSystem.migrate({"version": 99, "player": {}, "world": {}}).is_empty(), "майбутня версія відхиляється")
 	var w2 = WorldState.new()
@@ -704,17 +724,17 @@ func _suite_story() -> void:
 	var gold0 = p.gold
 	p.job = "peasant"
 	p.skills = {}
-	check(StoryService.state(w)["stage"] == "active" and StoryService.current(w)["id"] == "village", "пролог: одразу бій за рідне село")
+	check(StoryService.stage(w) == "active" and StoryService.current(w)["id"] == "village", "пролог: одразу бій за рідне село")
 	check(not StoryService.intro(w).is_empty(), "пролог: кобзар розповідає вступ")
 	check(StoryService.city_dialogue(w, "kyiv").is_empty(), "у чужому місті розмови немає")
 	check(StoryService.target(w) == "ridne_selo" and StoryService.objective_line(w) != "", "зірка й рядок мети")
 	check(p.is_peasant() and not p.can_learn_skill(Classes.find_node("whirl")), "селянин не вчить козацьких умінь")
 	var steps_done = 0
 	var guard = 0
-	while StoryService.state(w)["stage"] != "done" and guard < 300:
+	while StoryService.stage(w) != "done" and guard < 300:
 		guard += 1
 		var st = StoryService.current(w)
-		var stage = StoryService.state(w)["stage"]
+		var stage = StoryService.stage(w)
 		if stage == "offer":
 			var d = StoryService.city_dialogue(w, st["city"])
 			check(d.get("kind", "") == "start", "%s: стартова розмова" % st["id"])
@@ -724,7 +744,7 @@ func _suite_story() -> void:
 			check(StoryService.target(w) == obj["loc"], "%s: зірка веде до мети" % st["id"])
 			if obj["type"] == "job":
 				StoryService.on_event(w, p, "job", str(int(obj["count"]) - 1))
-				check(StoryService.state(w)["stage"] == "active", "%s: замало майстерності" % st["id"])
+				check(StoryService.stage(w) == "active", "%s: замало майстерності" % st["id"])
 				StoryService.on_event(w, p, "job", str(obj["count"]))
 			elif obj["type"] == "choose":
 				var PS = load("res://scripts/game/path_service.gd")
@@ -738,11 +758,11 @@ func _suite_story() -> void:
 				PS.choose(w, p, "cossack")
 			elif obj["type"] in ["clear", "dungeon", "visit"]:
 				StoryService.on_event(w, p, "kill", "nobody")
-				check(StoryService.state(w)["stage"] == "active", "%s: чужа подія не зараховується" % st["id"])
+				check(StoryService.stage(w) == "active", "%s: чужа подія не зараховується" % st["id"])
 				StoryService.on_event(w, p, obj["type"], obj["loc"])
 			else:
 				var n = 0
-				while StoryService.state(w)["stage"] == "active" and StoryService.current(w)["id"] == st["id"] and n < 500:
+				while StoryService.stage(w) == "active" and StoryService.current(w)["id"] == st["id"] and n < 500:
 					StoryService.on_event(w, p, "kill", obj["enemy"])
 					n += 1
 				check(n >= int(obj["count"]), "%s: треба щонайменше %d" % [st["id"], obj["count"]])
@@ -754,7 +774,7 @@ func _suite_story() -> void:
 			check(d.get("kind", "") == "end", "%s: фінальна розмова" % st["id"])
 			StoryService.on_dialogue_done(w, p, "end", 0 if not d["choices"].is_empty() else -1)
 			steps_done += 1
-	check(StoryService.state(w)["stage"] == "done", "розділ пройдено до кінця")
+	check(StoryService.stage(w) == "done", "розділ пройдено до кінця")
 	check(not p.is_peasant() and p.sk("whirl") >= 1, "після посвяти — козак із вихором")
 	check(p.rank == "hetman" and "Гетьманська булава" in p.inventory.map(func(it): return it["name"]), "фінал: гетьман із булавою")
 	check(StoryService.effect(w, "koshchii_mortal") == 1.0, "зламана голка — Кощій смертний")
@@ -771,8 +791,8 @@ func _suite_story() -> void:
 	check(p.equipment["weapon"]["name"] == "Козацька шабля" or "Козацька шабля" in names, "шабля за посвяту")
 	check("Шабля кошового" in names and "Оберіг Мотрі" in names, "сюжетні нагороди розділу I")
 	check("Булава полковника" in names and "Каптур літописця" in names, "сюжетні нагороди розділу II")
-	check(w.story.get("choices", {}).get("crypt", -1) == 0 and w.loyalty_points("kyiv") >= 270, "вибір у розділі II враховано")
-	check(w.loyalty_points("chyhyryn") >= 90 and w.story.get("choices", {}).get("potion", -1) == 0, "вибір у розмові з Мотрею враховано")
+	check(StoryService.QuestEngine.choices(w).get("crypt", -1) == 0 and w.loyalty_points("kyiv") >= 270, "вибір у розділі II враховано")
+	check(w.loyalty_points("chyhyryn") >= 90 and StoryService.QuestEngine.choices(w).get("potion", -1) == 0, "вибір у розмові з Мотрею враховано")
 	check(p.gold > gold0 and p.level > 1, "гривні й досвід за сюжет")
 	# Наслідки виборів (тест завжди обирає перший варіант)
 	check(p.stats["str"] == Data.STAT_BASE + 3, "присяга помсти: +3 сили")
@@ -784,14 +804,14 @@ func _suite_story() -> void:
 	CampService.apply_effects(w, p)
 	check(p.plague_resist > 0.0 and p.potion_max() == Data.POTION_MAX + 2, "наслідки застосовано до козака")
 	var lair: Dictionary = StoryService._find_step("lair")
-	w.story["choices"]["camp"] = 0
+	StoryService.QuestEngine.set_choice(w, "camp", 0)
 	var heard0 = StoryService.lines(w, lair["end"]).size()
-	w.story["choices"]["camp"] = 1
+	StoryService.QuestEngine.set_choice(w, "camp", 1)
 	var heard1 = StoryService.lines(w, lair["end"])
 	check(heard0 == heard1.size() and heard0 == lair["end"].size() - 1, "кожен чує лише свою репліку")
 	check(heard1.any(func(l): return "холодною головою" in l[1]), "інший вибір — інша репліка")
 	var wb = WorldState.new()
-	wb.story = {"chapter": 2, "step": 6, "stage": "turnin", "progress": 0, "choices": {"crypt": 1}}
+	_quests_set(wb, "story", {"chapter": 2, "step": 6, "stage": "turnin", "progress": 0, "choices": {"crypt": 1}})
 	var pb = _new_player()
 	StoryService.on_dialogue_done(wb, pb, "end")
 	var got_seal = pb.inventory.any(func(it): return it["name"] == "Печатка Києва")
@@ -800,7 +820,7 @@ func _suite_story() -> void:
 	check(StoryService.objective_line(w) == "" and StoryService.target(w) == "", "після завершення — без мети")
 	var w2 = WorldState.new()
 	w2.from_dict(w.to_dict())
-	check(w2.story["stage"] == "done", "сюжет зберігається")
+	check(StoryService.finished(w2), "сюжет зберігається")
 	p.free()
 
 
@@ -862,7 +882,7 @@ func _suite_heroes() -> void:
 	p.level = 8
 	var w = WorldState.new()
 	# Розділ I пройдено, полоненого врятовано
-	w.story = {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 0, "potion": 1}}
+	_quests_set(w, "story", {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 0, "potion": 1}})
 	check(not HS.can_meet(w, "petro", "kyiv") and HS.can_meet(w, "petro", "chyhyryn"), "Петро чекає в Чигирині")
 	check(not HS.can_meet(w, "oksana", "chernihiv"), "Оксана — лише після зразків Іларіона")
 	var d = HS.city_dialogue(w, "chyhyryn")
@@ -880,7 +900,7 @@ func _suite_heroes() -> void:
 	check(HS.member_name(w.companions[0]) != GameDB.companion(w.companions[0]["type"])["name"], "побратима звуть на ймення")
 	check(HS.power(w, "petro") > 1.0, "побратим сильніший за найманця")
 	var w2 = WorldState.new()
-	w2.story = {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 1}}
+	_quests_set(w2, "story", {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"camp": 1}})
 	check(not HS.can_meet(w2, "petro", "chyhyryn"), "не врятував полоненого — Петра немає")
 	# Дружба й особисте завдання Петра
 	for i in 59:
@@ -1031,14 +1051,14 @@ func _suite_defense_logic() -> void:
 	var p = _new_player()
 	p.level = 6
 	var w = WorldState.new()
-	w.story = {"chapter": 0, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(w, "story", {"chapter": 0, "step": 0, "stage": "active", "progress": 0})
 	w.defense = {"sieges": {}, "ruined": {}, "won": 0, "lost": 0, "calm": 0}
 	var any := false
 	for i in 30:
 		if not DS.tick(w, p).is_empty():
 			any = true
 	check(not any and w.defense["sieges"].is_empty(), "у пролозі облог немає")
-	w.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(w, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	check(not DS.threatened(w, p).is_empty(), "міста поруч із заразою під загрозою: %s" % ", ".join(DS.threatened(w, p)))
 	seed(11)
 	var started := ""
@@ -1100,7 +1120,7 @@ func _suite_defense_battle() -> void:
 	p.hp = p.max_hp
 	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true}
 	game.world.defense = {"sieges": {"chyhyryn": 3}, "ruined": {}, "won": 0, "lost": 0, "calm": 3}
-	game.world.story = {"chapter": 1, "step": 3, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 1, "step": 3, "stage": "active", "progress": 0})
 	await _ride(game, "chyhyryn")
 	check(game.state == game.State.PLAYING and game.combat.is_defense() and game.combat.gate != null, "обложене місто — після поїздки бій біля брами")
 	var loy0: int = game.world.loyalty_points("chyhyryn")
@@ -1221,7 +1241,7 @@ func _suite_challenges() -> void:
 	hero.level = 30
 	var story_mid := {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
 	var wh = WorldState.new()
-	wh.story = story_mid.duplicate()
+	_quests_set(wh, "story", story_mid.duplicate())
 	CS.now_override = T0
 	var chh = CS.state(wh, hero)
 	var ev_d: Array = chh["daily"].filter(func(x): return x["group"] == "event")
@@ -1236,7 +1256,7 @@ func _suite_challenges() -> void:
 	for d in 70:
 		CS.now_override = T0 + 86400 * d
 		var wd = WorldState.new()
-		wd.story = story_mid.duplicate()
+		_quests_set(wd, "story", story_mid.duplicate())
 		var cd = CS.state(wd, hero)
 		always_two = always_two and cd["daily"].filter(func(x): return x["group"] == "event").size() == 2 and cd["weekly"].filter(func(x): return x["group"] == "event").size() == 2
 		for x in cd["daily"]:
@@ -1249,7 +1269,7 @@ func _suite_challenges() -> void:
 	for wk_i in 40:
 		CS.now_override = T0 + 7 * 86400 * wk_i
 		var ww = WorldState.new()
-		ww.story = story_mid.duplicate()
+		_quests_set(ww, "story", story_mid.duplicate())
 		for x in CS.state(ww, hero)["weekly"]:
 			seen_w[x["stat"]] = true
 	var all_weekly := true
@@ -1258,7 +1278,7 @@ func _suite_challenges() -> void:
 	check(always_two and all_daily and all_weekly, "за десять тижнів у щоденних і за сорок у тижневих побували варта, герць, розшук, супровід, події, сліди й Башта: %s / %s" % [str(seen.keys()), str(seen_w.keys())])
 	check(not seen.has("depth_clear") and not seen_w.has("depth_clear"), "Глибини у виклики не потрапляють, доки сюжет не пройдено")
 	var wdone = WorldState.new()
-	wdone.story = {"chapter": 5, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(wdone, "story", {"chapter": 5, "step": 0, "stage": "done", "progress": 0})
 	check(CS.available("depth", wdone, hero) and not CS.available("depth", wh, hero), "після перемоги над Путіноїдом Глибини відкриті для викликів")
 	var young = _new_player()
 	young.change_class("cossack")
@@ -1268,7 +1288,7 @@ func _suite_challenges() -> void:
 	# Нові лічильники сумуються й просувають виклики
 	CS.now_override = T0
 	var wv = WorldState.new()
-	wv.story = story_mid.duplicate()
+	_quests_set(wv, "story", story_mid.duplicate())
 	var cv = CS.state(wv, hero)
 	cv["daily"][3] = {"stat": "vigil_min", "text": "Простій на Козацькій варті хвилин: 2", "goal": 2, "progress": 0, "claimed": false, "group": "event", "where": "Сторожова могила на мапі"}
 	check(CS.pending(wv, "vigil_min"), "виклик про варту ще не виконано")
@@ -1283,7 +1303,7 @@ func _suite_challenges() -> void:
 	ES.tick(wv, hero)
 	check(not ES.active(wv).is_empty(), "подія світу з'явилась на вимогу виклику: %s" % str(ES.active(wv).get("kind", "")))
 	var wcalm = WorldState.new()
-	wcalm.story = story_mid.duplicate()
+	_quests_set(wcalm, "story", story_mid.duplicate())
 	CS.state(wcalm, hero)["daily"] = []
 	wcalm.challenges["weekly"] = []
 	ES.state(wcalm)["calm"] = 9
@@ -1294,7 +1314,7 @@ func _suite_challenges() -> void:
 	vet.change_class("cossack")
 	vet.level = 66
 	var wvet = WorldState.new()
-	wvet.story = {"chapter": 5, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(wvet, "story", {"chapter": 5, "step": 0, "stage": "done", "progress": 0})
 	CS.state(wvet, vet)["daily"] = [{"stat": "event", "text": "Прийди на поміч", "goal": 1, "progress": 0, "claimed": false, "group": "event", "where": ""}]
 	var got_event := true
 	for i in 12:
@@ -1304,7 +1324,7 @@ func _suite_challenges() -> void:
 	check(got_event, "і героєві 66 рівня подія приходить щоразу")
 	# Виклик просить супроводу — на дошці міста він є
 	var wq = WorldState.new()
-	wq.story = story_mid.duplicate()
+	_quests_set(wq, "story", story_mid.duplicate())
 	CS.state(wq, hero)["daily"] = [{"stat": "escort", "text": "Проведи мандрівника", "goal": 1, "progress": 0, "claimed": false, "group": "event", "where": ""}]
 	var all_boards := true
 	for city in ["kyiv", "sich", "lviv", "chyhyryn"]:
@@ -1319,7 +1339,7 @@ func _suite_challenges() -> void:
 	check(DS.CHANCE_WANTED > DS.CHANCE * 2.0, "облога, яку просить виклик тижня, приходить швидше")
 	# Оновлення гри посеред дня: розпочате лишається, решта — за новою схемою
 	var wm = WorldState.new()
-	wm.story = story_mid.duplicate()
+	_quests_set(wm, "story", story_mid.duplicate())
 	wm.challenges = {"day": CS.day_key(T0), "week": CS.week_key(T0), "ach": {"first_blood": true},
 		"daily": [{"stat": "kill", "text": "Здолай 40 ворогів", "goal": 40, "progress": 12, "claimed": false},
 			{"stat": "parry", "text": "Відбий 4 ударів парируванням", "goal": 4, "progress": 0, "claimed": false},
@@ -1334,7 +1354,7 @@ func _suite_challenges() -> void:
 	check(again["daily"] == cm["daily"] and again["weekly"] == cm["weekly"], "удруге того ж дня виклики не перескладаються")
 	# Перше звернення до викликів — від екрана (лічильник нагород), а не від бою: склад однаково під героя
 	var wf = WorldState.new()
-	wf.story = story_mid.duplicate()
+	_quests_set(wf, "story", story_mid.duplicate())
 	wf.challenges = {"day": CS.day_key(T0), "week": CS.week_key(T0), "ach": {}, "daily": [{"stat": "kill", "text": "Здолай 40 ворогів", "goal": 40, "progress": 3, "claimed": false}], "weekly": []}
 	CS.ready_count(wf, hero)
 	check(int(wf.challenges["v"]) == CS.VERSION and wf.challenges["daily"].filter(func(x): return x.get("group", "") == "event").size() == 2 and wf.challenges["weekly"].filter(func(x): return x.get("group", "") == "event").size() == 2, "після оновлення виклики з подіями, навіть якщо першим спитав лічильник на екрані")
@@ -1484,11 +1504,11 @@ func _suite_classes() -> void:
 	StoryService.hero_class = "peasant"
 	var path := []
 	var guard := 0
-	while StoryService.state(w)["chapter"] == 0 and guard < 100:
+	while StoryService.chapter_index(w) == 0 and guard < 100:
 		guard += 1
 		var st = StoryService.current(w)
 		path.append(st["id"])
-		match StoryService.state(w)["stage"]:
+		match StoryService.stage(w):
 			"offer":
 				StoryService.on_dialogue_done(w, v, "start")
 			"active":
@@ -1510,7 +1530,7 @@ func _suite_classes() -> void:
 				StoryService.on_dialogue_done(w, v, "end", 0)
 	check(not "oath" in path and "to_carpathians" in path and "volkhv_trial" in path and "back_to_sich" in path, "дорога волхва: Капище, випробування, повернення")
 	check(v.job == "volkhv" and v.equipment["weapon"]["type"] == "staff" and v.sk("fireball") == 1, "посвячено у волхви — посох у руці")
-	check(StoryService.chose(w, "trial=1") and w.story["chapter"] == 1, "далі — Розділ I разом із козаками")
+	check(StoryService.chose(w, "trial=1") and StoryService.chapter_index(w) == 1, "далі — Розділ I разом із козаками")
 	var ln: Array = StoryService.lines(w, [["otaman", "Ну що, козаче?"], ["hero", "Я готовий."]])
 	check(ln[0][1] == "Ну що, волхве?" and ln[1][0] == "hero_volkhv", "до волхва звертаються «волхве»")
 	StoryService.hero_class = "cossack"
@@ -1519,7 +1539,7 @@ func _suite_classes() -> void:
 	var m = SaveSystem.migrate(old)
 	var mp: Dictionary = m["player"]
 	check(mp["job"] == "cossack" and mp["job_level"] == 12 and mp["skill_points"] == 20 and mp["perks"].is_empty() and mp["perk_points"] == 6, "міграція: колишній козак — клас «Козак», очки повернуто")
-	check(m["world"]["story"]["step"] == 4 and m["world"]["story"]["choices"]["trial"] == 0, "міграція: посвята — тепер козацька присяга (після кроку «Обери дорогу»)")
+	check(m["world"]["missions"]["active"].has("oath") and m["world"]["missions"]["choices"]["trial"] == 0, "міграція: посвята — тепер козацька присяга (після кроку «Обери дорогу»)")
 	var oldp = SaveSystem.migrate({"version": 7, "player": {"level": 2, "rank": "peasant"}, "world": {}})
 	check(oldp["player"]["job"] == "peasant", "міграція: селянин лишається селянином")
 	p.free()
@@ -2081,7 +2101,7 @@ func _suite_endgame() -> void:
 	check(mono, "досвід на рівень завжди росте")
 	var w = WorldState.new()
 	check(not DS.unlocked(w), "Глибини закриті до кінця сюжету")
-	w.story = {"chapter": 6, "step": 0, "stage": "done"}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done"})
 	check(DS.unlocked(w) and DS.state(w)["max"] == 1, "після Путіноїда — перша глибина")
 	var a = DS.loc_for(1)
 	var b = DS.loc_for(20)
@@ -2132,7 +2152,7 @@ func _suite_depth_battle() -> void:
 	game.start_depth(1)
 	await _frames(2)
 	check(game.state != game.State.PLAYING, "до кінця сюжету не пускає")
-	game.world.story = {"chapter": 6, "step": 0, "stage": "done"}
+	_quests_set(game.world, "story", {"chapter": 6, "step": 0, "stage": "done"})
 	p.change_class("cossack")
 	p.level = 40
 	p.stats["str"] = 200
@@ -2222,7 +2242,7 @@ func _suite_events() -> void:
 	var p = _new_player()
 	p.change_class("cossack")
 	p.level = 10
-	w.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(w, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	check(ES.battle_at(w, "black_forest").is_empty() and ES.state(w)["active"].is_empty(), "спочатку подій нема")
 	# Набіг
 	var m: String = ES.start(w, p, "village_raid", "black_forest")
@@ -2257,7 +2277,7 @@ func _suite_events() -> void:
 	check("побиту" in wm3, "побита валка — менша нагорода")
 	# Облога Січі
 	w.events = {}
-	w.story["chapter"] = 3
+	_quests_set(w, "story", {"chapter": 3, "step": 0, "stage": "active", "progress": 0})
 	ES.start(w, p, "sich_siege")
 	var L3: Dictionary = ES.battle_loc(w, ES.active(w), p)
 	check(L3["waves"] == 6 and L3["variant"] == "city" and L3["target"] == "sich", "облога Січі: 6 хвиль біля брами")
@@ -2349,7 +2369,7 @@ func _suite_event_battles() -> void:
 	p.recalc()
 	p.hp = p.max_hp
 	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "event_village_raid": true, "event_caravan": true}
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	var ES = game.EventService
 	ES.start(game.world, p, "village_raid", "black_forest")
 	await _ride(game, "black_forest")
@@ -2545,7 +2565,7 @@ func _suite_trade_game() -> void:
 	p.hp = p.max_hp
 	p.gold = 5000
 	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "ambush": true, "defense": true, "stones": true}
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	var TS = game.TradeService
 	game.enter_city("sich")
 	game.hud.close_dialogue()
@@ -4555,7 +4575,7 @@ func _suite_vigil_battle() -> void:
 	p.recalc()
 	p.hp = p.max_hp
 	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "vigil": true, "stones": true}
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	game.enter_map()
 	await _frames(2)
 	check(game.hud.map_view._markers.has("varta") or true, "мапа відкрита")
@@ -4718,7 +4738,7 @@ func _suite_bounty_battle() -> void:
 	p.recalc()
 	p.hp = p.max_hp
 	game.world.hints = {"combat": true, "block": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "bounty": true, "stones": true}
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	game.enter_city("kyiv")
 	game.hud.close_dialogue()
 	var BS = game.BountyService
@@ -4860,7 +4880,7 @@ func _suite_duel_battle() -> void:
 	p.skills = {"whirl": 3}
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	game.world.companions = [{"type": "dzhura", "downed": false, "level": 10, "xp": 0}]
 	var trips0: int = int(game.EventService.state(game.world)["trips"])
 	var gold0: int = p.gold
@@ -5206,7 +5226,7 @@ func _suite_escort_game() -> void:
 	p.recalc()
 	p.hp = p.max_hp
 	game.world.hints = {"combat": true, "block": true, "defense": true, "elite": true, "city": true, "map": true, "boss": true, "item": true, "cleared": true, "trail": true}
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	var ES = game.EscortService
 	var q := {"id": 901, "city": "sich", "loc": "wild_field", "progress": 0, "lvl": 1, "gold": 104, "xp": 80, "loyalty": 56}
 	ES.fill(q, 0.0)
@@ -5838,7 +5858,7 @@ func _suite_travel_ride() -> void:
 	await _frames(2)
 	p.level = 99
 	p.invuln = 9999.0
-	game.world.story = {"chapter": StoryT.chapter_count(), "step": 0, "stage": "done", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": StoryT.chapter_count(), "step": 0, "stage": "done", "progress": 0})
 	game.world.travel = {"cooldown": 99, "seen": {}}
 	var go_texts := ["Вирушити", "Увійти до міста", "Увійти на хутір", "Спуститися", "Піднятися", "Вирушити до табору", "Полювати", "Рибалити", "Стати на варту", "Стати в коло"]
 	var all_places: Array = Data.city_ids() + Data.place_ids() + ActsT.spot_ids() + [CampT.CAMP_ID]
@@ -6439,7 +6459,7 @@ func _suite_ring_muster_game() -> void:
 	p.stats["vit"] = 90
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	game.world.last_city = "kyiv"
 	game.enter_map()
 	await _frames(2)
@@ -6695,7 +6715,7 @@ func _suite_far_lands_game() -> void:
 	p.stats["vit"] = 150
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	# Дика місцевість, що росте з героєм
 	game.enter_location("oleshky")
 	await _frames(3)
@@ -6914,7 +6934,7 @@ func _suite_muscovy_game() -> void:
 	p.stats["vit"] = 150
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	# Снігове поле росте з героєм
 	game.enter_location("vedmezhyi_kut")
 	await _frames(3)
@@ -7242,7 +7262,7 @@ func _suite_uniques_game() -> void:
 	p.stats["vit"] = 150
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	var golden_on_floor := func() -> Dictionary:
 		for ch in c.entities.get_children():
 			if ch.get_script() == c.PickupScript and ch.kind == "item" and ch.item.has("unique") and not ch.is_queued_for_deletion():
@@ -7512,7 +7532,7 @@ func _suite_artifacts() -> void:
 	gp.stats["vit"] = 150
 	gp.recalc()
 	gp.hp = gp.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	game.enter_location("zmiinyi")
 	await _frames(3)
 	_clear_enemies(game)
@@ -7746,7 +7766,7 @@ func _suite_souls() -> void:
 	gp.stats["vit"] = 150
 	gp.recalc()
 	gp.hp = gp.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	game.enter_location("oleshky")
 	await _frames(3)
 	_clear_enemies(game)
@@ -8003,7 +8023,7 @@ func _suite_difficulty() -> void:
 	check(is_equal_approx(Power.score(th), Power.dps(th) * Power.ehp(th)), "сила героя — шкода на запас живучості")
 	var MP = load("res://scripts/ui/map_panel.gd")
 	var w_th = load("res://scripts/game/world_state.gd").new()
-	w_th.story = {"chapter": 6, "step": 0, "stage": "done"}
+	_quests_set(w_th, "story", {"chapter": 6, "step": 0, "stage": "done"})
 	var panel_text := func(c: Control) -> String:
 		var t := ""
 		for n in c.find_children("*", "Label", true, false):
@@ -8122,7 +8142,7 @@ func _suite_difficulty() -> void:
 	p.stats["str"] = 120
 	p.stats["vit"] = 150
 	p.recalc()
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	game.enter_location("oleshky")
 	await _frames(3)
 	_clear_enemies(game)
@@ -8173,7 +8193,7 @@ func _suite_difficulty() -> void:
 	game.enter_map()
 	await _frames(2)
 	p.recalc()
-	game.world.story = {"chapter": 6, "step": 0, "stage": "done"}
+	_quests_set(game.world, "story", {"chapter": 6, "step": 0, "stage": "done"})
 	game.world.depths = {"max": 2, "best": 1}
 	game.start_depth(1)
 	await _frames(3)
@@ -8402,13 +8422,13 @@ func _suite_journal() -> void:
 	check(w.is_done(w.quests[3]) and last == ["Завдання виконано! Здай: Київ"], "принесене до кінця: «%s»" % str(last))
 	# Сюжетна гілка в журналі є завжди: розділами, і після фіналу теж
 	var story_sec: Dictionary = Journal.sections(w, p)[0]
-	var cur_ch: int = int(game.StoryService.state(w)["chapter"])
+	var cur_ch: int = int(game.StoryService.chapter_index(w))
 	var states := []
 	for ch in story_sec["chapters"]:
 		states.append(str(ch["state"]))
 	check(str(story_sec["title"]).begins_with("Історія. ") and states.size() == game.StoryService.Story.chapter_count() and states.count("now") == 1 and states.find("now") == cur_ch and states.count("done") == cur_ch, "журнал показує гілку історії розділами: %s" % ", ".join(states))
-	var story_keep: Dictionary = w.story.duplicate(true)
-	w.story = {"chapter": game.StoryService.Story.chapter_count(), "step": 0, "stage": "done", "progress": 0}
+	var story_keep: Dictionary = w.missions.duplicate(true)
+	_quests_set(w, "story", {"chapter": game.StoryService.Story.chapter_count(), "step": 0, "stage": "done", "progress": 0})
 	var done_sec: Dictionary = Journal.sections(w, p)[0]
 	var all_done := true
 	var main_n: int = game.StoryService.Story.chapter_count()
@@ -8426,7 +8446,7 @@ func _suite_journal() -> void:
 	check("✓ Пролог. Попіл рідного села" in jtext and "✓ Розділ V. Кремль" in jtext and "Історію пройдено" in jtext, "екран журналу показує пройдену гілку історії")
 	game.close_character()
 	await _frames(2)
-	w.story = story_keep
+	w.missions = story_keep
 	# Журнал: дотик до завдання показує на мапі мету, а для виконаного — місто, де здати
 	var jrows: Array = find.call("Завдання міст")["rows"]
 	check(jrows[0]["place"] == "sich" and jrows[2]["place"] == "kyiv" and find.call("Розшук")["rows"][0]["place"] == "kyiv" and str(Journal.sections(w, p)[0]["rows"][0]["place"]) == str(game.StoryService.target(w)), "журнал знає місце кожного завдання")
@@ -8766,7 +8786,7 @@ func _suite_pickup_filter() -> void:
 	p.level = 20
 	p.stats["vit"] = 80
 	p.recalc()
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	check(c.pickup_filter == [true, true, true, true], "нова гра бере фільтр із налаштувань")
 	var common: Dictionary = Data.gen_item(10, 0, "boots")
 	var rare: Dictionary = Data.gen_item(10, 2, "belt")
@@ -8988,7 +9008,7 @@ func _suite_quick_raid() -> void:
 	h.change_class("cossack")
 	h.level = 20
 	h.recalc()
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	game.enter_map()
 	await _frames(2)
 	var panel := func(place: String) -> Array:
@@ -9198,7 +9218,7 @@ func _suite_objective_arrow() -> void:
 	p.stats["vit"] = 80
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	check(c.objective().is_empty() and not arrow.visible, "поза боєм мети й стрілки нема")
 	# Розшук і сторож скарбу
 	Bounty.state(game.world)["active"].append({"id": 7, "city": "kyiv", "kind": "upyr", "name": "Упир Кривий", "loc": "wild_field", "affixes": ["fiery"], "gold": 300, "glory": 6, "killed": false})
@@ -9468,7 +9488,7 @@ func _suite_guide() -> void:
 	p.skill_points = 0
 	p.perk_points = 0
 	p.recalc()
-	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	w.way = {"step": load("res://scripts/game/way_service.gd").total()}  # «Шлях козака» перевіряє окремий набір
 	var kinds := func() -> Array:
 		var out := []
@@ -9481,7 +9501,7 @@ func _suite_guide() -> void:
 	var spot: String = GS.best_place(w, p, "sich")
 	check(Data.is_place(spot) and abs(Data.loc_level(Data.place(spot), p.level) - p.level) <= 6, "запасна порада веде в місцевість по силі: %s" % spot)
 	# Порядок важливості: здати виконане, облога, історія, очки, розшук, завдання
-	w.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(w, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	w.quests.append({"id": 950, "city": "kyiv", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 5, "count": 5, "text": "Знищ 5 мавок (Дике Поле)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
 	w.quests.append({"id": 951, "city": "sich", "loc": "black_forest", "type": "kill", "target": "mavka", "progress": 1, "count": 5, "text": "Знищ 5 мавок (Чорний ліс)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
 	Bounty.state(w)["active"].append({"id": 7, "city": "poltava", "kind": "upyr", "name": "Упир Кривий", "loc": "crypt", "affixes": ["fiery"], "gold": 300, "glory": 6, "killed": false})
@@ -9534,7 +9554,7 @@ func _suite_guide() -> void:
 	check(mv.guide_btn.text.begins_with("Далі: Облога") and "Чигирин" in mv.guide_btn.text, "після здачі головною стає облога: «%s»" % mv.guide_btn.text)
 	# порада без місця відкриває вкладку
 	DS.state(w)["sieges"].clear()
-	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	p.stat_points = 2
 	game.enter_map()
 	await _frames(2)
@@ -9672,7 +9692,7 @@ func _suite_event_lift() -> void:
 	p.stats["vit"] = 400
 	p.recalc()
 	p.hp = p.max_hp
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	var fm: Dictionary = Far.event_mods(p)
 	# hp_mult — множник здоров'я поверх мірки (еліта, ніч), dmg_mult — те саме для удару
 	var floor_ok := func(e, hp_mult: float, dmg_mult: float = 1.0) -> bool:
@@ -9777,7 +9797,7 @@ func _suite_full_bag_and_scroll() -> void:
 	p.level = 20
 	p.stats["vit"] = 80
 	p.recalc()
-	game.world.story = {"chapter": 4, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
 	game.enter_location("wild_field")
 	await _frames(3)
 	_clear_enemies(game)
@@ -10024,7 +10044,7 @@ func _suite_events_wiki() -> void:
 	hero.level = 30
 	hero.recalc()
 	var w = WorldState.new()
-	w.story = {"chapter": 3, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(w, "story", {"chapter": 3, "step": 0, "stage": "active", "progress": 0})
 	var all_text := true
 	for e in Wiki.events():
 		all_text = all_text and str(EB.status(e["id"], w, hero)["text"]) != ""
@@ -10226,7 +10246,7 @@ func _suite_events_wiki_game() -> void:
 	p.change_class("cossack")
 	p.level = 20
 	p.recalc()
-	game.world.story = {"chapter": 2, "step": 0, "stage": "active", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 2, "step": 0, "stage": "active", "progress": 0})
 	game.enter_map()
 	await _frames(2)
 	game.EventService.start(game.world, p, "village_raid")
@@ -10815,7 +10835,7 @@ func _suite_gameplay() -> void:
 		_bot_fight(game)
 		await process_frame
 		pf += 1
-	check(game.combat.field_cleared and game.world.story["step"] == 1, "рідне село відбито — веди вцілілих на Січ")
+	check(game.combat.field_cleared and StoryService.current(game.world)["id"] == "flee", "рідне село відбито — веди вцілілих на Січ")
 	game.enter_city("sich")
 	await _frames(2)
 	var hall0: Array = game.hall_rows("sich")
@@ -10832,14 +10852,14 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root != null, "кошовий зустрічає втікача")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["step"] == 2 and game.hud.dialogue_root != null, "кошовий посилає набиратися сили")
+	check(StoryService.current(game.world)["id"] == "trial" and game.hud.dialogue_root != null, "кошовий посилає набиратися сили")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["stage"] == "active" and StoryService.current(game.world)["objective"]["type"] == "job", "мета — 10 рівень майстерності")
+	check(StoryService.stage(game.world) == "active" and StoryService.current(game.world)["objective"]["type"] == "job", "мета — 10 рівень майстерності")
 	while p.job_level < 10:
 		p.add_xp(p.job_next())
 	await _frames(2)
-	check(p.job_level == 10 and game.world.story["stage"] == "turnin" and p.can_change_class(), "майстерність 10 — час обирати дорогу")
+	check(p.job_level == 10 and StoryService.stage(game.world) == "turnin" and p.can_change_class(), "майстерність 10 — час обирати дорогу")
 	check(p.skill_points == 9, "селянин заробив 9 очок вмінь")
 	p.learn_skill("vyly")
 	check(p.sk("vyly") == 1 and "vyly" in p.active_skills(), "селянин вчить «Удар вилами»")
@@ -10857,7 +10877,7 @@ func _suite_gameplay() -> void:
 	check(trial_txt != "" and "Мирон" in trial_txt and "Зореслав" in trial_txt and "Лесь" in trial_txt and "троє" in trial_txt and not ("двоє" in trial_txt) and not ("обома" in trial_txt), "кошовий у пролозі називає всіх трьох представників: Мирона, Зореславу й Леся")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.PathService.choosing(game.world) and game.world.story["step"] == 3, "крок «Обери дорогу» активний")
+	check(game.PathService.choosing(game.world) and StoryService.current(game.world)["id"] == "choose", "крок «Обери дорогу» активний")
 	game.city_do("path_choose", "cossack")
 	game.city_do("path_choose", "cossack")
 	check(game.PathService.choosing(game.world), "без розмов обрати не вийде")
@@ -10881,7 +10901,7 @@ func _suite_gameplay() -> void:
 	check(game.PathService.choosing(game.world), "перше натискання — лише підтвердження")
 	game.city_do("path_choose", "cossack")
 	await _frames(2)
-	check(game.world.story["step"] == 4 and game.world.story["choices"]["trial"] == 0 and game.hud.dialogue_root != null, "козацька дорога: посвята")
+	check(StoryService.current(game.world)["id"] == "oath" and StoryService.chose(game.world, "trial=0") and game.hud.dialogue_root != null, "козацька дорога: посвята")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
 	for i in 8:
@@ -10893,12 +10913,12 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root != null, "посвята: урочиста розмова")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(p.job == "cossack" and p.job_level < 5 and p.sk("whirl") == 1 and p.sk("vyly") == 1 and game.world.story["chapter"] == 1, "посвячено в козаки — розділ I, селянське вміння лишилось")
+	check(p.job == "cossack" and p.job_level < 5 and p.sk("whirl") == 1 and p.sk("vyly") == 1 and StoryService.chapter_index(game.world) == 1, "посвячено в козаки — розділ I, селянське вміння лишилось")
 	check(p.equipment["weapon"]["type"] == "sabre", "козацька шабля одразу в руці")
 	check(game.hud.dialogue_root != null, "розділ I: кошовий одразу кличе")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["stage"] == "active" and game.hud.map_view != null, "після розмови сюжет активний")
+	check(StoryService.stage(game.world) == "active" and game.hud.map_view != null, "після розмови сюжет активний")
 	# Сильний козак, щоб тест ішов швидко й стабільно
 	p.stats["str"] = 40
 	p.stats["vit"] = 40
@@ -10937,7 +10957,7 @@ func _suite_gameplay() -> void:
 		frames += 1
 	check(game.state == game.State.MAP, "портал повертає на мапу")
 	check(game.world.cleared.get("wild_field", 0) == 1, "облік очищення")
-	check(game.world.story["stage"] == "turnin", "сюжет: Дике Поле зараховано")
+	check(StoryService.stage(game.world) == "turnin", "сюжет: Дике Поле зараховано")
 	check(game.hud.map_view.story_target == "sich", "зірка на мапі веде на Січ")
 
 	# Печера з босом
@@ -10960,13 +10980,13 @@ func _suite_gameplay() -> void:
 	check(game.hud.dialogue_root != null, "кошовий чекає зі звітом")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["step"] == 1 and game.hud.dialogue_root == null and game.hall_rows("sich")[0]["npc"] == "kobzar", "далі має справу кобзар: він чекає в курені, а не перебиває")
+	check(StoryService.current(game.world)["id"] == "legend" and game.hud.dialogue_root == null and game.hall_rows("sich")[0]["npc"] == "kobzar", "далі має справу кобзар: він чекає в курені, а не перебиває")
 	_hall_talk(game)
 	await _frames(2)
-	check(game.world.story["step"] == 1 and game.hud.dialogue_root != null, "розмова з кобзарем починається, коли підійдеш")
+	check(StoryService.current(game.world)["id"] == "legend" and game.hud.dialogue_root != null, "розмова з кобзарем починається, коли підійдеш")
 	game.hud.dialogue_root._finish()
 	await _frames(2)
-	check(game.world.story["stage"] == "active" and game.hud.dialogue_root == null, "мета від кобзаря активна")
+	check(StoryService.stage(game.world) == "active" and game.hud.dialogue_root == null, "мета від кобзаря активна")
 	var done = 0
 	for q in game.world.quests.duplicate():
 		if game.world.is_done(q):
@@ -11479,7 +11499,7 @@ func _suite_peril_game() -> void:
 	_fit(p, 8.0)
 	p.hp = p.max_hp
 	p.gold = 1000000
-	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	var ids: Array = PS.ids()
 	var id0: String = ids[0]
 	var panel_text := func() -> String:
@@ -11751,7 +11771,7 @@ func _suite_shop_game() -> void:
 	p.change_class("cossack")
 	p.level = 30
 	p.recalc()
-	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	var menu_texts := func() -> Array:
 		var out := []
 		for b in game.hud.overlay_box.find_children("*", "Button", true, false):
@@ -11960,7 +11980,7 @@ func _suite_skill_engine_game() -> void:
 	p.stats["vit"] = 200
 	p.recalc()
 	_fit(p, 2.0)
-	game.world.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	var missing := []
 	for id in Classes.actives():
 		if not game.hud.skill_buttons.has(id):
@@ -12196,11 +12216,11 @@ func _suite_strilets() -> void:
 	StoryService.hero_class = "peasant"
 	var path := []
 	var guard := 0
-	while StoryService.state(w)["chapter"] == 0 and guard < 100:
+	while StoryService.chapter_index(w) == 0 and guard < 100:
 		guard += 1
 		var st = StoryService.current(w)
 		path.append(st["id"])
-		match StoryService.state(w)["stage"]:
+		match StoryService.stage(w):
 			"offer":
 				StoryService.on_dialogue_done(w, v, "start")
 			"active":
@@ -12219,7 +12239,7 @@ func _suite_strilets() -> void:
 			"turnin":
 				StoryService.on_dialogue_done(w, v, "end", 0)
 	check(not "oath" in path and not "to_carpathians" in path and "to_baturyn" in path and "strilets_trial" in path and "back_to_sich_s" in path, "дорога стрільця: Батурин, випробування, повернення")
-	check(v.job == "strilets" and v.equipment["weapon"]["type"] == "bow" and v.sk("strila") == 1 and StoryService.chose(w, "trial=2") and w.story["chapter"] == 1, "посвячено в стрільці: лук у руці, «Влучна стріла» в подарунок, далі Розділ I")
+	check(v.job == "strilets" and v.equipment["weapon"]["type"] == "bow" and v.sk("strila") == 1 and StoryService.chose(w, "trial=2") and StoryService.chapter_index(w) == 1, "посвячено в стрільці: лук у руці, «Влучна стріла» в подарунок, далі Розділ I")
 	var ln: Array = StoryService.lines(w, [["otaman", "Ну що, козаче?"], ["hero", "Я готовий."]])
 	check(ln[0][1] == "Ну що, стрільче?" and ln[1][0] == "hero", "до стрільця звертаються «стрільче»")
 	StoryService.hero_class = "cossack"
@@ -12348,7 +12368,7 @@ func _suite_strilets_game() -> void:
 	for id in ["sokil", "kihti", "sokolyna_mitka", "pike", "strila", "syltsia"]:
 		p.skills[id] = 2
 	p.recalc()
-	game.world.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(game.world, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	game.enter_location("wild_field")
 	await _frames(3)
 	_clear_enemies(game)
@@ -12506,7 +12526,7 @@ func _suite_premium() -> void:
 	game.player.change_class("cossack")
 	game.player.level = 30
 	game.player.recalc()
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	SH.state(gw)["coins"] = PR.PRICE
 	game.enter_map()
 	await _frames(2)
@@ -12655,7 +12675,7 @@ func _suite_boss_hunt() -> void:
 	gp.stats["vit"] = 400
 	gp.recalc()
 	gp.hp = gp.max_hp
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	game.enter_map()
 	await _frames(2)
 	var here: String = game.map_here
@@ -12792,7 +12812,7 @@ func _suite_costumes() -> void:
 	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way"]:
 		gw.hints[k] = true
 	game.player.change_class("cossack")
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	var top: String = Cost.ids()[Cost.ids().size() - 1]
 	SH.state(gw)["coins"] = CS.price(top)
 	game.enter_map()
@@ -12914,7 +12934,7 @@ func _suite_pets() -> void:
 	gp.gold = 1000000
 	gp.resources = {"wood": 10000, "iron": 10000, "herbs": 10000, "trophy": 10000}
 	gp.recalc()
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	game.enter_camp()
 	await _frames(2)
 	var tabs := []
@@ -13096,7 +13116,7 @@ func _suite_enchant_fair() -> void:
 	gp.level = 60
 	gp.gold = 10000000
 	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	gw.camp["buildings"] = {"kuznia": 3}
 	var sw: Dictionary = Data.gen_item(60, 3, "weapon", "sabre")
 	gp.add_item(sw, true)
@@ -13161,7 +13181,7 @@ func _suite_auto() -> void:
 	p.stats["vit"] = 300
 	p.recalc()
 	p.hp = p.max_hp
-	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	# ---- Де можна ----
 	game.enter_location("wild_field")
 	await _frames(3)
@@ -13272,9 +13292,9 @@ func _suite_saga() -> void:
 	var p = _new_player()
 	p.change_class("cossack")
 	w.hero_level = 99
-	check(StoryService.state(w)["stage"] != "done" and not StoryService.objective_line(w).contains(Saga.title()) and not str(StoryService.city_dialogue(w, "sich").get("kind", "")).begins_with("saga") and StoryService.on_event(w, p, "dungeon", locs[0]).is_empty() and w.saga.is_empty(), "поки головну історію не пройдено, продовження мовчить")
+	check(StoryService.stage(w) != "done" and not StoryService.objective_line(w).contains(Saga.title()) and not str(StoryService.city_dialogue(w, "sich").get("kind", "")).begins_with("saga") and StoryService.on_event(w, p, "dungeon", locs[0]).is_empty() and not StoryService.QuestEngine.line_started(w, Saga.LINE), "поки головну історію не пройдено, продовження мовчить")
 	# ---- Відкриття ----
-	w.story = {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0})
 	w.hero_level = Saga.min_level() - 1
 	check(StoryService.objective_line(w) == "" and str(Saga.min_level()) in SS.teaser(w) and StoryService.target(w) == "" and StoryService.city_dialogue(w, "sich").is_empty() and StoryService.chapter_title(w) == "", "до %d-го рівня лише обіцянка продовження в журналі" % Saga.min_level())
 	w.hero_level = Saga.min_level()
@@ -13290,22 +13310,22 @@ func _suite_saga() -> void:
 	check("стрільче" in said and not "козаче" in said, "до стрільця й тут звертаються «стрільче»")
 	StoryService.hero_class = "cossack"
 	var msgs: Array = StoryService.on_dialogue_done(w, p, "saga_start")
-	check(SS.state(w)["stage"] == "active" and StoryService.target(w) == first["objective"]["loc"] and str(first["objective"]["text"]) in StoryService.objective_line(w) and not msgs.is_empty(), "після розмови мета: надважка печера")
+	check(SS.stage(w) == "active" and StoryService.target(w) == first["objective"]["loc"] and str(first["objective"]["text"]) in StoryService.objective_line(w) and not msgs.is_empty(), "після розмови мета: надважка печера")
 	# ---- Бос і нагорода ----
-	check(StoryService.on_event(w, p, "dungeon", "kremlin").is_empty() and SS.state(w)["stage"] == "active", "чужа печера кроку не зараховує")
+	check(StoryService.on_event(w, p, "dungeon", "kremlin").is_empty() and SS.stage(w) == "active", "чужа печера кроку не зараховує")
 	var done: Array = StoryService.on_event(w, p, "dungeon", first["objective"]["loc"])
-	check(SS.state(w)["stage"] == "turnin" and StoryService.target(w) == first["city"] and "Повертайся" in StoryService.objective_line(w) and not done.is_empty(), "боса здолано: повертайся до оповідача")
+	check(SS.stage(w) == "turnin" and StoryService.target(w) == first["city"] and "Повертайся" in StoryService.objective_line(w) and not done.is_empty(), "боса здолано: повертайся до оповідача")
 	var d2: Dictionary = StoryService.city_dialogue(w, first["city"])
 	var gold0: int = p.gold
 	var tr0: int = int(p.resources.get("trophy", 0))
 	check(d2.get("kind", "") == "saga_end", "оповідач чекає з кінцевою розмовою")
 	var fin: Array = StoryService.on_dialogue_done(w, p, "saga_end")
-	check(p.gold == gold0 + int(first["reward"]["gold"]) and int(p.resources["trophy"]) == tr0 + int(first["reward"]["trophy"]) and SS.done_count(w) == 1 and SS.state(w)["stage"] == "offer" and not fin.is_empty(), "крок завершено: гривні й трофеї видано, відкрито наступний")
+	check(p.gold == gold0 + int(first["reward"]["gold"]) and int(p.resources["trophy"]) == tr0 + int(first["reward"]["trophy"]) and SS.done_count(w) == 1 and SS.stage(w) == "offer" and not fin.is_empty(), "крок завершено: гривні й трофеї видано, відкрито наступний")
 	check(StoryService.target(w) == Saga.steps()[1]["city"], "далі зірка веде до наступного оповідача")
 	# ---- Бос, якого вже здолано раніше ----
 	w.cleared[Saga.steps()[1]["objective"]["loc"]] = 2
 	StoryService.on_dialogue_done(w, p, "saga_start")
-	check(SS.state(w)["stage"] == "turnin", "давно здоланого боса зараховано одразу після розмови")
+	check(SS.stage(w) == "turnin", "давно здоланого боса зараховано одразу після розмови")
 	StoryService.on_dialogue_done(w, p, "saga_end")
 	# ---- Збереження ----
 	var w2 = WorldState.new()
@@ -13326,7 +13346,7 @@ func _suite_saga() -> void:
 	check(StoryService.city_dialogue(w, "sich").is_empty() and StoryService.on_event(w, p, "dungeon", locs[0]).is_empty(), "після кінця оповідачі мовчать")
 	# ---- Журнал і довідник ----
 	var w3 = WorldState.new()
-	w3.story = {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w3, "story", {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0})
 	w3.hero_level = 95
 	var jr: Array = JS.sections(w3, p)
 	var story_sec: Dictionary = {}
@@ -13363,7 +13383,7 @@ func _suite_saga() -> void:
 	game._sync_class()
 	gp.level = 92
 	gp.recalc()
-	gw.story = {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0})
 	game.enter_map()
 	await _frames(2)
 	check(game.hud.map_view.story_target == "sich", "зірка на мапі стоїть над Січчю")
@@ -13422,7 +13442,7 @@ func _suite_loot_rates() -> void:
 	p.stats["vit"] = 5000
 	p.recalc()
 	p.hp = p.max_hp
-	w.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	# статистика падіння з рядових ворогів на 92-му рівні
 	game.enter_location("wild_field")
 	await _frames(3)
@@ -13683,7 +13703,7 @@ func _suite_divine() -> void:
 	game._sync_class()
 	gp.level = 40
 	gp.recalc()
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	SH.state(gw)["coins"] = 10000
 	game.enter_map()
 	await _frames(2)
@@ -14348,24 +14368,24 @@ func _suite_legends() -> void:
 		said += str(ln[1])
 	check("Влад" in said and "украв" in said, "перша ж розмова каже, що упир лише вкрав ім'я воєводи")
 	LS.on_dialogue_done(w, p, "legend_start", "drakula")
-	check(LS.state(w, "drakula")["stage"] == "active" and LS.target(w, "drakula") == "tihutsa" and "tihutsa" in LS.targets(w), "мета: Перевал Тігуца, він позначений на мапі")
-	check(LS.on_event(w, p, "clear", "hoia").is_empty() and LS.state(w, "drakula")["stage"] == "active", "чуже місце кроку не зараховує")
-	check(not LS.on_event(w, p, "clear", "tihutsa").is_empty() and LS.state(w, "drakula")["stage"] == "turnin" and LS.target(w, "drakula") == "verkhovyna", "перевал очищено: повертайся до оповідача")
+	check(LS.stage(w, "drakula") == "active" and LS.target(w, "drakula") == "tihutsa" and "tihutsa" in LS.targets(w), "мета: Перевал Тігуца, він позначений на мапі")
+	check(LS.on_event(w, p, "clear", "hoia").is_empty() and LS.stage(w, "drakula") == "active", "чуже місце кроку не зараховує")
+	check(not LS.on_event(w, p, "clear", "tihutsa").is_empty() and LS.stage(w, "drakula") == "turnin" and LS.target(w, "drakula") == "verkhovyna", "перевал очищено: повертайся до оповідача")
 	var gold0: int = p.gold
 	var tr0: int = int(p.resources.get("trophy", 0))
 	check(LS.city_dialogue(w, "verkhovyna").get("kind", "") == "legend_end", "оповідач чекає з кінцевою розмовою")
 	LS.on_dialogue_done(w, p, "legend_end", "drakula")
-	check(p.gold == gold0 + int(Leg.steps("drakula")[0]["reward"]["gold_lvl"]) * 50 and int(p.resources["trophy"]) == tr0 + int(Leg.steps("drakula")[0]["reward"]["trophy"]) and int(LS.state(w, "drakula")["step"]) == 1, "нагорода: гривні за рівень героя й трофеї")
+	check(p.gold == gold0 + int(Leg.steps("drakula")[0]["reward"]["gold_lvl"]) * 50 and int(p.resources["trophy"]) == tr0 + int(Leg.steps("drakula")[0]["reward"]["trophy"]) and str(LS.current(w, "drakula")["id"]) == "drakula_2", "нагорода: гривні за рівень героя й трофеї")
 	# здобути ікла
 	LS.on_dialogue_done(w, p, "legend_start", "drakula")
 	seed(99)
 	var kills := 0
 	LS.on_event(w, p, "kill", "moroi")
-	check(int(LS.state(w, "drakula")["progress"]) == 0, "ікла падають лише зі стригоїв")
-	while LS.state(w, "drakula")["stage"] == "active" and kills < 200:
+	check(LS.QuestEngine.progress(w, str(LS.current(w, "drakula")["id"])) == 0, "ікла падають лише зі стригоїв")
+	while LS.stage(w, "drakula") == "active" and kills < 200:
 		LS.on_event(w, p, "kill", "strygoi")
 		kills += 1
-	check(LS.state(w, "drakula")["stage"] == "turnin" and kills >= 10 and kills < 60, "десять ікол здобуто за %d стригоїв" % kills)
+	check(LS.stage(w, "drakula") == "turnin" and kills >= 10 and kills < 60, "десять ікол здобуто за %d стригоїв" % kills)
 	LS.on_dialogue_done(w, p, "legend_end", "drakula")
 	# замок
 	LS.on_dialogue_done(w, p, "legend_start", "drakula")
@@ -14383,11 +14403,11 @@ func _suite_legends() -> void:
 	LS.on_dialogue_done(w, p, "legend_start", "shubin")
 	for i in 14:
 		LS.on_event(w, p, "kill", "mara")
-	check(int(LS.state(w, "bila_pani")["progress"]) == 14 and LS.state(w, "bila_pani")["stage"] == "active" and int(LS.state(w, "shubin")["progress"]) == 0, "кожна мара рахується, чужа лінійка не рухається")
+	check(LS.QuestEngine.progress(w, str(LS.current(w, "bila_pani")["id"])) == 14 and LS.stage(w, "bila_pani") == "active" and LS.QuestEngine.progress(w, str(LS.current(w, "shubin")["id"])) == 0, "кожна мара рахується, чужа лінійка не рухається")
 	LS.on_event(w, p, "kill", "mara")
 	for i in 12:
 		LS.on_event(w, p, "kill", "kamiana_baba")
-	check(LS.state(w, "bila_pani")["stage"] == "turnin" and LS.state(w, "shubin")["stage"] == "turnin" and LS.targets(w).has("lviv") and LS.targets(w).has("izium"), "дві лінійки йдуть одразу й кожна веде у своє місто")
+	check(LS.stage(w, "bila_pani") == "turnin" and LS.stage(w, "shubin") == "turnin" and LS.targets(w).has("lviv") and LS.targets(w).has("izium"), "дві лінійки йдуть одразу й кожна веде у своє місто")
 	# ---- Місце переказу міряється з героєм ----
 	LS.on_dialogue_done(w, p, "legend_start", "vii")
 	var m: Dictionary = LS.mods_for(w, p, "lysa_hora")
@@ -14399,7 +14419,7 @@ func _suite_legends() -> void:
 	var w2 = WorldState.new()
 	w2.from_dict(w.to_dict())
 	w2.hero_level = 50
-	check(LS.finished(w2, "drakula") and LS.state(w2, "bila_pani")["stage"] == "turnin" and LS.state(w2, "vii")["stage"] == "active", "поступ переказів зберігається з героєм")
+	check(LS.finished(w2, "drakula") and LS.stage(w2, "bila_pani") == "turnin" and LS.stage(w2, "vii") == "active", "поступ переказів зберігається з героєм")
 	# ---- Журнал і довідник ----
 	var sec: Dictionary = {}
 	for s0 in JS.sections(w, p):
@@ -14440,8 +14460,8 @@ func _suite_legends() -> void:
 	gp.stats["vit"] = 3000
 	gp.recalc()
 	gp.hp = gp.max_hp
-	gw.story = {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0}
-	gw.saga = {"step": Leg.order().size(), "stage": "done"}
+	_quests_set(gw, "story", {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0})
+	_quests_set(gw, "saga", {"step": Leg.order().size(), "stage": "done"})
 	game.enter_map()
 	await _frames(2)
 	game.enter_city("kyiv")
@@ -14462,7 +14482,7 @@ func _suite_legends() -> void:
 		await _frames(2)
 		guard += 1
 	check(guard == 1 and not LS.started(gw, "kozhumiaka") and game.hall_rows("kyiv").size() == 1 and game.state == game.State.CITY, "після розмови герой лишається в ратуші; кобзар чекає далі й не перебиває")
-	check(LS.state(gw, "vii")["stage"] == "active", "після розмови крок активний")
+	check(LS.stage(gw, "vii") == "active", "після розмови крок активний")
 	game.enter_map()
 	await _frames(2)
 	check(bool(game.hud.map_view.targets.get("lysa_hora", false)), "Лиса гора позначена на мапі як мета")
@@ -14655,7 +14675,7 @@ func _suite_audit() -> void:
 		for i in steps.size():
 			var lloc := str(steps[i]["objective"].get("loc", ""))
 			if leg_goal < 0 and Data.is_place(lloc) and int(Data.place(lloc)["level"]) < 99:
-				lw.legends[line] = {"step": i, "stage": "active", "progress": 0}
+				_quests_set(lw, "legends", {line: {"step": i, "stage": "active", "progress": 0}}, true)
 				var lm: Dictionary = LS.mods_for(lw, lp, lloc)
 				leg_goal = int(lm.get("goal", -1))
 				leg_base = int(Data.place(lloc)["level"])
@@ -14718,7 +14738,7 @@ func _suite_audit() -> void:
 	check(thefts <= 1 and int(hw.camp.get("theft_day", -1)) == int(now_t / 86400.0), "за одну добу злодії приходять щонайбільше раз, скільки б разів не заходив у гру (%d)" % thefts)
 
 	# ---- Збереження: версія, безпечний запис, нечитаний слот, чужі поля ----
-	check(SaveSystem.SAVE_VERSION == 11 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 11 and int(SaveSystem.migrate({"version": 10, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 11, "формат збереження 11, дев'ятий і десятий підхоплюються")
+	check(SaveSystem.SAVE_VERSION == 12 and int(SaveSystem.migrate({"version": 9, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 12 and int(SaveSystem.migrate({"version": 10, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 12 and int(SaveSystem.migrate({"version": 11, "player": {}, "world": {}, "meta": {}}).get("version", 0)) == 12, "формат збереження 12, дев'ятий, десятий і одинадцятий підхоплюються")
 	var wpath := "user://test_write.save"
 	check(SaveSystem.write_var(wpath, {"a": 1}) and SaveSystem.write_var(wpath, {"a": 2}) and FileAccess.file_exists(wpath + ".bak") and not FileAccess.file_exists(wpath + ".tmp"), "запис іде через тимчасовий файл, попередній лишається копією")
 	SaveSystem.delete(wpath)
@@ -15618,7 +15638,7 @@ func _suite_pet_fetch() -> void:
 	gp.change_class("cossack")
 	gp.level = 30
 	gp.recalc()
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	SH.state(gw)["coins"] = 100000
 	check(DS.buy(gw, gp, "khovanets"), "Хованця куплено")
 	gp.pet = "pes"
@@ -15745,7 +15765,7 @@ func _suite_salvage_confirm() -> void:
 	gp.level = 60
 	gp.gold = 10000000
 	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	gw.camp["buildings"] = {"kuznia": 3}
 	gw.boosts["safe_sharpen"] = 0  # без безпечних заточок кузня показує «Заточити без ризику»
 	game.enter_camp()
@@ -15932,7 +15952,7 @@ func _suite_scroll_keep() -> void:
 	gp.level = 60
 	gp.gold = 50000000
 	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	while not gp.bag_full():
 		gp.add_item(Data.gen_item(40, 1, ["belt", "boots", "head", "body"][gp.inventory.size() % 4]))
 	var Aud = root.get_node("Audio")
@@ -16343,7 +16363,7 @@ func _suite_auto_buffs() -> void:
 	var gp = game.player
 	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "duel", "dungeon", "potion", "mana_potion", "res"]:
 		gw.hints[k] = true
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	gp.change_class("cossack")
 	gp.change_class("kharakternyk")
 	game._sync_class()
@@ -16585,7 +16605,7 @@ func _suite_sale_off() -> void:
 	var gp = game.player
 	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "bag_full", "duel", "dungeon", "potion", "mana_potion", "res", "depths_open"]:
 		gw.hints[k] = true
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	gp.change_class("cossack")
 	game._sync_class()
 	gp.level = 30
@@ -17019,7 +17039,7 @@ func _suite_xp_gold_cap() -> void:
 		return out
 	var s1: Array = snap.call()
 	game.save_game()
-	check(int(SaveSystem.load_data(TEST_SAVE)["version"]) == SaveSystem.SAVE_VERSION and SaveSystem.SAVE_VERSION == 11, "збереження тепер версії 11")
+	check(int(SaveSystem.load_data(TEST_SAVE)["version"]) == SaveSystem.SAVE_VERSION and SaveSystem.SAVE_VERSION >= 11, "збереження тепер версії 11 чи новішої")
 	for i in 2:
 		check(game.load_game(), "повторне завантаження %d" % (i + 1))
 		check(snap.call() == s1, "після збереження й завантаження значення ті самі (%d)" % (i + 1))
@@ -17356,7 +17376,7 @@ func _suite_reforge_rare() -> void:
 	gp.level = 60
 	gp.gold = 10000000
 	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
-	gw.story = {"chapter": 6, "step": 0, "stage": "done", "progress": 0}
+	_quests_set(gw, "story", {"chapter": 6, "step": 0, "stage": "done", "progress": 0})
 	gw.camp["buildings"] = {"kuznia": 3}
 	var ui_set: Dictionary = Sets.make(set_id, "belt", 50)
 	var ui_gold: Dictionary = Uniques.make(gid, 50)
@@ -18980,6 +19000,229 @@ func _suite_hero_mechanics() -> void:
 
 # ======================= База завдань і історії =======================
 
+# ======================= Рушій завдань на вигаданих даних =======================
+
+## Вигаданий крок для рушія: лінія, на кого чекає, мета.
+func _qstep(line: String, after: Array, obj: Dictionary, extra: Dictionary = {}) -> Dictionary:
+	var r := {"line": line, "giver": "kobzar", "city": "sich", "turn_in": "", "start": [], "end": [], "reward": {}, "objective": obj}
+	if not after.is_empty():
+		r["after"] = after
+	r.merge(extra, true)
+	return r
+
+
+func _suite_quest_engine() -> void:
+	suite("Рушій завдань: вигадані лінії")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var talk := [["kobzar", "Слухай."]]
+	# Головна лінія: m1 → (гілки b1 / b2 за вибором «k») → m2 (з 3-го рівня) → m3 (чекає й на обов'язкову
+	# паралельну req); opt — необов'язкова паралельна місія, на неї не чекає ніхто. Побічна лінія side — з 5-го рівня.
+	var lines := {"main": {"kind": "story", "story": true}, "par": {"kind": "story", "story": true}, "side": {"kind": "legend", "min_level": 5}}
+	var steps := {
+		"m1": _qstep("main", [], {"type": "clear", "loc": "wild_field", "text": "Перша мета"}, {"choices": [{"text": "a"}, {"text": "b"}], "choice_key": "k"}),
+		"b1": _qstep("main", ["m1"], {"type": "visit", "loc": "kyiv", "text": "Гілка a"}, {"if": "k=0"}),
+		"b2": _qstep("main", ["m1"], {"type": "visit", "loc": "lviv", "text": "Гілка b"}, {"if": "k=1"}),
+		"m2": _qstep("main", ["b1", "b2"], {"type": "kill", "enemy": "zarazhenyi", "count": 3, "loc": "wild_field", "text": "Три вороги"}, {"min_level": 3, "start": talk}),
+		"req": _qstep("par", ["m1"], {"type": "dungeon", "loc": "zmii_cave", "text": "Обов'язкова"}, {"start": talk}),
+		"opt": _qstep("par", ["m1"], {"type": "dungeon", "loc": "crypt", "text": "Необов'язкова"}, {"start": talk, "story": false}),
+		"m3": _qstep("main", ["m2", "req"], {"type": "clear", "loc": "rapids", "text": "Фінал"}, {"start": talk}),
+		"s1": _qstep("side", [], {"type": "kill", "enemy": "zarazhenyi", "count": 2, "loc": "wild_field", "text": "Побічна"}, {"start": talk}),
+	}
+	check(GameDB.quest_graph_problems(lines, {"story": steps}).is_empty(), "вигаданий граф без проблем: %s" % str(GameDB.quest_graph_problems(lines, {"story": steps})))
+	Q.use_graph(Q.make_graph(lines, steps))
+	var w = WorldState.new()
+	var p = _new_player()
+	w.hero_level = 1
+	# Позначка сюжету
+	check(Q.is_story("m1") and Q.is_story("req") and not Q.is_story("opt") and not Q.is_story("s1"), "«story» кроку й лінії: m1, req — сюжетні; opt (свій false) і s1 (лінія без позначки) — ні")
+	# Початок: m1 без розмови активний сам; побічна лінія закрита рівнем
+	check(Q.missions(w) == ["m1"] and Q.stage(w, "m1") == "active" and Q.stage(w, "s1") == "level" and Q.level_needed("s1") == 5 and Q.stage(w, "m2") == "locked", "спершу відкрито лише m1; s1 чекає 5-го рівня")
+	check(w.missions["done"].is_empty() and w.missions["active"].is_empty(), "крок, що почався сам, у стан не пишеться до першого поступу")
+	check(Q.on_event(w, p, "clear", "rapids").is_empty() and Q.stage(w, "m1") == "active", "чужа подія не зараховується")
+	Q.set_choice(w, "k", 1)
+	var msgs: Array = Q.on_event(w, p, "clear", "wild_field")
+	check(Q.is_done(w, "m1") and not msgs.is_empty(), "m1 виконано: без «turn_in» здається одразу")
+	# Невдала умова: b1 пропущено, на b2 чекають
+	check(Q.stage(w, "b1") == "skip" and Q.is_finished(w, "b1") and not Q.is_done(w, "b1") and Q.stage(w, "b2") == "active", "умова «k=0» не справдилась: b1 пропущено, b2 відкрито")
+	# Кілька місій одразу: b2, req, opt
+	check(Q.missions(w) == ["b2", "req", "opt"] and Q.stage(w, "req") == "offer" and Q.stage(w, "opt") == "offer", "відкриті водночас: гілка, обов'язкова й необов'язкова місії (%s)" % str(Q.missions(w)))
+	Q.on_event(w, p, "visit", "lviv")
+	check(Q.is_done(w, "b2") and Q.stage(w, "m2") == "level" and Q.level_needed("m2") == 3, "m2 дочекалась гілки, але просить 3-й рівень")
+	w.hero_level = 2
+	check(Q.stage(w, "m2") == "level" and not "m2" in Q.missions(w), "на 2-му рівні m2 ще закрито")
+	w.hero_level = 3
+	check(Q.stage(w, "m2") == "offer" and "m2" in Q.missions(w), "з 3-го рівня m2 пропонують")
+	# Дві місії з однаковою метою — кожна зі своїм лічильником
+	w.hero_level = 5
+	check(Q.stage(w, "s1") == "offer", "з 5-го рівня відкривається й побічна лінія")
+	Q.start(w, "m2")
+	Q.start(w, "s1")
+	Q.on_event(w, p, "kill", "zarazhenyi")
+	check(Q.progress(w, "m2") == 1 and Q.progress(w, "s1") == 1, "обидві активні місії рахують свого ворога")
+	Q.on_event(w, p, "kill", "zarazhenyi")
+	check(Q.progress(w, "m2") == 2 and Q.stage(w, "m2") == "active" and Q.stage(w, "s1") == "turnin" and Q.progress(w, "s1") == 2, "s1 (2 вороги) виконано, m2 (3) ще ні: лічильники окремі")
+	Q.on_event(w, p, "kill", "zarazhenyi")
+	check(Q.is_done(w, "m2") and Q.progress(w, "s1") == 2 and Q.stage(w, "s1") == "turnin", "третій ворог іде лише в m2")
+	# Обов'язкова паралельна місія тримає m3, необов'язкова — ні
+	check(Q.stage(w, "m3") == "locked", "m2 здано, але m3 чекає й на обов'язкову req")
+	Q.start(w, "req")
+	Q.on_event(w, p, "dungeon", "zmii_cave")
+	check(Q.is_done(w, "req") and Q.stage(w, "m3") == "offer" and Q.stage(w, "opt") == "offer", "req здано: m3 відкрито, хоч необов'язкову opt ніхто не брав")
+	check(Q.missions(w) == ["m3", "opt", "s1"] and Q.missions_of(w, ["legend"]) == ["s1"], "порядок місій: спершу сюжетні, далі решта (%s)" % str(Q.missions(w)))
+	check(Q.line_next(w, "main") == "m3" and Q.line_started(w, "side") and not Q.line_finished(w, "main") and Q.line_open(w, "side"), "лінія: наступний крок, почата, пройдена, відкрита")
+	Q.start(w, "m3")
+	Q.on_event(w, p, "clear", "rapids")
+	check(Q.line_finished(w, "main") and not Q.line_finished(w, "par"), "головну лінію пройдено, необов'язкова лишилась")
+	# Зміна стану видна одразу (підрахунок не застаріває)
+	Q.complete(w, "opt")
+	check(Q.line_finished(w, "par") and not "opt" in Q.missions(w), "здане зникає з місій одразу")
+	# Збереження: лише id і лічильники
+	var w2 = WorldState.new()
+	w2.from_dict(w.to_dict())
+	w2.hero_level = 5
+	check(Q.missions(w2) == ["s1"] and Q.stage(w2, "s1") == "turnin" and Q.progress(w2, "s1") == 2 and Q.chose(w2, "k=1"), "поступ зберігається з героєм")
+	# place_at: усі попередники здано, крім пропущених
+	var w3 = WorldState.new()
+	w3.hero_level = 9
+	Q.set_choice(w3, "k", 0)
+	Q.place_at(w3, "m3", "active", 0)
+	check(Q.is_done(w3, "b1") and Q.stage(w3, "b2") == "skip" and Q.is_done(w3, "req") and not Q.is_done(w3, "opt") and Q.stage(w3, "m3") == "active", "place_at ставить героя на крок")
+	Q.use_graph({})
+	p.free()
+	# Перевірка графа: коло, посилання в нікуди, недосяжний крок, умова не з попередника, повтор id
+	var bad := steps.duplicate(true)
+	bad["m1"]["after"] = ["m3"]
+	bad["s1"]["after"] = ["nema"]
+	bad["b1"]["if"] = "k2=0"
+	var pr := GameDB.quest_graph_problems(lines, {"story": bad})
+	check(_has_problem(pr, ["замикає коло"]) and _has_problem(pr, ["story/s1", "нема кроку «nema»"]) and _has_problem(pr, ["story/m2", "недосяжний"]) and _has_problem(pr, ["story/b1", "«k2»"]), "коло, «after» у нікуди, недосяжні кроки, невідомий вибір: %s" % str(pr))
+	bad = steps.duplicate(true)
+	bad["b1"]["if"] = "k=0"
+	bad["m1"]["if"] = "k=1"
+	pr = GameDB.quest_graph_problems(lines, {"story": bad, "saga": {"m2": bad["m2"]}})
+	check(_has_problem(pr, ["story/m1", "«if»", "не серед тих, на які цей крок чекає"]) and _has_problem(pr, ["saga/m2", "такий id кроку вже є"]) and not _has_problem(pr, ["story/b1", "«if»"]), "умова читає лише вибір попередника; id не повторюються: %s" % str(pr))
+	bad = steps.duplicate(true)
+	bad["opt"]["line"] = "nova"
+	pr = GameDB.quest_graph_problems(lines, {"story": bad})
+	check(_has_problem(pr, ["story/opt", "нема лінії «nova»"]), "крок без лінії: %s" % str(pr))
+	# Таблиці бази: граф справжніх даних без проблем, кожна лінія має кроки
+	check(GameDB.quest_graph_problems(GameDB.table("quest_lines"), {"story": GameDB.table("story"), "legend_steps": GameDB.table("legend_steps"), "saga": GameDB.table("saga")}).is_empty(), "граф справжніх завдань без проблем")
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("legend_steps")))
+	raw["vii_2"]["after"] = "vii_1"
+	check(_has_problem(GameDB.validate("legend_steps", raw), ["legend_steps/vii_2.after", "має бути"]), "«after» у файлі — лише список")
+	raw = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("legend_steps")))
+	raw["vii_2"]["after"] = []
+	raw["vii_3"]["min_level"] = 0
+	raw["vii_3"]["story"] = false
+	pr = GameDB.validate("legend_steps", raw)
+	check(_has_problem(pr, ["legend_steps/vii_2", "«after» порожній"]) and _has_problem(pr, ["legend_steps/vii_3", "«min_level»"]) and not _has_problem(pr, ["legend_steps/vii_3", "«story» пишеться лише як true"]), "порожній «after», нульовий рівень; «story»: false у кроці можна: %s" % str(pr))
+	# Справжні дані: позначка сюжету сьогодні
+	check(Q.is_story("village") and Q.is_story("kremlin") and Q.is_story("saga_dev") and not Q.is_story("vii_1") and Q.kind_of("vii_1") == "legend" and Q.level_needed("vii_1") == 12 and Q.level_needed("vii_2") == 0 and Q.level_needed("saga_dev") == 90 and Q.level_needed("saga_khala") == 0, "історія й сага — сюжетні, перекази — побічні; рівень лінії — лише на її першому кроці")
+	# Перестановка таблиць не міняє рушія: той самий стан — ті самі місії
+	var rl := {}
+	var keys: Array = GameDB.ids("quest_lines").duplicate()
+	keys.reverse()
+	for k in keys:
+		rl[k] = GameDB.row("quest_lines", k)
+	var rs := {}
+	var sk: Array = GameDB.quest_steps().keys()
+	sk.reverse()
+	for k in sk:
+		rs[k] = GameDB.quest_steps()[k]
+	var w4 = WorldState.new()
+	w4.hero_level = 40
+	_quests_set(w4, "story", {"chapter": 2, "step": 3, "stage": "active", "progress": 2, "choices": {"trial": 1}})
+	_quests_set(w4, "legends", {"vii": {"step": 1, "stage": "active", "progress": 3}, "drakula": {"step": 0, "stage": "turnin", "progress": 0}})
+	var before_ms: Array = Q.missions(w4).duplicate()
+	before_ms.sort()
+	Q.use_graph(Q.make_graph(rl, rs))
+	var after_ms: Array = Q.missions(w4).duplicate()
+	after_ms.sort()
+	check(before_ms == after_ms and Q.stage(w4, "samples") == "active" and Q.progress(w4, "samples") == 2 and Q.stage(w4, "vii_2") == "active" and Q.is_skipped(w4, "oath") and Q.is_done(w4, "volkhv_trial"), "таблиці в іншому порядку — ті самі місії: %s" % str(after_ms))
+	Q.use_graph({})
+	check(Q.missions(w4).size() == before_ms.size() and Q.graph()["line_of"].has("village"), "назад до таблиць бази")
+
+
+## Міграція збережень v11 → v12: старі номери кроків → id кроків рушія (через заморожений порядок).
+func _suite_quest_migration() -> void:
+	suite("Рушій завдань: старі збереження")
+	var Q = load("res://scripts/game/quest_engine.gd")
+	var SS = load("res://scripts/game/story_service.gd")
+	var LSv = load("res://scripts/game/legend_service.gd")
+	var SgS = load("res://scripts/game/saga_service.gd")
+	var cases := [
+		# [опис, story, legends, saga, рівень, очікувані здані (частина), активні {id: [етап, лічильник]}, відкриті]
+		["нова гра", {}, {}, {}, 1, [], {}, ["village"]],
+		["початок: бій за село", {"chapter": 0, "step": 0, "stage": "active", "progress": 0}, {}, {}, 1, [], {"village": ["active", 0]}, []],
+		["набирається сили", {"chapter": 0, "step": 2, "stage": "active", "progress": 7}, {}, {}, 4, ["village", "flee"], {"trial": ["active", 7]}, []],
+		["обирає дорогу", {"chapter": 0, "step": 3, "stage": "active", "progress": 0}, {}, {}, 4, ["trial"], {"choose": ["active", 0]}, []],
+		["козак: присяга", {"chapter": 0, "step": 4, "stage": "active", "progress": 3, "choices": {"trial": 0, "choose": 0}}, {}, {}, 5, ["choose"], {"oath": ["active", 3]}, []],
+		["волхв: випробування", {"chapter": 0, "step": 6, "stage": "turnin", "progress": 1, "choices": {"trial": 1, "choose": 0}}, {}, {}, 5, ["to_carpathians"], {"volkhv_trial": ["turnin", 1]}, []],
+		["волхв: назад на Січ", {"chapter": 0, "step": 7, "stage": "offer", "progress": 0, "choices": {"trial": 1, "choose": 0, "volkhv_trial": 0}}, {}, {}, 5, ["volkhv_trial"], {}, ["back_to_sich"]],
+		["стрілець: до Батурина", {"chapter": 0, "step": 8, "stage": "active", "progress": 0, "choices": {"trial": 2, "choose": 0}}, {}, {}, 5, ["choose"], {"to_baturyn": ["active", 0]}, []],
+		["стрілець: випробування", {"chapter": 0, "step": 9, "stage": "active", "progress": 5, "choices": {"trial": 2, "choose": 0}}, {}, {}, 5, ["to_baturyn"], {"strilets_trial": ["active", 5]}, []],
+		["розділ I, половина вбивств", {"chapter": 1, "step": 4, "stage": "active", "progress": 6, "choices": {"trial": 0, "oath": 1, "potion": 1}}, {}, {}, 9, ["oath", "recruit", "potion"], {"camp": ["active", 6]}, []],
+		["між розділами", {"chapter": 2, "step": 0, "stage": "offer", "progress": 0, "choices": {"trial": 2, "camp": 1}}, {}, {}, 10, ["lair", "back_to_sich_s"], {}, ["kyiv_call"]],
+		["здати в Кам'янці", {"chapter": 3, "step": 4, "stage": "turnin", "progress": 1, "choices": {"trial": 1, "dovbush": 1}}, {}, {}, 17, ["dovbush"], {"tower": ["turnin", 1]}, []],
+		["історію пройдено, сага закрита", {"chapter": 6, "step": 0, "stage": "done", "progress": 0, "choices": {"trial": 0, "rada": 1}}, {}, {}, 60, ["kremlin", "oath"], {}, []],
+		["перекази: не почато, почато, пройдено", {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 2}},
+			{"kozhumiaka": {"step": 0, "stage": "offer", "progress": 0}, "vii": {"step": 1, "stage": "active", "progress": 3}, "drakula": {"step": 2, "stage": "turnin", "progress": 0}, "shubin": {"step": 2, "stage": "done", "progress": 0}},
+			{}, 35, ["vii_1", "drakula_2", "shubin_1", "shubin_2"], {"vii_2": ["active", 3], "drakula_3": ["turnin", 0]}, ["kozhumiaka_1"]],
+		["сага посередині", {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 0}}, {}, {"step": 2, "stage": "active"}, 120, ["saga_dev", "saga_khala"], {"saga_velnias": ["active", 0]}, []],
+		["сага чекає розмови", {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 0}}, {}, {"step": 4, "stage": "offer"}, 140, ["saga_baba"], {}, ["saga_chornoboh"]],
+		["сагу пройдено", {"chapter": 6, "step": 0, "stage": "done", "choices": {"trial": 0}}, {}, {"step": 5, "stage": "done"}, 140, ["saga_chornoboh"], {}, []],
+	]
+	for c in cases:
+		var m: Dictionary = SaveSystem.quests_from_v11(c[1], c[2], c[3])
+		var w = WorldState.new()
+		w.missions = m
+		w.hero_level = int(c[4])
+		var ok := true
+		for id in c[5]:
+			ok = ok and Q.is_done(w, id)
+		var act := {}
+		for id in m["active"]:
+			act[id] = [str(m["active"][id]["stage"]), int(m["active"][id]["progress"])]
+		var opened := []  # відкриті без запису: чекають розмови або почались самі (перекази — лише ті, що в старому стані)
+		for id in Q.missions(w):
+			if Q.kind_of(id) == "legend" and not c[2].has(Q.line_of(id)):
+				continue
+			if Q.stage(w, id) == "offer" or (not m["active"].has(id) and Q.stage(w, id) == "active"):
+				opened.append(id)
+		ok = ok and act == c[6] and opened == c[7]
+		check(ok, "міграція: %s (активні %s, відкриті %s)" % [c[0], str(act), str(opened)])
+	# Пролог за гілками: пропущене не здано, а пройдене
+	var wc = WorldState.new()
+	wc.missions = SaveSystem.quests_from_v11({"chapter": 1, "step": 0, "stage": "offer", "choices": {"trial": 0}}, {}, {})
+	check(Q.is_done(wc, "oath") and Q.is_skipped(wc, "to_carpathians") and Q.is_skipped(wc, "back_to_sich_s") and SS.chapter_index(wc) == 1 and SS.current(wc)["id"] == "recruit", "козак після прологу: гілки волхва й стрільця пропущено, далі Розділ I")
+	var wv = WorldState.new()
+	wv.missions = SaveSystem.quests_from_v11({"chapter": 1, "step": 0, "stage": "offer", "choices": {"trial": 1}}, {}, {})
+	check(Q.is_skipped(wv, "oath") and Q.is_done(wv, "back_to_sich") and Q.is_skipped(wv, "to_baturyn") and SS.current(wv)["id"] == "recruit", "волхв після прологу")
+	# Історію пройдено старою грою без вибору дороги (герой до класів): сюжет усе одно пройдений
+	var wn = WorldState.new()
+	wn.missions = SaveSystem.quests_from_v11({"chapter": 6, "step": 0, "stage": "done"}, {}, {})
+	check(SS.finished(wn) and SS.chapter_index(wn) == 6 and Q.is_skipped(wn, "oath") and Q.is_done(wn, "kremlin"), "пройдена історія без вибору дороги")
+	# Вибори переходять як є (і «choose», який стара гра писала за кроком)
+	var wch = WorldState.new()
+	wch.missions = SaveSystem.quests_from_v11({"chapter": 3, "step": 3, "stage": "turnin", "progress": 0, "choices": {"trial": 2, "choose": 0, "potion": 0, "camp": 1, "crypt": 0, "samples": 1}}, {}, {})
+	check(Q.choices(wch) == {"trial": 2, "choose": 0, "potion": 0, "camp": 1, "crypt": 0, "samples": 1} and SS.chronicle(wch).size() == 5 and is_equal_approx(SS.effect(wch, "discount_chyhyryn"), 0.25) and SS.effect(wch, "plague_resist") == 0.0, "вибори, літопис і наслідки після міграції")
+	# Повне збереження v11: світ без старих полів, гра відкриває той самий крок
+	var p = _new_player()
+	var old := {"version": 11, "player": p.to_dict(), "meta": {}, "world": {"loyalty": {}, "story": {"chapter": 2, "step": 3, "stage": "active", "progress": 2, "choices": {"trial": 0, "potion": 1, "camp": 0, "crypt": 1}},
+		"legends": {"vii": {"step": 1, "stage": "active", "progress": 3}}, "saga": {}}}
+	var md: Dictionary = SaveSystem.migrate(old.duplicate(true))
+	var wl = WorldState.new()
+	wl.from_dict(md["world"])
+	wl.hero_level = 15
+	check(md["version"] == 12 and not md["world"].has("story") and not md["world"].has("legends") and not md["world"].has("saga") and md["world"].has("missions"), "v11 → v12: поля story / legends / saga стали missions")
+	check(SS.current(wl)["id"] == "samples" and SS.stage(wl) == "active" and Q.progress(wl, "samples") == 2 and LSv.stage(wl, "vii") == "active" and Q.progress(wl, "vii_2") == 3 and not SgS.unlocked(wl) and SS.objective_line(wl).ends_with("2/5"), "після міграції — той самий крок і лічильники")
+	# Слоти: розділ і «пройдено» читаються з нового стану
+	SaveSystem.save(md, SaveSystem.slot_path(5))
+	var sm: Dictionary = SaveSystem.slot_summaries()[4]
+	check(int(sm["chapter"]) == 2 and not sm["done"], "картка слота: розділ II")
+	SaveSystem.delete(SaveSystem.slot_path(5))
+	p.free()
+
 func _suite_quest_db() -> void:
 	suite("База завдань")
 	var Story = load("res://scripts/data/story.gd")
@@ -19039,20 +19282,20 @@ func _suite_quest_db() -> void:
 	var after_ok := true
 	var prev := ""
 	for id in Story.step_ids():
-		after_ok = after_ok and str(Story.step(id).get("after", "")) == prev and Story.step(id)["line"] == Story.LINE
+		after_ok = after_ok and Story.step(id).get("after", []) == ([prev] if prev != "" else []) and Story.step(id)["line"] == Story.LINE
 		prev = id
 	for line in Leg.order():
 		prev = ""
 		for st in Leg.steps(line):
-			after_ok = after_ok and str(st.get("after", "")) == prev and st["line"] == line
+			after_ok = after_ok and st.get("after", []) == ([prev] if prev != "" else []) and st["line"] == line
 			prev = st["id"]
-	check(after_ok and Saga.steps()[0].get("after", "") == "" and Saga.steps()[1]["after"] == "saga_dev", "«after» кожного кроку — попередній крок його лінії")
-	check(GameDB.row("quest_lines", Saga.LINE)["after"] == "kremlin" and Saga.min_level() == 90 and Leg.line("kozhumiaka")["min_level"] == 4 and Leg.line("drakula")["min_level"] == 30 and GameDB.row("quest_lines", Story.LINE)["kind"] == "story", "лінії: рівень і «після чого» відкриваються")
+	check(after_ok and Saga.steps()[0]["after"] == ["kremlin"] and Saga.steps()[1]["after"] == ["saga_dev"], "сьогодні «after» кожного кроку — попередній крок його лінії, сага чекає на Кремль")
+	check(Saga.min_level() == 90 and Leg.line("kozhumiaka")["min_level"] == 4 and Leg.line("drakula")["min_level"] == 30 and GameDB.row("quest_lines", Story.LINE)["kind"] == "story", "лінії: рівень і «після чого» відкриваються")
 	var lw = WorldState.new()
 	lw.hero_level = 29
 	var lu: bool = LS.unlocked(lw, "drakula")
 	lw.hero_level = 30
-	lw.saga = {"step": 0, "stage": "offer"}
+	_quests_set(lw, "saga", {"step": 0, "stage": "offer"})
 	var su: bool = SgS.unlocked(lw)
 	lw.hero_level = 90
 	check(not lu and LS.unlocked(lw, "drakula") and not su and SgS.unlocked(lw), "служби читають «min_level» лінії")
@@ -19073,14 +19316,15 @@ func _suite_quest_db() -> void:
 	b["lair"]["objective"]["loc"] = "nowhere"
 	b["camp"]["objective"]["enemy"] = "vovkulaka"
 	b["camp"]["objective"]["loc"] = "wild_field"
-	b["road"]["after"] = "lost"
+	b["road"]["after"] = ["lost"]
 	b["oath"]["if"] = "trial=7"
+	b["flee"]["if"] = "crypt=0"
 	b["kremlin"]["end"][0].append("nema=0")
 	b["potion"]["choices"][0]["effects"]["fly"] = 1
 	b["oath"]["reward"]["class"] = "pirate"
 	b["flee"]["giver"] = "ghost"
 	var pr := GameDB.validate("story", b)
-	check(_has_problem(pr, ["story/lair", "мовця «nobody» нема"]) and _has_problem(pr, ["story/lair", "нема місця «nowhere»"]) and _has_problem(pr, ["story/camp", "«vovkulaka» не водиться в «wild_field»"]) and _has_problem(pr, ["story/road", "«after»"])
+	check(_has_problem(pr, ["story/lair", "мовця «nobody» нема"]) and _has_problem(pr, ["story/lair", "нема місця «nowhere»"]) and _has_problem(pr, ["story/camp", "«vovkulaka» не водиться в «wild_field»"]) and _has_problem(pr, ["story/road", "«after» — нема кроку «lost»"]) and _has_problem(pr, ["story/flee", "«if»", "вибір робить крок «crypt»"])
 		and _has_problem(pr, ["story/oath", "«if»", "лише 3 вибори"]) and _has_problem(pr, ["story/kremlin", "нема кроку з виборами під ключем «nema»"]) and _has_problem(pr, ["story/potion", "наслідку «fly»"]) and _has_problem(pr, ["story/oath", "нема класу «pirate»"])
 		and _has_problem(pr, ["story/flee", "«giver»", "ghost"]), "зламаний крок історії: %s" % str(pr))
 	b = raws["story"].duplicate(true)
@@ -19093,26 +19337,26 @@ func _suite_quest_db() -> void:
 	b = raws["legend_steps"].duplicate(true)
 	b["vii_1"]["giver"] = "nobody"
 	b["vii_2"]["objective"]["enemy"] = "vovkulaka"
-	b["vii_3"]["after"] = "vii_1"
+	b["vii_1"]["after"] = ["vii_3"]
 	b["drakula_2"]["objective"]["loc"] = "nowhere"
 	b["drakula_3"]["reward"]["gold"] = 5
 	b["dovbush_1"]["objective"]["type"] = "dungeon"
 	pr = GameDB.validate("legend_steps", b)
-	check(_has_problem(pr, ["legend_steps/vii_1", "мовця «nobody»"]) and _has_problem(pr, ["legend_steps/vii_2", "«vovkulaka» не водиться в «lysa_hora»"]) and _has_problem(pr, ["legend_steps/vii_3", "«after» має бути «vii_2»"])
+	check(_has_problem(pr, ["legend_steps/vii_1", "мовця «nobody»"]) and _has_problem(pr, ["legend_steps/vii_2", "«vovkulaka» не водиться в «lysa_hora»"]) and _has_problem(pr, ["замикає коло", "vii_1 → vii_3 → vii_2 → vii_1"]) and _has_problem(pr, ["legend_steps/vii_2", "недосяжний"])
 		and _has_problem(pr, ["legend_steps/drakula_2", "нема місця «nowhere»"]) and _has_problem(pr, ["legend_steps/drakula_3", "не читає «gold»"]) and _has_problem(pr, ["legend_steps/dovbush_1", "не печера"]), "зламаний крок переказу: %s" % str(pr))
 	b = raws["saga"].duplicate(true)
 	b["saga_dev"]["objective"]["type"] = "clear"
 	b["saga_khala"]["city"] = "nowhere"
 	b["saga_baba"]["start"][0][0] = "nobody"
-	b["saga_chornoboh"].erase("after")
+	b["saga_chornoboh"]["after"] = ["saga_nowhere"]
 	pr = GameDB.validate("saga", b)
-	check(_has_problem(pr, ["saga/saga_dev", "мета «clear»"]) and _has_problem(pr, ["saga/saga_khala", "нема міста «nowhere»"]) and _has_problem(pr, ["saga/saga_baba", "мовця «nobody»"]) and _has_problem(pr, ["saga/saga_chornoboh", "«after» має бути «saga_baba»"]), "зламаний крок саги: %s" % str(pr))
+	check(_has_problem(pr, ["saga/saga_dev", "мета «clear»"]) and _has_problem(pr, ["saga/saga_khala", "нема міста «nowhere»"]) and _has_problem(pr, ["saga/saga_baba", "мовця «nobody»"]) and _has_problem(pr, ["saga/saga_chornoboh", "нема кроку «saga_nowhere»"]) and _has_problem(pr, ["saga/saga_chornoboh", "недосяжний"]), "зламаний крок саги: %s" % str(pr))
 	b = raws["quest_lines"].duplicate(true)
 	b["saga"]["after"] = "lost"
 	b["vii"].erase("min_level")
 	b["nova"] = {"num": 8702, "kind": "legend", "title": "x", "land": "x", "source": "x", "min_level": 1}
 	pr = GameDB.validate("quest_lines", b)
-	check(_has_problem(pr, ["quest_lines/saga", "нема кроку «lost»"]) and _has_problem(pr, ["quest_lines/vii", "«min_level»"]) and _has_problem(pr, ["quest_lines/nova", "8702"]) and _has_problem(pr, ["quest_lines/nova", "нема жодного кроку"]), "зламана лінія: %s" % str(pr))
+	check(_has_problem(pr, ["quest_lines/saga", "невідоме поле «after»"]) and _has_problem(pr, ["quest_lines/vii", "«min_level»"]) and _has_problem(pr, ["quest_lines/nova", "8702"]) and _has_problem(pr, ["quest_lines/nova", "нема жодного кроку"]), "зламана лінія: %s" % str(pr))
 	b = raws["speakers"].duplicate(true)
 	b["kobzar"]["name"] = " "
 	b.erase("doroha")
@@ -19170,11 +19414,14 @@ func _suite_quest_db() -> void:
 		for ci in Story.chapter_count():
 			for si in Story.steps(ci).size():
 				var st: Dictionary = Story.steps(ci)[si]
+				var made := {"trial": 0, "camp": 0, "crypt": 0, "samples": 0, "potion": 0, "dovbush": 1}
+				if st.has("if"):
+					made[str(st["if"]).get_slice("=", 0)] = int(str(st["if"]).get_slice("=", 1))  # крок своєї гілки, а не пропущений
 				for stage in ["offer", "active", "turnin"]:
-					w.story = {"chapter": ci, "step": si, "stage": stage, "progress": 1, "choices": {"trial": 0, "camp": 0, "crypt": 0, "samples": 0, "potion": 0, "dovbush": 1}}
+					_quests_set(w, "story", {"chapter": ci, "step": si, "stage": stage, "progress": 1, "choices": made})
 					var line: String = StoryService.objective_line(w)
 					# крок без розмови на початку («city» "") чи без повернення («turn_in» "") такого етапу не має
-					var ok: bool = line.begins_with("★ ") and (StoryService.target(w) != "" or (stage == "offer" and st["city"] == "") or (stage == "turnin" and st["turn_in"] == ""))
+					var ok: bool = StoryService.current(w)["id"] == st["id"] and line.begins_with("★ ") and (StoryService.target(w) != "" or (stage == "offer" and st["city"] == "") or (stage == "turnin" and st["turn_in"] == ""))
 					for k in ["intro", "start", "end"]:
 						for l in StoryService.lines(w, st.get(k, [])):
 							ok = ok and Story.npc_name(l[0]) != "" and str(l[1]) != ""
@@ -19185,7 +19432,7 @@ func _suite_quest_db() -> void:
 	for line in Leg.order():
 		for i in Leg.steps(line).size():
 			for stage in ["offer", "active", "turnin"]:
-				w.legends = {line: {"step": i, "stage": stage, "progress": 1}}
+				_quests_set(w, "legends", {line: {"step": i, "stage": stage, "progress": 1}})
 				w.hero_level = 99
 				var ok: bool = LS.objective_text(w, line) != "" and LS.target(w, line) != "" and LS.reward_text(Leg.steps(line)[i], 30) != "" and LS.rows(w).any(func(r): return r["line"] == line and str(r["text"]) != "")
 				for l in Leg.steps(line)[i]["start"] + Leg.steps(line)[i]["end"]:
@@ -19193,10 +19440,10 @@ func _suite_quest_db() -> void:
 				if not ok:
 					bad.append("%s/%d/%s" % [line, i, stage])
 				shown_ok = shown_ok and ok
-	w.story = {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0}
+	_quests_set(w, "story", {"chapter": Story.chapter_count(), "step": 0, "stage": "done", "progress": 0})
 	for i in Saga.steps().size():
 		for stage in ["offer", "active", "turnin"]:
-			w.saga = {"step": i, "stage": stage}
+			_quests_set(w, "saga", {"step": i, "stage": stage})
 			var ok: bool = StoryService.objective_line(w).begins_with("★ ") and StoryService.target(w) != "" and Saga.title() in StoryService.chapter_title(w)
 			if not ok:
 				bad.append("saga/%d/%s" % [i, stage])

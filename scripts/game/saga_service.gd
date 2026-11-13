@@ -1,35 +1,38 @@
 extends RefCounted
-## «Попіл за вітром» (див. Saga, data/saga.json): продовження сюжету після Кремля. Стан — world.saga:
-## {"step": номер кроку, "stage": "offer" (піти до оповідача) / "active" (іти на боса) /
-## "turnin" (повернутися) / "done"}. Розмови, зірку на мапі й рядок у журналі показує StoryService:
-## коли головний сюжет завершено, він питає цю службу.
+## «Попіл за вітром» (див. Saga, data/saga.json): продовження сюжету після Кремля. Що відкрито й що
+## пройдено, вирішує QuestEngine (стан — world.missions): перший крок чекає на Кремль («after») і рівень
+## лінії («min_level» у quest_lines.json), кожен наступний — на попередній. Ця служба веде розмови,
+## нагороди й тексти кроків ліній виду «saga»; ратуша, журнал і мапа питають її через StoryService.
 
 const Saga := preload("res://scripts/data/saga.gd")
 const Story := preload("res://scripts/data/story.gd")
 const Data := preload("res://scripts/data/data.gd")
+const QuestEngine := preload("res://scripts/game/quest_engine.gd")
 
 
-static func state(world) -> Dictionary:
-	if world.saga.is_empty():
-		world.saga = {"step": 0, "stage": "offer"}
-	return world.saga
-
-
-## Чи відкрите продовження: рівень героя досить високий («min_level» лінії «saga» в quest_lines.json).
-## Що головну історію пройдено («after» лінії), перевіряє StoryService: до її кінця він сюди не питає.
+## Чи продовження вже пускає героя: рівень героя досить високий («min_level» лінії «saga») або його почато.
+## Що головну історію пройдено, перевіряє рушій («after» першого кроку).
 static func unlocked(world) -> bool:
-	return int(world.hero_level) >= Saga.min_level() or int(state(world)["step"]) > 0 or str(state(world)["stage"]) != "offer"
+	return QuestEngine.line_open(world, Saga.LINE)
 
 
 static func finished(world) -> bool:
-	return str(state(world)["stage"]) == "done"
+	return QuestEngine.line_finished(world, Saga.LINE)
 
 
+## Нинішній крок ({} — продовження пройдено).
 static func current(world) -> Dictionary:
-	var s := state(world)
-	if s["stage"] == "done" or int(s["step"]) >= Saga.steps().size():
-		return {}
-	return Saga.steps()[int(s["step"])]
+	var id := QuestEngine.line_next(world, Saga.LINE)
+	return QuestEngine.step(id) if id != "" else {}
+
+
+## Етап нинішнього кроку: offer / active / turnin; "done" — пройдено.
+static func stage(world) -> String:
+	var st := current(world)
+	if st.is_empty():
+		return "done"
+	var s := QuestEngine.stage(world, str(st["id"]))
+	return s if s in ["active", "turnin"] else "offer"
 
 
 static func title(world) -> String:
@@ -39,52 +42,62 @@ static func title(world) -> String:
 	return "%s. %s" % [Saga.title(), st["title"]]
 
 
-## Що сказати в цьому місті: {"kind": "saga_start"/"saga_end", "lines": сирі репліки} або {}.
+## Що сказати в цьому місті: {"kind": "saga_start"/"saga_end", "lines": сирі репліки, "id"} або {}.
 static func city_dialogue(world, city: String) -> Dictionary:
-	if not unlocked(world):
-		return {}
-	var s := state(world)
-	var st := current(world)
-	if st.is_empty() or str(st["city"]) != city:
-		return {}
-	if s["stage"] == "offer":
-		return {"kind": "saga_start", "lines": st["start"]}
-	if s["stage"] == "turnin":
-		return {"kind": "saga_end", "lines": st["end"]}
+	for id in QuestEngine.missions_of(world, ["saga"]):
+		var d := dialogue_of(world, id, city)
+		if not d.is_empty():
+			d["id"] = id
+			return d
 	return {}
 
 
-## Розмову дочитано. Повертає повідомлення [{"text", "big"}].
-static func on_dialogue_done(world, player, kind: String) -> Array:
-	var s := state(world)
-	var st := current(world)
-	if st.is_empty():
+## Розмова кроку саги id у цьому місті ({"kind", "lines"} або {}).
+static func dialogue_of(world, id: String, city: String) -> Dictionary:
+	var st := QuestEngine.step(id)
+	if str(st.get("city", "")) != city:
+		return {}
+	match QuestEngine.stage(world, id):
+		"offer":
+			return {"kind": "saga_start", "lines": st["start"]}
+		"turnin":
+			return {"kind": "saga_end", "lines": st["end"]}
+	return {}
+
+
+## Розмову дочитано. Повертає повідомлення [{"text", "big"}]. id — крок розмови ("" — нинішній).
+static func on_dialogue_done(world, player, kind: String, id: String = "") -> Array:
+	if id == "":
+		id = str(current(world).get("id", ""))
+	if id == "" or QuestEngine.kind_of(id) != "saga":
 		return []
-	if kind == "saga_start" and s["stage"] == "offer":
+	var st := QuestEngine.step(id)
+	var s := QuestEngine.stage(world, id)
+	if kind == "saga_start" and s == "offer":
 		if int(world.cleared.get(str(st["objective"]["loc"]), 0)) > 0:
 			# цього боса герой уже здолав: оповідач про це знає
-			s["stage"] = "turnin"
+			QuestEngine.set_stage(world, id, "turnin")
 			return [{"text": "★ Цього ворога ти вже здолав.\nПоговори ще раз: %s" % Data.place_name(str(st["city"])), "big": true}]
-		s["stage"] = "active"
+		QuestEngine.start(world, id)
 		return [{"text": "★ " + str(st["objective"]["text"]), "big": true}]
-	if kind == "saga_end" and s["stage"] == "turnin":
-		return _complete(world, player)
+	if kind == "saga_end" and s == "turnin":
+		return _complete(world, player, id)
 	return []
 
 
-## Подія гри: пройдено печеру loc.
-static func on_event(world, type: String, arg: String) -> Array:
-	var s := state(world)
-	var st := current(world)
-	if st.is_empty() or s["stage"] != "active" or type != "dungeon" or str(st["objective"]["loc"]) != arg:
-		return []
-	s["stage"] = "turnin"
-	return [{"text": "★ Мету виконано!\nПовертайся: %s" % Data.place_name(str(st["city"])), "big": true}]
+## Мету кроку виконано (QuestEngine.on_event): повернутися до оповідача.
+static func objective_met(world, _player, id: String) -> Array:
+	QuestEngine.set_stage(world, id, "turnin")
+	return [{"text": "★ Мету виконано!\nПовертайся: %s" % Data.place_name(str(QuestEngine.step(id)["city"])), "big": true}]
 
 
-static func _complete(world, player) -> Array:
-	var s := state(world)
-	var st := current(world)
+## Мета саги — бос, «принести» в неї не буває (GameDB.QUEST_OBJECTIVES); для повноти.
+static func fetch_msg(_world, id: String) -> Dictionary:
+	return {"text": "★ %s" % str(QuestEngine.step(id)["objective"]["text"]), "big": false}
+
+
+static func _complete(world, player, id: String) -> Array:
+	var st := QuestEngine.step(id)
 	var msgs := []
 	var r: Dictionary = st.get("reward", {})
 	var parts := []
@@ -107,21 +120,23 @@ static func _complete(world, player) -> Array:
 			player.inventory.append(it)  # сюжетну нагороду не губимо навіть із повною торбою
 		msgs.append({"text": "Отримано: %s" % Data.item_title(it), "big": false})
 	msgs.push_front({"text": "%s: «%s» завершено!" % [Saga.title(), st["title"]], "big": true})
-	s["step"] = int(s["step"]) + 1
-	s["stage"] = "offer"
-	if int(s["step"]) >= Saga.steps().size():
-		s["stage"] = "done"
+	QuestEngine.complete(world, id)
+	if QuestEngine.line_finished(world, Saga.LINE):
 		msgs.append({"text": "Попіл розвіяно. Вітер над світом чистий!", "big": true})
 	return msgs
 
 
-## Рядок мети для журналу й мапи (із зіркою) або "".
+## Рядок мети для журналу й мапи (із зіркою) або "": перша відкрита місія саги.
 static func objective_line(world) -> String:
-	if finished(world) or not unlocked(world):
-		return ""
-	var s := state(world)
-	var st := current(world)
-	match str(s["stage"]):
+	for id in QuestEngine.missions_of(world, ["saga"]):
+		return mission_line(world, id)
+	return ""
+
+
+## Рядок мети місії саги id (із зіркою).
+static func mission_line(world, id: String) -> String:
+	var st := QuestEngine.step(id)
+	match QuestEngine.stage(world, id):
 		"offer":
 			return "★ Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(str(st["city"]))]
 		"turnin":
@@ -138,13 +153,21 @@ static func teaser(world) -> String:
 
 ## Куди веде продовження (id міста чи печери) — для зірки на мапі.
 static func target(world) -> String:
-	if finished(world) or not unlocked(world):
-		return ""
-	var s := state(world)
-	var st := current(world)
-	return str(st["objective"]["loc"]) if s["stage"] == "active" else str(st["city"])
+	for id in QuestEngine.missions_of(world, ["saga"]):
+		return mission_target(world, id)
+	return ""
 
 
-## Скільки кроків пройдено.
+## Куди веде місія саги id: до боса, коли мету почато, інакше до оповідача.
+static func mission_target(world, id: String) -> String:
+	var st := QuestEngine.step(id)
+	return str(st["objective"]["loc"]) if QuestEngine.stage(world, id) == "active" else str(st["city"])
+
+
+## Скільки кроків здано.
 static func done_count(world) -> int:
-	return Saga.steps().size() if finished(world) else int(state(world)["step"])
+	var n := 0
+	for id in QuestEngine.line_steps(Saga.LINE):
+		if QuestEngine.is_finished(world, id):
+			n += 1
+	return n

@@ -31,7 +31,8 @@ func _hero(cls: String, lvl: int) -> void:
 	var w = game.world
 	for k in ["city", "combat", "map", "camp", "block", "elite", "boss", "item", "cleared", "defense", "trail", "hunt", "escort", "vii_gaze", "mana", "status", "charge", "parry", "skills", "class"]:
 		w.hints[k] = true
-	w.story = {"chapter": 3, "step": 0, "stage": "active", "progress": 0}
+	w.missions = {}
+	game.QuestEngine.place_at(w, "west_call", "active")  # розділ III: «Карпатська варта»
 	game.hud.hint_panel.visible = false
 	game.player.gold = 1840
 

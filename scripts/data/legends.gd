@@ -2,7 +2,8 @@ extends RefCounted
 ## Перекази: квестові лінійки за легендами земель, які вже є на мапі. Кожна лінійка незалежна від
 ## сюжету й від інших лінійок: герой може вести кілька одразу. Відкривається з min_level-го рівня героя.
 ## Лінійка — запис із «kind»: «legend» у data/quest_lines.json (title, land, source, min_level; порядок
-## файлу — порядок показу), її кроки — data/legend_steps.json з «line» (порядок файлу — порядок кроків).
+## файлу — порядок показу), її кроки — data/legend_steps.json з «line» (у якому порядку вони йдуть, задає
+## «after», див. QuestEngine; порядок файлу — порядок показу).
 ## Мета кроку: clear, dungeon, kill, fetch; нагорода: gold_lvl (гривень за рівень героя), trophy, item
 ## рівня героя. Поля — docs/data.md.
 ## Нечисть у місці переказу міряється рівнем із героєм (LegendService.mods_for), тож стара печера
@@ -51,7 +52,7 @@ static func line(id: String) -> Dictionary:
 	return GameDB.row("quest_lines", id) if has_line(id) else {}
 
 
-## Кроки лінійки в порядку проходження (лише для читання).
+## Кроки лінійки в порядку показу (лише для читання).
 static func steps(id: String) -> Array:
 	_index()
 	return _steps.get(id, [])

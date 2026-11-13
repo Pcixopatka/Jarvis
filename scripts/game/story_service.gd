@@ -1,50 +1,66 @@
 extends RefCounted
-## Логіка сюжету без інтерфейсу. Стан зберігається у world.story:
-##   {"chapter", "step", "stage", "progress"}
-## Етапи кроку: offer (чекає розмови в місті) → active (виконується мета) →
-##             turnin (повернутися до того, хто дав) → наступний крок. "done" — сюжет завершено.
+## Історія без інтерфейсу: розмови, нагороди й тексти кроків лінії «story». Що відкрито й що пройдено,
+## вирішує QuestEngine (стан — world.missions, вибори там само). Для ратуші, журналу, порадника й мапи ця
+## служба збирає всі сюжетні лінії (історія й «Попіл за вітром», SagaService) у порядку місій рушія.
+## Етапи кроку: offer (чекає розмови в місті) → active (виконується мета) → turnin (повернутися до того,
+## хто дав) → здано. Крок без розмови на початку стає активним сам; без «turn_in» — здається сам.
 
 const Story := preload("res://scripts/data/story.gd")
 const Data := preload("res://scripts/data/data.gd")
 const PlagueService := preload("res://scripts/game/plague_service.gd")
 const SagaService := preload("res://scripts/game/saga_service.gd")
+const QuestEngine := preload("res://scripts/game/quest_engine.gd")
 
 ## Постійні наслідки виборів, які гра вміє (крім знижки міста «discount_<місто>»): хто їх читає —
 ## CampService.apply_effects (зілля, опір заразі), Game (Кощій смертний).
 const EFFECTS := ["potion_max", "plague_resist", "koshchii_mortal"]
 ## Звання, які може дати нагорода («rank»).
 const RANKS := ["hetman"]
+## Види ліній, які журнал, ратуша й мапа показують як історію.
+const KINDS := ["story", "saga"]
 
 ## Клас героя — для звертань у розмовах («козаче» / «волхве»). Виставляє гра.
 static var hero_class := "cossack"
 
 
-static func state(world) -> Dictionary:
-	if world.story.is_empty():
-		world.story = {"chapter": 0, "step": 0, "stage": "offer", "progress": 0}
-		_skip_empty_start(world)
-	return world.story
+## Чи головну історію пройдено (усі кроки лінії «story» здано чи пропущено).
+static func finished(world) -> bool:
+	return QuestEngine.line_finished(world, Story.LINE)
 
 
-## Поточний крок або порожній словник, якщо сюжет завершено.
+## Скільки розділів поспіль від початку вже пройдено: номер нинішнього розділу (усі — коли історію пройдено).
+static func chapter_index(world) -> int:
+	for i in Story.chapter_count():
+		for st in Story.steps(i):
+			if not QuestEngine.is_finished(world, str(st["id"])):
+				return i
+	return Story.chapter_count()
+
+
+## Нинішній крок історії або порожній словник, якщо історію пройдено.
 static func current(world) -> Dictionary:
-	var s := state(world)
-	if s["stage"] == "done":
-		return {}
-	return Story.steps(int(s["chapter"]))[s["step"]]
+	var id := QuestEngine.line_next(world, Story.LINE)
+	return Story.step(id) if id != "" else {}
+
+
+## Етап нинішнього кроку історії: offer / active / turnin; "done" — історію пройдено.
+static func stage(world) -> String:
+	var st := current(world)
+	if st.is_empty():
+		return "done"
+	var s := QuestEngine.stage(world, str(st["id"]))
+	return s if s in ["active", "turnin"] else "offer"
+
+
+## Сюжетні місії (історія й сага), відкриті зараз, у порядку рушія.
+static func missions(world) -> Array:
+	return QuestEngine.missions_of(world, KINDS)
 
 
 static func chapter_title(world) -> String:
-	var s := state(world)
-	if s["stage"] == "done":
+	if finished(world):
 		return SagaService.title(world) if SagaService.unlocked(world) else ""  # після Кремля — «Попіл за вітром»
-	return Story.chapter_title(int(s["chapter"]))
-
-
-static func _skip_empty_start(world) -> void:
-	var st := current(world)
-	if not st.is_empty() and world.story["stage"] == "offer" and st["start"].is_empty():
-		world.story["stage"] = "active"
+	return Story.chapter_title(chapter_index(world))
 
 
 static func _count(st: Dictionary) -> int:
@@ -60,10 +76,7 @@ static func intro(world) -> Array:
 
 ## Чи гравець колись обрав такий варіант. cond: "id_кроку=номер_вибору".
 static func chose(world, cond: String) -> bool:
-	var parts := cond.split("=")
-	if parts.size() != 2:
-		return false
-	return int(world.story.get("choices", {}).get(parts[0], -1)) == int(parts[1])
+	return QuestEngine.chose(world, cond)
 
 
 ## Репліки, які має почути саме цей гравець (з урахуванням його минулих виборів і класу).
@@ -83,23 +96,6 @@ static func lines(world, src: Array) -> Array:
 	return out
 
 
-## Крок, що не стосується цього гравця (умова "if" не справдилась), пропускається.
-static func _skip_conditional(world) -> void:
-	var s: Dictionary = world.story
-	var guard := 0
-	while s["stage"] != "done" and guard < 50:
-		guard += 1
-		var st: Dictionary = Story.steps(int(s["chapter"]))[s["step"]]
-		if not st.has("if") or chose(world, st["if"]):
-			return
-		s["step"] += 1
-		if s["step"] >= Story.steps(int(s["chapter"])).size():
-			s["chapter"] += 1
-			s["step"] = 0
-			if s["chapter"] >= Story.chapter_count():
-				s["stage"] = "done"
-
-
 static func _find_step(id: String) -> Dictionary:
 	return Story.step(id)
 
@@ -107,7 +103,7 @@ static func _find_step(id: String) -> Dictionary:
 ## Постійні наслідки всіх зроблених виборів: {"discount_kyiv": 0.2, "potion_max": 1, ...}.
 static func effects(world) -> Dictionary:
 	var out := {}
-	var made: Dictionary = world.story.get("choices", {})
+	var made: Dictionary = QuestEngine.choices(world)
 	for id in made:
 		var choices: Array = _find_step(id).get("choices", [])
 		var ci := int(made[id])
@@ -123,10 +119,10 @@ static func effect(world, key: String) -> float:
 	return float(effects(world).get(key, 0.0))
 
 
-## «Літопис»: записи про зроблені вибори в порядку сюжету.
+## «Літопис»: записи про зроблені вибори в порядку показу кроків.
 static func chronicle(world) -> Array:
 	var out := []
-	var made: Dictionary = world.story.get("choices", {})
+	var made: Dictionary = QuestEngine.choices(world)
 	for i in Story.chapter_count():
 		for st in Story.steps(i):
 			var key: String = Story.choice_key(st)  # вибір дороги зберігається як trial («choice_key»)
@@ -139,84 +135,84 @@ static func chronicle(world) -> Array:
 	return out
 
 
-## Що сказати в цьому місті: {"kind": "start"/"end", "lines", "choices"} або {}.
-static func city_dialogue(world, city: String) -> Dictionary:
-	var s := state(world)
-	var st := current(world)
-	if st.is_empty():
-		# головний сюжет завершено: далі говорить «Попіл за вітром»
-		var sd: Dictionary = SagaService.city_dialogue(world, city)
-		if sd.is_empty():
-			return {}
-		return {"kind": sd["kind"], "lines": lines(world, sd["lines"]), "choices": []}
-	if s["stage"] == "offer" and st["city"] == city:
-		return {"kind": "start", "lines": lines(world, st["start"]), "choices": []}
-	if s["stage"] == "turnin" and st["turn_in"] == city:
-		return {"kind": "end", "lines": lines(world, st["end"]), "choices": st.get("choices", [])}
+## Що сказати в цьому місті: {"kind": "start"/"end"/"saga_start"/"saga_end", "lines", "choices", "id"} або {}.
+## Перша з сюжетних місій, що чекають тут розмови (id — саме ця місія).
+static func city_dialogue(world, city: String, id: String = "") -> Dictionary:
+	for d in city_dialogues(world, city):
+		if id == "" or str(d["id"]) == id:
+			return d
+	return {}
+
+
+## Усі сюжетні розмови, що чекають у цьому місті, у порядку місій.
+static func city_dialogues(world, city: String) -> Array:
+	var out := []
+	for mid in missions(world):
+		var d: Dictionary = QuestEngine.service(QuestEngine.kind_of(mid)).dialogue_of(world, mid, city)
+		if not d.is_empty():
+			out.append({"kind": d["kind"], "lines": lines(world, d["lines"]), "choices": d.get("choices", []), "id": mid})
+	return out
+
+
+## Розмова кроку історії id в цьому місті ({"kind", "lines" сирі, "choices"} або {}).
+static func dialogue_of(world, id: String, city: String) -> Dictionary:
+	var st := QuestEngine.step(id)
+	match QuestEngine.stage(world, id):
+		"offer":
+			if str(st["city"]) == city:
+				return {"kind": "start", "lines": st["start"], "choices": []}
+		"turnin":
+			if str(st["turn_in"]) == city:
+				return {"kind": "end", "lines": st["end"], "choices": st.get("choices", [])}
 	return {}
 
 
 ## Викликається, коли гравець дочитав діалог. Повертає повідомлення для гравця.
-static func on_dialogue_done(world, player, kind: String, choice: int = -1) -> Array:
+## id — крок розмови (з city_dialogue); "" — нинішній крок історії.
+static func on_dialogue_done(world, player, kind: String, choice: int = -1, id: String = "") -> Array:
 	if kind.begins_with("saga_"):
-		return SagaService.on_dialogue_done(world, player, kind)
-	var s := state(world)
+		return SagaService.on_dialogue_done(world, player, kind, id)
+	if id == "":
+		id = str(current(world).get("id", ""))
+	if id == "" or not QuestEngine.is_open(world, id):
+		return []
 	if kind == "start":
-		s["stage"] = "active"
-		s["progress"] = 0
-		return [{"text": "★ " + current(world)["objective"]["text"], "big": true}]
-	if kind == "end" and s["stage"] == "turnin":
-		return _complete(world, player, choice)
+		QuestEngine.start(world, id)
+		return [{"text": "★ " + QuestEngine.step(id)["objective"]["text"], "big": true}]
+	if kind == "end" and QuestEngine.stage(world, id) == "turnin":
+		return _complete(world, player, id, choice)
 	return []
 
 
 # ---------- Події гри ----------
 
+## Подія гри для сюжетних місій (історія й сага). Усі лінії разом — QuestEngine.on_event.
 ## type: clear / dungeon / visit (arg = id місця) або kill (arg = вид ворога).
 static func on_event(world, player, type: String, arg: String) -> Array:
-	var s := state(world)
-	if s["stage"] == "done":
-		return SagaService.on_event(world, type, arg)
-	if s["stage"] != "active":
-		return []
-	var st := current(world)
-	var obj: Dictionary = st["objective"]
-	var msgs := []
-	var done := false
-	match type:
-		"clear", "dungeon", "visit":
-			done = obj["type"] == type and obj["loc"] == arg
-		"job":
-			if obj["type"] == "job":
-				s["progress"] = mini(int(arg), _count(st))
-				done = int(arg) >= _count(st)
-		"choose":
-			# Вибір дороги зроблено на екрані «Дорога» (PathService уже записав choices["trial"])
-			done = obj["type"] == "choose"
-		"kill":
-			if obj.get("enemy", "") == arg:
-				if obj["type"] == "kill":
-					s["progress"] += 1
-				elif obj["type"] == "fetch" and randf() < float(obj.get("chance", 0.5)):
-					s["progress"] += 1
-					msgs.append({"text": "★ %s %d/%d" % [obj["item"], s["progress"], _count(st)], "big": false})
-				done = s["progress"] >= _count(st)
-	if not done:
+	return QuestEngine.on_event(world, player, type, arg, KINDS)
+
+
+## Мету «принести» поповнено (QuestEngine.on_event).
+static func fetch_msg(world, id: String) -> Dictionary:
+	var st := QuestEngine.step(id)
+	return {"text": "★ %s %d/%d" % [st["objective"]["item"], QuestEngine.progress(world, id), _count(st)], "big": false}
+
+
+## Мету кроку виконано: повернутися до того, хто дав, або (без «turn_in») здати одразу.
+static func objective_met(world, player, id: String) -> Array:
+	var st := QuestEngine.step(id)
+	if str(st["turn_in"]) == "":
+		var msgs := [{"text": "★ Виконано: %s" % st["objective"]["text"], "big": true}]
+		msgs.append_array(_complete(world, player, id, -1))
 		return msgs
-	s["progress"] = _count(st)
-	if st["turn_in"] == "":
-		msgs.append({"text": "★ Виконано: %s" % obj["text"], "big": true})
-		msgs.append_array(_complete(world, player, -1))
-	else:
-		s["stage"] = "turnin"
-		msgs.append({"text": "★ Мету виконано!\nПовертайся: %s" % Data.place_name(st["turn_in"]), "big": true})
-	return msgs
+	QuestEngine.set_stage(world, id, "turnin")
+	return [{"text": "★ Мету виконано!\nПовертайся: %s" % Data.place_name(st["turn_in"]), "big": true}]
 
 
-# ---------- Нагороди і перехід ----------
+# ---------- Нагороди ----------
 
-static func _complete(world, player, choice: int) -> Array:
-	var st := current(world)
+static func _complete(world, player, id: String, choice: int) -> Array:
+	var st := QuestEngine.step(id)
 	var msgs := []
 	_apply_reward(world, player, st.get("reward", {}), msgs)
 	var choices: Array = st.get("choices", [])
@@ -224,36 +220,29 @@ static func _complete(world, player, choice: int) -> Array:
 		choice = 0  # розмову пропущено — перший варіант (інакше розгалуження загубиться)
 	if choice >= 0 and choice < choices.size():
 		_apply_reward(world, player, choices[choice].get("reward", {}), msgs)
-		world.story["choices"] = world.story.get("choices", {})
-		world.story["choices"][st["id"]] = choice
+		QuestEngine.set_choice(world, id, choice)  # під id кроку, як завжди (вибір дороги ще й під «choice_key», PathService)
 	for b in st.get("bonus", []):
 		if chose(world, b["if"]):
 			_apply_reward(world, player, b["reward"], msgs)
-	_advance(world, msgs)
+	QuestEngine.complete(world, id)
+	_chapter_done(world, st, msgs)
 	return msgs
 
 
-static func _advance(world, msgs: Array) -> void:
-	var s: Dictionary = world.story
-	var steps: Array = Story.steps(int(s["chapter"]))
-	s["step"] += 1
-	s["progress"] = 0
-	s["stage"] = "offer"
-	if s["step"] >= steps.size():
-		var ch: Dictionary = Story.chapter(int(s["chapter"]))
-		msgs.append({"text": "%s — завершено!" % ch["title"], "big": true})
-		if ch.has("cleanse") or ch.get("cleanse_all", false):
-			PlagueService.on_chapter_done(world, int(s["chapter"]))
-			msgs.append({"text": "Зараза відступає з цілого краю!", "big": true})
-		s["chapter"] += 1
-		s["step"] = 0
-		if s["chapter"] >= Story.chapter_count():
-			s["stage"] = "done"
-			return
-	_skip_conditional(world)
-	if s["stage"] == "done":
+## Розділ завершено, коли здано його останню ланку (крок, на який не чекає жоден інший крок розділу) і
+## всі кроки розділу пройдено: зараза відступає з краю («cleanse» розділу).
+static func _chapter_done(world, st: Dictionary, msgs: Array) -> void:
+	var ci := Story.chapter_index(str(st.get("chapter", "")))
+	if ci < 0:
 		return
-	_skip_empty_start(world)
+	for other in Story.steps(ci):
+		if str(st["id"]) in QuestEngine.after(str(other["id"])) or not QuestEngine.is_finished(world, str(other["id"])):
+			return
+	var ch: Dictionary = Story.chapter(ci)
+	msgs.append({"text": "%s — завершено!" % ch["title"], "big": true})
+	if ch.has("cleanse") or ch.get("cleanse_all", false):
+		PlagueService.on_chapter_done(world, ci)
+		msgs.append({"text": "Зараза відступає з цілого краю!", "big": true})
 
 
 static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
@@ -294,13 +283,24 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 
 # ---------- Для інтерфейсу ----------
 
-## Рядок мети для списку завдань (із зіркою) або "".
+## Рядок мети для списку завдань (із зіркою) або "": перша сюжетна місія.
 static func objective_line(world) -> String:
-	var s := state(world)
-	var st := current(world)
-	if st.is_empty():
-		return SagaService.objective_line(world)
-	match s["stage"]:
+	var ms := missions(world)
+	return mission_line(world, str(ms[0])) if not ms.is_empty() else ""
+
+
+## Куди зараз веде сюжет (id міста чи місцевості) — для зірки на мапі: перша сюжетна місія.
+static func target(world) -> String:
+	var ms := missions(world)
+	return QuestEngine.target(world, str(ms[0])) if not ms.is_empty() else ""
+
+
+## Рядок мети сюжетної місії id (із зіркою).
+static func mission_line(world, id: String) -> String:
+	if QuestEngine.kind_of(id) != "story":
+		return QuestEngine.service(QuestEngine.kind_of(id)).mission_line(world, id)
+	var st := QuestEngine.step(id)
+	match QuestEngine.stage(world, id):
 		"offer":
 			return "★ Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(st["city"])]
 		"turnin":
@@ -308,17 +308,14 @@ static func objective_line(world) -> String:
 	var obj: Dictionary = st["objective"]
 	var line: String = "★ " + obj["text"]
 	if _count(st) > 1:
-		line += " %d/%d" % [s["progress"], _count(st)]
+		line += " %d/%d" % [QuestEngine.progress(world, id), _count(st)]
 	return line
 
 
-## Куди зараз веде сюжет (id міста чи місцевості) — для зірки на мапі.
-static func target(world) -> String:
-	var s := state(world)
-	var st := current(world)
-	if st.is_empty():
-		return SagaService.target(world)
-	match s["stage"]:
+## Куди веде крок історії id: до того, хто дає, до мети чи туди, де здати.
+static func mission_target(world, id: String) -> String:
+	var st := QuestEngine.step(id)
+	match QuestEngine.stage(world, id):
 		"offer":
 			return st["city"]
 		"turnin":

@@ -18,7 +18,7 @@ static func info(id: String) -> Dictionary:
 
 
 static func _chapter(world) -> int:
-	return int(_svc("story_service").state(world)["chapter"])
+	return int(_svc("story_service").chapter_index(world))
 
 
 ## Чи відкрито заняття цьому героєві. Повертає "" (відкрито) або що для цього треба (ціле речення).

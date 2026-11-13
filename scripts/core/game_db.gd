@@ -639,6 +639,8 @@ const SPEAKER_SCHEMA := {
 ## Репліка розмови завдання: [мовець, текст] або [мовець, текст, "крок=вибір"] — тоді її чути лише після такого вибору.
 const QUEST_LINE := {"type": "list", "sizes": [2, 3], "of": {"type": "string"}}
 const QUEST_DIALOGUE := {"type": "list", "required": true, "of": QUEST_LINE}
+## На які кроки чекає крок: id кроків історії, переказів чи саги (QuestEngine).
+const QUEST_AFTER := {"type": "list", "of": {"type": "string"}}
 
 ## Мета кроку завдання. Які типи бере кожна таблиця, — QUEST_OBJECTIVES.
 const OBJECTIVE_SCHEMA := {"type": "record", "required": true, "fields": {
@@ -677,7 +679,7 @@ const REWARD_FIELDS := {
 }
 const REWARD_SCHEMA := {"type": "record", "fields": REWARD_FIELDS}
 
-## Розділ історії (порядок файлу — порядок розділів; номер розділу в збереженні — місце в цьому файлі).
+## Розділ історії (порядок файлу — порядок розділів).
 const STORY_CHAPTER_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер (8451...)
 	"title": {"type": "string", "required": true},
@@ -685,13 +687,15 @@ const STORY_CHAPTER_SCHEMA := {
 	"cleanse_all": {"type": "bool"},  # розділ пройдено — зараза зникає всюди
 }
 
-## Крок історії. Порядок файлу — порядок історії; номер кроку в збереженні — місце серед кроків свого розділу.
+## Крок історії. Порядок кроків задає «after» (QuestEngine); порядок файлу — лише порядок показу (розділ за розділом).
 const STORY_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер (8601...)
 	"chapter": {"type": "string", "required": true},  # розділ (story_chapters.json)
 	"line": {"type": "string", "required": true},  # лінія завдань (quest_lines.json, «story»)
-	"after": {"type": "string"},  # що пройдено перед ним: попередній крок у файлі (див. docs/data.md)
-	"if": {"type": "string"},  # "ключ=вибір": крок лише для тих, хто так обрав (гілка)
+	"after": QUEST_AFTER,  # на які кроки (будь-якої лінії) він чекає; без поля — ні на які (див. docs/data.md)
+	"min_level": {"type": "int"},  # з якого рівня героя крок відкривається
+	"story": {"type": "bool"},  # чи крок належить сюжетній лінії (без поля — як у лінії, «story» у quest_lines.json)
+	"if": {"type": "string"},  # "ключ=вибір": крок лише для тих, хто так обрав (гілка); інакше пропускається
 	"giver": {"type": "string", "required": true},  # хто дає крок (speakers.json)
 	"city": {"type": "string", "required": true},  # де з ним говорити; "" — крок без розмови на початку
 	"intro": {"type": "list", "of": QUEST_LINE},  # вступ нової гри (лише перший крок)
@@ -707,7 +711,7 @@ const STORY_SCHEMA := {
 		"effects": {"type": "map", "of": {"type": "number"}},  # постійні наслідки (StoryService.EFFECTS, discount_<місто>)
 		"memo": {"type": "string"},  # запис у «Літопис»
 	}}},
-	"choice_key": {"type": "string"},  # під яким ключем вибір лежить у збереженні (story.choices); без поля — id кроку
+	"choice_key": {"type": "string"},  # під яким ключем вибір лежить у збереженні (world.missions.choices); без поля — id кроку
 	"reward": {"type": "record", "required": true, "fields": REWARD_FIELDS},
 	"bonus": {"type": "list", "of": {"type": "record", "fields": {  # нагорода за давніший вибір
 		"if": {"type": "string", "required": true},
@@ -722,15 +726,17 @@ const QUEST_LINE_SCHEMA := {
 	"title": {"type": "string"},
 	"land": {"type": "string"},  # переказ: край, звідки він
 	"source": {"type": "string"},  # переказ: звідки взято
-	"min_level": {"type": "int"},  # з якого рівня героя лінія відкривається
-	"after": {"type": "string"},  # який крок має бути пройдено (сага: останній крок історії)
+	"min_level": {"type": "int"},  # з якого рівня героя відкриваються перші кроки лінії (ті, що не чекають на її ж крок)
+	"story": {"type": "bool"},  # кроки лінії належать сюжетній лінії (крок може сказати інакше своїм «story»)
 }
 
-## Крок переказу чи саги (спільний вигляд кроку лінії; порядок файлу — порядок кроків у лінії).
+## Крок переказу чи саги (спільний вигляд кроку лінії; порядок кроків задає «after», порядок файлу — порядок показу).
 const LINE_STEP_SCHEMA := {
 	"num": {"type": "int", "required": true},  # сталий номер (перекази 9251..., сага 8801...)
 	"line": {"type": "string", "required": true},  # лінія (quest_lines.json)
-	"after": {"type": "string"},  # попередній крок лінії
+	"after": QUEST_AFTER,  # на які кроки (будь-якої лінії) він чекає; без поля — ні на які
+	"min_level": {"type": "int"},  # з якого рівня героя крок відкривається
+	"story": {"type": "bool"},  # чи крок належить сюжетній лінії (без поля — як у лінії)
 	"title": {"type": "string", "required": true},
 	"giver": {"type": "string", "required": true},  # оповідач (speakers.json)
 	"city": {"type": "string", "required": true},  # де він (cities.json)
@@ -3028,7 +3034,7 @@ static func _class_links(name: String, rows: Dictionary) -> Array:
 ## Таблиці завдань: їхні правила — _quest_rules, посилання — _quest_links.
 const QUEST_TABLES := ["speakers", "story_chapters", "story", "quest_lines", "legend_steps", "saga", "way", "daily", "weekly", "achievements", "spec_trials"]
 ## Рядкові поля записів завдань, які не можуть бути порожні («city», «turn_in» і «role» бувають порожні навмисно).
-const _QUEST_TEXTS := ["name", "title", "how", "desc", "land", "source", "text", "where", "need", "stat", "giver", "chapter", "line", "after", "if", "choice_key"]
+const _QUEST_TEXTS := ["name", "title", "how", "desc", "land", "source", "text", "where", "need", "stat", "giver", "chapter", "line", "if", "choice_key"]
 ## Які типи мети вміє служба кожної таблиці.
 const QUEST_OBJECTIVES := {
 	"story": ["clear", "dungeon", "kill", "fetch", "visit", "job", "choose"],
@@ -3049,7 +3055,6 @@ const QUEST_LINE_KIND := {"story": "story", "legend_steps": "legend", "saga": "s
 ## Правила таблиць завдань, що не залежать від інших таблиць.
 static func _quest_rules(name: String, rows: Dictionary) -> Array:
 	var out := []
-	var prev_in_line := {}  # лінія → останній крок у файлі
 	var stats := {}
 	var keys := rows.keys()
 	for i in keys.size():
@@ -3058,7 +3063,8 @@ static func _quest_rules(name: String, rows: Dictionary) -> Array:
 		var where := "%s/%s" % [name, id]
 		_not_blank(R, _QUEST_TEXTS, where, out)
 		for k in R:
-			if R[k] is bool and not R[k]:
+			# «story» кроку може й вимкнути сюжетність, яку дає лінія
+			if R[k] is bool and not R[k] and not (k == "story" and QUEST_LINE_KIND.has(name)):
 				out.append("%s: «%s» пишеться лише як true" % [where, k])
 		if QUEST_OBJECTIVES.has(name) and R.has("objective"):
 			_objective_rules(where, R["objective"], QUEST_OBJECTIVES[name], out)
@@ -3070,12 +3076,19 @@ static func _quest_rules(name: String, rows: Dictionary) -> Array:
 				if ln.size() > 2 and not _is_cond(str(ln[2])):
 					out.append("%s: «%s[%d]»: умова має бути \"ключ=номер вибору\", а не «%s»" % [where, k, j, ln[2]])
 		if QUEST_LINE_KIND.has(name):
-			# Крок лінії: «after» — попередній крок тієї самої лінії у файлі (так рушій іде кроками сьогодні)
-			var ln_id := str(R.get("line", ""))
-			var want: String = str(prev_in_line.get(ln_id, ""))
-			if str(R.get("after", "")) != want:
-				out.append("%s: «after» має бути %s: рушій веде лінію «%s» кроками в порядку файлу" % [where, ("«%s»" % want) if want != "" else "відсутнім (перший крок лінії)", ln_id])
-			prev_in_line[ln_id] = id
+			# Крок лінії: «after» — список кроків, на які він чекає (посилання й цикли — _quest_graph_problems)
+			var seen_after := {}
+			for a in R.get("after", []):
+				if str(a).strip_edges() == "":
+					out.append("%s: «after»: порожній id кроку" % where)
+				elif str(a) == id:
+					out.append("%s: «after»: крок не може чекати сам на себе" % where)
+				elif seen_after.has(a):
+					out.append("%s: «after»: «%s» двічі" % [where, a])
+				seen_after[a] = true
+			if R.has("after") and R["after"].is_empty():
+				out.append("%s: «after» порожній (перший крок лінії пишуть без поля)" % where)
+			_positive(R, ["min_level"], where, out)
 			var RW: Dictionary = QUEST_REWARDS[name]
 			_reward_rules(where + ".reward", R.get("reward", _EMPTY), RW["keys"], RW["ilvl"], out)
 			if R.has("start") and R["start"].is_empty() and name != "story":
@@ -3093,8 +3106,8 @@ static func _quest_rules(name: String, rows: Dictionary) -> Array:
 			"story":
 				if str(R.get("city", "")) == "" and not R.get("start", []).is_empty():
 					out.append("%s: «city» порожнє, а розмова «start» є: її ніде почути" % where)
-				if R.has("intro") and i > 0:
-					out.append("%s: «intro» читає лише перший крок (вступ нової гри)" % where)
+				if R.has("intro") and not R.get("after", []).is_empty():
+					out.append("%s: «intro» читає лише крок, з якого історія починається (без «after»): вступ нової гри" % where)
 				if R.has("if") and not _is_cond(str(R["if"])):
 					out.append("%s: «if» має бути \"ключ=номер вибору\", а не «%s»" % [where, R["if"]])
 				if R.has("choice_key") and R.get("choices", []).is_empty():
@@ -3115,12 +3128,12 @@ static func _quest_rules(name: String, rows: Dictionary) -> Array:
 					_reward_rules("%s.bonus[%d].reward" % [where, j], B.get("reward", _EMPTY), QUEST_REWARDS["story"]["keys"], true, out)
 			"quest_lines":
 				var kind := str(R.get("kind", ""))
-				var need: Array = {"story": [], "legend": ["title", "land", "source", "min_level"], "saga": ["title", "min_level", "after"]}.get(kind, [])
+				var need: Array = {"story": [], "legend": ["title", "land", "source", "min_level"], "saga": ["title", "min_level"]}.get(kind, [])
 				var allow: Array = {"story": ["title"], "legend": need, "saga": need}.get(kind, [])
 				for k in need:
 					if not R.has(k):
 						out.append("%s: лінії «%s» потрібне «%s»" % [where, kind, k])
-				for k in ["title", "land", "source", "min_level", "after"]:
+				for k in ["title", "land", "source", "min_level"]:
 					if R.has(k) and not k in allow:
 						out.append("%s: лінія «%s» не має «%s» (рушій його не читає)" % [where, kind, k])
 				_positive(R, ["min_level"], where, out)
@@ -3211,19 +3224,19 @@ static func _reward_rules(where: String, r: Dictionary, allowed: Array, ilvl: bo
 		_positive(it, ["up", "rarity"], where + ".item", out, true)
 
 
-## Ключ вибору → [місце кроку у файлі, скільки виборів]: так умови "ключ=вибір" знаходять свій крок.
+## Ключ вибору → [id кроку, скільки виборів]: так умови "ключ=вибір" знаходять свій крок.
 static func _choice_keys(steps: Dictionary) -> Dictionary:
 	var out := {}
-	var keys := steps.keys()
-	for i in keys.size():
-		var R: Dictionary = steps[keys[i]]
+	for id in steps:
+		var R: Dictionary = steps[id]
 		if not R.get("choices", []).is_empty():
-			out[str(R.get("choice_key", keys[i]))] = [i, R["choices"].size()]
+			out[str(R.get("choice_key", id))] = [str(id), R["choices"].size()]
 	return out
 
 
-## Умова "ключ=вибір": крок із такими виборами є (і, якщо at ≥ 0, стоїть у файлі раніше за місце at).
-static func _cond_problem(cond: String, keys: Dictionary, at: int) -> String:
+## Умова "ключ=вибір": крок із такими виборами є. before — id кроків, на які чекає крок з умовою
+## (усі попередники за «after»): вибір мусить бути зроблений на одному з них. null — порядок не перевіряти.
+static func _cond_problem(cond: String, keys: Dictionary, before) -> String:
 	if not _is_cond(cond):
 		return "умова має бути \"ключ=номер вибору\", а не «%s»" % cond
 	var parts := cond.split("=")
@@ -3231,20 +3244,155 @@ static func _cond_problem(cond: String, keys: Dictionary, at: int) -> String:
 		return "умова «%s» — нема кроку з виборами під ключем «%s»" % [cond, parts[0]]
 	if int(parts[1]) >= int(keys[parts[0]][1]):
 		return "умова «%s» — у кроку «%s» лише %d вибори" % [cond, parts[0], int(keys[parts[0]][1])]
-	if at >= 0 and int(keys[parts[0]][0]) >= at:
-		return "умова «%s» — вибір «%s» робиться пізніше" % [cond, parts[0]]
+	if before is Dictionary and not before.has(str(keys[parts[0]][0])):
+		return "умова «%s» — вибір робить крок «%s», а він не серед тих, на які цей крок чекає («after»)" % [cond, keys[parts[0]][0]]
 	return ""
 
 
-## Розмова: мовці є в speakers.json, умови реплік — справжні вибори.
-static func _dialogue_links(where: String, field: String, lines: Array, keys: Dictionary, at: int, out: Array) -> void:
+## Розмова: мовці є в speakers.json, умови реплік — справжні вибори (зроблені на кроках із before, якщо дано).
+static func _dialogue_links(where: String, field: String, lines: Array, keys: Dictionary, before, out: Array) -> void:
 	for j in lines.size():
 		if not _has_row("speakers", lines[j][0]):
 			out.append("%s: «%s[%d]» — мовця «%s» нема в speakers.json" % [where, field, j, lines[j][0]])
 		if lines[j].size() > 2:
-			var p := _cond_problem(str(lines[j][2]), keys, at)
+			var p := _cond_problem(str(lines[j][2]), keys, before)
 			if p != "":
 				out.append("%s: «%s[%d]»: %s" % [where, field, j, p])
+
+
+## Таблиці кроків завдань (у порядку показу) і вид лінії, яку веде кожна.
+const QUEST_STEP_TABLES := ["story", "legend_steps", "saga"]
+
+
+## Кроки всіх ліній: id → запис, у порядку QUEST_STEP_TABLES і файлів. over — {таблиця: записи},
+## що підміняють таблиці бази (перевірка запису до того, як його записати; тести).
+static func quest_steps(over: Dictionary = {}) -> Dictionary:
+	var out := {}
+	for t in QUEST_STEP_TABLES:
+		var rows: Dictionary = over[t] if over.has(t) else table(t)
+		for id in rows:
+			out[id] = rows[id]
+	return out
+
+
+## Усі попередники кроків за «after» (на кого крок чекає прямо чи через інших): id → {id: true}.
+## Цикли не зависають: крок, до якого повернулись, просто не дає нових попередників.
+static func quest_ancestors(steps: Dictionary) -> Dictionary:
+	var out := {}
+	for id in steps:
+		_ancestors_of(steps, str(id), out, {})
+	return out
+
+
+static func _ancestors_of(steps: Dictionary, id: String, memo: Dictionary, busy: Dictionary) -> Dictionary:
+	if memo.has(id):
+		return memo[id]
+	var got := {}
+	if busy.has(id) or not steps.has(id):
+		return got
+	busy[id] = true
+	for a in steps[id].get("after", []):
+		got[str(a)] = true
+		for x in _ancestors_of(steps, str(a), memo, busy):
+			got[x] = true
+	busy.erase(id)
+	memo[id] = got
+	return got
+
+
+## Граф завдань: кожен крок належить лінії, «after» веде на справжні кроки, циклів нема, кожен крок
+## досяжний від кроку без «after», id кроків не повторюються між таблицями, умови («if», репліки, бонуси)
+## читають вибір, зроблений на кроці-попереднику. lines — записи quest_lines, tables — {таблиця кроків: записи}
+## (будь-які з QUEST_STEP_TABLES; так граф можна перевірити й на даних, що в пам'яті).
+static func quest_graph_problems(lines: Dictionary, tables: Dictionary) -> Array:
+	var out := []
+	var steps := {}
+	var where := {}
+	for t in QUEST_STEP_TABLES:
+		for id in tables.get(t, _EMPTY):
+			if steps.has(id):
+				out.append("%s/%s: такий id кроку вже є в %s" % [t, id, str(where[id]).get_slice("/", 0)])
+				continue
+			steps[id] = tables[t][id]
+			where[id] = "%s/%s" % [t, id]
+	var kids := {}
+	for id in steps:
+		var R: Dictionary = steps[id]
+		if not lines.has(str(R.get("line", ""))):
+			out.append("%s: «line» — нема лінії «%s» у quest_lines.json" % [where[id], R.get("line", "")])
+		for a in R.get("after", []):
+			if not steps.has(str(a)):
+				out.append("%s: «after» — нема кроку «%s»" % [where[id], a])
+			else:
+				if not kids.has(str(a)):
+					kids[str(a)] = []
+				kids[str(a)].append(id)
+	# Цикли: обхід углиб, сірий — крок на шляху зараз
+	var color := {}
+	for id in steps:
+		if not color.has(id):
+			_find_cycles(steps, id, color, [], where, out)
+	# Досяжність: від кроків без «after» униз за «after»
+	var seen := {}
+	var queue := []
+	for id in steps:
+		if steps[id].get("after", []).is_empty():
+			seen[id] = true
+			queue.append(id)
+	while not queue.is_empty():
+		var id: String = queue.pop_back()
+		for k in kids.get(id, []):
+			if not seen.has(k):
+				seen[k] = true
+				queue.append(k)
+	for id in steps:
+		if not seen.has(id):
+			out.append("%s: крок недосяжний: від жодного кроку без «after» до нього не дійти" % where[id])
+	# Умови: вибір робиться на попереднику
+	var keys := _choice_keys(steps)
+	var anc := quest_ancestors(steps)
+	for id in steps:
+		var R: Dictionary = steps[id]
+		var before: Dictionary = anc.get(id, _EMPTY)
+		if R.has("if"):
+			var p := _cond_problem(str(R["if"]), keys, before)
+			if p != "":
+				out.append("%s: «if»: %s" % [where[id], p])
+		for k in ["intro", "start", "end"]:
+			for j in R.get(k, []).size():
+				if R[k][j].size() > 2:
+					var p := _cond_problem(str(R[k][j][2]), keys, before)
+					if p != "":
+						out.append("%s: «%s[%d]»: %s" % [where[id], k, j, p])
+		for j in R.get("bonus", []).size():
+			var p := _cond_problem(str(R["bonus"][j].get("if", "")), keys, before)
+			if p != "":
+				out.append("%s.bonus[%d]: %s" % [where[id], j, p])
+	return out
+
+
+static func _find_cycles(steps: Dictionary, id: String, color: Dictionary, path: Array, where: Dictionary, out: Array) -> void:
+	color[id] = 1
+	path.append(id)
+	for a in steps[id].get("after", []):
+		var x := str(a)
+		if not steps.has(x):
+			continue
+		if int(color.get(x, 0)) == 1:
+			var loop: Array = path.slice(path.find(x)) + [x]
+			out.append("%s: «after» замикає коло (крок → той, на кого він чекає): %s" % [where[x], " → ".join(loop)])
+		elif not color.has(x):
+			_find_cycles(steps, x, color, path, where, out)
+	path.pop_back()
+	color[id] = 2
+
+
+## Граф завдань із підміненою таблицею name (для validate: перевірка запису до того, як його записати).
+static func _quest_graph_links(name: String, rows: Dictionary) -> Array:
+	var tables := {}
+	for t in QUEST_STEP_TABLES:
+		tables[t] = rows if t == name else table(t)
+	return quest_graph_problems(rows if name == "quest_lines" else table("quest_lines"), tables)
 
 
 ## Мета: місце є й підходить меті, ворог водиться там, місто — справжнє місто.
@@ -3355,11 +3503,7 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 					if str(R.get(k, "")) != "" and not _has_row("cities", R[k]):
 						out.append("%s: «%s» — нема міста «%s» у cities.json" % [where, k, R[k]])
 				for k in ["intro", "start", "end"]:
-					_dialogue_links(where, k, R.get(k, []), keys, i, out)
-				if R.has("if"):
-					var p := _cond_problem(str(R["if"]), keys, i)
-					if p != "":
-						out.append("%s: «if»: %s" % [where, p])
+					_dialogue_links(where, k, R.get(k, []), keys, null, out)  # чи вибір зроблено раніше — _quest_graph_links
 				_objective_links(where, R.get("objective", _EMPTY), out)
 				_reward_links(where + ".reward", R.get("reward", _EMPTY), out)
 				var first: Array = row("classes", "peasant").get("next", [])
@@ -3376,9 +3520,6 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 							out.append("%s: «effects» — наслідку «%s» гра не знає (StoryService.EFFECTS, discount_<місто>)" % [cw, k])
 				for j in R.get("bonus", []).size():
 					var B: Dictionary = R["bonus"][j]
-					var p := _cond_problem(str(B.get("if", "")), keys, i)
-					if p != "":
-						out.append("%s.bonus[%d]: %s" % [where, j, p])
 					_reward_links("%s.bonus[%d].reward" % [where, j], B.get("reward", _EMPTY), out)
 			var seen := {}
 			for id in rows:
@@ -3389,6 +3530,7 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 					seen[k] = id
 			if not rows.is_empty() and at != chapters.size() - 1:
 				out.append("story: не всі розділи story_chapters.json мають кроки")
+			out.append_array(_quest_graph_links(name, rows))
 		"quest_lines":
 			for need in [[load("res://scripts/data/story.gd").LINE, "story"], [load("res://scripts/data/saga.gd").LINE, "saga"]]:
 				if str(rows.get(need[0], _EMPTY).get("kind", "")) != need[1]:
@@ -3396,16 +3538,16 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 			for id in rows:
 				var R: Dictionary = rows[id]
 				var kind := str(R.get("kind", ""))
-				if R.has("after") and not (_has_row("story", R["after"]) or _has_row("legend_steps", R["after"]) or _has_row("saga", R["after"])):
-					out.append("quest_lines/%s: «after» — нема кроку «%s»" % [id, R["after"]])
 				var table_of: String = {"story": "story", "legend": "legend_steps", "saga": "saga"}.get(kind, "")
 				var n := 0
 				for s in (ids(table_of) if table_of != "" else []):
 					n += 1 if str(row(table_of, s).get("line", "")) == id else 0
 				if n == 0:
 					out.append("quest_lines/%s: у лінії нема жодного кроку (%s.json)" % [id, table_of])
+			out.append_array(_quest_graph_links(name, rows))
 		"legend_steps", "saga":
 			var story_keys := _choice_keys(table("story"))
+			out.append_array(_quest_graph_links(name, rows))
 			for id in rows:
 				var R: Dictionary = rows[id]
 				var where: String = "%s/%s" % [name, id]
@@ -3416,7 +3558,7 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 				if not _has_row("cities", R.get("city", "")):
 					out.append("%s: «city» — нема міста «%s» у cities.json" % [where, R.get("city", "")])
 				for k in ["start", "end"]:
-					_dialogue_links(where, k, R.get(k, []), story_keys, -1, out)
+					_dialogue_links(where, k, R.get(k, []), story_keys, null, out)
 				_objective_links(where, R.get("objective", _EMPTY), out)
 				_reward_links(where + ".reward", R.get("reward", _EMPTY), out)
 		"way":
@@ -3476,7 +3618,7 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 				elif not C.is_empty() and not wt in C.get("weapons", []):
 					out.append("%s: «item.type» — «%s» не зброя класу «%s»" % [where, wt, id])
 				for k in ["start", "end"]:
-					_dialogue_links(where, k, R.get(k, []), {}, -1, out)
+					_dialogue_links(where, k, R.get(k, []), {}, null, out)
 				_objective_links(where, R.get("objective", _EMPTY), out)
 			for c in ids("classes"):
 				if row("classes", c).has("parent") and not rows.has(c):

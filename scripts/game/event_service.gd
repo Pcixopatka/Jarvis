@@ -116,7 +116,7 @@ static func tick(world, player) -> Array:
 		a["left"] = int(a["left"]) - 1
 		if int(a["left"]) <= 0:
 			msgs.append(lose(world, player, a, true))
-	if player.is_peasant() or int(StoryService.state(world)["chapter"]) < 1:
+	if player.is_peasant() or StoryService.chapter_index(world) < 1:
 		return msgs
 	# Ярмарок
 	if s["fair"].is_empty() and int(s["trips"]) % FAIR_EVERY == 0:
@@ -173,7 +173,7 @@ static func reachable_locs(world, player) -> Array:
 
 static func pick_kind(world, player) -> String:
 	var s := state(world)
-	var chapter := int(StoryService.state(world)["chapter"])
+	var chapter := StoryService.chapter_index(world)
 	var pool := ["village_raid", "village_raid", "caravan", "caravan", "wounded"]
 	if chapter >= 2:
 		pool.append("captives")
@@ -280,7 +280,7 @@ static func win(world, player, ev: Dictionary, gate_part: float = 1.0) -> String
 				return "Валку довезено цілою! +%d грн, рідкісна річ із краму, +40 лояльності в місті %s." % [gold, place(ev["to"])]
 			return "Валку довезено, хоч і побиту: +%d грн, річ із краму, +40 лояльності в місті %s." % [gold, place(ev["to"])]
 		"sich_siege":
-			s["sich_done"] = int(StoryService.state(world)["chapter"])
+			s["sich_done"] = StoryService.chapter_index(world)
 			player.gold += g * 2
 			player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 5
 			world.add_loyalty("sich", 120)

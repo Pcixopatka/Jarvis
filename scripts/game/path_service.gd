@@ -1,22 +1,22 @@
 extends RefCounted
 ## Вибір дороги (Козак, Волхв чи Стрілець) після майстерності 10. Стан — world.path_talks:
 ##   {"cossack": true, "volkhv": true} — з ким уже поговорив.
-## Обрати можна лише після всіх розмов; вибір записується як story.choices["trial"] = 0/1/2 (номер вибору
-## з «class» цього класу в кроці "choose" data/story.json, ключ — його «choice_key») і завершує сюжетний
-## крок "choose", далі сюжет сам іде гілкою oath / to_carpathians / to_baturyn.
+## Обрати можна лише після всіх розмов; вибір записується як вибір «trial» = 0/1/2 (номер вибору з «class»
+## цього класу в кроці "choose" data/story.json, ключ — його «choice_key»; QuestEngine.set_choice) і завершує
+## сюжетний крок "choose", далі сюжет сам іде гілкою oath / to_carpathians / to_baturyn.
 
 const Paths := preload("res://scripts/data/paths.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const StoryService := preload("res://scripts/game/story_service.gd")
 
+## Крок історії, на якому обирають дорогу.
+const STEP := "choose"
+
 
 
 ## Чи зараз герой стоїть перед вибором дороги (крок «choose» активний).
 static func choosing(world) -> bool:
-	var s := StoryService.state(world)
-	if s["stage"] != "active":
-		return false
-	return StoryService.current(world).get("id", "") == "choose"
+	return StoryService.QuestEngine.stage(world, STEP) == "active"
 
 
 static func talked(world, cls: String) -> bool:
@@ -48,7 +48,7 @@ static func talk_lines(cls: String) -> Array:
 static func choose(world, player, cls: String) -> Array:
 	if not can_choose(world):
 		return []
-	var st: Dictionary = StoryService.current(world)
+	var st: Dictionary = StoryService.Story.step(STEP)
 	var ci := -1
 	for i in st.get("choices", []).size():
 		if str(st["choices"][i].get("class", "")) == cls:
@@ -56,6 +56,5 @@ static func choose(world, player, cls: String) -> Array:
 			break
 	if ci < 0:
 		return []
-	world.story["choices"] = world.story.get("choices", {})
-	world.story["choices"][StoryService.Story.choice_key(st)] = ci
+	StoryService.QuestEngine.set_choice(world, StoryService.Story.choice_key(st), ci)
 	return StoryService.on_event(world, player, "choose", cls)
