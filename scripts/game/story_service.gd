@@ -23,6 +23,16 @@ const KINDS := ["story", "saga"]
 static var hero_class := "cossack"
 
 
+## Рідне село з прологу й крок «Утеча на Січ»: до нього поразка вдома нічого не коштує.
+const HOME_ID := "ridne_selo"
+const FLEE_ID := "flee"
+
+
+## Чи впалий у бою герой лишається в рідному селі (ще не дійшов до Січі), а не отямлюється в місті.
+static func wakes_at_home(world, loc_id: String) -> bool:
+	return loc_id == HOME_ID and not QuestEngine.is_finished(world, FLEE_ID)
+
+
 ## Чи головну історію пройдено (усі кроки лінії «story» здано чи пропущено).
 static func finished(world) -> bool:
 	return QuestEngine.line_finished(world, Story.LINE)

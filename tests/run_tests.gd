@@ -79,6 +79,7 @@ func _run() -> void:
 	_suite_bulk_sell()
 	_suite_account()
 	await _suite_gameplay()
+	await _suite_home_death()
 	await _suite_moves()
 	await _suite_defense_battle()
 	await _suite_mage_battle()
@@ -12126,6 +12127,89 @@ func _suite_gameplay() -> void:
 	check(("Втрачено %d досвіду" % want_loss) in death_text if want_loss > 0 else "Втрачено" in death_text and not "досвіду" in death_text, "екран поразки називає втрачене")
 	game.enter_city(game.world.last_city)
 	check(game.player.alive and game.player.hp == game.player.max_hp, "козак отямився в місті")
+	game.queue_free()
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	await _frames(2)
+
+
+## Тексти й кнопки екрана поразки.
+func _defeat_screen(game) -> Dictionary:
+	var text := ""
+	for n in game.hud.overlay_box.find_children("*", "Label", true, false):
+		text += n.text + "\n"
+	var btns := {}
+	for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion():
+			btns[b.text] = b
+	return {"text": text, "buttons": btns}
+
+
+func _suite_home_death() -> void:
+	suite("Смерть у рідному селі до Січі")
+	var WorldState = load("res://scripts/game/world_state.gd")
+	var QE = load("res://scripts/game/quest_engine.gd")
+	var w0 = WorldState.new()
+	check(StoryService.wakes_at_home(w0, "ridne_selo") and not StoryService.wakes_at_home(w0, "wild_field"), "до Січі поразка в рідному селі лишає героя вдома, деінде — ні")
+	QE.complete(w0, "village")
+	QE.complete(w0, "flee")
+	check(not StoryService.wakes_at_home(w0, "ridne_selo"), "коли «Утечу на Січ» пройдено, рідне село — звичайне місце")
+	var basics := ""
+	for e in load("res://scripts/game/wiki_service.gd")._entries("basics"):
+		basics += str(e["text"]) + "\n"
+	check("У рідному селі, поки ти ще не дійшов до Січі, поразка нічого не коштує: бій починається заново." in basics, "довідник: у рідному селі до Січі поразка нічого не коштує")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(3)
+	game.new_game()
+	await _frames(2)
+	game.hud.dialogue_root._finish()
+	await _frames(2)
+	check(game.state == game.State.PLAYING and game.combat.loc_id == "ridne_selo", "перший бій — у рідному селі")
+	# Перша поразка: нічого не втрачено, бій починається заново
+	game.player.gold = 200
+	var xp0: int = game.player.xp
+	var last0: String = game.world.last_city
+	game.player.invuln = 0.0
+	game.player.take_damage(1e9)
+	await _frames(150)
+	var scr := _defeat_screen(game)
+	check(game.state == game.State.DEAD and game.player.gold == 200 and game.player.xp == xp0, "поразка вдома: гривні й досвід цілі")
+	check("Односельці відтягли тебе до хати" in scr["text"] and not "Втрачено" in scr["text"] and not "Отямитися" in str(scr["buttons"].keys()), "екран поразки вдома без утрат і без «Отямитися»")
+	check(scr["buttons"].has("Стати на поріг знову") and scr["buttons"].size() == 1, "одна кнопка «Стати на поріг знову»")
+	# Гру закрито на екрані поразки: після входу герой живий на мапі біля села
+	game.save_game()
+	game._show_main_menu()
+	game._continue_game()
+	await _frames(3)
+	check(game.state == game.State.MAP and game.map_here == "ridne_selo" and game.player.alive and game.player.hp == game.player.max_hp and not game.combat.active, "збереження з екрана поразки: герой живий на мапі біля рідного села")
+	game.enter_location("ridne_selo")
+	await _frames(2)
+	game.player.invuln = 0.0
+	game.player.take_damage(1e9)
+	await _frames(150)
+	scr = _defeat_screen(game)
+	check(game.state == game.State.DEAD and scr["buttons"].has("Стати на поріг знову"), "знову впав у селі — знову екран без утрат")
+	scr["buttons"]["Стати на поріг знову"].pressed.emit()
+	await _frames(2)
+	check(game.player.alive and game.player.hp == game.player.max_hp, "герой на ногах із повним здоров'ям")
+	check(game.state == game.State.PLAYING and game.combat.active and game.combat.loc_id == "ridne_selo" and game.city_id == "" and game.world.last_city == last0, "бій у рідному селі почався заново, місто не відкривалось")
+	check(not QE.is_finished(game.world, "flee"), "«Утеча на Січ» від цього не зарахована")
+	# Після Січі рідне село карає, як усюди
+	QE.complete(game.world, "village")
+	QE.complete(game.world, "flee")
+	game.player.gold = 200
+	game.player.invuln = 0.0
+	game.player.take_damage(1e9)
+	await _frames(150)
+	scr = _defeat_screen(game)
+	check(game.state == game.State.DEAD and game.player.gold == 200 - int(200 * Data.DEATH_GOLD_LOSS) and "Втрачено" in scr["text"] and not "Односельці" in scr["text"], "після Січі смерть у селі забирає %d%% гривень" % roundi(Data.DEATH_GOLD_LOSS * 100.0))
+	check(scr["buttons"].has("Отямитися: %s" % Data.place_name(game.world.last_city)), "після Січі — звичайна кнопка «Отямитися»")
 	game.queue_free()
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)

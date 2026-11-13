@@ -1557,18 +1557,25 @@ func _on_player_died() -> void:
 	Audio.jingle("defeat")
 	hud.set_mode(true, false)
 	hud.char_btn.visible = false
-	hud.show_banner("Козак поліг...", Color(1.0, 0.4, 0.35))
+	# у рідному селі до Січі поразка нічого не коштує: бій починається заново
+	var home: bool = StoryService.wakes_at_home(world, combat.loc_id)
+	hud.show_banner("Ти впав..." if home else "Козак поліг...", Color(1.0, 0.4, 0.35))
 	# Кара за смерть лягає одразу й одразу зберігається: згорнути гру, поки екран темніє, не поможе
-	var lost := int(player.gold * Data.DEATH_GOLD_LOSS)
+	var lost := 0 if home else int(player.gold * Data.DEATH_GOLD_LOSS)
 	player.gold -= lost
 	# у надважкій печері смерть коштує більше досвіду, а отямлюється герой у таборі біля входу
 	var peril_id: String = combat.loc_id if PerilService.is_peril(combat.loc_id) else ""
-	var lost_xp: int = player.death_xp_loss(Peril.DEATH_XP_MULT if peril_id != "" else 1.0)
+	var lost_xp: int = 0 if home else player.death_xp_loss(Peril.DEATH_XP_MULT if peril_id != "" else 1.0)
 	save_game()
 	await get_tree().create_timer(1.4).timeout
 	if state != State.DEAD:
 		return  # за цю мить гравець уже деінде (тест чи головне меню): екран поразки не потрібен
 	_open_menu()
+	if home:
+		hud.add_title("Ти впав", 64, Color(1.0, 0.45, 0.35))
+		hud.add_title("Односельці відтягли тебе до хати. Заражені ще в селі.", 24, UI.TEXT)
+		hud.add_button("Стати на поріг знову", _wake_at_home)
+		return
 	hud.add_title("Козак поліг", 64, Color(1.0, 0.45, 0.35))
 	var price := "Втрачено %d грн." % lost
 	if lost_xp > 0:
@@ -1908,6 +1915,14 @@ func _wake_at_camp(id: String) -> void:
 	map_sel = id
 	enter_map()
 	_build_map_panel()
+
+
+## Після поразки в рідному селі до Січі: герой і загін на ногах, бій за село починається заново.
+func _wake_at_home() -> void:
+	_leave_combat()
+	player.revive()
+	world.revive_companions()
+	enter_location(StoryService.HOME_ID)
 
 
 ## Крок подорожі (викликається з _process, коли ми на мапі й їдемо).
