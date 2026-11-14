@@ -161,6 +161,20 @@ static var PARRY_WINDOW: float  # натиснув «Блок» не раніш�
 static var BLOCK_MULT: float  # частка шкоди, що проходить крізь блок
 static var CHARGE_MIN: float  # з якого часу утримання блоку, с, удар уже заряджений
 static var CHARGE_FULL: float  # з якого часу утримання блоку удар заряджений повністю, с
+## Межі й пороги бою: їх показують екран героя (HeroSheet) і довідник, тож вони названі тут
+const CRIT_CAP := 0.8  # шанс криту не більший
+const SKILL_CD_MIN := 0.3  # перезарядка вмінь не коротша за цю частку
+const BLOCK_FX_CAP := 60.0  # блок від умінь (fx «block»), %, не більший
+const WARD_FX_CAP := 40.0  # оберіг від умінь (fx «ward»), %, не більший
+const DODGE_FX_MIN := 0.4  # уміння (fx «dodge_cd») скорочують перекид не нижче цієї частки
+const LOW_HP := 0.3  # добивання: у ворога менше цієї частки здоров'я
+const HIGH_HP := 0.9  # перший удар: у ворога більше цієї частки здоров'я
+const EXECUTE_PERK := 1.2  # множник добивання від «h_execute» (Загартування)
+const PARRY_HIT := 1.5  # удар у відповідь на парирування: шкода × це × множник криту
+const PARRY_HEAL_PERK := 0.04  # лікування за парирування від «h_parry», частка здоров'я на ранг
+const AFTER_DODGE_T := 2.0  # скільки секунд після перекиду діє fx «dodge_dmg»
+const ANTIPLAGUE_MULT := 0.8  # під зіллям від зарази удар по героєві множиться на це
+const STATUS_RES_CAP := 0.6  # стани на герої коротші щонайбільше на цю частку
 
 var combo_step := 0
 var combo_timer := 0.0
@@ -746,7 +760,7 @@ func recalc() -> void:
 		attack_cooldown = RANGED_MIN_CD
 	if not Data.is_ranged(weapon_type):
 		attack_range *= 1.0 + fx("range") / 100.0
-	crit_chance = minf(0.8, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0 + fx("crit") / 100.0)
+	crit_chance = minf(CRIT_CAP, 0.05 + 0.015 * s_agi + 0.05 * pk("luck") + 0.04 * pk("oko") + 0.05 * pk("vluchnist") + eq("crit") / 100.0 + float(festive.get("crit", 0.0)) + float(klein.get("crit", 0.0)) + float(set_fx.get("crit", 0.0)) / 100.0 + fx("crit") / 100.0)
 	crit_mult = (3.0 if pk("deadly") > 0 else 2.0) + 0.25 * pk("h_crit") + float(soul_fx.get("crit_dmg", 0.0)) + float(set_fx.get("crit_dmg", 0.0)) / 100.0 + fx("crit_dmg") / 100.0
 	lifesteal = 0.02 * pk("thirst") + 0.03 * pk("wolf_blood") + eq("lifesteal") / 100.0 + fx("lifesteal") / 100.0
 
@@ -762,7 +776,7 @@ func recalc() -> void:
 	regen = 0.6 * pk("regen") + 1.0 * pk("zhyve_slovo") + 0.5 * pk("h_blood") + eq("regen") + (1.0 if meal == "yushka" else 0.0) + max_hp * float(festive.get("regen", 0.0))
 	dodge_cooldown = 1.2 * (1.0 - 0.12 * pk("roll")) * (1.0 - 0.15 * pk("stryvok")) * (1.0 - 0.1 * pk("h_roll")) * (1.0 - float(art.get("dodge_cd", 0.0))) * (1.0 - float(soul_fx.get("dodge_cd", 0.0)))
 	regen += max_hp * fx("regen_pct") / 100.0
-	dodge_cooldown *= maxf(0.4, 1.0 - fx("dodge_cd") / 100.0)
+	dodge_cooldown *= maxf(DODGE_FX_MIN, 1.0 - fx("dodge_cd") / 100.0)
 	thorns = 0.25 * pk("thorns") + fx("thorns") / 100.0
 	varenyk_bonus = pk("varenyk")
 
@@ -770,8 +784,8 @@ func recalc() -> void:
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0))) * (1.0 + float(divine_fx.get("pickup", 0.0)))
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0)) + float(divine_fx.get("xp", 0.0))
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0 + float(divine_fx.get("gold", 0.0))
-	skill_cd_mult = maxf(0.3, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
-	skill_cd_mult = maxf(0.3, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0) * (1.0 - fx("cd") / 100.0))
+	skill_cd_mult = maxf(SKILL_CD_MIN, (1.0 - 0.06 * pk("focus") - 0.05 * pk("h_mind") - eq("skill_cd") / 100.0) / (1.0 + 0.04 * Data.soft_spi(s_spi)) * (1.0 - float(festive.get("cd", 0.0))) * (1.0 - float(klein.get("cd", 0.0))))
+	skill_cd_mult = maxf(SKILL_CD_MIN, skill_cd_mult * (1.0 - float(soul_fx.get("cd", 0.0))) * (1.0 - float(set_fx.get("cd", 0.0)) / 100.0) * (1.0 - fx("cd") / 100.0))
 	skill_power = (1.0 + 0.05 * Data.soft_spi(s_spi) + 0.1 * pk("spirit") + 0.05 * pk("h_spirit") + eq("skill_power") / 100.0 + float(festive.get("skill", 0.0))) * (1.0 + float(soul_fx.get("skill", 0.0))) * (1.0 + float(set_fx.get("skill", 0.0)) / 100.0) * (1.0 + float(valor_fx.get("skill", 0.0)) / 100.0) * (1.0 + fx("skill") / 100.0)
 	var ci := class_info()
 	# Грозові й карпатські чари б'ють по кілька цілей і частіше за інші, тож сила вмінь у цих класів менша:
@@ -1099,14 +1113,14 @@ func _parry(source) -> void:
 	combat.float_text(global_position + Vector2(0, -70), "Парирування!" if source != null else "Відбито!", Color(1.0, 0.95, 0.5))
 	Events.parried.emit()
 	if pk("h_parry") > 0:
-		heal(max_hp * 0.04 * pk("h_parry"), false)
+		heal(max_hp * PARRY_HEAL_PERK * pk("h_parry"), false)
 	if fx("parry_heal") > 0.0:
 		heal(max_hp * fx("parry_heal") / 100.0, false)
 	if source != null and is_instance_valid(source) and not source.dead:
 		source.windup = 0.0
 		source.stun = maxf(source.stun, 0.6 if source.is_boss else 1.5)
 		var to: Vector2 = source.global_position - global_position
-		hit(source, damage * 1.5 * crit_mult * (1.0 + fx("parry_dmg") / 100.0), to.normalized() * 400.0, true)
+		hit(source, damage * PARRY_HIT * crit_mult * (1.0 + fx("parry_dmg") / 100.0), to.normalized() * 400.0, true)
 
 
 # ================= Бій =================
@@ -1144,8 +1158,8 @@ func _roll(mult: float) -> Array:
 func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 	if e.dead:
 		return
-	if pk("h_execute") > 0 and e.hp < e.max_hp * 0.3:
-		dmg *= 1.2
+	if pk("h_execute") > 0 and e.hp < e.max_hp * LOW_HP:
+		dmg *= EXECUTE_PERK
 	var hp_before: float = maxf(0.0, e.hp)
 	if not art.is_empty():
 		dmg *= 1.0 + float(art.get("dmg", 0.0))  # «Уламок чорного сонця»
@@ -1154,7 +1168,7 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 		elif e.elite or e.bounty_id > 0:
 			dmg *= 1.0 + float(art.get("elite_dmg", 0.0))
 	if not soul_fx.is_empty():
-		if e.hp < e.max_hp * 0.3:
+		if e.hp < e.max_hp * LOW_HP:
 			dmg *= 1.0 + float(soul_fx.get("execute", 0.0))
 		if e.is_boss or e.elite:
 			dmg *= 1.0 + float(soul_fx.get("big_dmg", 0.0))
@@ -1163,9 +1177,9 @@ func hit(e, dmg: float, kb: Vector2, crit: bool) -> void:
 	if not _fx.is_empty():
 		if e.is_boss or e.elite:
 			dmg *= 1.0 + fx("big_dmg") / 100.0
-		if e.hp < e.max_hp * 0.3:
+		if e.hp < e.max_hp * LOW_HP:
 			dmg *= 1.0 + fx("execute") / 100.0
-		elif e.hp > e.max_hp * 0.9:
+		elif e.hp > e.max_hp * HIGH_HP:
 			dmg *= 1.0 + fx("opener") / 100.0
 		if not e.statuses.is_empty():
 			dmg *= 1.0 + fx("status_dmg") / 100.0
@@ -1347,7 +1361,7 @@ func dodge() -> void:
 	invuln = maxf(invuln, 0.32)
 	for m in _hooks[HeroMechanic.ON_DODGE]:
 		m.on_dodge()
-	_after_dodge_t = 2.0
+	_after_dodge_t = AFTER_DODGE_T
 	Audio.play("dodge", 0.1)
 	combat.fx.burst(global_position + Vector2(0, 16), Color(0.75, 0.7, 0.55, 0.7), 10, 160, 7, 0.45, 0, (-dodge_dir).angle(), 1.4)
 
@@ -1621,7 +1635,7 @@ func take_damage(amount: float, source = null, area: bool = false) -> bool:
 		if block_time <= PARRY_WINDOW:
 			_parry(source)
 			return false
-		amount *= BLOCK_MULT * (1.0 - float(soul_fx.get("block", 0.0))) * (1.0 - minf(60.0, fx("block")) / 100.0)
+		amount *= BLOCK_MULT * (1.0 - float(soul_fx.get("block", 0.0))) * (1.0 - minf(BLOCK_FX_CAP, fx("block")) / 100.0)
 		combat.float_text(global_position + Vector2(0, -70), "Блок", Color(0.75, 0.85, 1.0))
 	for m in _hooks[HeroMechanic.ABSORB]:
 		amount = m.absorb(amount)
@@ -1633,9 +1647,9 @@ func take_damage(amount: float, source = null, area: bool = false) -> bool:
 		source.take_damage(amount * thorns, Vector2.ZERO, false)
 	amount *= (1.0 - armor)
 	amount *= 1.0 - float(valor_fx.get("ward", 0.0)) / 100.0  # звитяга «Оберіг»
-	amount *= 1.0 - minf(40.0, fx("ward")) / 100.0  # вміння за даними
+	amount *= 1.0 - minf(WARD_FX_CAP, fx("ward")) / 100.0  # вміння за даними
 	if trip_buffs.has("antiplague"):
-		amount *= 0.8
+		amount *= ANTIPLAGUE_MULT
 	hp -= amount
 	hurt_flash = 0.2
 	if not area:
@@ -1707,7 +1721,7 @@ func add_status(id: String, dur: float, dps: float = 0.0) -> void:
 		dps *= (1.0 - plague_resist) * (1.0 - float(art.get("plague", 0.0)))
 	var fresh := not statuses.has(id)
 	# на Здвиження пристріт слабне; артефакти теж скорочують стани, разом не більш як на 60%
-	var shorter: float = minf(0.6, float(festive.get("status", 0.0)) + float(art.get("status", 0.0)) + float(art.get("st_" + id, 0.0)) + float(soul_fx.get("status_res", 0.0)))
+	var shorter: float = minf(STATUS_RES_CAP, float(festive.get("status", 0.0)) + float(art.get("status", 0.0)) + float(art.get("st_" + id, 0.0)) + float(soul_fx.get("status_res", 0.0)))
 	Status.apply(self, id, dur * (1.0 - shorter), dps)
 	if fresh and _in_combat():
 		combat.float_text(global_position + Vector2(0, -95), Status.name_of(id) + "!", Status.color_of(id))

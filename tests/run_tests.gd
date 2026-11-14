@@ -175,6 +175,7 @@ func _run() -> void:
 	await _suite_divine()
 	await _suite_legends()
 	await _suite_grid_shops()
+	await _suite_hero_sheet()
 	await _suite_audit()
 	await _suite_place_restore()
 	await _suite_hero_names()
@@ -15868,6 +15869,253 @@ func _suite_grid_shops() -> void:
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
 
+
+## Рядки вкладки «Герой»: [[напис, значення], ...] з усіх сіток лівої панелі й заголовки груп.
+func _hero_tab(UChar, game) -> Dictionary:
+	var hero: Control = UChar._hero(game)
+	var rows := []
+	var heads := []
+	for c in hero.get_child(0).get_children():
+		if c is Label:
+			heads.append(c.text)
+		elif c is GridContainer:
+			for cell in c.get_children():
+				if cell is HBoxContainer and cell.get_child_count() == 2:
+					rows.append([cell.get_child(0).text, cell.get_child(1).text])
+	hero.free()
+	var by := {}
+	for r in rows:
+		by[r[0]] = r[1]
+	return {"rows": rows, "heads": heads, "by": by}
+
+
+func _suite_hero_sheet() -> void:
+	suite("Екран героя: усі показники")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var UChar = load("res://scripts/ui/ui_character.gd")
+	var HS = load("res://scripts/game/hero_sheet.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Arts = load("res://scripts/data/artifacts.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var gw = game.world
+	var gp = game.player
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "levelup", "way", "camp", "kleinody"]:
+		gw.hints[k] = true
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.recalc()
+	game.enter_map()
+	await _frames(2)
+	var NEW := ["Замах", "Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду", "Удар парирування", "Вибух убитого",
+		"Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення",
+		"Блок гасить", "Оберіг", "Шипи", "Вампіризм лікує до", "Парирування лікує", "За вбивство: здоров'я", "Перекид раз на", "Стани коротші", "Зараза слабша", "Лікування героя",
+		"Наснага за удар", "За вбивство: наснага", "Радіус збору"]
+	# ---- Герой без нічого: давні рядки ті самі, нові — нулі й основа ----
+	var tab: Dictionary = _hero_tab(UChar, game)
+	var old := [
+		["Зброя", Data.weapon_name(gp.weapon_type)],
+		["Ударів за секунду", "%.2f" % (1.0 / gp.attack_cooldown)],
+		["Шкода удару", "%.1f" % gp.damage],
+		["Шанс криту", "%d%%  (x%s)" % [roundi(gp.crit_chance * 100), ("%.2f" % gp.crit_mult).trim_suffix("0").trim_suffix("0").trim_suffix(".")]],
+		["Сила вмінь", "%d%%" % roundi(gp.skill_power * 100)],
+		["Перезарядка вмінь", "%d%%" % roundi(gp.skill_cd_mult * 100)],
+		["Наснага за секунду", "+%.1f" % gp.mana_regen],
+		["Відновлення", "%.1f / с" % gp.regen],
+		["Вампіризм", "%.1f%%" % (gp.lifesteal * 100)],
+		["Швидкість бігу", "%d" % int(gp.speed)],
+		["Дальність удару", "%d" % int(gp.attack_range)],
+		["Бонус досвіду", "+%d%%" % roundi((gp.xp_mult - 1.0) * 100)],
+		["Бонус гривень", "+%d%%" % roundi((gp.gold_mult - 1.0) * 100)],
+		["Зілля з собою", "%d і %d" % [gp.potion_max(), gp.mana_potion_max()]],
+	]
+	check(tab["rows"].slice(0, 14) == old, "чотирнадцять давніх рядків ті самі й у тому самому порядку: %s" % str(tab["rows"].slice(0, 3)))
+	var labels := []
+	for r in tab["rows"]:
+		labels.append(r[0])
+	var missing := NEW.filter(func(l): return not labels.has(l))
+	check(missing.is_empty() and tab["rows"].size() == 14 + NEW.size(), "на вкладці всі нові рядки (бракує: %s)" % str(missing))
+	check(tab["heads"] == [HS.ATTACK, HS.PROCS, HS.DEFENSE, HS.MANA, HS.OTHER], "нові рядки під заголовками груп: %s" % str(tab["heads"]))
+	check(not labels.has(HS.SHOT_LABEL), "зі зброєю зблизька (%s) рядка «%s» нема" % [Data.weapon_name(gp.weapon_type), HS.SHOT_LABEL])
+	var B: Dictionary = tab["by"]
+	var zero := true
+	for l in ["Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду"]:
+		zero = zero and B.get(l, "") == "+0%"
+	for l in ["Вибух убитого", "Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення", "Оберіг", "Шипи", "Парирування лікує", "За вбивство: здоров'я", "Стани коротші", "Зараза слабша"]:
+		zero = zero and B.get(l, "") == "0%"
+	check(zero and B.get("За вбивство: наснага", "") == "+0" and B.get("Лікування героя", "") == "100%", "герой без бонусів бачить нулі в кожному рядку: %s" % str(B))
+	var base_ok: bool = B.get("Замах", "") == "%d°" % roundi(130.0 * gp.weapon["arc"]) and B.get("Радіус збору", "") == "120" and B.get("Перекид раз на", "") == "1.20 с"
+	base_ok = base_ok and B.get("Блок гасить", "") == HS._share(1.0 - gp.BLOCK_MULT) and B.get("Вампіризм лікує до", "") == "%s / с" % HS._share(Data.LIFESTEAL_MAX_HPS)
+	base_ok = base_ok and B.get("Удар парирування", "") == "%.1f" % (gp.damage * gp.PARRY_HIT * gp.crit_mult)
+	check(base_ok, "і основу: замах %s, перекид %s, блок %s, удар парирування %s" % [B.get("Замах"), B.get("Перекид раз на"), B.get("Блок гасить"), B.get("Удар парирування")])
+	# ---- Герой із відомими бонусами: показане = те, що робить бій ----
+	gp.level = 40
+	gp.perks = {"h_execute": 1, "h_parry": 2, "thorns": 1, "roll": 2}
+	var souls := ["kamiana_baba", "b_oprychnyk", "pesyholovets", "mara", "zlyden", "zarazhenyi"]
+	var ench := ["zviroboi", "kolyuchka", "obereh", "zhyvytsia", "dzherelo", "dobyvach"]
+	gp.equipment = {}
+	var si := 0
+	for slot in Data.slots():
+		var it: Dictionary = Data.gen_item(40, 2, slot, "sabre" if slot == "weapon" else "")
+		it["soul"] = souls[si]
+		it["ench"] = ench[si]
+		it["set"] = "sviatohor"
+		gp.equip_new(it)
+		si += 1
+	for a in ["yadro_tsar_harmaty", "svystok_soloveia", "ulamok_chornoho_sontsia"]:
+		gp.add_item(Arts.make(a), true)
+	gp.valor_spent = {"ward": 3}
+	gp.buffs = {"t": {"t": 999.0, "fx": {"block": 20.0, "ward": 10.0, "parry_dmg": 30.0, "parry_heal": 2.0, "stun_dmg": 12.0, "opener": 10.0, "status_dmg": 5.0, "dodge_cd": 20.0, "thorns": 5.0, "kill_mana": 3.0}, "group": ""}}
+	gp.trip_buffs = {"antiplague": 999.0}
+	gp.recalc()
+	gp.hp = gp.max_hp
+	check(HS.block_pass(gp) < gp.BLOCK_MULT and HS.ward_pass(gp) < 0.8 and gp.thorns > 0.25 and HS.elite_mult(gp) > HS.boss_mult(gp) and HS.execute_mult(gp) > 1.3 and HS.kill_heal(gp) > 0.0 and HS.parry_heal(gp) > 0.08, "у героя для перевірки справді є блок, оберіг, шипи, надбавки по еліті й босах, добивання, лікування")
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	await _frames(1)
+	var c = game.combat
+	c.spawn_timer = 999.0
+	tab = _hero_tab(UChar, game)
+	B = tab["by"]
+	var mk := func(boss: bool, elite: bool, frac: float):
+		c.spawn_enemy("zarazhenyi", gp.level, boss, gp.global_position + Vector2(3000, 0))
+		var e = c._last_enemy()
+		if elite:
+			e.make_elite(["swift"])
+		e.max_hp = 1.0e6
+		e.hp = e.max_hp * frac
+		e.damage = 0.0
+		e.speed = 0.0
+		return e
+	var dealt := func(e) -> float:
+		var h0: float = e.hp
+		gp.hit(e, 100.0, Vector2.ZERO, false)
+		return h0 - e.hp
+	var base: float = dealt.call(mk.call(false, false, 0.5))
+	var near := func(a: float, b: float) -> bool:
+		return absf(a - b) <= 1e-5 * maxf(1.0, absf(b))
+	check(near.call(base, 100.0 * HS.all_hits_mult(gp)) and B.get("Шкода всіх ударів", "") == HS._bonus(base / 100.0), "«Шкода всіх ударів» %s: удар по звичайному ворогу %.3f з 100" % [B.get("Шкода всіх ударів"), base])
+	var r_elite: float = dealt.call(mk.call(false, true, 0.5)) / base
+	check(near.call(r_elite, HS.elite_mult(gp)) and B.get("По елітах", "") == HS._bonus(r_elite), "«По елітах» %s: еліта отримує в %.4f раза більше за звичайного" % [B.get("По елітах"), r_elite])
+	var r_boss: float = dealt.call(mk.call(true, false, 0.5)) / base
+	check(near.call(r_boss, HS.boss_mult(gp, c.festive)) and B.get("По босах", "") == HS._bonus(r_boss), "«По босах» %s: бос отримує в %.4f раза більше (душі, набір, зачарування, артефакт разом)" % [B.get("По босах"), r_boss])
+	var r_exec: float = dealt.call(mk.call(false, false, 0.2)) / base
+	check(near.call(r_exec, HS.execute_mult(gp)) and B.get("Добивання", "") == HS._bonus(r_exec), "«Добивання» %s: слабкий ворог отримує в %.4f раза більше" % [B.get("Добивання"), r_exec])
+	var r_open: float = dealt.call(mk.call(false, false, 1.0)) / base
+	check(near.call(r_open, HS.opener_mult(gp)) and B.get("Перший удар", "") == HS._bonus(r_open), "«Перший удар» %s" % B.get("Перший удар"))
+	var st = mk.call(false, false, 0.5)
+	st.stun = 2.0
+	var r_stun: float = dealt.call(st) / base
+	check(near.call(r_stun, HS.stun_mult(gp)) and B.get("По оглушених", "") == HS._bonus(r_stun), "«По оглушених» %s" % B.get("По оглушених"))
+	# удари по героєві: відкрито, з блоком; шипи й оберіг
+	var src = mk.call(false, false, 1.0)
+	gp.invuln = 0.0
+	gp.blocking = false
+	var h0: float = gp.hp
+	gp.take_damage(100.0, src)
+	var open_loss: float = h0 - gp.hp
+	var thorn_loss: float = src.max_hp - src.hp
+	check(near.call(thorn_loss / 100.0, gp.thorns) and B.get("Шипи", "") == HS._share(thorn_loss / 100.0), "«Шипи» %s: той, хто вдарив на 100, отримав %.3f" % [B.get("Шипи"), thorn_loss])
+	var ward_part: float = open_loss / (100.0 * (1.0 - gp.armor))
+	check(near.call(ward_part, HS.ward_pass(gp)) and B.get("Оберіг", "") == HS._share(1.0 - ward_part), "«Оберіг» %s: після захисту проходить %.4f удару (звитяга, вміння, зілля від зарази)" % [B.get("Оберіг"), ward_part])
+	gp.hp = gp.max_hp
+	gp.invuln = 0.0
+	gp.blocking = true
+	gp.block_time = gp.PARRY_WINDOW + 0.5
+	h0 = gp.hp
+	gp.take_damage(100.0, null)
+	var block_part: float = (h0 - gp.hp) / open_loss
+	gp.blocking = false
+	check(near.call(block_part, HS.block_pass(gp)) and B.get("Блок гасить", "") == HS._share(1.0 - block_part), "«Блок гасить» %s: крізь блок пройшло %.4f удару" % [B.get("Блок гасить"), block_part])
+	# парирування: удар у відповідь і лікування
+	var ps = mk.call(false, false, 0.5)
+	gp.hp = gp.max_hp * 0.5
+	gp.invuln = 0.0
+	gp.blocking = true
+	gp.block_time = 0.0
+	gp.leech_pool = 0.0
+	h0 = gp.hp
+	gp.take_damage(100.0, ps)
+	var counter: float = (ps.max_hp * 0.5 - ps.hp) / HS.all_hits_mult(gp)
+	check(near.call(counter, gp.damage * HS.parry_mult(gp)) and B.get("Удар парирування", "") == "%.1f" % counter, "«Удар парирування» %s: удар у відповідь %.1f" % [B.get("Удар парирування"), counter])
+	var ph: float = (gp.hp - h0) / gp.max_hp
+	check(near.call(ph, HS.parry_heal(gp)) and B.get("Парирування лікує", "") == HS._share(ph), "«Парирування лікує» %s: повернуло %.4f здоров'я" % [B.get("Парирування лікує"), ph])
+	gp.blocking = false
+	gp.invuln = 0.0
+	# вбивство: здоров'я й наснага
+	var kv = mk.call(false, false, 1.0)
+	kv.hp = 1.0
+	gp.hp = gp.max_hp * 0.5
+	gp.mana = 0.0
+	gp.leech_pool = 0.0
+	gp.hit(kv, 100.0, Vector2.ZERO, false)
+	var kh: float = (gp.hp - gp.max_hp * 0.5) / gp.max_hp
+	check(kv.dead and near.call(kh, HS.kill_heal(gp)) and B.get("За вбивство: здоров'я", "") == HS._share(kh), "«За вбивство: здоров'я» %s: повернуло %.4f" % [B.get("За вбивство: здоров'я"), kh])
+	check(near.call(gp.mana, HS.kill_mana(gp)) and B.get("За вбивство: наснага", "") == "+" + HS._trim(gp.mana), "«За вбивство: наснага» %s: дало %.2f" % [B.get("За вбивство: наснага"), gp.mana])
+	# перекид і наснага за удар зблизька
+	gp.dodge_timer = 0.0
+	gp.dodge()
+	check(gp.dodge_timer == gp.dodge_cooldown and gp.dodge_cooldown < 1.0 and B.get("Перекид раз на", "") == "%.2f с" % gp.dodge_timer, "«Перекид раз на» %s: перезарядка перекиду %.3f с" % [B.get("Перекид раз на"), gp.dodge_timer])
+	gp.dodge_time_left = 0.0
+	_clear_enemies(game)
+	var tgt = mk.call(false, false, 1.0)
+	tgt.global_position = gp.global_position + Vector2(40, 0)
+	gp.facing = Vector2.RIGHT
+	gp.mana = 0.0
+	gp.attack_timer = 0.0
+	gp.attack()
+	check(tgt.hp < tgt.max_hp and near.call(gp.mana, HS.mana_per_hit(gp)) and B.get("Наснага за удар", "") == "+" + HS._trim(gp.mana), "«Наснага за удар» %s: влучний удар шаблею дав %.3f" % [B.get("Наснага за удар"), gp.mana])
+	_clear_enemies(game)
+	await _frames(1)
+	if game.state == game.State.PLAYING:
+		game.enter_map()
+	await _frames(1)
+	# ---- Стрілець: «Сила пострілу» лише з луком, пістолями й пищаллю ----
+	gp.change_class("strilets")
+	game._sync_class()
+	gp.buffs = {}
+	gp.trip_buffs = {}
+	var bow: Dictionary = Data.gen_item(40, 2, "weapon", "bow")
+	gp.equip_new(bow)
+	gp.recalc()
+	tab = _hero_tab(UChar, game)
+	check(tab["by"].has(HS.SHOT_LABEL) and tab["by"][HS.SHOT_LABEL] == "x" + HS._trim(gp.shot_mult) and tab["rows"].size() == 15 + NEW.size(), "з луком є рядок «%s» %s" % [HS.SHOT_LABEL, tab["by"].get(HS.SHOT_LABEL, "")])
+	gp.buffs = {"s": {"t": 999.0, "fx": {"aspd": 400.0}, "group": ""}}
+	gp.recalc()
+	tab = _hero_tab(UChar, game)
+	check(gp.shot_mult > 1.0 and gp.attack_cooldown == gp.RANGED_MIN_CD and tab["by"].get(HS.SHOT_LABEL, "") == "x" + HS._trim(gp.shot_mult), "швидкість понад межу йде в силу пострілу: %s" % tab["by"].get(HS.SHOT_LABEL, ""))
+	check(near.call(HS.mana_per_hit(gp), Data.MANA_ON_HIT * Data.MANA_ON_SHOT * minf(1.0, gp.attack_cooldown / Data.MANA_ON_HIT_CD)) and tab["by"].get("Наснага за удар", "") == "+" + HS._trim(HS.mana_per_hit(gp)), "стрілець бачить наснагу за постріл: %s" % tab["by"].get("Наснага за удар", ""))
+	var shot_labels: Array = []
+	for r in tab["rows"]:
+		shot_labels.append(r[0])
+	gp.change_class("volkhv")
+	game._sync_class()
+	gp.equip_new(Data.gen_item(40, 2, "weapon", "staff"))
+	gp.recalc()
+	tab = _hero_tab(UChar, game)
+	check(not tab["by"].has(HS.SHOT_LABEL) and tab["by"].get("Наснага за удар", "") == "+0", "з посохом рядка «%s» нема, наснаги за удар він не дає" % HS.SHOT_LABEL)
+	# ---- Довідник: стаття «Показники героя» називає кожен рядок ----
+	var art_text := ""
+	for e in WS._entries("basics"):
+		if str(e["title"]) == "Показники героя":
+			art_text = str(e["text"])
+	var unnamed := shot_labels.filter(func(l): return not (l in art_text))
+	check(art_text != "" and unnamed.is_empty(), "у довіднику є стаття «Показники героя» з кожним рядком вкладки (бракує: %s)" % str(unnamed))
+	var limits := ["%d%%" % roundi(Data.ARMOR_CAP * 100.0), "%d%%" % roundi(gp.CRIT_CAP * 100.0), "%d%%" % roundi(gp.SKILL_CD_MIN * 100.0), "%d%%" % roundi(gp.BLOCK_FX_CAP), "%d%%" % roundi(gp.WARD_FX_CAP), "%d%%" % roundi((1.0 - gp.DODGE_FX_MIN) * 100.0), str(gp.RANGED_MIN_CD).replace(".", ","), "%d очок" % int(Data.SPI_SOFT), "%d очок" % int(Data.AGI_ASPD_SOFT)]
+	check(limits.all(func(x): return x in art_text), "стаття називає межі з тих самих сталих, що й бій: %s" % str(limits))
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
 
 func _suite_legends() -> void:
 	suite("Перекази: Дракула й лінійки за легендами земель")

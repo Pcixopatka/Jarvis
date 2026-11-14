@@ -5,6 +5,7 @@ const Gfx := preload("res://scripts/world/gfx.gd")
 
 const Data := preload("res://scripts/data/data.gd")
 const UI := preload("res://scripts/ui/ui_kit.gd")
+const HeroSheet := preload("res://scripts/game/hero_sheet.gd")
 
 
 static func _pts(n: int) -> String:
@@ -185,6 +186,22 @@ static func _hero(game) -> Control:
 		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stats.add_child(cell)
 	left.add_child(stats)
+	# Решта показників бою групами під заголовками; ті самі числа, що й у бою (HeroSheet)
+	for g in HeroSheet.groups(p, game.combat.festive if game.combat != null else {}):
+		left.add_child(UI.label(g[0], 16, UI.GOLD, false))
+		var grid := GridContainer.new()
+		grid.columns = 2
+		grid.add_theme_constant_override("h_separation", 22)
+		grid.add_theme_constant_override("v_separation", 0)
+		for l in g[1]:
+			var cell := _kv(l[0], l[1], 14)
+			cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grid.add_child(cell)
+		if g[1].size() % 2 == 1:
+			var pad := Control.new()  # порожня друга колонка: стовпці стоять так само, як у рядках вище
+			pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			grid.add_child(pad)
+		left.add_child(grid)
 
 	# ----- Торба: сітка клітинок -----
 	var bag := VBoxContainer.new()
