@@ -8,6 +8,7 @@ extends RefCounted
 const GameDB := preload("res://scripts/core/game_db.gd")
 
 const Data := preload("res://scripts/data/data.gd")
+const DivineService := preload("res://scripts/game/divine_service.gd")
 const Premium := preload("res://scripts/game/premium_service.gd")
 
 static var MIN_CLEARS: int  # скільки разів треба пройти місце, щоб відкрився автобій
@@ -96,7 +97,9 @@ static func drive(game) -> void:
 	if p.mana < p.max_mana * MANA_AT:
 		p.use_mana_potion()
 	if en != null:
-		for id in p.active_skills():
+		# атаки всі, бафи як у Німба: зі стійок лише найлівіша, інакше пізніша збиває попередню
+		var buffs: Array = DivineService.auto_panel(p)  # заразом вирівнює панель (sync_panel)
+		for id in p.panel["attack"].filter(func(x): return x != "") + buffs:
 			if id == "first_aid" and p.hp > p.max_hp * AID_AT:
 				continue
 			p.use_skill(id)

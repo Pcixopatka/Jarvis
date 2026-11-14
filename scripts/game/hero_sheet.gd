@@ -144,10 +144,27 @@ static func heal_taken(p) -> float:
 	return 1.0 - float(p.soul_fx.get("heal_taken", 0.0))
 
 
+## Досвід за вбивство чи нагороду: як у Player.add_xp — надбавки (xp_mult) і подвоєння за рекламу чи
+## універсал (xp_boost, виставляє Game щокадру в будь-якому стані).
+static func xp_total(p) -> float:
+	return p.xp_mult * p.xp_boost
+
+
+## Шанс речі з нечисті й еліти: свято (festive.loot) і ×2 здобичі (drop_boost), як у Combat._drop_loot.
+static func item_drop_mult(festive: Dictionary, drop_boost: float) -> float:
+	return (1.0 + float(festive.get("loot", 0.0))) * drop_boost
+
+
+## Шанс ресурсу з нечисті: ×2 здобичі (drop_boost) і хист улюбленця (pet_fx.res), як у Combat._drop_loot.
+static func res_drop_mult(p, drop_boost: float) -> float:
+	return drop_boost * (1.0 + float(p.pet_fx.get("res", 0.0)))
+
+
 # ---------------- Рядки екрана ----------------
 
-## Усі рядки вкладки «Герой» групами: [[назва групи, [[напис, значення], ...]], ...]. festive — combat.festive (свято проти босів).
-static func groups(p, festive: Dictionary = {}) -> Array:
+## Усі рядки вкладки «Герой» групами: [[назва групи, [[напис, значення], ...]], ...]. festive — combat.festive (свято проти
+## босів і на здобич), drop_boost — combat.drop_boost (×2 здобичі).
+static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Array:
 	var atk := [
 		["Зброя", Data.weapon_name(p.weapon_type)],
 		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
@@ -197,8 +214,10 @@ static func groups(p, festive: Dictionary = {}) -> Array:
 	var other := [
 		["Швидкість бігу", "%d" % int(p.speed)],
 		["Радіус збору", "%d" % int(p.pickup_radius)],
-		["Бонус досвіду", "+%d%%" % roundi((p.xp_mult - 1.0) * 100)],
+		["Бонус досвіду", "+%d%%" % roundi((xp_total(p) - 1.0) * 100)],
 		["Бонус гривень", "+%d%%" % roundi((p.gold_mult - 1.0) * 100)],
+		["Здобич: речі", "+%d%%" % roundi((item_drop_mult(festive, drop_boost) - 1.0) * 100)],
+		["Здобич: ресурси", "+%d%%" % roundi((res_drop_mult(p, drop_boost) - 1.0) * 100)],
 		["Зілля з собою", "%d і %d" % [p.potion_max(), p.mana_potion_max()]],
 	]
 	return [[ATTACK, atk], [PROCS, procs], [DEFENSE, dfn], [MANA, mana], [OTHER, other]]

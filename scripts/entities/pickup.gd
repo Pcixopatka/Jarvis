@@ -1,6 +1,7 @@
 extends Node2D
 ## Здобич на землі: гривня (досвід і гроші), вареник (лікування), зілля, зілля наснаги, ресурс, жетон свята
-## або річ спорядження. Непідібране за LIFE секунд бою зникає; останні BLINK секунд блимає.
+## або річ спорядження. Непідібране за LIFE секунд бою зникає (крім разових нагород і цінних речей); останні
+## BLINK секунд блимає.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 const Data := preload("res://scripts/data/data.gd")
@@ -44,6 +45,14 @@ static func life_for(premium: bool, keep_: bool = false) -> float:
 	if keep_:
 		return 0.0
 	return LIFE * (PREMIUM_MULT if premium else 1.0)
+
+
+## Скільки секунд лежатиме нова здобич виду kind: цінна річ (Data.is_precious: золота, з набору, артефакт)
+## не зникає, як і разова нагорода; решта — як у life_for.
+static func life_of(premium: bool, kind_: String, item_: Dictionary, keep_: bool = false) -> float:
+	if kind_ == "item" and Data.is_precious(item_):
+		return 0.0
+	return life_for(premium, keep_)
 
 
 ## Скоро зникне: останні BLINK секунд блимає.

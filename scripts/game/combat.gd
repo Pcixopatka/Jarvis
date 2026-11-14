@@ -1563,7 +1563,7 @@ func drop_item(item: Dictionary) -> void:
 	p.item = item
 	p.manual = true
 	p.hold = 1.5
-	p.life = PickupScript.life_for(premium)  # викинута річ теж зникає, якщо її не підняти
+	p.life = PickupScript.life_of(premium, "item", item)  # викинута річ теж зникає, якщо її не підняти (цінна ні)
 	p.position = _clamp_in(player.global_position + Vector2.from_angle(randf() * TAU) * 110.0, 60.0)
 	entities.add_child(p)
 
@@ -1987,7 +1987,7 @@ func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {},
 	p.value = value
 	p.item = item
 	p.keep = keep
-	p.life = PickupScript.life_for(premium, keep)  # скільки лежатиме, вирішено раз, при появі
+	p.life = PickupScript.life_of(premium, kind, item, keep)  # скільки лежатиме, вирішено раз, при появі
 	p.position = pos
 	p.spawn_vel = Vector2.from_angle(randf() * TAU) * randf_range(60, 200)
 	entities.add_child(p)

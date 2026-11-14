@@ -11263,6 +11263,44 @@ func _suite_ground_life() -> void:
 		"разова нагорода (keep) лежить і далеко за межею, не блимає")
 	reward.queue_free()
 	await run.call(1)
+	# ---- Цінні речі (Data.is_precious): золота, з набору, артефакт — без таймера, і з ворога, і викинуті ----
+	var Uq = load("res://scripts/data/uniques.gd")
+	var StD = load("res://scripts/data/sets.gd")
+	var Art = load("res://scripts/data/artifacts.gd")
+	var precious := {"золота": Uq.make(Uq.ids()[0], 20), "набору": StD.make(StD.ids()[0], "boots", 20), "артефакт": Art.make(Art.ids()[0])}
+	check(Data.is_precious(precious["золота"]) and Data.is_precious(precious["набору"]) and Data.is_precious(precious["артефакт"]) and Art.is_artifact(precious["артефакт"]) and int(precious["артефакт"]["rarity"]) > Data.RARITY_MAX_RANDOM,
+		"золота річ, річ набору й артефакт цінні (артефакт — рідкістю %d понад випадкові)" % int(precious["артефакт"]["rarity"]))
+	clear_ground.call()
+	await run.call(1)
+	var prec_pk := {}
+	var row := 0
+	for nm in precious:
+		c.spawn_pickup(far, "item", 0, precious[nm].duplicate(true))
+		prec_pk[nm] = put.call(far + Vector2(0, 50 * row))
+		row += 1
+		var th: Dictionary = precious[nm].duplicate(true)
+		p.add_item(th, true)
+		c.drop_item(p.remove_from_bag(th["uid"]))  # викинута з торби
+		prec_pk[nm + " викинута"] = newest.call()
+	c.spawn_pickup(far, "item", 0, Data.gen_item(20, Data.RARITY_MAX_RANDOM, "head"))
+	var top_plain = put.call(far + Vector2(0, 200))
+	var prec_life := true
+	for nm in prec_pk:
+		prec_life = prec_life and prec_pk[nm].life == 0.0 and not prec_pk[nm].keep
+		prec_pk[nm].spawn_vel = Vector2.ZERO
+		prec_pk[nm].position = far + Vector2(-80, 0)
+		prec_pk[nm].age = Pick.LIFE * 5.0
+	check(prec_life and prec_pk.size() == 6, "золота річ, річ набору й артефакт — з ворога й викинуті з торби — без таймера (life 0), keep не ставиться")
+	check(top_plain.life == Pick.LIFE and not Data.is_precious(top_plain.item) and int(top_plain.item["rarity"]) == Data.RARITY_MAX_RANDOM, "звичайна річ найвищої випадкової рідкості, як і раніше, лежить %s с" % Pick.LIFE)
+	top_plain.age = Pick.LIFE - 0.25
+	await run.call(30)
+	var prec_there := true
+	for nm in prec_pk:
+		prec_there = prec_there and is_instance_valid(prec_pk[nm]) and not prec_pk[nm].is_queued_for_deletion() and not prec_pk[nm].fading() and prec_pk[nm].modulate.a == 1.0
+	check(prec_there, "і далеко за межею вони лежать і не блимають (%s)" % ", ".join(prec_pk.keys()))
+	check(not (is_instance_valid(top_plain) and not top_plain.is_queued_for_deletion()), "а звичайна річ найвищої випадкової рідкості на межі зникла")
+	clear_ground.call()
+	await run.call(1)
 	# перше проходження звичайного поверху Башти: річ — разова нагорода, без таймера; повтор речі не дає
 	var TowS = load("res://scripts/game/tower_service.gd")
 	check(not TowS.is_super(1) and int(TowS.state(game.world)["best"]) == 0, "поверх 1 звичайний і ще не пройдений")
@@ -11419,10 +11457,12 @@ func _suite_ground_life() -> void:
 	var life_s := "%d с" % roundi(Pick.LIFE)
 	var prem_s := "%d с" % roundi(Pick.life_for(true))
 	var rule: String = str(wiki.get("Здобич на землі", ""))
-	check(life_s in rule and prem_s in rule and "вдвічі довше" in rule and ("Останні %d с" % roundi(Pick.BLINK)) in rule and "Разові нагороди не зникають" in rule and "те пропало" in rule and "Хованцем" in rule,
-		"довідник: здобич лежить %s, з універсалом %s, блимає останні %d с, разові нагороди не зникають, що зникло, пропало" % [life_s, prem_s, roundi(Pick.BLINK)])
+	check(life_s in rule and prem_s in rule and "вдвічі довше" in rule and ("Останні %d с" % roundi(Pick.BLINK)) in rule and "Разові нагороди не зникають" in rule and "Не зникають і цінні речі: золоті, речі наборів і артефакти" in rule and "те пропало" in rule and "Хованцем" in rule,
+		"довідник: здобич лежить %s, з універсалом %s, блимає останні %d с, разові нагороди, золоті, наборні речі й артефакти не зникають, що зникло, пропало" % [life_s, prem_s, roundi(Pick.BLINK)])
 	check(life_s in str(wiki.get("Фільтр автопідбору", "")) and life_s in str(wiki.get("Повна торба", "")) and life_s in str(wiki.get("Божі дари", "")) and life_s in str(wiki.get("Цінна здобич не губиться", "")),
 		"фільтр, повна торба, Хованець і цінна здобич теж кажуть про час на землі")
+	var safe: String = str(wiki.get("Цінна здобич не губиться", ""))
+	check("лежать на землі без строку" in safe and "артефакти" in safe and not "як і решта здобичі" in safe, "«Цінна здобич не губиться»: золоті, наборні речі й артефакти лежать без строку")
 	var perk := "Здобич лежить на землі вдвічі довше: %d с замість %d" % [roundi(Pick.life_for(true)), roundi(Pick.LIFE)]
 	check(perk in Prem.perks(1, 1) and perk in str(wiki.get(Prem.NAME, "")), "універсал у крамниці й у довіднику: «%s»" % perk)
 	game.queue_free()
@@ -14751,6 +14791,47 @@ func _suite_enchant_fair() -> void:
 	SaveSystem.delete(TEST_ACCOUNT)
 
 
+## Бій автобою з одною приспаною нечистю, що не вмирає: панель задано, здоров'я тримається на hp_part, наснага
+## повна. speed — на скільки секунд щокадру ще скорочується відновлення (щоб пройти кілька відновлень швидко).
+## cast — відсортовані id того, що ввімкнулось, casts — скільки разів, seen — які підсилення бували в player.buffs.
+func _auto_fight(game, attack: Array, buff: Array, hp_part: float, n: int, speed: float = 0.0) -> Dictionary:
+	var p = game.player
+	var c = game.combat
+	p.panel = {"attack": attack.duplicate(), "buff": buff.duplicate()}
+	for id in p.skill_timers.keys():
+		p.skill_timers[id] = 0.0
+	p.buffs.clear()
+	p.recalc()
+	_clear_enemies(game)
+	c.spawn_timer = 9999.0
+	c.spawn_enemy("upyr", 1, false, p.global_position + Vector2(120, 0))
+	c.enemies_dirty()
+	var casts := {}
+	var seen := {}
+	var last := {}
+	for i in n:
+		p.invuln = 999.0
+		p.hp = p.max_hp * hp_part
+		p.mana = p.max_mana
+		for e in c.enemies_now():
+			e.stun = 999.0
+			e.max_hp = 1e9
+			e.hp = 1e9
+		await process_frame
+		for id in p.skill_timers:
+			var t: float = float(p.skill_timers[id])
+			if t > float(last.get(id, 0.0)) + 0.001:
+				casts[id] = int(casts.get(id, 0)) + 1
+			t = maxf(0.0, t - speed)
+			p.skill_timers[id] = t
+			last[id] = t
+		for id in p.buffs:
+			seen[id] = true
+	var out: Array = casts.keys()
+	out.sort()
+	return {"cast": out, "casts": casts, "seen": seen}
+
+
 func _suite_auto() -> void:
 	suite("Автобій")
 	SaveSystem.delete(TEST_SAVE)
@@ -14847,12 +14928,115 @@ func _suite_auto() -> void:
 	var peril_id: String = load("res://scripts/game/peril_service.gd").ids()[0]
 	c.loc = Data.place(peril_id)
 	check(not AS.applies(c, peril_id) and not AS.applies(c, "hlybyny") and not AS.applies(c, "duel"), "у надважкій печері, Глибинах і особливих боях автобою нема")
+	# ---- Що тисне автобій: атаки всі, бафи як у Німба (DivineService.auto_panel) ----
+	var DS = load("res://scripts/game/divine_service.gd")
+	var Cls = load("res://scripts/data/classes.gd")
+	var SI = load("res://scripts/data/skill_info.gd")
+	w.cleared["wild_field"] = AS.MIN_CLEARS
+	game.enter_location("wild_field")
+	await _frames(3)
+	if not game.auto_on:
+		game.toggle_auto()
+	await _frames(2)
+	check(game.auto_on and AS.block_reason(w, c, "wild_field") == "", "автобій знову веде героя в полі")
+	for id in ["whirl", "pidsichka", "hrim_zemli", "battle_cry", "khoruhva", "first_aid", "zamova_krovi", "stina"]:
+		p.skills[id] = 1
+	var att := ["whirl", "pidsichka", "hrim_zemli"]
+	var bf := ["battle_cry", "khoruhva", "first_aid", "zamova_krovi", "stina"]
+	# Набори «до» взято з того самого бою на коді до правила про стійки: вони не змінились
+	var no_st_full: Array = (await _auto_fight(game, att, bf, 1.0, 300))["cast"]
+	check(no_st_full == ["battle_cry", "hrim_zemli", "khoruhva", "pidsichka", "stina", "whirl", "zamova_krovi"], "без стійок, здоров'я повне: атаки, бафи й лікування тиснуться, як і раніше, Перша допомога чекає (%s)" % [no_st_full])
+	var no_st_low: Array = (await _auto_fight(game, att, bf, 0.5, 300))["cast"]
+	check(no_st_low == ["battle_cry", "first_aid", "hrim_zemli", "khoruhva", "pidsichka", "stina", "whirl", "zamova_krovi"], "без стійок, здоров'я 50%%: тиснеться й Перша допомога (%s)" % [no_st_low])
+	p.stats["spi"] = 300  # наснаги на всю панель за крок: права стійка мовчить через правило, а не через брак наснаги
+	p.recalc()
+	p.skills["navala"] = 1
+	p.skills["mur"] = 1
+	var clean := func() -> void:
+		for id in p.skill_timers.keys():
+			p.skill_timers[id] = 0.0
+		p.buffs.clear()
+		p.recalc()
+		p.mana = p.max_mana
+		p.hp = p.max_hp
+	for order in [["navala", "mur"], ["mur", "navala"]]:
+		var bp := [order[0], "battle_cry", order[1], "khoruhva", "stina"]
+		var r: Dictionary = await _auto_fight(game, att, bp, 1.0, 600, 0.15)
+		check(int(r["casts"].get(order[0], 0)) >= 3 and r["seen"].has(order[0]) and r["casts"].has("battle_cry") and r["casts"].has("stina"), "дві стійки (%s ліва): автобій тисне ліву раз за разом (%d разів) і решту бафів" % [order[0], int(r["casts"].get(order[0], 0))])
+		check(not r["casts"].has(order[1]) and not r["seen"].has(order[1]) and order[0] in r["cast"] and "whirl" in r["cast"], "дві стійки: права (%s) за кілька відновлень ні разу не ввімкнулась" % order[1])
+		# один крок автобою просто зараз: наснага йде лише на те, що ввімкнулось, права стійка її не бере
+		clean.call()
+		var m0: float = p.mana
+		AS.drive(game)
+		var spent := 0.0
+		for id in p.skill_timers:
+			if float(p.skill_timers[id]) > 0.0:
+				spent += p.skill_cost(id)
+		check(float(p.skill_timers.get(order[0], 0.0)) > 0.0 and float(p.skill_timers.get(order[1], 0.0)) <= 0.0 and not p.buffs.has(order[1]) and is_equal_approx(m0 - p.mana, spent) and p.mana >= p.skill_cost(order[1]), "один крок: ліва стійка ввімкнулась, права ні, наснага пішла лише на ввімкнене")
+		clean.call()
+		p.skill_timers[order[0]] = 5.0  # ліва відновлюється: права однаково чекає
+		AS.drive(game)
+		check(float(p.skill_timers.get(order[1], 0.0)) <= 0.0 and not p.buffs.has(order[1]) and float(p.skill_timers.get("battle_cry", 0.0)) > 0.0, "ліва стійка відновлюється: права сама не вмикається, Клич вмикається")
+	# Сагайдачний, що вивчив усе: чотири стійки, тисне лише найлівішу
+	var sah_st := []
+	for cl in Cls.lineage("sahaidachnyk"):
+		for b in Cls.tree(cl):
+			for n in b["nodes"]:
+				if SI.group(n["id"]) == "stance":
+					sah_st.append(n["id"])
+	for id in sah_st:
+		p.skills[id] = 1
+	for st_n in [3, 4]:
+		var bp: Array = sah_st.slice(0, st_n)
+		while bp.size() < 5:
+			bp.append("battle_cry" if not "battle_cry" in bp else "khoruhva")
+		var r: Dictionary = await _auto_fight(game, att, bp, 1.0, 400, 0.15)
+		var other := false
+		for id in sah_st.slice(1, st_n):
+			other = other or r["casts"].has(id) or r["seen"].has(id)
+		check(sah_st.size() == 4 and int(r["casts"].get(sah_st[0], 0)) >= 2 and not other, "%d стійки на панелі: автобій тисне лише найлівішу (%s)" % [st_n, sah_st[0]])
+	for id in sah_st:
+		p.skills.erase(id)
+		p.skill_timers.erase(id)
+	# Рукою права стійка вмикається; ліва повертається, щойно відновиться
+	var hand_panel := ["navala", "battle_cry", "mur", "khoruhva", "stina"]
+	await _auto_fight(game, att, hand_panel, 1.0, 5)
+	check(p.buffs.has("navala") and float(p.skill_timers.get("navala", 0.0)) > 0.0, "автобій увімкнув Навалу (ліва стійка)")
+	game.hud.skill_pressed.emit("mur")
+	check(p.buffs.has("mur") and not p.buffs.has("navala") and float(p.skill_timers.get("mur", 0.0)) > 0.0, "рукою під час автобою Мур вмикається й знімає Навалу")
+	await _frames(30)
+	check(p.buffs.has("mur") and not p.buffs.has("navala"), "поки Навала відновлюється, автобій Мур не перебиває")
+	p.skill_timers["navala"] = 1.0  # лишилась секунда відновлення
+	await _frames(30)
+	check(p.buffs.has("mur") and not p.buffs.has("navala"), "за пів секунди до кінця відновлення Мур ще діє")
+	await _frames(45)
+	check(p.buffs.has("navala") and not p.buffs.has("mur"), "Навала відновилась: автобій одразу вмикає її, і вона знімає Мур")
+	p.skill_timers["navala"] = 0.0
+	p.skill_timers["mur"] = 0.0
+	p.mana = p.max_mana
+	game.hud.skill_pressed.emit("mur")
+	check(p.buffs.has("mur"), "Мур рукою, коли Навала готова: вмикається")
+	await _frames(1)
+	check(p.buffs.has("navala") and not p.buffs.has("mur") and float(p.skill_timers.get("mur", 0.0)) > 0.0, "та Навала готова, тож уже наступного кадру автобій вмикає її й знімає Мур")
+	p.skills.erase("navala")
+	p.skills.erase("mur")
+	for id in p.skill_timers.keys():
+		p.skill_timers[id] = 0.0
+	p.buffs.clear()
+	p.recalc()
+	_clear_enemies(game)
+	game.toggle_auto()
+	await _frames(2)
+	check(not game.auto_on, "автобій вимкнено")
+	game.enter_map()
+	await _frames(2)
 	# ---- Довідник ----
 	var art := ""
 	for e in WS._entries("basics"):
 		if str(e["title"]) == "Автобій":
 			art = str(e["text"])
 	check("%d рази" % AS.MIN_CLEARS in art and "%d%%" % roundi(AS.POTION_AT * 100.0) in art, "довідник описує автобій")
+	check("Із кількох стійок на панелі автобій тисне лише найлівішу, а рукою можна натиснути будь-яку." in art, "довідник: зі стійок автобій тисне лише найлівішу")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
@@ -16229,7 +16413,7 @@ func _suite_hero_sheet() -> void:
 	var NEW := ["Замах", "Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду", "Удар парирування", "Вибух убитого",
 		"Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення",
 		"Блок гасить", "Оберіг", "Шипи", "Вампіризм лікує до", "Парирування лікує", "За вбивство: здоров'я", "Перекид раз на", "Стани коротші", "Зараза слабша", "Лікування героя",
-		"Наснага за удар", "За вбивство: наснага", "Радіус збору"]
+		"Наснага за удар", "За вбивство: наснага", "Радіус збору", "Здобич: речі", "Здобич: ресурси"]
 	# ---- Герой без нічого: давні рядки ті самі, нові — нулі й основа ----
 	var tab: Dictionary = _hero_tab(UChar, game)
 	var old := [
@@ -16263,7 +16447,7 @@ func _suite_hero_sheet() -> void:
 		HS.PROCS: ["Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення"],
 		HS.DEFENSE: ["Відновлення", "Вампіризм", "Вампіризм лікує до", "Блок гасить", "Оберіг", "Шипи", "Парирування лікує", "За вбивство: здоров'я", "Перекид раз на", "Стани коротші", "Зараза слабша", "Лікування героя"],
 		HS.MANA: ["Наснага за секунду", "Наснага за удар", "За вбивство: наснага"],
-		HS.OTHER: ["Швидкість бігу", "Радіус збору", "Бонус досвіду", "Бонус гривень", "Зілля з собою"],
+		HS.OTHER: ["Швидкість бігу", "Радіус збору", "Бонус досвіду", "Бонус гривень", "Здобич: речі", "Здобич: ресурси", "Зілля з собою"],
 	}
 	for gname in want_groups:
 		check(G.get(gname, []) == want_groups[gname], "група «%s»: рядки в порядку %s" % [gname, str(G.get(gname, []))])
@@ -16435,6 +16619,120 @@ func _suite_hero_sheet() -> void:
 	gp.recalc()
 	tab = _hero_tab(UChar, game)
 	check(not tab["by"].has(HS.SHOT_LABEL) and tab["by"].get("Наснага за удар", "") == "+0", "з посохом рядка «%s» нема, наснаги за удар він не дає" % HS.SHOT_LABEL)
+	# ---- Бонус досвіду з подвоєнням і бонус здобичі: ті самі множники, що в Player.add_xp і Combat._drop_loot ----
+	var Ad = load("res://scripts/game/ad_rewards.gd")
+	var Prem = load("res://scripts/game/premium_service.gd")
+	var HolS = load("res://scripts/game/holiday_service.gd")
+	var PetS = load("res://scripts/game/pet_service.gd")
+	var Pets = load("res://scripts/data/pets.gd")
+	gp.change_class("cossack")
+	game._sync_class()
+	gp.buffs = {}
+	gp.recalc()
+	var gc = game.combat
+	# скільки досвіду справді дав add_xp: на рівень (рівень не росте) і на майстерність
+	var xp_gain := func(value: int) -> Array:
+		var saved := [gp.level, gp.xp, gp.xp_next, gp.job_level, gp.job_xp, gp.skill_points]
+		gp.xp_next = 1 << 40
+		var j0: int = gp.job_level
+		gp.add_xp(value)
+		var lv_gain: int = gp.xp - int(saved[1])
+		var job_gain: int = gp.job_xp - int(saved[4])
+		for L in range(j0, gp.job_level):
+			job_gain += Data.Classes.job_xp_for(int(gp.class_info()["tier"]), L)
+		gp.level = saved[0]
+		gp.xp = saved[1]
+		gp.xp_next = saved[2]
+		gp.job_level = saved[3]
+		gp.job_xp = saved[4]
+		gp.skill_points = saved[5]
+		return [lv_gain, job_gain]
+	var pct := func(label: String) -> int:
+		return int(str(_hero_tab(UChar, game)["by"].get(label, "")).trim_prefix("+").trim_suffix("%"))
+	var xp_ok := func(where: String, boost: float) -> void:
+		var g: Array = xp_gain.call(100000)
+		var shown: int = pct.call("Бонус досвіду")
+		check(is_equal_approx(gp.xp_boost, boost) and shown == roundi((float(g[0]) / 100000.0 - 1.0) * 100.0) and g[0] == g[1] and shown == roundi((gp.xp_mult * boost - 1.0) * 100.0),
+			"%s, подвоєння ×%s: «Бонус досвіду» +%d%% — стільки ж дав add_xp (%d з 100000) і рівню, і майстерності (%d)" % [where, boost, shown, g[0], g[1]])
+	# реальні множники коду здобичі: шанс речі (звичайна нечисть і еліта) і шанс ресурсу (звичайна нечисть)
+	var loot_ok := func(what: String) -> void:
+		var it_m: float = (1.0 + float(gc.festive.get("loot", 0.0))) * gc.drop_boost
+		var res_m: float = gc.drop_boost * (1.0 + float(gp.pet_fx.get("res", 0.0)))
+		check(pct.call("Здобич: речі") == roundi((it_m - 1.0) * 100.0) and pct.call("Здобич: ресурси") == roundi((res_m - 1.0) * 100.0),
+			"%s: «Здобич: речі» +%d%%, «Здобич: ресурси» +%d%% (речі ×%s, ресурси ×%s)" % [what, pct.call("Здобич: речі"), pct.call("Здобич: ресурси"), it_m, res_m])
+	game.enter_map()
+	await _frames(2)
+	check(Ad.xp_mult(gw) == 1.0 and Ad.drop_mult(gw) == 1.0, "реклами й універсалу нема")
+	xp_ok.call("мапа", 1.0)
+	loot_ok.call("без подвоєння")
+	check(pct.call("Здобич: речі") == 0 and pct.call("Здобич: ресурси") == 0, "без подвоєння, свята й улюбленця здобич +0%")
+	# подвоєння за рекламу: однаково на мапі, в місті, на хуторі й у бою
+	Ad.grant_xp2(gw)
+	Ad.grant_drop2(gw)
+	await _frames(2)
+	xp_ok.call("мапа, реклама", 2.0)
+	loot_ok.call("мапа, реклама ×2 здобичі")
+	check(pct.call("Здобич: речі") == 100 and pct.call("Здобич: ресурси") == 100, "×2 здобичі: речі й ресурси +100%")
+	game.enter_city("sich")
+	await _frames(2)
+	xp_ok.call("місто", 2.0)
+	loot_ok.call("місто, реклама")
+	game.enter_camp()
+	await _frames(2)
+	xp_ok.call("хутір", 2.0)
+	loot_ok.call("хутір, реклама")
+	game.enter_location("wild_field")
+	await _frames(3)
+	_clear_enemies(game)
+	xp_ok.call("бій", 2.0)
+	loot_ok.call("бій, реклама")
+	game.open_character()
+	await _frames(2)
+	xp_ok.call("екран героя поверх бою", 2.0)
+	game.close_character()
+	await _frames(1)
+	_clear_enemies(game)
+	game.enter_map()
+	await _frames(2)
+	gw.boosts.erase("xp2")
+	gw.boosts.erase("drop2")
+	await _frames(2)
+	xp_ok.call("реклама скінчилась", 1.0)
+	# універсал теж подвоює
+	gw.shop["premium_until"] = Prem.now() + 86400.0
+	await _frames(2)
+	xp_ok.call("мапа, універсал", 2.0)
+	loot_ok.call("універсал")
+	# свято на здобич: Маланка, речі з нечисті ×1,5; ресурсів не чіпає
+	HolS.forced = "malanka"
+	game._apply_holiday()
+	await _frames(1)
+	check(is_equal_approx(float(gc.festive.get("loot", 0.0)), 0.5), "Маланка: свято на речі з нечисті (+50%)")
+	loot_ok.call("Маланка й універсал")
+	check(pct.call("Здобич: речі") == 200 and pct.call("Здобич: ресурси") == 100, "Маланка й ×2 здобичі: речі +200%, ресурси +100%")
+	gw.shop["premium_until"] = 0.0
+	await _frames(2)
+	loot_ok.call("Маланка без подвоєння")
+	check(pct.call("Здобич: речі") == 50 and pct.call("Здобич: ресурси") == 0, "Маланка: речі +50%, ресурси +0%")
+	HolS.forced = "none"
+	game._apply_holiday()
+	# улюбленець на ресурси: ворон
+	var gold0: int = gp.gold
+	var res0: Dictionary = gp.resources.duplicate()
+	gp.gold = 10000000
+	gp.resources = {"wood": 100000, "iron": 100000, "herbs": 100000, "trophy": 100000}
+	check(PetS.upgrade(gw, gp, "voron") and PetS.choose(gw, gp, "voron") and float(gp.pet_fx.get("res", 0.0)) > 0.0, "ворон з героєм: +%d%% ресурсів" % roundi(Pets.value("voron", 1) * 100.0))
+	loot_ok.call("ворон")
+	check(pct.call("Здобич: речі") == 0 and pct.call("Здобич: ресурси") == roundi(Pets.value("voron", 1) * 100.0), "ворон: речі +0%%, ресурси +%d%%" % roundi(Pets.value("voron", 1) * 100.0))
+	Ad.grant_drop2(gw)
+	await _frames(2)
+	loot_ok.call("ворон і реклама")
+	gw.boosts.erase("drop2")
+	PetS.choose(gw, gp, "")
+	gp.gold = gold0
+	gp.resources = res0
+	await _frames(2)
+	loot_ok.call("ворона відпущено")
 	# ---- Довідник: стаття «Показники героя» називає кожен рядок ----
 	var art_text := ""
 	for e in WS._entries("basics"):
@@ -16455,6 +16753,8 @@ func _suite_hero_sheet() -> void:
 			art_order = art_order and lp > at
 			at = maxi(at, lp)
 	check(art_order, "стаття йде за групами вкладки: заголовки й рядки в тому самому порядку")
+	check("подвоєнням за рекламу чи Гетьманський універсал" in art_text and "і на рівень, і на майстерність" in art_text and "«Здобич: речі»" in art_text and "«Здобич: ресурси»" in art_text and "хист улюбленця" in art_text and "свято" in art_text,
+		"стаття: бонус досвіду з подвоєнням іде на рівень і майстерність, два рядки здобичі з їхніми джерелами")
 	var limits := ["%d%%" % roundi(Data.ARMOR_CAP * 100.0), "%d%%" % roundi(gp.CRIT_CAP * 100.0), "%d%%" % roundi(gp.SKILL_CD_MIN * 100.0), "%d%%" % roundi(gp.BLOCK_FX_CAP), "%d%%" % roundi(gp.WARD_FX_CAP), "%d%%" % roundi((1.0 - gp.DODGE_FX_MIN) * 100.0), str(gp.RANGED_MIN_CD).replace(".", ","), "%d очок" % int(Data.SPI_SOFT), "%d очок" % int(Data.AGI_ASPD_SOFT)]
 	check(limits.all(func(x): return x in art_text), "стаття називає межі з тих самих сталих, що й бій: %s" % str(limits))
 	game.queue_free()
@@ -18590,6 +18890,7 @@ func _suite_auto_buffs() -> void:
 				art = str(e["text"])
 	check("авто-бафи" in art and "Авто-бафи: так" in art and ("нижче %d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in art and "Перша допомога" in art and "Замовляння крові" in art and "гетьманському огляді" in art, "довідник описує авто-бафи: коли вмикаються, поріг лікування, перемикач")
 	check(not ("—" in str(nl[2]) or "—" in str(nl[3]) or "—" in str(nl[4])), "рядки авто-бафів без довгого тире")
+	check("на кнопках бафів, які вони тиснуть, горить позначка «авто»: на стійках, крім найлівішої, її нема" in art, "довідник: позначка «авто» лише на тому, що тисне Німб")
 	check(("Чисте лікування" in art) and ("Хоругва куреня" in art) and ("вмикається одразу" in art) and ("найлівіша" in art) and ("рукою їх можна натиснути" in art), "довідник: лікування з бонусом одразу, зі стійок лише найлівіша, рукою можна будь-яку")
 	var shp = _new_player()  # Сагайдачний, що вивчив усе: на панелі чотири стійки, Німб тисне одну
 	shp.job = "sahaidachnyk"
@@ -18683,6 +18984,38 @@ func _suite_auto_buffs() -> void:
 	# 11. Позначка «авто» на кнопках бафів
 	var hud = game.hud
 	check(hud.skill_buttons["battle_cry"].auto_mark and hud.skill_buttons["zamova_krovi"].auto_mark and not hud.skill_buttons["whirl"].auto_mark, "позначка «авто» є на кнопках бафів і нема на атаці")
+	# дві стійки: позначка лише на найлівішій (те, що тисне Німб, DivineService.auto_panel)
+	gp.skills["navala"] = 1
+	var marks := func() -> Array:
+		var out := []
+		for id in hud.skill_buttons:
+			if hud.skill_buttons[id].visible and hud.skill_buttons[id].auto_mark:
+				out.append(id)
+		out.sort()
+		return out
+	for order in [["mur", "navala"], ["navala", "mur"]]:
+		gp.panel["buff"] = [order[0], "battle_cry", order[1], "khoruhva", "first_aid"]
+		await _frames(2)
+		var mk: Array = marks.call()
+		var want_mk := ["battle_cry", "first_aid", "khoruhva", order[0]]
+		want_mk.sort()
+		check(mk == want_mk, "стійки %s і %s: «авто» на лівій стійці й звичайних бафах, на правій нема (%s)" % [order[0], order[1], mk])
+	gp.auto_buffs = false
+	await _frames(2)
+	check(marks.call().is_empty(), "перемикач вимкнено: позначки «авто» нема на жодній кнопці, і на стійках")
+	gp.auto_buffs = true
+	DS.unequip(gw, gp, "halo")
+	await _frames(2)
+	check(marks.call().is_empty(), "Німб знято: позначки «авто» нема на жодній кнопці")
+	DS.equip(gw, gp, "nimb")
+	await _frames(2)
+	check(DS.auto_buffs_on(gp) and marks.call().size() == 4, "Німб вдягли знову: позначки вернулись")
+	gp.skills.erase("navala")
+	gp.skill_timers.erase("navala")
+	gp.buffs.erase("navala")
+	gp.panel["buff"] = buffs.duplicate()
+	gp.recalc()
+	await _frames(2)
 	# 4. Лікування: понад 60% мовчить, нижче вмикається
 	reset.call(DS.AUTO_HEAL_AT + 0.1)
 	tick.call()
@@ -18777,6 +19110,9 @@ func _suite_auto_buffs() -> void:
 	check(fired.call("mur") and gp.buffs.has("mur") and not gp.buffs.has("navala"), "рукою права стійка вмикається й знімає ліву")
 	tick.call()
 	check(gp.buffs.has("mur") and not gp.buffs.has("navala"), "Німб не перебиває стійку, ввімкнену рукою")
+	gp.skill_timers["navala"] = 0.0  # ліва відновилась: Німб у першій же перевірці вмикає її й знімає праву
+	tick.call()
+	check(gp.buffs.has("navala") and not gp.buffs.has("mur"), "ліва стійка відновилась: Німб вмикає її, і вона знімає ввімкнену рукою")
 	# три стійки однієї групи: лише найлівіша
 	gp.panel["buff"] = ["battle_cry", "stiika_vezhi", "stiika_vitru", "stiika_zasidky", "khoruhva"]
 	reset_all.call()

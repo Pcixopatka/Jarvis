@@ -539,7 +539,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 			btn_mana.label = ml
 			btn_mana.queue_redraw()
 		player.sync_panel()
-		var auto_marks: bool = DivineService.auto_buffs_on(player)
+		var auto_ids: Array = DivineService.auto_panel(player) if DivineService.auto_buffs_on(player) else []  # що тисне Німб
 		for id in skill_buttons:
 			var b = skill_buttons[id]
 			var ai: int = player.panel["attack"].find(id)
@@ -549,7 +549,7 @@ func update(player: Player, world, combat_info: Dictionary, delta: float, story_
 				b.position = attack_slots[ai] if ai >= 0 else buff_slots[bi]
 				var no_mana: bool = player.mana < player.skill_cost(id)
 				b.set_cooldown(1.0 if no_mana and player.skill_timers.get(id, 0.0) <= 0.0 else player.skill_ready_ratio(id))
-				b.set_auto(auto_marks and bi >= 0)
+				b.set_auto(id in auto_ids)
 	var pts: int = player.unspent_points() + ChallengeService.ready_count(world, player)
 	if pts > 0:
 		_pulse += maxf(delta, 0.016) * 5.0

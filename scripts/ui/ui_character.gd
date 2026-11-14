@@ -161,7 +161,8 @@ static func _hero(game) -> Control:
 	left.add_child(pts)
 
 	# Докладні показники у дві колонки, групами під заголовками; ті самі числа, що й у бою (HeroSheet)
-	for g in HeroSheet.groups(p, game.combat.festive if game.combat != null else {}):
+	var fest: Dictionary = game.combat.festive if game.combat != null else {}
+	for g in HeroSheet.groups(p, fest, game.combat.drop_boost if game.combat != null else 1.0):
 		left.add_child(UI.label(g[0], 16, UI.GOLD, false))
 		var grid := GridContainer.new()
 		grid.columns = 2
