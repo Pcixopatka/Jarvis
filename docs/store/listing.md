@@ -26,13 +26,13 @@
 • Комбо, стани (кровотеча, опік, холод, зараза) й елітна нечисть із властивостями.
 • Боси з власними прийомами: Триголовий Змій, Відьма з Лисої гори, Вій із залізними повіками, Кощій Безсмертний.
 
-ДЕСЯТЬ КЛАСІВ
-• Селянин стає Козаком або Волхвом, а далі обирає спеціалізацію: Запорожець, Пластун, Самопальник, Характерник, Знахар, Жрець Перуна чи Мольфар.
+ЧОТИРНАДЦЯТЬ КЛАСІВ
+• Селянин стає Козаком, Стрільцем або Волхвом, а далі обирає спеціалізацію: Запорожець, Пластун, Характерник, Самопальник, Сагайдачник, Опришок, Сокольник, Знахар, Перунів жрець чи Мольфар.
 • Дерева вмінь, майстерність класу, Загартування й камені долі.
-• Шаблі, булави, списи, пищалі й посохи. Кування, заточка й переплавка у власній кузні.
+• Шаблі, булави, списи, луки, пищалі, пістолі й посохи. Кування, заточка й переплавка у власній кузні.
 
 ЖИВИЙ СВІТ
-• Мапа від Карпат до Криму: п'ятнадцять міст, сорок місцевостей і печер, далекі краї, що ростуть разом із героєм.
+• Мапа від Карпат до Криму: дев'ятнадцять міст і осель, майже сімдесят місцевостей і печер, далекі краї, що ростуть разом із героєм.
 • Зараза шириться мапою, міста потрапляють в облогу, на села нападають, а мандрівники просять провести їх через небезпечні місця.
 • Сюжет із виборами, що мають наслідки, і побратими зі своїми історіями.
 
@@ -44,7 +44,8 @@
 • Двадцять вісім свят за справжнім календарем: від Маланки до Різдва.
 
 ГРАЙ ДЕ ЗАВГОДНО
-• Гра працює й без інтернету. З мережею рід ще й зберігається в хмарі.
+• Гра працює й без інтернету. З мережею рід зберігається в хмарі й відновлюється на новому телефоні.
+• Спільні таблиці рекордів: змагайся з іншими гравцями за Башту, Глибини й славу.
 • До п'яти персонажів зі спільним хутором, скринею й досягненнями.
 • Піксельна графіка й записана музика.
 
@@ -83,12 +84,12 @@ REAL-TIME COMBAT
 • Combos, status effects and elite enemies with affixes.
 • Bosses with their own tricks: the Three-Headed Dragon, the Witch of Bald Mountain, Viy with iron eyelids, Koschei the Deathless.
 
-TEN CLASSES
-• The Peasant becomes a Cossack or a Volkhv, then picks a specialisation: Zaporozhets, Plastun, Samopalnyk, Kharakternyk, Znakhar, Priest of Perun or Molfar.
+FOURTEEN CLASSES
+• The Peasant becomes a Cossack, a Strilets (marksman) or a Volkhv, then picks a specialisation: Zaporozhets, Plastun, Kharakternyk, Samopalnyk, Sahaidachnyk, Opryshok, Sokolnyk, Znakhar, Priest of Perun or Molfar.
 • Skill trees, class mastery, Tempering perks and stones of fate.
 
 A LIVING WORLD
-• A map from the Carpathians to Crimea: fifteen cities, forty wilds and caves, and far lands that grow with your hero.
+• A map from the Carpathians to Crimea: nineteen towns and settlements, nearly seventy wilds and caves, and far lands that grow with your hero.
 • The plague spreads across the map, cities fall under siege, villages are raided and travellers ask for an escort.
 • A story with choices that matter and comrades with their own stories.
 
@@ -100,7 +101,8 @@ HOMESTEAD AND PEACEFUL PURSUITS
 • Twenty-eight holidays that follow the real calendar.
 
 PLAY ANYWHERE
-• Works offline too. With a connection your clan is also saved to the cloud.
+• Works offline too. With a connection your clan is saved to the cloud and restored on a new phone.
+• Shared leaderboards: compete with other players for the Tower, the Depths and glory.
 • Up to five characters sharing one homestead.
 
 The game is in Ukrainian only.
@@ -113,6 +115,6 @@ The game is in Ukrainian only.
 | Категорія | Ігри, «Рольові» |
 | Теги | Екшн-RPG, піксельна графіка, офлайн |
 | Назва пакета | `com.kozatska.zvytiaha` (після першої публікації змінити не можна) |
-| Контактна пошта | твоя адреса для гравців (у репозиторії її немає навмисно) |
-| Сайт | необов'язково |
-| Політика приватності | посилання на розміщений текст із `privacy-policy.md` |
+| Контактна пошта | sichlab.studio@ukr.net |
+| Сайт | `https://pcixopatka.github.io/Jarvis/` |
+| Політика приватності | `https://pcixopatka.github.io/Jarvis/privacy/` |
