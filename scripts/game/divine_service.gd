@@ -95,9 +95,9 @@ static func unequip(world, player, slot: String) -> void:
 	apply(world, player)
 
 
-## Що дають вдягнені дари: {"bag", "trade", "stats", "pickup", "shop", "xp", "gold", "revive", "party", "sight", "light", "auto_buffs", "fx": {ключ: значення}}.
+## Що дають вдягнені дари: {"bag", "trade", "chest", "stats", "pickup", "shop", "xp", "gold", "revive", "party", "sight", "light", "auto_buffs", "fx": {ключ: значення}}.
 static func fx_of(world, player) -> Dictionary:
-	var out := {"bag": 0, "trade": 0, "stats": 0.0, "pickup": 0.0, "shop": false, "loot": false, "xp": 0.0, "gold": 0.0, "revive": 0.0,
+	var out := {"bag": 0, "trade": 0, "chest": 0, "stats": 0.0, "pickup": 0.0, "shop": false, "loot": false, "xp": 0.0, "gold": 0.0, "revive": 0.0,
 		"party": 0.0, "sight": false, "light": 1.0, "auto_buffs": false, "fx": {}}
 	for slot in player.divine.keys():
 		var id: String = str(player.divine[slot])
@@ -106,6 +106,7 @@ static func fx_of(world, player) -> Dictionary:
 		var D: Dictionary = Divine.def(id)
 		out["bag"] = int(out["bag"]) + int(D.get("bag", 0))
 		out["trade"] = int(out["trade"]) + int(D.get("trade", 0))
+		out["chest"] = int(out["chest"]) + int(D.get("chest", 0))
 		out["stats"] = float(out["stats"]) + float(D.get("stats", 0.0))
 		out["pickup"] = float(out["pickup"]) + float(D.get("pickup", 0.0))
 		out["shop"] = bool(out["shop"]) or bool(D.get("shop", false))
@@ -131,6 +132,7 @@ static func apply(world, player) -> void:
 	player.divine_fx = fx_of(world, player)
 	player.bag_divine = int(player.divine_fx["bag"])
 	world.cart_divine = int(player.divine_fx["trade"])  # віз для торгу рахується від героя, яким грають
+	world.chest_divine = int(player.divine_fx["chest"])  # і скриня роду теж
 	player.recalc()
 
 

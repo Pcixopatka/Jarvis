@@ -3923,7 +3923,7 @@ func camp_do(action: String, arg) -> void:
 			smith_msg = ""
 		"chest_put":
 			chest_sel = ""
-			if account.chest_full(CampService.level(world, "sklad")):
+			if account.chest_full(world):
 				smith_msg = "Скриня повна"
 				smith_msg_color = UI.BAD
 			elif player.is_equipped(arg):
@@ -3932,7 +3932,7 @@ func camp_do(action: String, arg) -> void:
 			else:
 				var it := player.remove_from_bag(arg)
 				if not it.is_empty():
-					account.put_item(it, CampService.level(world, "sklad"))
+					account.put_item(it, world)
 					smith_msg = ""
 		"chest_take":
 			chest_sel = ""

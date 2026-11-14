@@ -763,7 +763,7 @@ scripts/mechanics/
 ### Божі дари, вбрання, крамниця
 
 **Дар** (`gifts.json`): `slot`* (гніздо з `gift_slots.json`), `name`*, `icon`*, `price`*, `desc`*,
-`lines`* — рядки опису, і те, що він дає: `pickup`, `shop`, `loot`, `bag`, `trade`, `stats`, `fx`,
+`lines`* — рядки опису, і те, що він дає: `pickup`, `shop`, `loot`, `bag`, `trade`, `chest`, `stats`, `fx`,
 `revive`, `xp`, `gold`, `auto_buffs`, `party`, `sight`, `light` (див. `DivineService.fx_of`). Дари
 гнізд «Супутник» і «Віз» мають ще й запис у `pets.json` (див. «Улюбленець і супутник із дару»).
 

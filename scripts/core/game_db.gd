@@ -349,6 +349,7 @@ const GIFT_SCHEMA := {
 	"loot": {"type": "bool"},  # здобич одразу в торбу
 	"bag": {"type": "int"},  # місць у торбі
 	"trade": {"type": "int"},  # одиниць краму на возі
+	"chest": {"type": "int"},  # місць у скрині роду
 	"stats": {"type": "float"},  # частка до всіх характеристик
 	"fx": {"type": "map", "of": {"type": "float"}},  # бойові показники: ключі бонусів (effects.json)
 	"revive": {"type": "float"},  # з якою часткою здоров'я раз на бій піднімає
@@ -1989,7 +1990,7 @@ static func _item_rules(name: String, rows: Dictionary) -> Array:
 					if float(R["fx"][k]) <= 0.0:
 						out.append("%s: «fx.%s» має бути більшим за нуль" % [where, k])
 			"gifts":
-				_positive(R, ["price", "pickup", "bag", "trade", "stats", "revive", "xp", "gold", "party", "light"], where, out)
+				_positive(R, ["price", "pickup", "bag", "trade", "chest", "stats", "revive", "xp", "gold", "party", "light"], where, out)
 				if R.get("lines", []).is_empty():
 					out.append("%s: «lines» порожні" % where)
 				for ln in R.get("lines", []):

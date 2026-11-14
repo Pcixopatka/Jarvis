@@ -174,12 +174,11 @@ static func _chest(game) -> Control:
 	var p = game.player
 	var acc = game.account
 	var w = game.world
-	var sklad: int = CampService.level(w, "sklad")
-	var size: int = acc.chest_size(sklad)
+	var size: int = acc.chest_size(w)
 	var items: Array = acc.chest["items"]
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
-	v.add_child(UI.label("Спільна скриня: усе, що тут лежить, бачать усі твої персонажі. Склад на хуторі робить її більшою.", 16, UI.MUTED, false))
+	v.add_child(UI.label("Спільна скриня: усе, що тут лежить, бачать усі твої персонажі. Склад на хуторі й Чумацький віз роблять її більшою.", 16, UI.MUTED, false))
 	# Гривні
 	var grow := HBoxContainer.new()
 	grow.add_theme_constant_override("separation", 8)
@@ -247,7 +246,7 @@ static func _chest(game) -> Control:
 		if sel.begins_with("c:"):
 			det.add_child(UI.button(CHEST_TAKE, _do(game, "chest_take", picked["uid"]), Vector2(290, 58), 20, not p.bag_full()))
 		else:
-			det.add_child(UI.button(CHEST_PUT, _do(game, "chest_put", picked["uid"]), Vector2(290, 58), 20, not acc.chest_full(sklad) and not p.is_equipped(picked["uid"])))
+			det.add_child(UI.button(CHEST_PUT, _do(game, "chest_put", picked["uid"]), Vector2(290, 58), 20, not acc.chest_full(w) and not p.is_equipped(picked["uid"])))
 	v.add_child(h)
 	if game.smith_msg != "":
 		v.add_child(UI.label(game.smith_msg, 18, game.smith_msg_color, false))

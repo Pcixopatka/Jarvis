@@ -11459,15 +11459,24 @@ func _suite_account() -> void:
 	p.add_item(it)
 	var uid_before: int = it["uid"]
 	var taken: Dictionary = p.remove_from_bag(uid_before)
-	check(acc.put_item(taken, 0) and acc.chest["items"].size() == 1 and int(acc.chest["items"][0]["uid"]) >= 1000000, "річ у скрині отримує свій uid")
+	var cw = WorldState.new()  # місткість скрині рахується від світу: Склад і дар героя
+	acc.attach(cw)
+	check(acc.put_item(taken, cw) and acc.chest["items"].size() == 1 and int(acc.chest["items"][0]["uid"]) >= 1000000, "річ у скрині отримує свій uid")
 	var back: Dictionary = acc.take_item(acc.chest["items"][0]["uid"])
 	check(not back.is_empty() and not back.has("uid") and acc.chest["items"].is_empty(), "взяти річ зі скрині")
 	check(p.add_item(back) and p.inventory.size() == 1 and p.inventory[0]["name"] == it["name"], "річ повернулась у торбу з новим uid героя")
-	check(acc.chest_size(0) == Account.CHEST_SIZE and acc.chest_size(2) == Account.CHEST_SIZE + 2 * Account.CHEST_PER_SKLAD, "Склад збільшує скриню")
+	var CampSv = load("res://scripts/game/camp_service.gd")
+	var size0: int = acc.chest_size(cw)
+	CampSv.state(cw)["buildings"]["sklad"] = 2
+	var size2: int = acc.chest_size(cw)
+	CampSv.state(cw)["buildings"]["sklad"] = 0
+	check(size0 == Account.CHEST_SIZE and size2 == Account.CHEST_SIZE + 2 * Account.CHEST_PER_SKLAD, "Склад збільшує скриню")
 	for i in Account.CHEST_SIZE:
-		acc.put_item(Data.gen_item(1, 0, "belt"), 0)
-	check(acc.chest_full(0) and not acc.put_item(Data.gen_item(1, 0, "belt"), 0), "повна скриня не бере")
-	check(not acc.chest_full(1), "із Складом місце є")
+		acc.put_item(Data.gen_item(1, 0, "belt"), cw)
+	check(acc.chest_full(cw) and not acc.put_item(Data.gen_item(1, 0, "belt"), cw), "повна скриня не бере")
+	CampSv.state(cw)["buildings"]["sklad"] = 1
+	check(not acc.chest_full(cw), "із Складом місце є")
+	CampSv.state(cw)["buildings"].erase("sklad")
 	# Камені
 	p.stones = {"alatyr": 1}
 	check(acc.put_stone(p, "alatyr") and p.stones["alatyr"] == 0 and acc.chest["stones"]["alatyr"] == 1, "камінь у скриню")
@@ -14803,7 +14812,8 @@ func _suite_divine() -> void:
 	var MD: Dictionary = Div.def("mazha")
 	var mtext: String = (str(MD["name"]) + " " + str(MD["desc"]) + " " + " ".join(MD["lines"])).to_lower()
 	check(str(MD["name"]) == "Чумацький віз" and not "маж" in mtext, "дар зветься «Чумацький віз», слова «мажа» нема в назві, описі й рядках")
-	check(MD["lines"].size() == 2 and "50 місць" in str(MD["lines"][0]) and "торз" in str(MD["lines"][1]) and "50" in str(MD["lines"][1]) and int(MD["trade"]) == 50, "у властивостях дару обидва бонуси: торба й віз для торгу, по 50")
+	check(MD["lines"].size() == 3 and "50 місць" in str(MD["lines"][0]) and "торз" in str(MD["lines"][1]) and "50" in str(MD["lines"][1]) and int(MD["trade"]) == 50, "у властивостях дару бонуси торби й воза для торгу, по 50")
+	check(int(MD.get("chest", 0)) == 50 and "скриня на хуторі більша на 50 місць" in MD["lines"], "у картці воза скриня роду більша на 50: «chest» і третій рядок")
 	var wiki_maz := []
 	for sec in WS.sections():
 		for e in sec["entries"]:
@@ -14820,6 +14830,51 @@ func _suite_divine() -> void:
 	check(p_other.divine.is_empty() and TS.capacity(w) == cap0, "інший герой роду без дару бонусу до воза не має")
 	Camp.apply_effects(w, p)
 	check(TS.capacity(w) == cap0 + 50, "знову граємо героєм із возом: бонус повернувся")
+	# ---- Чумацький віз: місця в скрині роду ----
+	var Account = load("res://scripts/game/account.gd")
+	var acc = Account.new()
+	var bag_cart: int = p.bag_size()
+	var chest_on: int = acc.chest_size(w)
+	DS.unequip(w, p, "cart")
+	var chest_off: int = acc.chest_size(w)
+	check(chest_on == chest_off + int(MD["chest"]) and chest_off == Account.CHEST_SIZE + Account.CHEST_PER_SKLAD * Camp.level(w, "sklad"), "з вдягненим возом скриня більша на 50 при тому самому Складі (%d → %d)" % [chest_off, chest_on])
+	check(TS.capacity(w) == cap0 and p.bag_size() == bag_cart - 50, "зняв віз: торба й віз для торгу теж звичайні")
+	Camp.state(w)["buildings"]["sklad"] = 2
+	var sk_off: int = acc.chest_size(w)
+	DS.equip(w, p, "mazha")
+	check(acc.chest_size(w) == sk_off + 50 and TS.capacity(w) == Acts.TRADE_CART + Acts.TRADE_CART_SKLAD * 2 + 50 and p.bag_size() == bag_cart, "зі Складом 2 віз так само додає 50 місць скрині, а торба й торг діють як і були")
+	Camp.state(w)["buildings"].erase("sklad")
+	Camp.apply_effects(w, p_other)
+	check(acc.chest_size(w) == chest_off, "інший герой роду без воза: скриня без надбавки")
+	Camp.apply_effects(w, p)
+	check(acc.chest_size(w) == chest_on, "знову граємо героєм із возом: скриня знову більша")
+	# скриню заповнили понад меншу місткість, віз зняли: усе лишилось, класти не можна, брати можна
+	var fill: int = chest_off + 10
+	var put_ok := true
+	for i in fill:
+		put_ok = put_ok and acc.put_item(Data.gen_item(1, 0, "belt"), w)
+	var uids: Array = []
+	for it in acc.chest["items"]:
+		uids.append(int(it["uid"]))
+	check(put_ok and acc.chest["items"].size() == fill and not acc.chest_full(w), "з возом у скриню влізло %d речей, понад %d" % [fill, chest_off])
+	DS.unequip(w, p, "cart")
+	var still := true
+	for i in uids.size():
+		still = still and int(acc.chest["items"][i]["uid"]) == uids[i]
+	check(acc.chest_size(w) == chest_off and acc.chest["items"].size() == fill and still, "віз зняли: скриня менша (%d), а всі %d речей на місці" % [acc.chest_size(w), fill])
+	check(acc.chest_full(w) and not acc.put_item(Data.gen_item(1, 0, "belt"), w) and acc.chest["items"].size() == fill, "понад місткість класти не можна")
+	var took: Dictionary = acc.take_item(uids[0])
+	check(not took.is_empty() and acc.chest["items"].size() == fill - 1, "брати зі скрині можна")
+	for i in range(1, 11):
+		acc.take_item(uids[i])
+	check(acc.chest["items"].size() == chest_off - 1 and not acc.chest_full(w) and acc.put_item(Data.gen_item(1, 0, "belt"), w), "забрали досить речей: класти знову можна")
+	var chest_txt := ""
+	for sec in WS.sections():
+		for e in sec["entries"]:
+			if str(e.get("title", "")) == "Скриня":
+				chest_txt = str(e["text"])
+	check(("Чумацький віз додає ще %d місць, поки він вдягнений на героєві, яким граєш." % int(MD["chest"])) in chest_txt, "у довіднику «Скриня» сказано про 50 місць від воза")
+	DS.equip(w, p, "mazha")
 	# крам понад стару місткість; дар зняли, вантаж лишився
 	var wt = WorldState.new()
 	var pt = _new_player()
@@ -15363,7 +15418,7 @@ func _suite_grid_shops() -> void:
 	game.enter_map()
 	await _frames(2)
 	var in_chest: Dictionary = Data.gen_item(25, 3, "amulet")
-	game.account.put_item(in_chest, 0)
+	game.account.put_item(in_chest, game.world)
 	game.enter_camp()
 	await _frames(2)
 	var ctc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
@@ -15399,6 +15454,52 @@ func _suite_grid_shops() -> void:
 	put_btn.pressed.emit()
 	await _frames(2)
 	check(game.account.chest["items"].size() == 1 and gp.find_item(put_uid).is_empty(), "кнопка картки кладе річ до скрині")
+	# Чумацький віз: скриня з ним більша; зняли, коли речей понад місткість, — екран цілий і чесний
+	var DSc = load("res://scripts/game/divine_service.gd")
+	var div_had: Dictionary = gw.shop.get("divine", {}).duplicate()
+	var worn_had: Dictionary = gp.divine.duplicate()
+	if not gw.shop.has("divine"):
+		gw.shop["divine"] = {}
+	gw.shop["divine"]["mazha"] = true
+	DSc.equip(gw, gp, "mazha")
+	var c_on: int = game.account.chest_size(gw)
+	var c_items: Array = game.account.chest["items"]
+	var c_keep: Array = c_items.duplicate()
+	while c_items.size() < c_on - 50 + 5:
+		game.account.put_item(Data.gen_item(1, 0, "belt"), gw)
+	var c_n: int = c_items.size()
+	game._build_camp()
+	await _frames(2)
+	var chest_head := func() -> String:
+		var pg: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.camp_tab)
+		for l in pg.find_children("*", "Label", true, false):
+			if not l.is_queued_for_deletion() and l.text.begins_with("Скриня "):
+				return l.text
+		return ""
+	check(chest_head.call() == "Скриня %d/%d" % [c_n, c_on], "з возом заголовок скрині: %s" % chest_head.call())
+	DSc.unequip(gw, gp, "cart")
+	var c_off: int = game.account.chest_size(gw)
+	game.chest_sel = "b:%d" % int(gp.inventory[0]["uid"]) if not gp.inventory.is_empty() else ""
+	game._build_camp()
+	await _frames(2)
+	cpage = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.camp_tab)
+	var put_off = null
+	for b in cpage.find_children("*", "Button", true, false):
+		if not b.is_queued_for_deletion() and b.text == UCamp.CHEST_PUT:
+			put_off = b
+	check(c_off == c_on - 50 and chest_head.call() == "Скриня %d/%d" % [c_n, c_off] and _cells(cpage, UCamp.CHEST_CELL).size() == c_n + gp.inventory.size(), "віз зняли: екран скрині будується, заголовок %s, порожніх клітинок нема" % chest_head.call())
+	check(game.chest_sel == "" or (put_off != null and put_off.disabled), "кнопка «%s» вимкнена, поки скриня переповнена" % UCamp.CHEST_PUT)
+	if not gp.inventory.is_empty():
+		var bag_was: int = gp.inventory.size()
+		game.camp_do("chest_put", int(gp.inventory[0]["uid"]))
+		check(game.account.chest["items"].size() == c_n and gp.inventory.size() == bag_was, "покласти в переповнену скриню не можна, річ лишилась у торбі")
+	# прибрати: речі тесту зі скрині геть, дари як були
+	game.account.chest["items"] = c_keep
+	gw.shop["divine"] = div_had
+	gp.divine = worn_had
+	DSc.apply(gw, gp)
+	game.chest_sel = ""
+	game.smith_msg = ""
 	# ---- Донатна крамниця сіткою ----
 	var UShop = load("res://scripts/ui/ui_shop.gd")
 	var SHs = load("res://scripts/game/shop_service.gd")
@@ -18345,7 +18446,7 @@ func _suite_xp_gold_cap() -> void:
 	var hb: Dictionary = bag_of.call(gp, "belt")
 	var hb_aff: String = var_to_str(hb["affixes"])
 	var moved: Dictionary = gp.remove_from_bag(int(hb["uid"]))
-	check(game.account.put_item(moved, 0), "річ героя лягла в скриню")
+	check(game.account.put_item(moved, game.world), "річ героя лягла в скриню")
 	var back: Dictionary = game.account.take_item(int(game.account.chest["items"][0]["uid"]))
 	var back_aff: String = var_to_str(back["affixes"])
 	gp.add_item(back)
@@ -18868,7 +18969,7 @@ func _suite_artifact_bag_icon() -> void:
 	check(hero_ok and not hkeys.has(generic), "торба на екрані героя показує артефакти спрайтами їхніх босів, загального ромба нема")
 	game.close_character()
 	await _frames(2)
-	game.account.put_item(Arts.make(drawn[5]), 0)
+	game.account.put_item(Arts.make(drawn[5]), game.world)
 	game.camp_tab = 0
 	game.enter_camp()
 	await _frames(2)

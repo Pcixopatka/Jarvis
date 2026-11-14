@@ -1,7 +1,7 @@
 extends RefCounted
 ## Спільне на всіх персонажів (один файл account.save):
 ##   camp       — Козацький хутір (будівлі, пасіка) — те саме, що раніше world.camp
-##   chest      — спільна скриня: {"gold", "items", "stones"}; місткість — CHEST_SIZE + бонус Складу
+##   chest      — спільна скриня: {"gold", "items", "stones"}; місткість — chest_size(world)
 ##   stats      — лічильники подій для викликів і досягнень (усі персонажі разом)
 ##   challenges — щоденні/тижневі виклики й відкриті досягнення
 ##   records    — рекорди роду: найкраще серед усіх персонажів (див. RecordService)
@@ -16,6 +16,7 @@ const Data := preload("res://scripts/data/data.gd")
 const Clock := preload("res://scripts/core/clock.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const Valor := preload("res://scripts/data/valor.gd")
+const CampService := preload("res://scripts/game/camp_service.gd")
 
 static var CHEST_SIZE: int  # місць у скрині роду
 static var CHEST_PER_SKLAD: int  # кожен рівень Складу на хуторі — ще стільки місць у скрині
@@ -110,17 +111,19 @@ func _cap_valor() -> void:
 
 # ---------- Скриня ----------
 
-func chest_size(sklad_level: int) -> int:
-	return CHEST_SIZE + CHEST_PER_SKLAD * sklad_level
+## Місткість скрині — лише тут: основа, Склад на хуторі й Чумацький віз героя, яким грають
+## (world.chest_divine). Як дар зняти, речі понад місткість лишаються, але класти не можна.
+func chest_size(world) -> int:
+	return CHEST_SIZE + CHEST_PER_SKLAD * CampService.level(world, "sklad") + int(world.chest_divine)
 
 
-func chest_full(sklad_level: int) -> bool:
-	return chest["items"].size() >= chest_size(sklad_level)
+func chest_full(world) -> bool:
+	return chest["items"].size() >= chest_size(world)
 
 
 ## Покласти річ у скриню (річ отримує новий uid зі скринного діапазону).
-func put_item(item: Dictionary, sklad_level: int) -> bool:
-	if chest_full(sklad_level):
+func put_item(item: Dictionary, world) -> bool:
+	if chest_full(world):
 		return false
 	item = item.duplicate(true)
 	item["uid"] = next_uid

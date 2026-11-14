@@ -118,6 +118,7 @@ static func apply_effects(world, player) -> void:
 	player.divine_fx = DivS.fx_of(world, player)
 	player.bag_divine = int(player.divine_fx["bag"])
 	world.cart_divine = int(player.divine_fx["trade"])  # Чумацький віз: місткість воза в торзі
+	world.chest_divine = int(player.divine_fx["chest"])  # і місця в скрині роду
 	player.recalc()  # крила, молот і хист улюбленця мають одразу лягти в показники
 	load("res://scripts/game/kleinod_service.gd").apply(world, player)  # клейноди роду діють на кожного героя
 	load("res://scripts/game/peril_service.gd").apply(world, player)  # іменні звитяги за надважких босів
