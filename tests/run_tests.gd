@@ -14087,10 +14087,12 @@ func _suite_strilets_game() -> void:
 	p.use_skill("bartka")
 	check(near.statuses.has("bleed"), "«Удар бартки» пускає кров")
 	p.statuses["chill"] = {"t": 5.0, "dps": 0.0, "tick": 0.5}
+	p.stats["agi"] = 0  # нижче стелі швидкості бігу, щоб надбавку було видно
+	p.recalc()
 	var sp0: float = p.speed
 	ready.call()
 	p.use_skill("vtecha_horamy")
-	check(p.statuses.is_empty() and p.speed > sp0 * 1.4 and p.invuln > 0.0, "«Втеча горами»: стани знято, біг швидший, мить невразливості")
+	check(sp0 * 1.4 < p.SPEED_CAP and p.statuses.is_empty() and p.speed > sp0 * 1.4 and p.invuln > 0.0, "«Втеча горами»: стани знято, біг швидший (%d → %d), мить невразливості" % [int(sp0), int(p.speed)])
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
@@ -16587,6 +16589,76 @@ func _suite_hero_sheet() -> void:
 	gp.attack_timer = 0.0
 	gp.attack()
 	check(tgt.hp < tgt.max_hp and near.call(gp.mana, HS.mana_per_hit(gp)) and B.get("Наснага за удар", "") == "+" + HS._trim(gp.mana), "«Наснага за удар» %s: влучний удар шаблею дав %.3f" % [B.get("Наснага за удар"), gp.mana])
+	# ---- Стеля швидкості бігу: обрізано після всіх множників; «Вовча подоба» й «Бойовий клич» додають понад неї ----
+	_clear_enemies(game)
+	var cap: float = gp.SPEED_CAP
+	check(cap == float(GameDB.settings("hero_combat")["speed_cap"]) and is_equal_approx(cap, 520.0), "стеля швидкості бігу з налаштувань: %s" % cap)
+	var raw_speed := func() -> float:  # та сама формула, що в recalc, без стелі
+		return 260.0 * (1.0 + 0.015 * gp._bonus("agi") + 0.05 * gp.pk("boots") + gp.eq("speed") / 100.0) * (1.0 + float(gp.soul_fx.get("speed", 0.0))) * (1.0 + float(gp.set_fx.get("speed", 0.0)) / 100.0) * (1.0 + gp.fx("speed") / 100.0)
+	var low_raw: float = raw_speed.call()
+	check(low_raw < cap and gp.speed == low_raw and tab["by"].get("Швидкість бігу", "") == "%d" % int(low_raw), "герой під стелею біжить як раніше: %s (без стелі %s), на екрані «%s» без позначки" % [gp.speed, low_raw, tab["by"].get("Швидкість бігу", "")])
+	var buffs0: Dictionary = gp.buffs.duplicate(true)
+	var skills0: Dictionary = gp.skills.duplicate()
+	gp.buffs["spd"] = {"t": 999.0, "fx": {"speed": 500.0}, "group": ""}
+	gp.skills["vovk"] = 1
+	gp.skills["battle_cry"] = 1
+	gp.recalc()
+	var high_raw: float = raw_speed.call()
+	check(high_raw > cap and gp.speed == cap, "герой понад стелю: формула дає %s, біжить %s" % [high_raw, gp.speed])
+	tab = _hero_tab(UChar, game)
+	check(tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(cap), HS.SPEED_CAP_MARK], "на стелі екран героя показує «%s»" % tab["by"].get("Швидкість бігу", ""))
+	# справжній біг: секунда кадрів із повним ходом праворуч
+	var arena0: Rect2 = c.arena
+	var input0: Callable = c.move_input
+	c.arena = Rect2(-100000, -100000, 200000, 200000)
+	c.move_input = func() -> Vector2: return Vector2.RIGHT
+	gp.invuln = 999.0
+	var run := func() -> float:
+		gp.position = Vector2.ZERO
+		gp.push = Vector2.ZERO
+		for i in 60:
+			gp._process(1.0 / 60.0)
+		return gp.position.x
+	var d_cap: float = run.call()
+	check(near.call(d_cap, cap), "на стелі герой за секунду пробігає %.2f (стеля %s)" % [d_cap, cap])
+	var wolf = gp.mech("skill/vovk")
+	var cry = gp.mech("skill/battle_cry")
+	wolf.t = 5.0
+	var wolf_m: float = wolf.speed_mult()
+	var d_wolf: float = run.call()
+	wolf.t = 0.0
+	check(wolf_m > 1.0 and near.call(d_wolf, cap * wolf_m), "«Вовча подоба» понад стелю: %.2f за секунду (стеля × %s)" % [d_wolf, wolf_m])
+	cry.t = 5.0
+	var cry_m: float = cry.speed_mult()
+	var d_cry: float = run.call()
+	cry.t = 0.0
+	check(cry_m > 1.0 and near.call(d_cry, cap * cry_m), "«Бойовий клич» понад стелю: %.2f за секунду (стеля × %s)" % [d_cry, cry_m])
+	gp.block_held = true
+	gp.block_cd = 0.0
+	var d_block: float = run.call()
+	gp.block_held = false
+	gp.blocking = false
+	gp.block_time = 0.0
+	check(near.call(d_block, cap * 0.45), "із блоком герой сповільнений від стелі: %.2f за секунду" % d_block)
+	gp.statuses["chill"] = {"t": 5.0, "dps": 0.0, "tick": 0.5}
+	var chill_m: float = load("res://scripts/game/status.gd").speed_mult(gp)
+	var d_chill: float = run.call()
+	gp.statuses.erase("chill")
+	check(chill_m < 1.0 and near.call(d_chill, cap * chill_m), "холод сповільнює від стелі: %.2f за секунду" % d_chill)
+	# перекид: ROLL_TIME секунд у ROLL_SPEED раз швидше за біг
+	gp.position = Vector2.ZERO
+	gp.dodge_timer = 0.0
+	gp.dodge()
+	while gp.dodge_time_left > 0.0:
+		gp._process(minf(1.0 / 60.0, gp.dodge_time_left))
+	check(near.call(gp.position.x, cap * gp.ROLL_SPEED * gp.ROLL_TIME), "перекид на стелі летить %.2f = стеля × %s × %s" % [gp.position.x, gp.ROLL_SPEED, gp.ROLL_TIME])
+	c.arena = arena0
+	c.move_input = input0
+	gp.invuln = 0.0
+	gp.buffs = buffs0
+	gp.skills = skills0
+	gp.recalc()
+	gp.position = c.arena.get_center()
 	_clear_enemies(game)
 	await _frames(1)
 	if game.state == game.State.PLAYING:
@@ -16757,6 +16829,7 @@ func _suite_hero_sheet() -> void:
 		"стаття: бонус досвіду з подвоєнням іде на рівень і майстерність, два рядки здобичі з їхніми джерелами")
 	var limits := ["%d%%" % roundi(Data.ARMOR_CAP * 100.0), "%d%%" % roundi(gp.CRIT_CAP * 100.0), "%d%%" % roundi(gp.SKILL_CD_MIN * 100.0), "%d%%" % roundi(gp.BLOCK_FX_CAP), "%d%%" % roundi(gp.WARD_FX_CAP), "%d%%" % roundi((1.0 - gp.DODGE_FX_MIN) * 100.0), str(gp.RANGED_MIN_CD).replace(".", ","), "%d очок" % int(Data.SPI_SOFT), "%d очок" % int(Data.AGI_ASPD_SOFT)]
 	check(limits.all(func(x): return x in art_text), "стаття називає межі з тих самих сталих, що й бій: %s" % str(limits))
+	check(("щонайбільше %d" % int(gp.SPEED_CAP)) in art_text and HS.SPEED_CAP_MARK in art_text and "«Вовча подоба»" in art_text and "«Бойовий клич»" in art_text and "понад стелю" in art_text, "стаття називає стелю швидкості бігу %d і два вміння понад неї" % int(gp.SPEED_CAP))
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

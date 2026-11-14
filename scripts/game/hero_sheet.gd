@@ -18,6 +18,7 @@ const OTHER := "Інше"
 const PROC_KEYS := [["bleed_hit", "bleed"], ["burn_hit", "burn"], ["chill_hit", "chill"], ["weak_hit", "weak"], ["curse_hit", "curse"], ["stun_hit", ""]]
 const STUN_LABEL := "Оглушення"
 const SHOT_LABEL := "Сила пострілу"
+const SPEED_CAP_MARK := "(стеля)"  # після швидкості бігу, коли вона вперлась у стелю
 
 
 # ---------------- Числа ----------------
@@ -212,7 +213,7 @@ static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Arra
 		["За вбивство: наснага", "+%s" % _trim(kill_mana(p))],
 	]
 	var other := [
-		["Швидкість бігу", "%d" % int(p.speed)],
+		["Швидкість бігу", speed_text(p)],
 		["Радіус збору", "%d" % int(p.pickup_radius)],
 		["Бонус досвіду", "+%d%%" % roundi((xp_total(p) - 1.0) * 100)],
 		["Бонус гривень", "+%d%%" % roundi((p.gold_mult - 1.0) * 100)],
@@ -221,6 +222,11 @@ static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Arra
 		["Зілля з собою", "%d і %d" % [p.potion_max(), p.mana_potion_max()]],
 	]
 	return [[ATTACK, atk], [PROCS, procs], [DEFENSE, dfn], [MANA, mana], [OTHER, other]]
+
+
+## Швидкість бігу; на стелі (Player.SPEED_CAP) — з позначкою, щоб було видно, що більше вже не буде.
+static func speed_text(p) -> String:
+	return "%d" % int(p.speed) + (" " + SPEED_CAP_MARK if p.speed >= PlayerScript.SPEED_CAP else "")
 
 
 ## Множник як надбавка: 1.12 → «+12%», 0.92 → «−8%».

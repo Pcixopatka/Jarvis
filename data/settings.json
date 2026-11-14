@@ -58,7 +58,8 @@
 		"charge_min": 0.6,
 		"charge_full": 1.4,
 		"attack_slots": 3,
-		"buff_slots": 5
+		"buff_slots": 5,
+		"speed_cap": 520.0
 	},
 	"battle": {
 		"num": 11004,

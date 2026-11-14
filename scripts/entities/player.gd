@@ -161,6 +161,7 @@ static var PARRY_WINDOW: float  # натиснув «Блок» не раніш�
 static var BLOCK_MULT: float  # частка шкоди, що проходить крізь блок
 static var CHARGE_MIN: float  # з якого часу утримання блоку, с, удар уже заряджений
 static var CHARGE_FULL: float  # з якого часу утримання блоку удар заряджений повністю, с
+static var SPEED_CAP: float  # швидкість бігу не вища; «Вовча подоба» й «Бойовий клич» (SPEED_MULT) додають понад неї
 ## Межі й пороги бою: їх показують екран героя (HeroSheet) і довідник, тож вони названі тут
 const CRIT_CAP := 0.8  # шанс криту не більший
 const SKILL_CD_MIN := 0.3  # перезарядка вмінь не коротша за цю частку
@@ -173,6 +174,8 @@ const EXECUTE_PERK := 1.2  # множник добивання від «h_execut
 const PARRY_HIT := 1.5  # удар у відповідь на парирування: шкода × це × множник криту
 const PARRY_HEAL_PERK := 0.04  # лікування за парирування від «h_parry», частка здоров'я на ранг
 const AFTER_DODGE_T := 2.0  # скільки секунд після перекиду діє fx «dodge_dmg»
+const ROLL_SPEED := 3.2  # перекид летить у стільки разів швидше за біг
+const ROLL_TIME := 0.18  # скільки секунд триває перекид
 const ANTIPLAGUE_MULT := 0.8  # під зіллям від зарази удар по героєві множиться на це
 const STATUS_RES_CAP := 0.6  # стани на герої коротші щонайбільше на цю частку
 
@@ -218,6 +221,7 @@ static func apply_settings() -> void:
 	BLOCK_MULT = S["block_mult"]
 	CHARGE_MIN = S["charge_min"]
 	CHARGE_FULL = S["charge_full"]
+	SPEED_CAP = S["speed_cap"]
 	ATTACK_SLOTS = S["attack_slots"]
 	BUFF_SLOTS = S["buff_slots"]
 
@@ -781,6 +785,7 @@ func recalc() -> void:
 	varenyk_bonus = pk("varenyk")
 
 	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0) * (1.0 + fx("speed") / 100.0)
+	speed = minf(speed, SPEED_CAP)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0))) * (1.0 + float(divine_fx.get("pickup", 0.0)))
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0)) + float(divine_fx.get("xp", 0.0))
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0 + float(divine_fx.get("gold", 0.0))
@@ -1038,7 +1043,7 @@ func _process(delta: float) -> void:
 	moving = false
 	if dodge_time_left > 0.0:
 		dodge_time_left -= delta
-		position += dodge_dir * speed * 3.2 * delta
+		position += dodge_dir * speed * ROLL_SPEED * delta
 		if pk("dash_strike") > 0:
 			_dash_strike()
 	else:
@@ -1356,7 +1361,7 @@ func dodge() -> void:
 	dodge_timer = dodge_cooldown
 	var input_vec: Vector2 = combat.get_move_input()
 	dodge_dir = input_vec.normalized() if input_vec.length() > 0.1 else facing
-	dodge_time_left = 0.18
+	dodge_time_left = ROLL_TIME
 	dodge_hits.clear()
 	invuln = maxf(invuln, 0.32)
 	for m in _hooks[HeroMechanic.ON_DODGE]:

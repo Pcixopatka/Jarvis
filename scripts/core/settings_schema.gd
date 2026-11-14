@@ -78,6 +78,7 @@ const SCHEMAS := {
 		"charge_full": {"type": "float", "check": "pos", "about": "з якого часу утримання блоку удар заряджений повністю, с"},
 		"attack_slots": {"type": "int", "check": "count", "about": "кнопок атак праворуч (біля основного удару)"},
 		"buff_slots": {"type": "int", "check": "count", "about": "кнопок бафів знизу посередині"},
+		"speed_cap": {"type": "float", "check": "pos", "about": "швидкість бігу героя не вища (пікселів за секунду); «Вовча подоба» й «Бойовий клич» додають понад неї"},
 	},
 	"battle": {
 		"num": _NUM,
