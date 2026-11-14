@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function own(uid) { return signedIn() && request.auth.uid == uid; }
+
+    match /players/{uid} {
+      allow get, delete: if own(uid);
+      allow create, update: if own(uid)
+        && request.resource.data.keys().hasOnly(['save', 'rev', 'ver', 'updated', 'device', 'summary'])
+        && request.resource.data.save is string
+        && request.resource.data.save.size() <= 900000
+        && request.resource.data.rev is int
+        && request.resource.data.ver is int
+        && request.resource.data.updated is timestamp
+        && request.resource.data.device is string
+        && request.resource.data.device.size() <= 64
+        && request.resource.data.summary is map;
+    }
+
+    match /boards/{board}/scores/{uid} {
+      allow read: if signedIn();
+      allow delete: if own(uid);
+      allow create, update: if own(uid)
+        && board.matches('^[a-z_]{1,24}$')
+        && request.resource.data.keys().hasOnly(['value', 'name', 'cls', 'level', 'updated'])
+        && request.resource.data.value is number
+        && request.resource.data.value >= 0
+        && request.resource.data.value <= 1000000000
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.name.size() <= 24
+        && request.resource.data.cls is string
+        && request.resource.data.cls.size() <= 24
+        && request.resource.data.level is int
+        && request.resource.data.level >= 1
+        && request.resource.data.level <= 200
+        && request.resource.data.updated is timestamp;
+    }
+
+    match /reports/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['from', 'target', 'name', 'board', 'time'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.target is string
+        && request.resource.data.target.size() <= 64
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 24
+        && request.resource.data.board is string
+        && request.resource.data.board.size() <= 24
+        && request.resource.data.time is timestamp;
+    }
+  }
+}
