@@ -46,6 +46,8 @@ def presets():
     vals = [{k: re.search(re.escape(k) + r"=(.*)", b).group(1) for k in keys} for b in blocks]
     check(len(blocks) == 2 and vals[0] == vals[1], "два пресети збірки (APK і AAB) з однаковими версією, пакетом і значком: %s, код %s" % (vals[0]["version/name"], vals[0]["version/code"]))
     check('export_format=1' in blocks[1] and 'use_gradle_build=true' in blocks[1], "пресет «Google Play» збирає AAB через Gradle")
+    check('export_format=0' in blocks[0] and 'use_gradle_build=true' in blocks[0], "пресет «Android» збирає APK через Gradle (у грі плагін реклами)")
+    check('custom_features="store"' in blocks[1] and 'custom_features=""' in blocks[0], "справжня реклама (ознака store) лише в пресеті «Google Play», APK — з тестовою")
 
 
 def main():

@@ -541,5 +541,11 @@
 		"min_gain": 0.01,
 		"weak_from": 10,
 		"weak_grade": 3
+	},
+	"admob": {
+		"num": 11050,
+		"app_id": "ca-app-pub-4415342337066719~5037802628",
+		"rewarded_unit": "ca-app-pub-4415342337066719/1423554349",
+		"test_rewarded_unit": "ca-app-pub-3940256099942544/5224354917"
 	}
 }

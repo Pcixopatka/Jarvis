@@ -1,0 +1,45 @@
+// The AAR holds only our class: Godot and the Google SDKs are compileOnly here. The game's Gradle build
+// gets the SDKs from the export plugin's dependency list (addons/kz_ads/kz_ads_export.gd).
+plugins {
+    id 'com.android.library' version '8.6.1'
+}
+
+// Keep in sync with addons/kz_ads/kz_ads_export.gd (DEPENDENCIES).
+ext.adsVersion = '25.5.0'
+ext.umpVersion = '4.0.0'
+
+android {
+    namespace 'com.kozatska.kzads'
+    compileSdk 36
+    buildToolsVersion '36.1.0'
+
+    defaultConfig {
+        minSdk 24  // the same as the Godot 4.7.1 Android template
+        consumerProguardFiles 'consumer-rules.pro'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    buildFeatures {
+        buildConfig false
+    }
+}
+
+dependencies {
+    compileOnly 'org.godotengine:godot:4.7.1.stable'
+    compileOnly "com.google.android.gms:play-services-ads:$adsVersion"
+    compileOnly "com.google.android.ump:user-messaging-platform:$umpVersion"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << "-Xlint:deprecation"
+}

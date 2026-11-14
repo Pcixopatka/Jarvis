@@ -152,6 +152,7 @@ func _run() -> void:
 	await _suite_objective_arrow()
 	await _suite_gear_best()
 	await _suite_quick_raid()
+	await _suite_admob()
 	await _suite_pickup_filter()
 	await _suite_renew_cost()
 	_suite_peril()
@@ -10349,6 +10350,251 @@ func _suite_quick_raid() -> void:
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Підставний плагін реклами: ті самі методи й сигнали, що в KzAds (android_plugins/kz_ads).
+class FakeAds extends RefCounted:
+	signal initialized(can_request: bool)
+	signal rewarded_loaded
+	signal rewarded_failed_to_load(code: int, message: String)
+	signal rewarded_shown
+	signal rewarded_earned(type: String, amount: int)
+	signal rewarded_dismissed
+	signal rewarded_failed_to_show(code: int, message: String)
+	var test_mode = null
+	var ready := false
+	var loads := []
+	var shows := 0
+	var privacy := false
+	var privacy_opened := 0
+
+	func init(test: bool) -> void:
+		test_mode = test
+
+	func loadRewarded(unit: String) -> void:
+		loads.append(unit)
+
+	func isRewardedReady() -> bool:
+		return ready
+
+	func showRewarded() -> void:
+		shows += 1
+		ready = false
+
+	func privacyOptionsRequired() -> bool:
+		return privacy
+
+	func showPrivacyOptions() -> void:
+		privacy_opened += 1
+
+
+## Ловить події введення, що дійшли до гри.
+class InputCatch extends Node:
+	var n := 0
+
+	func _input(_e: InputEvent) -> void:
+		n += 1
+
+
+## Справжня реклама AdMob без Android: «Ads» з підставним плагіном (FakeAds) проходить усі шляхи показу.
+func _suite_admob() -> void:
+	suite("Реклама AdMob")
+	var ads = root.get_node("Ads")
+	var instant0: bool = ads.instant
+	var feat0: Callable = ads.has_feature
+	ads.instant = false
+	# ---- Ідентифікатори: data/settings.json, запис «admob» ----
+	var S: Dictionary = GameDB.settings("admob")
+	check(S["app_id"] == "ca-app-pub-4415342337066719~5037802628" and S["rewarded_unit"] == "ca-app-pub-4415342337066719/1423554349"
+		and S["test_rewarded_unit"] == "ca-app-pub-3940256099942544/5224354917", "запис admob: застосунок, справжній і тестовий блоки")
+	check(GameDB.admob_id_ok(S["app_id"], true) and GameDB.admob_id_ok(S["rewarded_unit"], false) and GameDB.admob_id_ok(S["test_rewarded_unit"], false)
+		and not GameDB.admob_id_ok(S["app_id"], false) and not GameDB.admob_id_ok(S["rewarded_unit"], true) and not GameDB.admob_id_ok("ca-app-pub-123/456", false),
+		"ідентифікатори у своїх форматах (~ у застосунку, / у блоці)")
+	check(ads.APP_ID == S["app_id"] and ads.REWARDED_UNIT == S["rewarded_unit"] and ads.TEST_REWARDED_UNIT == S["test_rewarded_unit"], "Ads тримає ідентифікатори з налаштувань")
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("settings")))
+	raw["admob"]["app_id"] = "ca-app-pub-4415342337066719/5037802628"
+	raw["admob"]["rewarded_unit"] = "ca-app-pub-44153420/1423554349"
+	var probs := GameDB.validate("settings", raw)
+	check(probs.any(func(p): return str(p).begins_with("settings/admob.app_id: ідентифікатор AdMob")) and probs.any(func(p): return str(p).begins_with("settings/admob.rewarded_unit: ідентифікатор AdMob")),
+		"зламаний ідентифікатор помічено: %s" % str(probs.slice(0, 2)))
+	var Exp = load("res://addons/kz_ads/kz_ads_export.gd")
+	var gradle := FileAccess.get_file_as_string("res://android_plugins/kz_ads/build.gradle")
+	var ver := func(key: String) -> String:
+		var m := RegEx.create_from_string(key + " = '([0-9.]+)'").search(gradle)
+		return m.get_string(1) if m != null else "?"
+	check(Exp != null and Exp.can_instantiate() and Exp.app_id() == S["app_id"] and FileAccess.file_exists(Exp.AAR)
+		and Exp.DEPENDENCIES == ["com.google.android.gms:play-services-ads:" + ver.call("adsVersion"), "com.google.android.ump:user-messaging-platform:" + ver.call("umpVersion")],
+		"плагін експорту: AAR на місці, ідентифікатор застосунку з налаштувань, версії SDK ті самі, що в build.gradle")
+	var presets := FileAccess.get_file_as_string("res://export_presets.cfg").split("\n[preset.1]")
+	check(presets.size() == 2 and 'custom_features=""' in presets[0] and 'custom_features="store"' in presets[1] and presets[0].count("use_gradle_build=true") == 1
+		and presets[1].count("use_gradle_build=true") == 1 and "res://addons/kz_ads/plugin.cfg" in FileAccess.get_file_as_string("res://project.godot"),
+		"ознака store лише в пресеті «Google Play», обидва збираються через Gradle, плагін увімкнено")
+	# ---- Який блок: справжній лише з ознакою store ----
+	ads.has_feature = func(f: String) -> bool: return false
+	check(not ads.is_store() and ads.unit_id() == S["test_rewarded_unit"], "без ознаки store — тестовий блок Google")
+	ads.has_feature = func(f: String) -> bool: return f == "store"
+	check(ads.is_store() and ads.unit_id() == S["rewarded_unit"], "з ознакою store — справжній блок")
+	var fs := FakeAds.new()
+	ads.use_provider(fs)
+	fs.initialized.emit(true)
+	check(fs.test_mode == false and fs.loads == [S["rewarded_unit"]], "збірка для магазину: init без тестового режиму, вантажить справжній блок")
+	ads.has_feature = func(f: String) -> bool: return false
+	# ---- Підключення: спершу згода, потім завантаження наперед ----
+	var f := FakeAds.new()
+	ads.use_provider(f)
+	check(ads.provider == "admob" and f.test_mode == true and f.loads.is_empty() and fs.get_signal_connection_list("rewarded_loaded").is_empty(), "плагін підключено (тестовий режим), до згоди нічого не вантажиться, старий відключено")
+	var got := []
+	var views0: int = ads.views
+	ads.show_rewarded("xp2", func(ok: bool): got.append(ok))
+	await _frames(1)
+	check(got == [false] and not ads.is_busy() and f.loads.is_empty() and f.shows == 0, "до згоди реклами нема: без нагороди, гра не зависла")
+	f.initialized.emit(true)
+	check(f.loads == [S["test_rewarded_unit"]] and ads.load_requests > 0, "після згоди одразу вантажиться тестовий блок")
+	f.initialized.emit(true)
+	check(f.loads.size() == 1, "поки вантажиться, другого запиту нема")
+	# ---- Невдале завантаження: повтори з довшим чеканням, потім тиша ----
+	f.rewarded_failed_to_load.emit(3, "No fill")
+	var waits := [ads._retry_timer.wait_time]
+	check(not ads._retry_timer.is_stopped() and is_equal_approx(waits[0], ads.RETRY_DELAYS[0]), "не завантажилось — повтор через %d с" % int(waits[0]))
+	# гравець хоче рекламу, а її нема: без нагороди, повідомлення, завантаження одразу
+	ads.last_message = ""
+	got = []
+	ads.show_rewarded("drop2", func(ok: bool): got.append(ok))
+	check(f.loads.size() == 2 and ads._retry_timer.is_stopped() and f.shows == 0, "немає готової реклами — завантаження почалось одразу")
+	await _frames(1)
+	check(got == [false] and not ads.is_busy() and ads.views == views0 and ads.last_message == "Реклама зараз недоступна. Спробуй трохи пізніше.", "без нагороди, гравцеві сказано, що реклама недоступна")
+	var shown_toast: bool = ads.find_children("*", "Label", true, false).any(func(l): return l.text == ads.UNAVAILABLE)
+	check(shown_toast, "повідомлення видно на екрані")
+	var loads_before: int = f.loads.size()
+	for i in 10:
+		f.rewarded_failed_to_load.emit(3, "No fill")
+		if ads._retry_timer.is_stopped():
+			break
+		waits.append(ads._retry_timer.wait_time)
+		ads._retry_timer.stop()
+		ads._retry_timer.timeout.emit()  # час вийшов
+	var growing := true
+	for i in range(1, waits.size()):
+		growing = growing and waits[i] > waits[i - 1]
+	var tried: int = f.loads.size() - loads_before
+	await _frames(3)
+	check(growing and waits.size() == ads.RETRY_DELAYS.size() and ads._retry_timer.is_stopped() and f.loads.size() - loads_before == tried and tried == ads.RETRY_DELAYS.size() - 1,
+		"повтори з довшим чеканням (%s), після останнього нових запитів нема" % str(waits))
+	# ---- Переглянув до кінця: нагорода рівно раз ----
+	ads._load(true)
+	f.ready = true
+	f.rewarded_loaded.emit()
+	check(ads._retry_step == 0 and not ads._loading, "реклама готова, лічильник повторів скинуто")
+	AudioServer.set_bus_mute(0, false)
+	var catcher := InputCatch.new()
+	catcher.process_mode = Node.PROCESS_MODE_ALWAYS  # попередні набори можуть лишити дерево на паузі
+	root.add_child(catcher)
+	got = []
+	ads.show_rewarded("xp2", func(ok: bool): got.append(ok))
+	var key := InputEventKey.new()
+	key.keycode = KEY_K
+	key.physical_keycode = KEY_K
+	key.pressed = true
+	root.push_input(key)
+	check(ads.is_busy() and f.shows == 1 and AudioServer.is_bus_mute(0) and root.gui_disable_input and catcher.n == 0, "реклама на екрані: звук вимкнено, дотики й клавіші до гри не доходять")
+	ads.show_rewarded("drop2", func(ok: bool): got.append("друга"))
+	check(f.shows == 1 and got.is_empty(), "друга реклама, поки йде перша, не починається")
+	f.rewarded_shown.emit()
+	f.rewarded_earned.emit("coins", 10)
+	check(got.is_empty() and ads.is_busy(), "нагорода зарахована, але чекаємо, поки рекламу закриють")
+	f.rewarded_dismissed.emit()
+	f.rewarded_dismissed.emit()
+	f.rewarded_earned.emit("coins", 10)
+	root.push_input(key)
+	check(got == [true] and not ads.is_busy() and ads.views == views0 + 1 and not AudioServer.is_bus_mute(0) and not root.gui_disable_input and catcher.n == 1,
+		"закрито після перегляду: нагорода рівно раз, звук і дотики повернулись (%s, %d, %s, %s, %d)" % [str(got), ads.views - views0, AudioServer.is_bus_mute(0), root.gui_disable_input, catcher.n])
+	check(f.loads.size() == loads_before + tried + 2, "після закриття вантажиться наступна")
+	catcher.queue_free()
+	# ---- Закрив, не дивившись: нічого ----
+	f.ready = true
+	f.rewarded_loaded.emit()
+	got = []
+	ads.show_rewarded("quick", func(ok: bool): got.append(ok))
+	f.rewarded_shown.emit()
+	f.rewarded_dismissed.emit()
+	f.rewarded_earned.emit("coins", 10)  # запізніле «переглянуто» вже нічого не дає
+	check(got == [false] and not ads.is_busy() and ads.views == views0 + 1, "закрив раніше часу: без нагороди")
+	# ---- Не показалась: нічого, кінець, повідомлення ----
+	f.ready = true
+	f.rewarded_loaded.emit()
+	ads.last_message = ""
+	got = []
+	var n_loads: int = f.loads.size()
+	ads.show_rewarded("safe", func(ok: bool): got.append(ok))
+	f.rewarded_failed_to_show.emit(1, "The ad was already shown")
+	f.rewarded_dismissed.emit()
+	check(got == [false] and not ads.is_busy() and ads.last_message == ads.UNAVAILABLE and not AudioServer.is_bus_mute(0) and not root.gui_disable_input and f.loads.size() == n_loads + 1,
+		"не показалась: без нагороди, показ завершено, звук повернувся, вантажиться нова")
+	# ---- Плагін замовк: запобіжник завершує показ ----
+	f.ready = true
+	f.rewarded_loaded.emit()
+	got = []
+	ads.show_rewarded("xp2", func(ok: bool): got.append(ok))
+	check(not ads._show_timer.is_stopped() and is_equal_approx(ads._show_timer.wait_time, ads.START_TIMEOUT), "чекаємо відповіді плагіна не вічно")
+	f.rewarded_shown.emit()
+	check(is_equal_approx(ads._show_timer.wait_time, ads.SHOW_TIMEOUT), "реклама на екрані: довший запобіжник")
+	ads._show_timer.stop()
+	ads._show_timer.timeout.emit()
+	f.rewarded_dismissed.emit()
+	check(got == [false] and not ads.is_busy() and not AudioServer.is_bus_mute(0), "без відповіді: показ завершено раз, без нагороди")
+	# звук, вимкнений до реклами, лишається вимкненим
+	AudioServer.set_bus_mute(0, true)
+	f.ready = true
+	f.rewarded_loaded.emit()
+	ads.show_rewarded("xp2", func(_ok: bool): pass)
+	f.rewarded_dismissed.emit()
+	check(AudioServer.is_bus_mute(0), "звук, вимкнений до реклами, після неї не вмикається")
+	AudioServer.set_bus_mute(0, false)
+	# ---- Згода на рекламу: кнопка лише там, де її вимагають ----
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	var privacy_btn := func() -> Button:
+		game._show_main_menu()
+		await _frames(1)
+		for b in game.hud.overlay_box.find_children("*", "Button", true, false):
+			if b.text == game.PRIVACY_BUTTON:
+				return b
+		return null
+	var b0 = await privacy_btn.call()
+	f.privacy = true
+	var b1 = await privacy_btn.call()
+	check(b0 == null and b1 != null and ads.privacy_options_required(), "кнопка «%s» є лише там, де Google її вимагає" % game.PRIVACY_BUTTON)
+	if b1 != null:
+		b1.pressed.emit()
+	check(f.privacy_opened == 1, "кнопка відкриває форму згоди Google")
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	# ---- Без плагіна — заглушка, як і була ----
+	ads.use_provider(null)
+	check(ads.provider == "stub" and not ads.privacy_options_required() and f.get_signal_connection_list("rewarded_dismissed").is_empty(), "плагін відключено: заглушка, згода не потрібна")
+	got = []
+	var shows0: int = f.shows
+	ads.show_rewarded("xp2", func(ok: bool): got.append(ok))
+	await _frames(1)
+	var stub_seen: bool = ads.find_children("*", "Label", true, false).any(func(l): return l.text == "РЕКЛАМА СПОНСОРА")
+	check(stub_seen and ads.is_busy() and got.is_empty() and f.shows == shows0, "заглушка показує свій екран")
+	ads._finish(false)
+	ads._finish(true)
+	check(got == [false] and not ads.is_busy(), "заглушку скасовано: без нагороди, кінець рівно раз")
+	ads.instant = true
+	got = []
+	ads.show_rewarded("xp2", func(ok: bool): got.append(ok))
+	await _frames(1)
+	check(got == [true] and not ads.is_busy(), "instant для тестів: нагорода одразу")
+	ads.instant = instant0
+	ads.has_feature = feat0
+	ads.last_message = ""
 
 
 func _suite_gear_best() -> void:

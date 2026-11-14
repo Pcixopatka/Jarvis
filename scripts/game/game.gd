@@ -3452,6 +3452,12 @@ func _add_sound_toggles(refresh: Callable, shop: bool = false) -> void:
 		])
 	else:
 		hud.add_button(pick_text, func(): _show_pickup_menu(refresh), Vector2(480, 64))
+	# Там, де діють правила приватності (ЄС і подібні), Google вимагає дати змогу змінити згоду на рекламу
+	if Ads.privacy_options_required():
+		hud.add_button(PRIVACY_BUTTON, Ads.show_privacy_options, Vector2(480, 64))
+
+
+const PRIVACY_BUTTON := "Згода на рекламу"
 
 
 ## Фільтр автопідбору: речі яких рідкостей герой підбирає сам. back — меню, з якого прийшли.

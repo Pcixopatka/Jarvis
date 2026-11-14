@@ -1,0 +1,18 @@
+// Native part of the KzAds Godot plugin (Google AdMob rewarded ads). Built by tools/build_ads_plugin.sh.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "kz_ads"

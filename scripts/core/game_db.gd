@@ -4533,12 +4533,21 @@ static func _settings_checks(R: Dictionary, schema: Dictionary, where: String, c
 					prev = int(P["level"])
 					if float(P["ttk"]) <= 0.0 or float(P["hit"]) <= 0.0 or float(P["hit"]) >= 1.0:
 						out.append("%s[%d]: ttk має бути більшим за нуль, hit — між 0 і 1" % [at, i])
+			"admob_app", "admob_unit":
+				if not admob_id_ok(str(v), str(f["check"]) == "admob_app"):
+					out.append("%s: ідентифікатор AdMob має бути ca-app-pub-<16 цифр>%s<10 цифр>, а не «%s»" % [at, "~" if str(f["check"]) == "admob_app" else "/", v])
 			"soul_chance":
 				if v.keys() != SOUL_KINDS:
 					out.append("%s: роди мають бути саме %s, по порядку, а не %s" % [at, str(SOUL_KINDS), str(v.keys())])
 				for x in v.values():
 					if float(x) < 0.0 or float(x) > 1.0:
 						out.append("%s: шанс — від 0 до 1, а не %s" % [at, x])
+
+
+## Чи рядок — ідентифікатор AdMob: застосунку (ca-app-pub-<16 цифр>~<10 цифр>) чи рекламного блоку (…/…).
+static func admob_id_ok(id: String, app: bool) -> bool:
+	var re := RegEx.create_from_string("^ca-app-pub-[0-9]{16}%s[0-9]{10}$" % ("~" if app else "/"))
+	return re.search(id) != null
 
 
 ## Зв'язки налаштувань з таблицями: номери рідкостей і ступенів, скільки кіл і викликів є в таблицях,

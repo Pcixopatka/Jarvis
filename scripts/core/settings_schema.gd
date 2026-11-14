@@ -6,7 +6,8 @@ extends RefCounted
 ## рідкості (rarities.json); tier — ступінь золота (golden_tiers.json); soul_tier — ступінь душі (soul_tiers.json);
 ## mults — непорожній перелік додатних множників; curve — точки мірки нечисті; zone — [від, до] у межах 0..1;
 ## soul_chance — шанс душі за родом ворога (regular, elite, named, boss); step — id кроку завдань (історії,
-## переказу, саги, доручення) або "" (без місії).
+## переказу, саги, доручення) або "" (без місії); admob_app і admob_unit — ідентифікатори AdMob застосунку
+## (ca-app-pub-<16 цифр>~<10 цифр>) і рекламного блоку (ca-app-pub-<16 цифр>/<10 цифр>).
 ## Порядок полів у схемі — порядок у файлі (tools/data_format.gd). Як модулі беруть ці числа — docs/data.md.
 
 const _NUM := {"type": "int", "required": true}  # сталий номер запису (11001...)
@@ -561,6 +562,12 @@ const SCHEMAS := {
 		"weak_from": {"type": "int", "check": "level", "about": "порадник: з цього рівня героя стежить, чи під силу йому нечисть свого рівня"},
 		"weak_grade": {"type": "int", "check": "nonneg", "about": "порадник: з цієї оцінки Power.threat (3 — смертельно) радить зміцнити спорядження"},
 	},
+	"admob": {
+		"num": _NUM,
+		"app_id": {"type": "string", "check": "admob_app", "about": "ідентифікатор застосунку в AdMob (ca-app-pub-…~…); його ж пише в маніфест addons/kz_ads"},
+		"rewarded_unit": {"type": "string", "check": "admob_unit", "about": "справжній рекламний блок «за нагороду» (ca-app-pub-…/…): лише в збірці з ознакою store (Google Play)"},
+		"test_rewarded_unit": {"type": "string", "check": "admob_unit", "about": "загальнодоступний тестовий блок Google «за нагороду»: у всіх інших збірках, щоб не клацати справжню рекламу"},
+	},
 }
 
 ## Заголовки записів (для людей і docs/data.md).
@@ -614,6 +621,7 @@ const TITLES := {
 	"divine": "Божі дари",
 	"shop": "Крамниця червінців",
 	"power": "Мірило сили героя й порадник",
+	"admob": "Реклама AdMob: ідентифікатори",
 }
 
 ## Хто тримає робочі копії чисел запису: [скрипт, префікс поля]. Поле стає static var модуля з тим самим
@@ -669,4 +677,5 @@ const MODULES := {
 	"divine": [["res://scripts/data/divine.gd", ""], ["res://scripts/game/divine_service.gd", ""]],
 	"shop": [["res://scripts/data/shop.gd", ""], ["res://scripts/game/shop_service.gd", ""]],
 	"power": [["res://scripts/game/power.gd", ""], ["res://scripts/game/guide_service.gd", ""]],
+	"admob": [["res://scripts/core/ads.gd", ""]],
 }

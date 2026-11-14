@@ -6,3 +6,7 @@ export/
 *.keystore
 # Шаблон Gradle-збірки Godot (ставиться командою --install-android-build-template)
 android/
+# Проміжні файли й кеш збірки рідної частини плагіна реклами (tools/build_ads_plugin.sh)
+android_plugins/kz_ads/build/
+android_plugins/kz_ads/.gradle/
+android_plugins/kz_ads/local.properties
