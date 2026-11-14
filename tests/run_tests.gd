@@ -15875,6 +15875,7 @@ func _hero_tab(UChar, game) -> Dictionary:
 	var hero: Control = UChar._hero(game)
 	var rows := []
 	var heads := []
+	var in_group := {}  # заголовок -> написи рядків під ним за порядком ("" — рядки без заголовка)
 	for c in hero.get_child(0).get_children():
 		if c is Label:
 			heads.append(c.text)
@@ -15882,11 +15883,15 @@ func _hero_tab(UChar, game) -> Dictionary:
 			for cell in c.get_children():
 				if cell is HBoxContainer and cell.get_child_count() == 2:
 					rows.append([cell.get_child(0).text, cell.get_child(1).text])
+					var hd: String = heads[-1] if not heads.is_empty() else ""
+					if not in_group.has(hd):
+						in_group[hd] = []
+					in_group[hd].append(cell.get_child(0).text)
 	hero.free()
 	var by := {}
 	for r in rows:
 		by[r[0]] = r[1]
-	return {"rows": rows, "heads": heads, "by": by}
+	return {"rows": rows, "heads": heads, "by": by, "groups": in_group}
 
 
 func _suite_hero_sheet() -> void:
@@ -15936,13 +15941,31 @@ func _suite_hero_sheet() -> void:
 		["Бонус гривень", "+%d%%" % roundi((gp.gold_mult - 1.0) * 100)],
 		["Зілля з собою", "%d і %d" % [gp.potion_max(), gp.mana_potion_max()]],
 	]
-	check(tab["rows"].slice(0, 14) == old, "чотирнадцять давніх рядків ті самі й у тому самому порядку: %s" % str(tab["rows"].slice(0, 3)))
+	var old_group := {"Зброя": HS.ATTACK, "Ударів за секунду": HS.ATTACK, "Шкода удару": HS.ATTACK, "Шанс криту": HS.ATTACK, "Сила вмінь": HS.ATTACK,
+		"Перезарядка вмінь": HS.ATTACK, "Дальність удару": HS.ATTACK, "Відновлення": HS.DEFENSE, "Вампіризм": HS.DEFENSE,
+		"Наснага за секунду": HS.MANA, "Швидкість бігу": HS.OTHER, "Бонус досвіду": HS.OTHER, "Бонус гривень": HS.OTHER, "Зілля з собою": HS.OTHER}
+	var G: Dictionary = tab["groups"]
+	for o in old:
+		var n_same: int = tab["rows"].count(o)
+		var n_label: int = tab["rows"].filter(func(r): return r[0] == o[0]).size()
+		check(n_same == 1 and n_label == 1 and G.get(old_group[o[0]], []).has(o[0]), "давній рядок «%s: %s» є рівно раз і стоїть у групі «%s»" % [o[0], o[1], old_group[o[0]]])
+	check(not G.has(""), "рядків без заголовка нема: %s" % str(G.get("", [])))
+	var want_groups := {
+		HS.ATTACK: ["Зброя", "Ударів за секунду", "Шкода удару", "Шанс криту", "Сила вмінь", "Перезарядка вмінь", "Дальність удару",
+			"Замах", "Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду", "Удар парирування", "Вибух убитого"],
+		HS.PROCS: ["Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення"],
+		HS.DEFENSE: ["Відновлення", "Вампіризм", "Вампіризм лікує до", "Блок гасить", "Оберіг", "Шипи", "Парирування лікує", "За вбивство: здоров'я", "Перекид раз на", "Стани коротші", "Зараза слабша", "Лікування героя"],
+		HS.MANA: ["Наснага за секунду", "Наснага за удар", "За вбивство: наснага"],
+		HS.OTHER: ["Швидкість бігу", "Радіус збору", "Бонус досвіду", "Бонус гривень", "Зілля з собою"],
+	}
+	for gname in want_groups:
+		check(G.get(gname, []) == want_groups[gname], "група «%s»: рядки в порядку %s" % [gname, str(G.get(gname, []))])
 	var labels := []
 	for r in tab["rows"]:
 		labels.append(r[0])
 	var missing := NEW.filter(func(l): return not labels.has(l))
 	check(missing.is_empty() and tab["rows"].size() == 14 + NEW.size(), "на вкладці всі нові рядки (бракує: %s)" % str(missing))
-	check(tab["heads"] == [HS.ATTACK, HS.PROCS, HS.DEFENSE, HS.MANA, HS.OTHER], "нові рядки під заголовками груп: %s" % str(tab["heads"]))
+	check(tab["heads"] == [HS.ATTACK, HS.PROCS, HS.DEFENSE, HS.MANA, HS.OTHER], "п'ять заголовків груп за порядком: %s" % str(tab["heads"]))
 	check(not labels.has(HS.SHOT_LABEL), "зі зброєю зблизька (%s) рядка «%s» нема" % [Data.weapon_name(gp.weapon_type), HS.SHOT_LABEL])
 	var B: Dictionary = tab["by"]
 	var zero := true
@@ -16088,6 +16111,9 @@ func _suite_hero_sheet() -> void:
 	gp.recalc()
 	tab = _hero_tab(UChar, game)
 	check(tab["by"].has(HS.SHOT_LABEL) and tab["by"][HS.SHOT_LABEL] == "x" + HS._trim(gp.shot_mult) and tab["rows"].size() == 15 + NEW.size(), "з луком є рядок «%s» %s" % [HS.SHOT_LABEL, tab["by"].get(HS.SHOT_LABEL, "")])
+	var want_bow: Array = want_groups[HS.ATTACK].duplicate()
+	want_bow.insert(want_bow.find("Замах") + 1, HS.SHOT_LABEL)
+	check(tab["groups"].get(HS.ATTACK, []) == want_bow, "з луком «%s» стоїть у «%s» одразу під «Замах»" % [HS.SHOT_LABEL, HS.ATTACK])
 	gp.buffs = {"s": {"t": 999.0, "fx": {"aspd": 400.0}, "group": ""}}
 	gp.recalc()
 	tab = _hero_tab(UChar, game)
@@ -16109,6 +16135,19 @@ func _suite_hero_sheet() -> void:
 			art_text = str(e["text"])
 	var unnamed := shot_labels.filter(func(l): return not (l in art_text))
 	check(art_text != "" and unnamed.is_empty(), "у довіднику є стаття «Показники героя» з кожним рядком вкладки (бракує: %s)" % str(unnamed))
+	var at := -1
+	var art_order := true
+	for gname in want_groups:
+		var hp: int = art_text.find("\n" + gname)
+		art_order = art_order and hp > at
+		at = hp
+		if gname == HS.PROCS:
+			continue
+		for l in want_groups[gname]:
+			var lp: int = art_text.find("«%s»" % l)
+			art_order = art_order and lp > at
+			at = maxi(at, lp)
+	check(art_order, "стаття йде за групами вкладки: заголовки й рядки в тому самому порядку")
 	var limits := ["%d%%" % roundi(Data.ARMOR_CAP * 100.0), "%d%%" % roundi(gp.CRIT_CAP * 100.0), "%d%%" % roundi(gp.SKILL_CD_MIN * 100.0), "%d%%" % roundi(gp.BLOCK_FX_CAP), "%d%%" % roundi(gp.WARD_FX_CAP), "%d%%" % roundi((1.0 - gp.DODGE_FX_MIN) * 100.0), str(gp.RANGED_MIN_CD).replace(".", ","), "%d очок" % int(Data.SPI_SOFT), "%d очок" % int(Data.AGI_ASPD_SOFT)]
 	check(limits.all(func(x): return x in art_text), "стаття називає межі з тих самих сталих, що й бій: %s" % str(limits))
 	game.queue_free()
@@ -18219,9 +18258,23 @@ func _suite_auto_buffs() -> void:
 	for id in Cls.actives():
 		if SI.kind(id) == "buff" and (Cls.act(id).has("heal") or Cls.act(id).get("fx", {}).has("regen_pct")):
 			check(id in heal_ids, "баф за даними з лікуванням визнано лікувальним: %s" % id)
+	# ---- Чисте лікування чекає рани, лікування з бонусом тиснеться одразу (SkillInfo.waits_for_wound) ----
+	var pure_heals := ["first_aid", "herb", "zhyvytsia", "zamova_krovi", "tsiliushche_kolo", "stiika_tsilytelia"]
+	for id in pure_heals:
+		check(SI.waits_for_wound(id), "чисте лікування чекає рани: %s" % id)
+	check(not SI.waits_for_wound("khoruhva"), "Хоругва лікує й дає шкоду: тиснеться одразу")
+	var wrong_wait := []
+	for id in Cls.actives():
+		if SI.kind(id) == "buff" and not SI.heals(id) and SI.waits_for_wound(id):
+			wrong_wait.append(id)
+	check(wrong_wait.is_empty(), "баф, що не лікує, рани не чекає: %s" % [wrong_wait])
+	check(SI.group("navala") == "stance" and SI.group("mur") == "stance" and SI.group("battle_cry") == "" and SI.group("khoruhva") == "", "група вміння: стійки «stance», решта без групи")
 	# ---- Тексти ----
 	var nl: Array = Div.def("nimb")["lines"]
-	check(nl.size() == 3 and "авто-бафи" in str(nl[2]) and ("%d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in str(nl[2]), "у Німба третій рядок про авто-бафи з порогом лікування")
+	var heal_pct := "%d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)
+	check(nl.size() == 5 and "авто-бафи" in str(nl[2]) and "нижньої панелі" in str(nl[2]), "у Німба третій рядок про авто-бафи")
+	check(nl.size() == 5 and "чисте лікування" in str(nl[3]) and heal_pct in str(nl[3]) and "з бонусом" in str(nl[3]) and "одразу" in str(nl[3]), "четвертий рядок: чисте лікування чекає %s, лікування з бонусом одразу" % heal_pct)
+	check(nl.size() == 5 and "стійок" in str(nl[4]) and "найлівіша" in str(nl[4]), "п'ятий рядок: зі стійок вмикається найлівіша")
 	check(int(Div.def("nimb")["price"]) == 1200 and is_equal_approx(float(Div.def("nimb")["xp"]), 5.0) and is_equal_approx(float(Div.def("nimb")["gold"]), 5.0) and str(nl[0]) == "+500% досвіду" and str(nl[1]) == "+500% гривень", "ціна та сама, Німб дає +500% досвіду й гривень")
 	var art := ""
 	for sec in WS.sections():
@@ -18229,7 +18282,18 @@ func _suite_auto_buffs() -> void:
 			if str(e["title"]) == "Божі дари":
 				art = str(e["text"])
 	check("авто-бафи" in art and "Авто-бафи: так" in art and ("нижче %d%%" % roundi(DS.AUTO_HEAL_AT * 100.0)) in art and "Перша допомога" in art and "Замовляння крові" in art and "гетьманському огляді" in art, "довідник описує авто-бафи: коли вмикаються, поріг лікування, перемикач")
-	check(not ("—" in str(nl[2])), "новий рядок без довгого тире")
+	check(not ("—" in str(nl[2]) or "—" in str(nl[3]) or "—" in str(nl[4])), "рядки авто-бафів без довгого тире")
+	check(("Чисте лікування" in art) and ("Хоругва куреня" in art) and ("вмикається одразу" in art) and ("найлівіша" in art) and ("рукою їх можна натиснути" in art), "довідник: лікування з бонусом одразу, зі стійок лише найлівіша, рукою можна будь-яку")
+	var shp = _new_player()  # Сагайдачний, що вивчив усе: на панелі чотири стійки, Німб тисне одну
+	shp.job = "sahaidachnyk"
+	for cl in Cls.lineage("sahaidachnyk"):
+		for b in Cls.tree(cl):
+			for n in b["nodes"]:
+				shp.skills[n["id"]] = 1
+	var sh_auto_st: Array = DS.auto_panel(shp).filter(func(x): return SI.group(x) == "stance")
+	var sh_st: Array = shp.panel["buff"].filter(func(x): return SI.group(x) == "stance")
+	check(sh_st.size() >= 3 and sh_auto_st == [sh_st[0]], "Сагайдачний: %d стійок на панелі, Німб бере лише найлівішу (%s)" % [sh_st.size(), sh_auto_st])
+	shp.free()
 	# ---- Гра ----
 	var game = load("res://scenes/main.tscn").instantiate()
 	game.save_path = TEST_SAVE
@@ -18308,18 +18372,121 @@ func _suite_auto_buffs() -> void:
 	check(fired.call("battle_cry") and fired.call("mur") and gp.mana < m0 - gp.skill_cost("battle_cry"), "нечисть поруч: Клич і Мур увімкнулись самі, наснага зменшилась")
 	# 6. Атаки не чіпає, лікування при повному здоров'ї мовчить
 	check(not fired.call("whirl"), "атака з комірок атак сама не вмикається")
-	check(not fired.call("first_aid") and not fired.call("zamova_krovi") and not fired.call("khoruhva"), "здоров'я повне: лікувальні бафи мовчать")
+	check(not fired.call("first_aid") and not fired.call("zamova_krovi") and fired.call("khoruhva"), "здоров'я повне: чисте лікування мовчить, Хоругва (лікує й дає шкоду) ввімкнулась")
 	# 11. Позначка «авто» на кнопках бафів
 	var hud = game.hud
 	check(hud.skill_buttons["battle_cry"].auto_mark and hud.skill_buttons["zamova_krovi"].auto_mark and not hud.skill_buttons["whirl"].auto_mark, "позначка «авто» є на кнопках бафів і нема на атаці")
 	# 4. Лікування: понад 60% мовчить, нижче вмикається
 	reset.call(DS.AUTO_HEAL_AT + 0.1)
 	tick.call()
-	check(fired.call("battle_cry") and not fired.call("first_aid") and not fired.call("zamova_krovi") and not fired.call("khoruhva"), "здоров'я %d%%: лікування мовчить, підсилення вмикається" % roundi((DS.AUTO_HEAL_AT + 0.1) * 100.0))
+	check(fired.call("battle_cry") and fired.call("khoruhva") and not fired.call("first_aid") and not fired.call("zamova_krovi"), "здоров'я %d%%: чисте лікування мовчить, підсилення й Хоругва вмикаються" % roundi((DS.AUTO_HEAL_AT + 0.1) * 100.0))
 	reset.call(DS.AUTO_HEAL_AT - 0.4)  # Перша допомога лікує 20%: і після неї здоров'я нижче порога
 	var hp_low: float = gp.hp
 	tick.call()
 	check(fired.call("first_aid") and fired.call("zamova_krovi") and fired.call("khoruhva") and gp.hp > hp_low, "здоров'я нижче %d%%: Перша допомога, Замовляння крові (лікування за даними) й Хоругва ввімкнулись" % roundi(DS.AUTO_HEAL_AT * 100.0))
+	# 12. Усі лікувальні бафи: при повному здоров'ї лише Хоругва, нижче порога й чисте лікування
+	var extra := ["herb", "zhyvytsia", "tsiliushche_kolo", "stiika_tsilytelia", "navala", "stiika_vezhi", "stiika_vitru", "stiika_zasidky"]
+	for id in extra:
+		gp.skills[id] = 1
+	var reset_all := func(hp_part: float = 1.0) -> void:
+		for id in gp.skill_timers.keys():
+			gp.skill_timers[id] = 0.0
+		gp.buffs.clear()
+		gp.recalc()
+		gp.mana = gp.max_mana
+		gp.hp = gp.max_hp * hp_part
+		gp.invuln = 999.0
+	var heal_panels := [["khoruhva", "first_aid", "zamova_krovi", "herb", "tsiliushche_kolo"], ["zhyvytsia", "stiika_tsilytelia", "khoruhva", "", ""]]
+	for hpn in heal_panels:
+		gp.panel["buff"] = hpn.duplicate()
+		reset_all.call()
+		tick.call()
+		var quiet := true
+		for id in hpn:
+			if id in pure_heals and fired.call(id):
+				quiet = false
+		check(fired.call("khoruhva") and quiet, "здоров'я повне: Хоругва вмикається, чисте лікування (%s) мовчить" % ", ".join(hpn.filter(func(x): return x in pure_heals)))
+		var all_on := true
+		for id in hpn:  # по одному: лікування, що спрацювало першим, може підняти здоров'я вище порога
+			if id in pure_heals:
+				gp.panel["buff"] = [id, "khoruhva", "battle_cry", "mur", "zamova_krovi" if id != "zamova_krovi" else "first_aid"]
+				reset_all.call(DS.AUTO_HEAL_AT - 0.45)
+				tick.call()
+				all_on = all_on and fired.call(id)
+		check(all_on, "здоров'я нижче %s: чисте лікування (%s) вмикається" % [heal_pct, ", ".join(hpn.filter(func(x): return x in pure_heals))])
+	# 13. Стійки: з кількох на панелі тисне лише найлівішу
+	for order in [["navala", "mur"], ["mur", "navala"]]:
+		gp.panel["buff"] = [order[0], "battle_cry", order[1], "first_aid", "zamova_krovi"]
+		reset_all.call()
+		var m_st: float = gp.mana
+		tick.call()
+		check(fired.call(order[0]) and gp.buffs.has(order[0]) and not fired.call(order[1]) and not gp.buffs.has(order[1]) and fired.call("battle_cry"), "дві стійки (%s, %s): вмикається лише ліва, баф без групи теж" % order)
+		check(is_equal_approx(gp.mana, m_st - gp.skill_cost(order[0]) - gp.skill_cost("battle_cry")), "наснага пішла на ліву стійку й Клич, на праву ні")
+		reset_all.call()
+		gp.skill_timers[order[0]] = 5.0  # ліва відновлюється: права однаково чекає
+		tick.call()
+		check(not fired.call(order[1]) and not gp.buffs.has(order[1]) and fired.call("battle_cry"), "ліва стійка відновлюється: права сама не вмикається, Клич вмикається")
+	# довгий бій: ліва стійка діє, скільки дозволяє її тривалість, права ні разу
+	gp.panel["buff"] = ["navala", "mur", "first_aid", "zamova_krovi", "battle_cry"]
+	reset_all.call()
+	var st_cd: float = gp.skill_cooldown("navala")
+	var st_dur: float = Cls.val(Cls.act("navala")["dur"], gp.sk("navala"))
+	var run_t: float = st_cd * 3.0 + 4.0
+	var on_left := 0.0
+	var on_right := 0.0
+	var right_ever := false
+	var left_casts := 0
+	var left_t0: float = 0.0
+	var tt := 0.0
+	while tt < run_t:
+		await process_frame
+		var dt: float = 1.0 / 60.0
+		tt += dt
+		gp.invuln = 999.0
+		gp.hp = gp.max_hp
+		if float(gp.skill_timers.get("navala", 0.0)) > left_t0:
+			left_casts += 1
+		left_t0 = float(gp.skill_timers.get("navala", 0.0))
+		if gp.buffs.has("navala"):
+			on_left += dt
+		if gp.buffs.has("mur"):
+			on_right += dt
+		if float(gp.skill_timers.get("mur", 0.0)) > 0.0:
+			right_ever = true
+	var want := 0.0  # скільки часу стійка може діяти: об'єднання відрізків [k·cd, k·cd + dur]
+	var k := 0
+	var covered := 0.0
+	while k * st_cd < run_t:
+		var a: float = maxf(k * st_cd, covered)
+		var b: float = minf(k * st_cd + st_dur, run_t)
+		if b > a:
+			want += b - a
+		covered = maxf(covered, b)
+		k += 1
+	check(left_casts == k and absf(on_left - want) <= 0.5 + DS.AUTO_STEP * k, "довгий бій %.0f с: Навала %d раз(и), діяла %.1f с з %.1f можливих" % [run_t, left_casts, on_left, want])
+	check(not right_ever and on_right == 0.0, "довгий бій: Мур (права стійка) ні разу не ввімкнувся й не взяв наснаги")
+	# ручний дотик по правій стійці працює
+	gp.use_skill("mur")
+	check(fired.call("mur") and gp.buffs.has("mur") and not gp.buffs.has("navala"), "рукою права стійка вмикається й знімає ліву")
+	tick.call()
+	check(gp.buffs.has("mur") and not gp.buffs.has("navala"), "Німб не перебиває стійку, ввімкнену рукою")
+	# три стійки однієї групи: лише найлівіша
+	gp.panel["buff"] = ["battle_cry", "stiika_vezhi", "stiika_vitru", "stiika_zasidky", "khoruhva"]
+	reset_all.call()
+	tick.call()
+	check(fired.call("stiika_vezhi") and not fired.call("stiika_vitru") and not fired.call("stiika_zasidky") and DS.auto_panel(gp) == ["battle_cry", "stiika_vezhi", "khoruhva"], "три стійки: вмикається лише найлівіша")
+	# лікувальна стійка ліворуч: при повному здоров'ї мовчать обидві, нижче порога лише вона
+	gp.panel["buff"] = ["stiika_tsilytelia", "navala", "first_aid", "zamova_krovi", "battle_cry"]
+	reset_all.call()
+	tick.call()
+	check(not fired.call("stiika_tsilytelia") and not fired.call("navala") and not gp.buffs.has("stiika_tsilytelia") and not gp.buffs.has("navala"), "Стійка: цілитель ліворуч, здоров'я повне: не вмикається ні вона, ні Навала")
+	reset_all.call(DS.AUTO_HEAL_AT - 0.2)
+	tick.call()
+	check(fired.call("stiika_tsilytelia") and not fired.call("navala") and gp.buffs.has("stiika_tsilytelia"), "здоров'я нижче %s: вмикається лише Стійка: цілитель" % heal_pct)
+	for id in extra:
+		gp.skills.erase(id)
+		gp.skill_timers.erase(id)
+	gp.panel["buff"] = buffs.duplicate()
 	# 7. Порядок комірок і запас наснаги
 	reset.call()
 	gp.mana = gp.skill_cost("battle_cry") + gp.skill_cost("mur") + 1.0

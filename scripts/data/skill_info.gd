@@ -24,6 +24,24 @@ static func heals(id: String) -> bool:
 	return bool(Classes.find_node(id).get("heals", false))
 
 
+## Чи чекає вміння рани: лікує й нічого більше не дає. Підсилення за даними, що має в «fx» інший ключ, ніж
+## загоєння «regen_pct», з додатним значенням першого рангу, дає ще й бонус (від'ємне — кара, не бонус).
+## Вміння з власною механікою й без «act» — чисте лікування.
+static func waits_for_wound(id: String) -> bool:
+	if not heals(id):
+		return false
+	var fx: Dictionary = Classes.act(id).get("fx", {})
+	for k in fx:
+		if k != "regen_pct" and Classes.val(fx[k], 1) > 0.0:
+			return false
+	return true
+
+
+## Група підсилення («stance» для стійок): одночасно діє одне вміння групи; "" — без групи.
+static func group(id: String) -> String:
+	return str(Classes.act(id).get("group", ""))
+
+
 ## Що робить уміння (для картки й довідника); fallback — коли вузол цього не каже.
 static func what(id: String, fallback: String = "") -> String:
 	return str(Classes.find_node(id).get("what", fallback))

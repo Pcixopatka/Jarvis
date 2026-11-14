@@ -12,7 +12,7 @@ const SkillInfo := preload("res://scripts/data/skill_info.gd")
 # Авто-бафи Німба: бафи з нижньої панелі бою вмикаються самі
 static var AUTO_STEP: float  # Німб: як часто перевіряти авто-бафи, с
 static var AUTO_NEAR: float  # Німб: нечисть ближча за стільки пікселів вважається «поруч»
-static var AUTO_HEAL_AT: float  # Німб: лікувальні вміння вмикаються самі лише нижче цієї частки здоров'я
+static var AUTO_HEAL_AT: float  # Німб: чисте лікування вмикається само лише нижче цієї частки здоров'я
 
 
 ## Числа-правила вище й вимикач продажу on_sale нижче лежать у data/settings.json (запис «divine»; docs/data.md,
@@ -151,9 +151,28 @@ static func auto_buffs_on(player) -> bool:
 	return has_auto_buffs(player) and bool(player.auto_buffs)
 
 
-## Крок авто-бафів у бою. Раз на AUTO_STEP секунд перебирає комірки бафів зліва направо й тисне те,
-## що готове й на що вистачає наснаги, коли поруч є жива нечисть. Лікування чекає, поки здоров'я
-## впаде нижче AUTO_HEAL_AT. Атаки не чіпає. Наснагу перевіряє сам, тож напис «Бракує наснаги» не спливає.
+## Які вміння з нижньої панелі може тиснути автоматика: комірки бафів зліва направо, але з кількох умінь
+## однієї групи (стійок) — лише найлівіше, хоч би воно й не було готове.
+static func auto_panel(player) -> Array:
+	player.sync_panel()
+	var out := []
+	var groups := {}
+	for id in player.panel["buff"]:
+		if id == "":
+			continue
+		var g := SkillInfo.group(id)
+		if g != "":
+			if groups.has(g):
+				continue
+			groups[g] = true
+		out.append(id)
+	return out
+
+
+## Крок авто-бафів у бою. Раз на AUTO_STEP секунд перебирає те, що дає auto_panel, і тисне готове, на що
+## вистачає наснаги, коли поруч є жива нечисть. Чисте лікування чекає, поки здоров'я впаде нижче AUTO_HEAL_AT;
+## лікування з іншим бонусом тиснеться одразу. Атаки не чіпає. Наснагу перевіряє сам, тож напис «Бракує
+## наснаги» не спливає.
 static func auto_buff_tick(player, combat, delta: float) -> void:
 	player.auto_buff_t -= delta
 	if player.auto_buff_t > 0.0:
@@ -163,10 +182,9 @@ static func auto_buff_tick(player, combat, delta: float) -> void:
 		return
 	if combat.nearest_enemy(player.global_position, AUTO_NEAR) == null:
 		return
-	player.sync_panel()
-	for id in player.panel["buff"]:
-		if id == "" or player.sk(id) <= 0 or float(player.skill_timers.get(id, 0.0)) > 0.0 or player.mana < player.skill_cost(id):
+	for id in auto_panel(player):
+		if player.sk(id) <= 0 or float(player.skill_timers.get(id, 0.0)) > 0.0 or player.mana < player.skill_cost(id):
 			continue
-		if SkillInfo.heals(id) and player.hp >= player.max_hp * AUTO_HEAL_AT:
+		if SkillInfo.waits_for_wound(id) and player.hp >= player.max_hp * AUTO_HEAL_AT:
 			continue
 		player.use_skill(id)

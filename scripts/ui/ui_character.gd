@@ -160,33 +160,7 @@ static func _hero(game) -> Control:
 		pts.add_child(box)
 	left.add_child(pts)
 
-	# Докладні показники у дві колонки
-	var lines := [
-		["Зброя", Data.weapon_name(p.weapon_type)],
-		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
-		["Шкода удару", "%.1f" % p.damage],
-		["Шанс криту", "%d%%  (x%s)" % [roundi(p.crit_chance * 100), ("%.2f" % p.crit_mult).trim_suffix("0").trim_suffix("0").trim_suffix(".")]],
-		["Сила вмінь", "%d%%" % roundi(p.skill_power * 100)],
-		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
-		["Наснага за секунду", "+%.1f" % p.mana_regen],
-		["Відновлення", "%.1f / с" % p.regen],
-		["Вампіризм", "%.1f%%" % (p.lifesteal * 100)],
-		["Швидкість бігу", "%d" % int(p.speed)],
-		["Дальність удару", "%d" % int(p.attack_range)],
-		["Бонус досвіду", "+%d%%" % roundi((p.xp_mult - 1.0) * 100)],
-		["Бонус гривень", "+%d%%" % roundi((p.gold_mult - 1.0) * 100)],
-		["Зілля з собою", "%d і %d" % [p.potion_max(), p.mana_potion_max()]],
-	]
-	var stats := GridContainer.new()
-	stats.columns = 2
-	stats.add_theme_constant_override("h_separation", 22)
-	stats.add_theme_constant_override("v_separation", 0)
-	for l in lines:
-		var cell := _kv(l[0], l[1], 14)
-		cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		stats.add_child(cell)
-	left.add_child(stats)
-	# Решта показників бою групами під заголовками; ті самі числа, що й у бою (HeroSheet)
+	# Докладні показники у дві колонки, групами під заголовками; ті самі числа, що й у бою (HeroSheet)
 	for g in HeroSheet.groups(p, game.combat.festive if game.combat != null else {}):
 		left.add_child(UI.label(g[0], 16, UI.GOLD, false))
 		var grid := GridContainer.new()
@@ -198,7 +172,7 @@ static func _hero(game) -> Control:
 			cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			grid.add_child(cell)
 		if g[1].size() % 2 == 1:
-			var pad := Control.new()  # порожня друга колонка: стовпці стоять так само, як у рядках вище
+			var pad := Control.new()  # порожня друга колонка: стовпці стоять так само, як у сусідніх групах
 			pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			grid.add_child(pad)
 		left.add_child(grid)

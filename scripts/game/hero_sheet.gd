@@ -8,7 +8,7 @@ const Data := preload("res://scripts/data/data.gd")
 const Status := preload("res://scripts/game/status.gd")
 const PlayerScript := preload("res://scripts/entities/player.gd")
 
-## Назви груп під чотирнадцятьма давніми рядками
+## Назви груп вкладки «Герой»
 const ATTACK := "Напад"
 const PROCS := "Стани від удару"
 const DEFENSE := "Захист"
@@ -146,9 +146,18 @@ static func heal_taken(p) -> float:
 
 # ---------------- Рядки екрана ----------------
 
-## Групи нових рядків: [[назва групи, [[напис, значення], ...]], ...]. festive — combat.festive (свято проти босів).
+## Усі рядки вкладки «Герой» групами: [[назва групи, [[напис, значення], ...]], ...]. festive — combat.festive (свято проти босів).
 static func groups(p, festive: Dictionary = {}) -> Array:
-	var atk := [["Замах", "%d°" % roundi(rad_to_deg(p.attack_arc))]]
+	var atk := [
+		["Зброя", Data.weapon_name(p.weapon_type)],
+		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
+		["Шкода удару", "%.1f" % p.damage],
+		["Шанс криту", "%d%%  (x%s)" % [roundi(p.crit_chance * 100), _trim(p.crit_mult)]],
+		["Сила вмінь", "%d%%" % roundi(p.skill_power * 100)],
+		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
+		["Дальність удару", "%d" % int(p.attack_range)],
+		["Замах", "%d°" % roundi(rad_to_deg(p.attack_arc))],
+	]
 	if uses_shot_mult(p):
 		atk.append([SHOT_LABEL, "x" + _trim(p.shot_mult)])
 	atk.append_array([
@@ -167,10 +176,12 @@ static func groups(p, festive: Dictionary = {}) -> Array:
 	for pk in PROC_KEYS:
 		procs.append([Status.name_of(pk[1]) if pk[1] != "" else STUN_LABEL, _share(proc_chance(p, pk[0]))])
 	var dfn := [
+		["Відновлення", "%.1f / с" % p.regen],
+		["Вампіризм", "%.1f%%" % (p.lifesteal * 100)],
+		["Вампіризм лікує до", "%s / с" % _share(Data.LIFESTEAL_MAX_HPS)],
 		["Блок гасить", _share(1.0 - block_pass(p))],
 		["Оберіг", _share(1.0 - ward_pass(p))],
 		["Шипи", _share(p.thorns)],
-		["Вампіризм лікує до", "%s / с" % _share(Data.LIFESTEAL_MAX_HPS)],
 		["Парирування лікує", _share(parry_heal(p))],
 		["За вбивство: здоров'я", _share(kill_heal(p))],
 		["Перекид раз на", "%.2f с" % p.dodge_cooldown],
@@ -179,10 +190,17 @@ static func groups(p, festive: Dictionary = {}) -> Array:
 		["Лікування героя", _share(heal_taken(p))],
 	]
 	var mana := [
+		["Наснага за секунду", "+%.1f" % p.mana_regen],
 		["Наснага за удар", "+%s" % _trim(mana_per_hit(p))],
 		["За вбивство: наснага", "+%s" % _trim(kill_mana(p))],
 	]
-	var other := [["Радіус збору", "%d" % int(p.pickup_radius)]]
+	var other := [
+		["Швидкість бігу", "%d" % int(p.speed)],
+		["Радіус збору", "%d" % int(p.pickup_radius)],
+		["Бонус досвіду", "+%d%%" % roundi((p.xp_mult - 1.0) * 100)],
+		["Бонус гривень", "+%d%%" % roundi((p.gold_mult - 1.0) * 100)],
+		["Зілля з собою", "%d і %d" % [p.potion_max(), p.mana_potion_max()]],
+	]
 	return [[ATTACK, atk], [PROCS, procs], [DEFENSE, dfn], [MANA, mana], [OTHER, other]]
 
 
