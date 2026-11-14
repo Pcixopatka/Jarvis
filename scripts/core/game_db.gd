@@ -978,6 +978,7 @@ const RECORD_SCHEMA := {
 	"fmt": _TEXT,  # як показати значення ("time" — хвилини:секунди)
 	"step": {"type": "int", "required": true},  # за кожні step одиниць нового рекорду роду —
 	"glory": {"type": "int", "required": true},  # стільки слави (0 — без слави)
+	"board": {"type": "bool", "required": true},  # спільна таблиця гравців (Firestore boards/{id}/scores); id — назва таблиці
 }
 
 ## Мандрівник, якого проводять (завдання «Супровід»).
@@ -3833,6 +3834,8 @@ static func _life_rules(name: String, rows: Dictionary) -> Array:
 					out.append("%s: «step» і «glory» або обидва більші за нуль, або обидва нуль" % where)
 				if str(R.get("fmt", "")) != "time" and not "%d" in str(R.get("fmt", "")):
 					out.append("%s: «fmt» — \"time\" або рядок із %%d" % where)
+				if bool(R.get("board", false)) and not board_id_ok(str(id)):
+					out.append("%s: таблиця гравців зветься id рекорду, а він має бути ^[a-z_]{1,24}$ (так пускають правила Firestore)" % where)
 			"holidays":
 				var ways := int(R.has("from") or R.has("to")) + int(R.has("easter")) + int(R.has("nth"))
 				if ways != 1:
@@ -4536,12 +4539,23 @@ static func _settings_checks(R: Dictionary, schema: Dictionary, where: String, c
 			"admob_app", "admob_unit":
 				if not admob_id_ok(str(v), str(f["check"]) == "admob_app"):
 					out.append("%s: ідентифікатор AdMob має бути ca-app-pub-<16 цифр>%s<10 цифр>, а не «%s»" % [at, "~" if str(f["check"]) == "admob_app" else "/", v])
+			"firebase_key":
+				if RegEx.create_from_string("^AIza[0-9A-Za-z_-]{35}$").search(str(v)) == null:
+					out.append("%s: відкритий ключ Firebase має бути AIza і 35 знаків, а не «%s»" % [at, v])
+			"firebase_project":
+				if RegEx.create_from_string("^[a-z][a-z0-9-]{4,28}[a-z0-9]$").search(str(v)) == null:
+					out.append("%s: ідентифікатор проєкту Firebase — 6–30 знаків (малі латинські, цифри, дефіс), а не «%s»" % [at, v])
 			"soul_chance":
 				if v.keys() != SOUL_KINDS:
 					out.append("%s: роди мають бути саме %s, по порядку, а не %s" % [at, str(SOUL_KINDS), str(v.keys())])
 				for x in v.values():
 					if float(x) < 0.0 or float(x) > 1.0:
 						out.append("%s: шанс — від 0 до 1, а не %s" % [at, x])
+
+
+## Чи годиться назва для спільної таблиці boards/{id} (правила Firestore: ^[a-z_]{1,24}$).
+static func board_id_ok(id: String) -> bool:
+	return RegEx.create_from_string("^[a-z_]{1,24}$").search(id) != null
 
 
 ## Чи рядок — ідентифікатор AdMob: застосунку (ca-app-pub-<16 цифр>~<10 цифр>) чи рекламного блоку (…/…).

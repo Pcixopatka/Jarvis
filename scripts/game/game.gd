@@ -78,6 +78,8 @@ const LegendService := preload("res://scripts/game/legend_service.gd")
 const SideService := preload("res://scripts/game/side_service.gd")
 const UiDivine := preload("res://scripts/ui/ui_divine.gd")
 const UiCamp := preload("res://scripts/ui/ui_camp.gd")
+const UiAccount := preload("res://scripts/ui/ui_account.gd")
+const UiBoard := preload("res://scripts/ui/ui_board.gd")
 const DialogueScript := preload("res://scripts/ui/dialogue.gd")
 const SaveSystem := preload("res://scripts/core/save_system.gd")
 const PlayerScript := preload("res://scripts/entities/player.gd")
@@ -97,6 +99,10 @@ var account_path: String = SaveSystem.ACCOUNT_PATH  # тести підміня�
 var account := AccountScript.new()  # спільне на всіх персонажів: хутір, скриня, досягнення, виклики
 var slot := 1  # активний слот персонажа (1..5)
 var use_slots := true  # false у тестах зі своїм save_path
+var cloud: Node = null  # обліковий запис і хмарне збереження (автозавантаження Cloud; тести підставляють свій екземпляр)
+var account_ui := {}  # стан екранів облікового запису (UiAccount)
+var board_key := ""  # відкрита спільна таблиця рекорду (UiBoard; "" — не відкрита)
+var board_view := {}  # стан екрана таблиці (UiBoard)
 
 var city_id := ""
 ## Де герой на мапі. Зазвичай це місце (map_here), та він може стояти й просто на мапі, у вільній точці:
@@ -245,6 +251,10 @@ func _ready() -> void:
 	Events.player_hurt.connect(func():
 		if world != null and world.hints.has("combat"):
 			hint("block", "Натисни «Блок» саме тоді, коли ворог червоніє, — парируєш удар і приголомшиш його. Тримай «Блок» довше — зарядиш потужний удар, відпусти — вдар!"))
+	use_cloud(get_node_or_null("/root/Cloud"))
+	# Хмара лише в справжній грі: тести й інструменти (-s) додають сцену до кореня самі, і current_scene тоді порожня
+	if cloud != null and get_tree().current_scene == self:
+		cloud.start(cloud_config())
 	_show_main_menu()
 
 
@@ -2217,6 +2227,8 @@ func _expedition_news(healed: bool = false) -> Array:
 		Audio.play("quest", 0.0)
 		msgs.append_array(ChallengeService.record(world, player, "expedition", came))
 	var recs := RecordService.sync(world, player, slot)
+	if cloud != null:
+		cloud.sync_boards()  # рядки спільних таблиць (не частіше за board_gap; лише змінені)
 	if not recs.is_empty():
 		Audio.play("quest", 0.0)
 		msgs.append_array(recs)
@@ -2961,6 +2973,7 @@ func _open_menu(key: String = "", child: bool = false) -> void:
 
 
 var _menu_back := Callable()  # куди веде «Назад» із підменю головного меню (порожнє на самому меню)
+const MENU_HALF := Vector2(375, 80)  # півкнопки головного меню: дві в рядку завширшки як одна звичайна
 
 
 ## Скидає все, що могло лишитись від попереднього екрана чи героя: відкриті крамниці, ціль порталу
@@ -2974,6 +2987,7 @@ func _reset_session() -> void:
 	_shop_back = Callable()
 	shop_confirm = ""
 	wiki_open = false
+	board_key = ""
 	defense_target = ""
 	leave_notice = ""
 	map_sel = ""
@@ -3024,11 +3038,13 @@ func _show_main_menu() -> void:
 		hud.add_button("Нова гра", _confirm_new_game)
 	else:
 		hud.add_button("Нова гра", _ask_new_hero.bind(_show_main_menu))
-	hud.add_button("Довідник", func(): open_wiki(_show_main_menu))
+	# Довідник і обліковий запис — одним рядком, щоб меню не стало вищим
+	hud.add_row([UI.button("Довідник", func(): open_wiki(_show_main_menu), MENU_HALF), UI.button("Обліковий запис", func(): UiAccount.open(self), MENU_HALF)])
 	if account_notice != "":
 		hud.add_title(account_notice, 20, UI.BAD)
 	_add_sound_toggles(_show_main_menu)
 	hud.add_title("Ліва частина екрана — рух, праворуч — удар, перекид і вміння.\nНа мапі обирай міста, дикі місцевості та печери.", 18, Color(0.8, 0.8, 0.8))
+	UiAccount.on_main_menu(self)
 
 
 ## Підпис слота у два рядки: «Сірко • Козак 12» і «Розділ II • 3 год 20 хв».
@@ -3184,6 +3200,95 @@ func transfer_restore() -> void:
 		_show_transfer_menu("Повернуто рід, який був до перенесення.", UI.GOOD)
 	else:
 		_show_transfer_menu("Запасу немає.", UI.BAD)
+
+
+# ---------- Хмара (Cloud, екрани — UiAccount) ----------
+
+## Спільна таблиця рекорду: відкрити з вкладки «Слава» й повернутися на екран героя.
+func open_board(key: String) -> void:
+	Audio.play("page", 0.08)
+	UiBoard.open(self, key)
+
+
+func close_board() -> void:
+	board_key = ""
+	board_view = {"seq": int(board_view.get("seq", 0)) + 1}
+	if state == State.CHARACTER:
+		_build_character()
+
+
+## Що Cloud знає про гру: де рід на пристрої, коли його можна замінити й як.
+func cloud_config() -> Dictionary:
+	return {"paths_fn": _transfer_paths, "account_path": account_path, "apply_fn": cloud_apply, "can_apply": cloud_can_apply,
+		"rows_fn": cloud_board_rows}
+
+
+## Рядки спільних таблиць: рекорди роду (з пам'яті, коли герой у грі, інакше з файлу спільного майна).
+func cloud_board_rows() -> Dictionary:
+	var recs: Dictionary = world.records if player != null else {}
+	if player == null:
+		var acc := SaveTransfer._read_var(account_path)
+		recs = acc.get("records", {}) if acc.get("records") is Dictionary else {}
+	return RecordService.board_rows(recs, _record_holder)
+
+
+## Хто в слоті n (для давніх рекордів без імені): {"nick", "cls", "level"}; слот порожній — нинішній герой.
+func _record_holder(n: int) -> Dictionary:
+	var d := SaveSystem.load_data(_slot_file(n)) if n > 0 else {}
+	if not d.is_empty():
+		var p: Dictionary = d["player"]
+		return {"nick": NameService.from_save(p.get("nick", "")), "cls": str(p.get("job", "peasant")), "level": int(p.get("level", 1))}
+	if player != null:
+		return {"nick": str(player.nick), "cls": str(player.job), "level": int(player.level)}
+	return {}
+
+
+## Рід на пристрої можна замінити лише тоді, коли відкрите саме головне меню чи екран облікового запису
+## (не «Персонажі», не створення героя, не довідник). Інакше документ чекає до наступного головного меню.
+func cloud_can_apply() -> bool:
+	if state != State.MENU or naming != "" or wiki_open or not hud.overlay.visible:
+		return false
+	var key := str(hud._overlay_key)
+	return key == "main" or key.begins_with("account")
+
+
+## Підключити екземпляр Cloud (автозавантаження чи тестовий) до банерів і екранів.
+func use_cloud(c: Node) -> void:
+	if cloud != null and cloud.notice.is_connected(_cloud_notice):
+		cloud.notice.disconnect(_cloud_notice)
+		cloud.changed.disconnect(_cloud_changed)
+		cloud.conflict_found.disconnect(_cloud_conflict)
+	cloud = c
+	if c != null:
+		c.notice.connect(_cloud_notice)
+		c.changed.connect(_cloud_changed)
+		c.conflict_found.connect(_cloud_conflict)
+
+
+func _cloud_notice(text: String, good: bool) -> void:
+	UiAccount.on_notice(self, text, good)
+
+
+func _cloud_changed() -> void:
+	UiAccount.refresh(self)
+
+
+func _cloud_conflict() -> void:
+	UiAccount.on_conflict(self)
+
+
+## Рід із хмари замість роду на пристрої (як transfer_apply: запас лишається, «Повернути рід…» працює).
+func cloud_apply(profile: Dictionary) -> bool:
+	if not SaveTransfer.apply(profile, _transfer_paths(), account_path):
+		return false
+	_forget_hero()
+	if use_slots:
+		slot = int(profile["heroes"][0]["slot"])
+		save_path = SaveSystem.slot_path(slot)
+		_remember_slot()
+	if state == State.MENU and hud._overlay_key == "main":
+		_show_main_menu.call_deferred()  # «Продовжити» має показати завантаженого героя
+	return true
 
 
 ## Після заміни файлів героя в пам'яті більше не існує: інакше перше ж автозбереження затерло б перенесене.
@@ -3544,6 +3649,8 @@ func _notification(what: int) -> void:
 			if combat.active:
 				combat.secure_loot()  # золоте, наборне й разові нагороди не лишаються на землі, якщо гру закриють
 			save_game()
+		if what == NOTIFICATION_APPLICATION_FOCUS_OUT and cloud != null:
+			cloud.on_focus_out()  # уже після запису на пристрій
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and state == State.PLAYING:
 		_show_pause()
 	elif what == NOTIFICATION_WM_GO_BACK_REQUEST:
@@ -3562,6 +3669,9 @@ func go_back(from_system: bool) -> void:
 		return  # рекламу, оплату й розмову з вибором треба довести до кінця
 	if naming != "":
 		_name_cancel()  # новий герой і перейменування: назад у меню; старий герой без імені лишається тут
+		return
+	if board_key != "":
+		close_board()
 		return
 	if wiki_open:
 		close_wiki()

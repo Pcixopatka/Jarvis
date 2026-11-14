@@ -547,5 +547,23 @@
 		"app_id": "ca-app-pub-4415342337066719~5037802628",
 		"rewarded_unit": "ca-app-pub-4415342337066719/1423554349",
 		"test_rewarded_unit": "ca-app-pub-3940256099942544/5224354917"
+	},
+	"firebase": {
+		"num": 11051,
+		"api_key": "AIzaSyA_p1nXSa_MpD1fkZAUyRzBlZmn_3tFlRw",
+		"project_id": "kozatska-zvytiaha"
+	},
+	"cloud": {
+		"num": 11052,
+		"timeout": 15.0,
+		"max_save": 900000,
+		"upload_gap": 300.0,
+		"upload_min_gap": 30.0,
+		"check_gap": 60.0,
+		"retry_delays": [30.0, 60.0, 120.0, 300.0, 600.0],
+		"token_margin": 300.0,
+		"board_gap": 60.0,
+		"board_top": 20,
+		"board_cache": 300.0
 	}
 }

@@ -7,7 +7,8 @@ extends RefCounted
 ## mults — непорожній перелік додатних множників; curve — точки мірки нечисті; zone — [від, до] у межах 0..1;
 ## soul_chance — шанс душі за родом ворога (regular, elite, named, boss); step — id кроку завдань (історії,
 ## переказу, саги, доручення) або "" (без місії); admob_app і admob_unit — ідентифікатори AdMob застосунку
-## (ca-app-pub-<16 цифр>~<10 цифр>) і рекламного блоку (ca-app-pub-<16 цифр>/<10 цифр>).
+## (ca-app-pub-<16 цифр>~<10 цифр>) і рекламного блоку (ca-app-pub-<16 цифр>/<10 цифр>); firebase_key — відкритий
+## ключ Firebase (AIza і 35 знаків), firebase_project — ідентифікатор проєкту (6–30 знаків: малі латинські, цифри, дефіс).
 ## Порядок полів у схемі — порядок у файлі (tools/data_format.gd). Як модулі беруть ці числа — docs/data.md.
 
 const _NUM := {"type": "int", "required": true}  # сталий номер запису (11001...)
@@ -568,6 +569,24 @@ const SCHEMAS := {
 		"rewarded_unit": {"type": "string", "check": "admob_unit", "about": "справжній рекламний блок «за нагороду» (ca-app-pub-…/…): лише в збірці з ознакою store (Google Play)"},
 		"test_rewarded_unit": {"type": "string", "check": "admob_unit", "about": "загальнодоступний тестовий блок Google «за нагороду»: у всіх інших збірках, щоб не клацати справжню рекламу"},
 	},
+	"firebase": {
+		"num": _NUM,
+		"api_key": {"type": "string", "check": "firebase_key", "about": "відкритий ключ веб-застосунку Firebase (AIza…): не таємний, ним гра ходить до Firebase Auth"},
+		"project_id": {"type": "string", "check": "firebase_project", "about": "ідентифікатор проєкту Firebase: з нього складається адреса бази Firestore"},
+	},
+	"cloud": {
+		"num": _NUM,
+		"timeout": {"type": "float", "check": "pos", "about": "секунд на один запит до Firebase, далі він вважається невдалим (немає зв'язку)"},
+		"max_save": {"type": "int", "check": "count", "about": "найдовший код роду (знаків), який гра кладе в хмару; правила Firestore пускають до 900000"},
+		"upload_gap": {"type": "float", "check": "pos", "about": "секунд між збереженнями в хмару за розкладом, поки гра йде"},
+		"upload_min_gap": {"type": "float", "check": "pos", "about": "секунд щонайменше між двома збереженнями в хмару (крім кнопки «Зберегти в хмару зараз»)"},
+		"check_gap": {"type": "float", "check": "pos", "about": "секунд щонайменше між перевірками хмари при вході в головне меню"},
+		"retry_delays": {"type": "list", "check": "mults", "about": "секунд до нової спроби, коли зв'язку нема: що далі, то довше, після останньої — останнє число", "of": {"type": "float"}},
+		"token_margin": {"type": "float", "check": "pos", "about": "за скільки секунд до кінця дії ключа входу (id token) гра бере новий"},
+		"board_gap": {"type": "float", "check": "pos", "about": "секунд щонайменше між двома надсиланнями рядків спільних таблиць рекордів"},
+		"board_top": {"type": "int", "check": "count", "about": "скільки найкращих рядків спільної таблиці показувати"},
+		"board_cache": {"type": "float", "check": "pos", "about": "секунд, поки прочитана таблиця вважається свіжою (кнопка «Оновити» не читає її знову)"},
+	},
 }
 
 ## Заголовки записів (для людей і docs/data.md).
@@ -622,6 +641,8 @@ const TITLES := {
 	"shop": "Крамниця червінців",
 	"power": "Мірило сили героя й порадник",
 	"admob": "Реклама AdMob: ідентифікатори",
+	"firebase": "Firebase: проєкт і відкритий ключ",
+	"cloud": "Хмарне збереження: розклад, межі, повтори",
 }
 
 ## Хто тримає робочі копії чисел запису: [скрипт, префікс поля]. Поле стає static var модуля з тим самим
@@ -678,4 +699,6 @@ const MODULES := {
 	"shop": [["res://scripts/data/shop.gd", ""], ["res://scripts/game/shop_service.gd", ""]],
 	"power": [["res://scripts/game/power.gd", ""], ["res://scripts/game/guide_service.gd", ""]],
 	"admob": [["res://scripts/core/ads.gd", ""]],
+	"firebase": [["res://scripts/core/firebase_api.gd", ""]],
+	"cloud": [["res://scripts/core/cloud.gd", ""]],
 }

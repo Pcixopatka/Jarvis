@@ -50,6 +50,17 @@ def presets():
     check('custom_features="store"' in blocks[1] and 'custom_features=""' in blocks[0], "справжня реклама (ознака store) лише в пресеті «Google Play», APK — з тестовою")
 
 
+def pages():
+    sys.path.insert(0, os.path.dirname(__file__))
+    import store_pages
+    old = store_pages.stale()
+    check(not old, "публічні сторінки (політика приватності, видалення облікового запису) збігаються з текстами docs/store" + ("" if not old else ": застаріли %s, запусти python3 tools/store_pages.py" % ", ".join(old)))
+    for rel in ("store/privacy-policy.md", "store/delete-account.md"):
+        text = open(os.path.join(ROOT, "docs", rel), encoding="utf-8").read().partition("\n---\n")[2]
+        left = re.findall(r"\[(?:дата|контактна пошта|ім'я або назва[^\]]*)\]", text)
+        check(not left, "%s: дату, розробника й пошту вписано" % rel + ("" if not left else " (лишилось: %s)" % ", ".join(left)))
+
+
 def main():
     print("Тексти сторінки:")
     texts()
@@ -62,6 +73,8 @@ def main():
         image(os.path.join("screenshots", f), min_side=320, max_side=3840, max_ratio=2.0)
     print("Збірка:")
     presets()
+    print("Публічні сторінки:")
+    pages()
     print("Усе вкладається у вимоги." if not bad else "Не вкладається: %d" % len(bad))
     sys.exit(1 if bad else 0)
 

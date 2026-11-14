@@ -153,6 +153,7 @@ func _run() -> void:
 	await _suite_gear_best()
 	await _suite_quick_raid()
 	await _suite_admob()
+	await _suite_cloud()
 	await _suite_pickup_filter()
 	await _suite_renew_cost()
 	_suite_peril()
@@ -10394,6 +10395,1056 @@ class InputCatch extends Node:
 
 	func _input(_e: InputEvent) -> void:
 		n += 1
+
+
+## Обліковий запис і хмарне збереження: FirebaseApi (запити, відповіді, типи Firestore, тексти помилок) і Cloud на
+## підставному Firebase (tests/cloud_fake.gd). Жоден запит не йде в мережу: тут лише підставний транспорт.
+func _suite_cloud() -> void:
+	suite("Хмарне збереження")
+	var FA = load("res://scripts/core/firebase_api.gd")
+	var CloudS = load("res://scripts/core/cloud.gd")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	var Fake = load("res://tests/cloud_fake.gd")
+	# ---- Налаштування ----
+	var FS: Dictionary = GameDB.settings("firebase")
+	var CS: Dictionary = GameDB.settings("cloud")
+	check(FS["api_key"] == "AIzaSyA_p1nXSa_MpD1fkZAUyRzBlZmn_3tFlRw" and FS["project_id"] == "kozatska-zvytiaha" and FA.API_KEY == FS["api_key"] and FA.PROJECT_ID == FS["project_id"],
+		"запис firebase: відкритий ключ і проєкт, FirebaseApi тримає їх")
+	check(int(FS["num"]) == 11051 and int(CS["num"]) == 11052 and CloudS.UPLOAD_GAP == CS["upload_gap"] and CloudS.UPLOAD_MIN_GAP == CS["upload_min_gap"] and CloudS.MAX_SAVE == 900000
+		and CloudS.TIMEOUT == CS["timeout"] and CloudS.RETRY_DELAYS == CS["retry_delays"], "запис cloud: розклад, межі й повтори в Cloud")
+	var rawset: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GameDB.path_of("settings")))
+	rawset["firebase"]["api_key"] = "abc"
+	rawset["firebase"]["project_id"] = "Bad Project"
+	var fprobs := GameDB.validate("settings", rawset)
+	check(fprobs.any(func(p): return str(p).begins_with("settings/firebase.api_key:")) and fprobs.any(func(p): return str(p).begins_with("settings/firebase.project_id:")),
+		"зламаний ключ чи проєкт Firebase помічено")
+	# ---- Типи Firestore ----
+	var vals := {"s": "Сірко", "i": 12, "neg": -7, "f": 1.5, "b": true, "n": null, "t": FA.ts(1794664320), "a": [1, "два", false, [3.25]],
+		"m": {"x": {"y": "глибоко"}, "list": []}}
+	var enc: Dictionary = FA.encode_fields(vals)
+	check(enc["s"] == {"stringValue": "Сірко"} and enc["i"] == {"integerValue": "12"} and enc["f"] == {"doubleValue": 1.5} and enc["b"] == {"booleanValue": true}
+		and enc["n"] == {"nullValue": null} and enc["t"] == {"timestampValue": "2026-11-14T13:52:00Z"} and enc["a"]["arrayValue"]["values"][1] == {"stringValue": "два"}
+		and enc["m"]["mapValue"]["fields"]["x"]["mapValue"]["fields"]["y"] == {"stringValue": "глибоко"}, "кожен тип кодується, як вимагає Firestore (ціле — рядком)")
+	var back: Dictionary = FA.decode_fields(JSON.parse_string(JSON.stringify(enc)))
+	check(back == vals and typeof(back["i"]) == TYPE_INT and typeof(back["f"]) == TYPE_FLOAT and typeof(back["a"][0]) == TYPE_INT, "туди й назад крізь JSON — те саме, типи збережено")
+	check(FA.ts_unix(FA.ts(1794664320)) == 1794664320 and FA.ts_unix("2026-11-14T13:52:00.123456Z") == 1794664320 and FA.ts_unix("") == 0
+		and is_inf(FA.decode_value({"doubleValue": "Infinity"})) and FA.decode_value({"doubleValue": 2}) == 2.0, "мітка часу з частками секунди, особливі дробові")
+	# ---- Запити ----
+	var key: String = FA.API_KEY
+	var r0: Dictionary = FA.sign_up_guest()
+	check(r0["method"] == "POST" and r0["url"] == "https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + key and Array(r0["headers"]) == ["Content-Type: application/json"]
+		and JSON.parse_string(r0["body"]) == {"returnSecureToken": true}, "гість: signUp з ключем, тіло returnSecureToken")
+	var r1: Dictionary = FA.link_email("IDT", "a@b.ua", "секрет1")
+	check(r1["url"].ends_with("accounts:signUp?key=" + key) and JSON.parse_string(r1["body"]) == {"idToken": "IDT", "email": "a@b.ua", "password": "секрет1", "returnSecureToken": true},
+		"прив'язка пошти: той самий signUp з idToken")
+	var r2: Dictionary = FA.sign_in("a@b.ua", "pw1234")
+	check(r2["url"].ends_with("accounts:signInWithPassword?key=" + key) and JSON.parse_string(r2["body"]) == {"email": "a@b.ua", "password": "pw1234", "returnSecureToken": true}, "вхід: signInWithPassword")
+	var r3: Dictionary = FA.refresh("RT/+=")
+	check(r3["url"] == "https://securetoken.googleapis.com/v1/token?key=" + key and Array(r3["headers"]) == ["Content-Type: application/x-www-form-urlencoded"]
+		and r3["body"] == "grant_type=refresh_token&refresh_token=RT%2F%2B%3D", "новий ключ: securetoken, форма, ключ сеансу закодовано")
+	var r4: Dictionary = FA.send_reset("a@b.ua")
+	check(r4["url"].ends_with("accounts:sendOobCode?key=" + key) and "X-Firebase-Locale: uk" in r4["headers"] and JSON.parse_string(r4["body"]) == {"requestType": "PASSWORD_RESET", "email": "a@b.ua"},
+		"лист зі зміною пароля: sendOobCode українською")
+	var r5: Dictionary = FA.delete_account("IDT")
+	check(r5["url"].ends_with("accounts:delete?key=" + key) and JSON.parse_string(r5["body"]) == {"idToken": "IDT"}, "видалення облікового запису: accounts:delete")
+	var base := "https://firestore.googleapis.com/v1/projects/kozatska-zvytiaha/databases/(default)/documents/"
+	var r6: Dictionary = FA.get_doc("players/U1", "IDT")
+	check(r6["method"] == "GET" and r6["url"] == base + "players/U1" and Array(r6["headers"]) == ["Authorization: Bearer IDT"] and r6["body"] == "", "читання документа: GET з ключем входу")
+	var r7: Dictionary = FA.patch_doc("players/U1", "IDT", {"rev": 3, "save": "KZ1"}, {"update_time": "2026-11-14T13:52:00.5Z"})
+	check(r7["method"] == "PATCH" and r7["url"] == base + "players/U1?currentDocument.updateTime=2026-11-14T13%3A52%3A00.5Z" and "Authorization: Bearer IDT" in r7["headers"]
+		and JSON.parse_string(r7["body"]) == {"fields": {"rev": {"integerValue": "3"}, "save": {"stringValue": "KZ1"}}}, "запис з умовою updateTime: мітка закодована, поля типізовані")
+	var r8: Dictionary = FA.patch_doc("players/U1", "IDT", {}, {"exists": false})
+	var r9: Dictionary = FA.delete_doc("players/U1", "IDT")
+	check(r8["url"].ends_with("players/U1?currentDocument.exists=false") and r9["method"] == "DELETE" and r9["url"] == base + "players/U1", "перший запис — exists=false; стирання — DELETE")
+	# ---- Відповіді й помилки ----
+	var ae := func(m: String) -> String: return JSON.stringify({"error": {"code": 400, "message": m}})
+	check(FA.error_code(ae.call("WEAK_PASSWORD : Password should be at least 6 characters")) == "WEAK_PASSWORD" and FA.error_code(ae.call("EMAIL_EXISTS")) == "EMAIL_EXISTS"
+		and FA.error_code(JSON.stringify({"error": {"code": 400, "message": "the stored version does not match", "status": "FAILED_PRECONDITION"}})) == "FAILED_PRECONDITION"
+		and FA.error_code("") == "" and FA.error_code("<html>") == "", "код помилки: Auth із пояснення, Firestore зі status")
+	var want_msg := {"EMAIL_EXISTS": "Ця пошта вже має обліковий запис. Натисни «Увійти в наявний обліковий запис».", "INVALID_EMAIL": "Пошта написана з помилкою.",
+		"WEAK_PASSWORD": "Пароль закороткий: треба щонайменше 6 знаків.", "INVALID_LOGIN_CREDENTIALS": "Пошта або пароль не підходять.", "INVALID_PASSWORD": "Пошта або пароль не підходять.",
+		"EMAIL_NOT_FOUND": "Пошта або пароль не підходять.", "TOO_MANY_ATTEMPTS_TRY_LATER": "Забагато спроб. Спробуй трохи пізніше.", "USER_DISABLED": "Цей обліковий запис вимкнено.",
+		"net": "Немає зв'язку. Перевір інтернет і спробуй ще раз.", "OPERATION_NOT_ALLOWED": "Не вдалося. Спробуй пізніше.", "щось": "Не вдалося. Спробуй пізніше."}
+	var wrong_msg := []
+	for k in want_msg:
+		if FA.message(k) != want_msg[k]:
+			wrong_msg.append(k)
+	check(wrong_msg.is_empty(), "тексти помилок для гравця: %s" % str(wrong_msg))
+	check(FA.is_dead_session("INVALID_REFRESH_TOKEN") and FA.is_dead_session("USER_NOT_FOUND") and FA.is_dead_session("TOKEN_EXPIRED") and FA.is_dead_session("USER_DISABLED")
+		and not FA.is_dead_session("TOO_MANY_ATTEMPTS_TRY_LATER"), "кінець сеансу: які відповіді")
+	var pa: Dictionary = FA.parse_auth(200, JSON.stringify({"idToken": "I", "refreshToken": "R", "expiresIn": "3600", "localId": "U", "email": "a@b.ua"}))
+	var pr: Dictionary = FA.parse_auth(200, JSON.stringify({"id_token": "I2", "refresh_token": "R2", "expires_in": "3600", "user_id": "U"}))
+	var pe: Dictionary = FA.parse_auth(400, ae.call("INVALID_LOGIN_CREDENTIALS"))
+	check(pa["ok"] and pa["uid"] == "U" and pa["id_token"] == "I" and pa["refresh_token"] == "R" and pa["expires_in"] == 3600 and pa["email"] == "a@b.ua"
+		and pr["ok"] and pr["id_token"] == "I2" and pr["refresh_token"] == "R2" and pr["uid"] == "U" and not pe["ok"] and pe["error"] == "INVALID_LOGIN_CREDENTIALS",
+		"відповідь входу й оновлення ключа одним видом")
+	var pd: Dictionary = FA.parse_doc(JSON.stringify({"name": "projects/p/databases/(default)/documents/players/U", "fields": {"rev": {"integerValue": "4"}}, "createTime": "c", "updateTime": "u"}))
+	check(pd["fields"] == {"rev": 4} and pd["update_time"] == "u" and FA.parse_doc("{}").is_empty(), "документ: поля звичайними значеннями й мітка")
+	check(CloudS.email_ok("kozak@sich.ua") and not CloudS.email_ok("kozak@sich") and not CloudS.email_ok("kozak sich.ua") and CloudS.form_problem("x", "123456") == want_msg["INVALID_EMAIL"]
+		and CloudS.form_problem("a@b.ua", "12345") == want_msg["WEAK_PASSWORD"] and CloudS.form_problem("a@b.ua", "123456") == "", "перевірка на пристрої: вигляд пошти й 6 знаків пароля")
+	# ---- Пристрої на підставному Firebase ----
+	DirAccess.make_dir_recursive_absolute("user://cloud_test")
+	for f in DirAccess.get_files_at("user://cloud_test"):
+		DirAccess.remove_absolute("user://cloud_test/" + f)
+	var fake = Fake.new()
+	var clock := [1794660000.0]
+	var dev := func(name: String, server = fake) -> Node:
+		var c: Node = CloudS.new()
+		root.add_child(c)
+		c.set_process(false)  # розклад тут крутить сам тест (poll), а не кадри
+		c.set_meta("cfg", {"transport": server, "session_path": "user://cloud_test/%s.session" % name, "account_path": "user://cloud_test/%s_acc.save" % name,
+			"paths": {1: "user://cloud_test/%s_1.save" % name, 2: "user://cloud_test/%s_2.save" % name}, "clock": func(): return clock[0]})
+		return c
+	var go := func(c: Node) -> void:
+		await c.start(c.get_meta("cfg"))
+	var hero := func(c: Node, slot: int, level: int, gold: int) -> void:
+		SaveSystem.save(_transfer_hero(level, gold), c.get_meta("cfg")["paths"][slot])
+		var f := FileAccess.open(c.get_meta("cfg")["account_path"], FileAccess.WRITE)
+		f.store_var({"chest": {"gold": gold, "items": [], "stones": {}}})
+		f.close()
+	var digest_of := func(c: Node) -> String: return c.local()["digest"]
+	var cloud_digest := func(u: String) -> String:
+		var d: Dictionary = fake.docs.get("players/" + u, {})
+		if d.is_empty():
+			return ""
+		return CloudS.digest(ST.unpack(d["fields"]["save"]["stringValue"])["profile"])
+	# Гість без героїв: тихо, нічого не вантажить
+	var a: Node = dev.call("a")
+	check(not a.started and a.transport == null and a.state == "off", "до start() екземпляр нічого не робить і транспорту не має")
+	await go.call(a)
+	check(a.started and a.state == "guest" and a.uid() != "" and fake.users.has(a.uid()) and fake.calls.size() == 2 and fake.calls[0]["url"].contains("accounts:signUp")
+		and fake.calls[1]["method"] == "GET" and a.last_skip == "no_heroes" and fake.docs.is_empty(), "перший запуск: тихо гість, у хмарі порожньо, без героїв нічого не шле")
+	var sess = _cloud_read(a.session_path)
+	check(sess["uid"] == a.uid() and sess["guest"] and str(sess["device"]).length() > 8 and str(sess["device"]).length() <= 64 and not sess.has("id_token") and str(sess["refresh"]) != ""
+		and not var_to_str(sess).contains(a._id_token), "сеанс у файлі: uid, ключ сеансу, гість, пристрій; ключа входу там нема")
+	# Перше збереження: exists=false, будова за правилами
+	hero.call(a, 1, 12, 400)
+	var n0: int = fake.calls.size()
+	var up: Dictionary = await a.upload_now()
+	var patch: Dictionary = fake.calls[n0] if fake.calls.size() > n0 else {}
+	var doc1: Dictionary = fake.docs.get("players/" + a.uid(), {})
+	check(up["ok"] and patch.get("method", "") == "PATCH" and patch["query"] == "currentDocument.exists=false" and not doc1.is_empty() and Fake.shape_ok(doc1["fields"])
+		and doc1["fields"]["rev"] == {"integerValue": "1"} and int(doc1["fields"]["ver"]["integerValue"]) == SaveSystem.SAVE_VERSION and doc1["fields"]["device"]["stringValue"] == a.device_id()
+		and cloud_digest.call(a.uid()) == digest_of.call(a), "перше збереження: умова exists=false, шість полів за правилами, rev 1, вміст той самий")
+	var summ: Dictionary = FA.decode_value(doc1["fields"]["summary"])
+	check(summ["heroes"] == ST.summary(a.local()["profile"]) and typeof(summ["made"]) == TYPE_INT and summ["made"] > 0, "summary: рядки героїв і час збирання")
+	# Без змін — не шле
+	n0 = fake.calls.size()
+	var same: Dictionary = await a.upload_now()
+	check(same["ok"] and fake.calls.size() == n0 and a.last_skip == "same", "той самий рід удруге не шле")
+	# Друге: з міткою й rev + 1
+	hero.call(a, 1, 13, 500)
+	var stamp1: String = doc1["updateTime"]
+	n0 = fake.calls.size()
+	await a.upload_now()
+	var doc2: Dictionary = fake.docs["players/" + a.uid()]
+	check(fake.calls[n0]["query"] == "currentDocument.updateTime=" + stamp1.uri_encode() and doc2["fields"]["rev"] == {"integerValue": "2"} and doc2["updateTime"] != stamp1
+		and a.session["seen_update"] == doc2["updateTime"] and a.session["synced_rev"] == 2, "далі: умова з міткою останнього, rev + 1")
+	# Проміжок і розклад
+	hero.call(a, 1, 14, 600)
+	n0 = fake.calls.size()
+	clock[0] += 5.0
+	await a.on_focus_out()
+	check(fake.calls.size() == n0 and a.last_skip == "gap", "згортання гри одразу після збереження: не частіше за %d с" % int(CloudS.UPLOAD_MIN_GAP))
+	clock[0] += CloudS.UPLOAD_MIN_GAP
+	a.poll()
+	await _frames(1)
+	check(fake.calls.size() == n0, "до розкладу (%d с) саме не шле" % int(CloudS.UPLOAD_GAP))
+	clock[0] += CloudS.UPLOAD_GAP
+	a.poll()
+	await _frames(1)
+	check(fake.calls.size() == n0 + 1 and fake.calls[n0]["method"] == "PATCH" and cloud_digest.call(a.uid()) == digest_of.call(a), "за розкладом — шле")
+	hero.call(a, 1, 15, 700)
+	clock[0] += CloudS.UPLOAD_MIN_GAP + 1.0
+	n0 = fake.calls.size()
+	await a.on_focus_out()
+	check(fake.calls.size() == n0 + 1 and cloud_digest.call(a.uid()) == digest_of.call(a), "згортання гри після проміжку — шле")
+	# Завеликий рід
+	var max0: int = CloudS.MAX_SAVE
+	CloudS.MAX_SAVE = 100
+	hero.call(a, 1, 16, 800)
+	n0 = fake.calls.size()
+	var big: Dictionary = await a.upload_now()
+	CloudS.MAX_SAVE = max0
+	check(not big["ok"] and a.too_big and fake.calls.size() == n0 and big["text"] == CloudS.TOO_BIG, "рід довший за max_save у хмару не йде, на екрані сказано чому")
+	await a.upload_now()
+	check(not a.too_big and cloud_digest.call(a.uid()) == digest_of.call(a), "менший знову йде")
+	# Ключ входу: оновлення перед кінцем дії й на 401
+	clock[0] += 3600.0
+	n0 = fake.calls.size()
+	hero.call(a, 1, 17, 900)
+	await a.upload_now()
+	check(fake.calls.size() == n0 + 2 and fake.calls[n0]["url"].contains("securetoken") and fake.calls[n0 + 1]["method"] == "PATCH", "ключ входу скоро скінчиться — спершу новий, тоді запис")
+	fake.expire_tokens()
+	hero.call(a, 1, 18, 950)
+	n0 = fake.calls.size()
+	var r401: Dictionary = await a.upload_now()
+	var codes: Array = fake.calls.slice(n0).map(func(x): return x["method"] + (" token" if x["url"].contains("securetoken") else ""))
+	check(r401["ok"] and codes == ["PATCH", "POST token", "PATCH"] and cloud_digest.call(a.uid()) == digest_of.call(a), "відповідь 401: новий ключ і ще раз (%s)" % str(codes))
+	# Сеанс переживає перезапуск
+	var guest_uid: String = a.uid()
+	var dev_id: String = a.device_id()
+	a.queue_free()
+	var a2: Node = dev.call("a")
+	n0 = fake.calls.size()
+	await go.call(a2)
+	check(a2.state == "guest" and a2.uid() == guest_uid and a2.device_id() == dev_id and fake.calls[n0]["url"].contains("securetoken")
+		and fake.sent("accounts:signUp").size() == 1 and a2.last_skip == "same", "перезапуск: той самий гість і пристрій за файлом сеансу, новий ключ, нового гостя нема")
+	# Прив'язка пошти: той самий uid і документ
+	var bad_bind: Dictionary = await a2.bind_email("kozak@sich.ua", "123")
+	check(not bad_bind["ok"] and bad_bind["text"] == want_msg["WEAK_PASSWORD"] and a2.state == "guest", "закороткий пароль: пояснення, лишається гостем")
+	var noted := []
+	a2.notice.connect(func(t, _g): noted.append(t))
+	var bound: Dictionary = await a2.bind_email("kozak@sich.ua", "пароль1")
+	check(bound["ok"] and a2.state == "email" and a2.uid() == guest_uid and a2.email() == "kozak@sich.ua" and fake.users[guest_uid]["email"] == "kozak@sich.ua"
+		and fake.docs.has("players/" + guest_uid) and noted == [CloudS.BOUND] and not _cloud_read(a2.session_path)["guest"], "прив'язка пошти: той самий uid і документ, банер")
+	# Новий пристрій без героїв: входить і одразу бере рід
+	var b: Node = dev.call("b")
+	await go.call(b)
+	var b_guest: String = b.uid()
+	check(b.state == "guest" and b_guest != guest_uid and fake.users.has(b_guest), "пристрій Б спершу гість")
+	var bnotes := []
+	b.notice.connect(func(t, _g): bnotes.append(t))
+	var wrong: Dictionary = await b.sign_in("kozak@sich.ua", "не той")
+	check(not wrong["ok"] and wrong["text"] == want_msg["INVALID_LOGIN_CREDENTIALS"] and b.uid() == b_guest and fake.users.has(b_guest), "хибний пароль: пояснення, гість лишився")
+	var sin: Dictionary = await b.sign_in("kozak@sich.ua", "пароль1")
+	check(sin["ok"] and b.state == "email" and b.uid() == guest_uid and not fake.users.has(b_guest) and not fake.docs.has("players/" + b_guest), "вхід із гостя: гостя стерто (обліковий запис і документ)")
+	check(digest_of.call(b) == digest_of.call(a2) and not b.conflict and bnotes == [CloudS.DOWNLOADED % 1] and ST.has_backup(b.get_meta("cfg")["paths"], b.account_path),
+		"порожній пристрій узяв рід із хмари одразу: той самий, банер, запас для «Повернути рід…»")
+	n0 = fake.calls.size()
+	await b.upload_now()
+	check(fake.calls.size() == n0, "щойно завантажене назад не шле")
+	# Пристрій із тим самим родом: лише бере мітку
+	var c3: Node = dev.call("c")
+	for f in ["_1.save", "_acc.save"]:
+		DirAccess.copy_absolute("user://cloud_test/a" + f, "user://cloud_test/c" + f)
+	await go.call(c3)
+	await c3.sign_in("kozak@sich.ua", "пароль1")
+	var docn: Dictionary = fake.docs["players/" + guest_uid]
+	check(not c3.conflict and c3.session["seen_update"] == docn["updateTime"] and c3.session["synced_rev"] == int(docn["fields"]["rev"]["integerValue"]) and not ST.has_backup(c3.get_meta("cfg")["paths"], c3.account_path),
+		"той самий рід на пристрої: лише мітка, нічого не замінено")
+	c3.queue_free()
+	# Розбіжність, знайдена під час запису (стара мітка)
+	hero.call(b, 1, 30, 3000)
+	clock[0] += 100.0
+	await b.upload_now()
+	hero.call(a2, 1, 19, 1900)
+	var found := [0]
+	a2.conflict_found.connect(func(): found[0] += 1)
+	n0 = fake.calls.size()
+	var rc: Dictionary = await a2.upload_now()
+	check(not rc["ok"] and a2.conflict and found[0] == 1 and a2.conflict_doc["rev"] == int(fake.docs["players/" + guest_uid]["fields"]["rev"]["integerValue"])
+		and fake.calls[n0]["method"] == "PATCH" and fake.calls[n0 + 1]["method"] == "GET" and cloud_digest.call(guest_uid) == digest_of.call(b), "стара мітка: запис відхилено, свіжий документ прочитано — розбіжність, у хмарі лишилось Б")
+	n0 = fake.calls.size()
+	clock[0] += 1000.0
+	a2.poll()
+	await _frames(1)
+	await a2.on_focus_out()
+	check(fake.calls.size() == n0 and a2.last_skip == "conflict", "поки розбіжність, у хмару нічого не йде: %s %s" % [a2.last_skip, str(fake.calls.slice(n0).map(func(x): return x["url"]))])
+	# «Взяти рід із хмари»
+	var took: Dictionary = await a2.take_cloud()
+	check(took["ok"] and not a2.conflict and digest_of.call(a2) == digest_of.call(b) and a2.session["synced_rev"] == int(fake.docs["players/" + guest_uid]["fields"]["rev"]["integerValue"]),
+		"«Взяти рід із хмари»: на пристрої рід із хмари, мітку взято")
+	check(ST.restore(a2.get_meta("cfg")["paths"], a2.account_path) and int(SaveSystem.load_data(a2.get_meta("cfg")["paths"][1])["player"]["level"]) == 19, "свій рід можна повернути з запасу")
+	# Розбіжність при перевірці на запуску; «Лишити рід із цього пристрою»
+	a2.queue_free()
+	hero.call(b, 1, 31, 3100)
+	clock[0] += 100.0
+	await b.upload_now()
+	var a3: Node = dev.call("a")
+	await go.call(a3)
+	check(a3.state == "email" and a3.conflict and a3.conflict_doc["lines"] == ST.summary(b.local()["profile"]), "перевірка на запуску знайшла розбіжність, у ній рядки героїв із хмари")
+	var rev_before: int = a3.conflict_doc["rev"]
+	var kept: Dictionary = await a3.keep_local()
+	var dk: Dictionary = fake.docs["players/" + guest_uid]
+	check(kept["ok"] and not a3.conflict and cloud_digest.call(guest_uid) == digest_of.call(a3) and int(dk["fields"]["rev"]["integerValue"]) == rev_before + 1, "«Лишити рід із цього пристрою»: свій рід поверх хмарного, rev + 1")
+	# Б тепер бачить розбіжність; «Вирішити пізніше» — лишається
+	clock[0] += 100.0
+	b._last_check = -1.0e12
+	await b.on_main_menu()
+	check(b.conflict, "інший пристрій при вході в меню бачить розбіжність")
+	await b.on_main_menu()
+	check(b.conflict, "«Вирішити пізніше»: розбіжність лишається")
+	var bt: Dictionary = await b.take_cloud()
+	check(bt["ok"] and digest_of.call(b) == digest_of.call(a3), "Б узяв рід із хмари")
+	# Свій запис, відповідь на який загубилась
+	hero.call(a3, 2, 5, 50)
+	fake.drop_next = 1
+	var lost: Dictionary = await a3.upload_now()
+	check(not lost["ok"] and a3.state == "offline" and cloud_digest.call(guest_uid) == digest_of.call(a3), "запис дійшов, відповідь ні: пристрій вважає, що зв'язку нема")
+	clock[0] += 60.0
+	await a3.retry()
+	check(a3.state == "email" and not a3.conflict and a3.session["seen_update"] == fake.docs["players/" + guest_uid]["updateTime"], "свій загублений запис упізнано: без розбіжності")
+	hero.call(a3, 2, 6, 60)
+	fake.drop_next = 1
+	await a3.upload_now()
+	clock[0] += 60.0
+	a3._retry_at = clock[0]
+	a3.state = "email"  # зв'язок повернувся, а перевірки ще не було: пристрій пише зі старою міткою
+	var again: Dictionary = await a3.upload_now()
+	check(again["ok"] and not a3.conflict and a3.session["seen_update"] == fake.docs["players/" + guest_uid]["updateTime"], "і під час запису зі старою міткою: свій документ, без розбіжності")
+	# Новіша версія в хмарі
+	var dn: Dictionary = fake.docs["players/" + guest_uid]
+	dn["fields"]["ver"] = {"integerValue": str(SaveSystem.SAVE_VERSION + 1)}
+	hero.call(a3, 2, 7, 70)
+	b._last_check = -1.0e12
+	for p in b.get_meta("cfg")["paths"].values():
+		SaveSystem.delete(p)
+	await b.on_main_menu()
+	n0 = fake.calls.size()
+	a3._last_check = -1.0e12
+	await a3.on_main_menu()
+	var nr: Dictionary = await a3.upload_now()
+	check(b.newer_cloud and b.local()["empty"] and a3.newer_cloud and not nr["ok"] and nr["text"] == CloudS.NEWER and fake.calls.slice(n0).all(func(x): return x["method"] == "GET"),
+		"рід у хмарі з новішої версії гри: ні завантаження на порожній пристрій, ні запису поверх")
+	dn["fields"]["ver"] = {"integerValue": str(SaveSystem.SAVE_VERSION)}
+	dn["fields"]["save"] = {"stringValue": "KZ2:" + str(dn["fields"]["save"]["stringValue"]).substr(4)}
+	a3._last_check = -1.0e12
+	await a3.on_main_menu()
+	check(a3.newer_cloud, "код у хмарі новішого формату — те саме")
+	dn["fields"]["save"] = {"stringValue": "KZ1:" + str(dn["fields"]["save"]["stringValue"]).substr(4)}
+	a3._last_check = -1.0e12
+	await a3.on_main_menu()
+	check(not a3.newer_cloud and cloud_digest.call(guest_uid) == digest_of.call(a3), "звичайний документ знову: усе йде як завжди")
+	# Без зв'язку на запуску, потім повтори з довшим чеканням
+	var off_fake = Fake.new()
+	off_fake.offline = true
+	var o: Node = dev.call("o", off_fake)
+	hero.call(o, 1, 4, 10)
+	await go.call(o)
+	var w1: float = o._retry_at - clock[0]
+	check(o.state == "offline" and is_equal_approx(w1, CloudS.RETRY_DELAYS[0]) and off_fake.users.is_empty(), "без зв'язку: стан offline, повтор через %d с" % int(w1))
+	n0 = off_fake.calls.size()
+	clock[0] += w1 - 1.0
+	o.poll()
+	check(off_fake.calls.size() == n0, "до строку не пробує")
+	clock[0] += 1.0
+	o.poll()
+	await _frames(1)
+	var w2: float = o._retry_at - clock[0]
+	check(off_fake.calls.size() == n0 + 1 and o.state == "offline" and w2 > w1, "пробує вчасно, далі чекає довше (%d с)" % int(w2))
+	off_fake.offline = false
+	clock[0] += w2
+	o.poll()
+	await _frames(1)
+	check(o.state == "guest" and off_fake.docs.has("players/" + o.uid()), "зв'язок з'явився: гість, рід у хмарі")
+	# Кінець сеансу: гостеві новий гість, пошті — «увійди знову»
+	o.queue_free()
+	var o_uid: String = o.uid()
+	off_fake.refresh_tokens.clear()
+	var o2: Node = dev.call("o", off_fake)
+	await go.call(o2)
+	check(o2.state == "guest" and o2.uid() != o_uid and o2.uid() != "", "сеанс гостя скінчився: тихо новий гість")
+	await o2.bind_email("ataman@sich.ua", "пароль2")
+	o2.queue_free()
+	off_fake.users[o2.uid()]["disabled"] = true
+	var o3: Node = dev.call("o", off_fake)
+	await go.call(o3)
+	check(o3.state == "signed_out" and o3.last_error == CloudS.SESSION_ENDED and _cloud_read(o3.session_path)["signed_out"] and o3.email() == "ataman@sich.ua", "сеанс пошти скінчився: вийшов, «Сеанс завершився. Увійди знову.»")
+	# Вихід: рід лишається, у хмару не йде, після перезапуску теж
+	var t_uid: String = a3.uid()
+	a3.sign_out()
+	n0 = fake.calls.size()
+	hero.call(a3, 1, 20, 2000)
+	await a3.upload_now()
+	await a3.on_focus_out()
+	check(a3.state == "signed_out" and fake.calls.size() == n0 and not a3.local()["empty"] and _cloud_read(a3.session_path)["signed_out"] and a3.uid() == "", "вихід: рід на пристрої, у хмару нічого")
+	a3.queue_free()
+	var a4: Node = dev.call("a")
+	await go.call(a4)
+	check(a4.state == "signed_out" and fake.calls.size() == n0, "після перезапуску лишається вийденим, гостя не створює")
+	# «Забув пароль»
+	n0 = fake.calls.size()
+	var fbad: Dictionary = await a4.send_reset("ні")
+	var fr: Dictionary = await a4.send_reset("kozak@sich.ua")
+	var fr2: Dictionary = await a4.send_reset("nobody@sich.ua")
+	check(not fbad["ok"] and fr["ok"] and fr["text"] == CloudS.RESET_SENT and fr2["text"] == CloudS.RESET_SENT and fake.calls.size() == n0 + 2 and fake.resets == ["kozak@sich.ua", "nobody@sich.ua"]
+		and "X-Firebase-Locale: uk" in fake.calls[n0]["headers"], "«Забув пароль»: завжди та сама відповідь, лист українською, хибна пошта не шлеться")
+	# Видалення облікового запису з поштою, давній вхід — спершу пароль
+	await a4.sign_in("kozak@sich.ua", "пароль1")
+	check(a4.state == "email" and a4.uid() == t_uid, "увійшов знову")
+	a4.extra_doc_paths = func(u: String) -> Array: return ["extra/" + u]
+	fake.users[t_uid]["too_old"] = true
+	var d1: Dictionary = await a4.delete_account()
+	var rows_del: Array = CloudS.board_ids().filter(func(bd): return fake.calls.any(func(x): return x["method"] == "DELETE" and x["path"].ends_with("boards/%s/scores/%s" % [bd, t_uid])))
+	check(not d1["ok"] and d1["need_password"] and not fake.docs.has("players/" + t_uid) and fake.users.has(t_uid) and fake.sent("extra/" + t_uid).size() == 1
+		and rows_del.size() == CloudS.board_ids().size() and CloudS.board_ids().size() == 17,
+		"давній вхід: стерто рід, рядки всіх %d таблиць і документи з місця розширення; обліковий запис просить пароль" % rows_del.size())
+	var d2: Dictionary = await a4.delete_account("пароль1")
+	check(d2["ok"] and not fake.users.has(t_uid) and a4.state == "signed_out" and _cloud_read(a4.session_path)["signed_out"] and not a4.local()["empty"], "з паролем видалено; рід на пристрої лишився")
+	n0 = fake.calls.size()
+	await b.retry()
+	var bs: Dictionary = await b.sign_in("kozak@sich.ua", "пароль1")
+	check(b.state == "signed_out" and not bs["ok"] and bs["text"] == want_msg["INVALID_LOGIN_CREDENTIALS"], "інший пристрій: сеанс скінчився, увійти не можна")
+	# Видалення гостя (і з давнім входом)
+	await a4.play_as_guest()
+	var g_uid: String = a4.uid()
+	check(a4.state == "guest" and fake.docs.has("players/" + g_uid), "«Грати як гість»: новий гість, рід у хмарі")
+	fake.users[g_uid]["too_old"] = true
+	var dg: Dictionary = await a4.delete_account()
+	check(dg["ok"] and not dg["need_password"] and not fake.docs.has("players/" + g_uid) and a4.state == "signed_out", "гість із давнім входом: документ стерто, і цього досить")
+	await a4.play_as_guest()
+	var g2: String = a4.uid()
+	var dg2: Dictionary = await a4.delete_account()
+	check(dg2["ok"] and not fake.users.has(g2) and not fake.docs.has("players/" + g2), "звичайне видалення гостя: документ і обліковий запис")
+	for c in [a4, b, o3]:
+		c.queue_free()
+	# Пристрій із родом від версії без хмари: стає гостем, у хмарі нічого — кладе свій рід як є; пошта той самий документ
+	var u_fake = Fake.new()
+	var up1: Node = dev.call("upd", u_fake)
+	hero.call(up1, 1, 22, 2200)
+	hero.call(up1, 2, 8, 80)
+	var before := {"digest": CloudS.digest(ST.collect(up1.get_meta("cfg")["paths"], up1.get_meta("cfg")["account_path"]))}
+	var before_files := [FileAccess.get_file_as_bytes(up1.get_meta("cfg")["paths"][1]), FileAccess.get_file_as_bytes(up1.get_meta("cfg")["paths"][2])]
+	await go.call(up1)
+	var ud: Dictionary = u_fake.docs.get("players/" + up1.uid(), {})
+	var ud_digest: String = CloudS.digest(ST.unpack(ud["fields"]["save"]["stringValue"])["profile"]) if not ud.is_empty() else ""
+	check(up1.state == "guest" and u_fake.calls.map(func(x): return x["method"]) == ["POST", "GET", "PATCH"] and ud_digest == before["digest"]
+		and FileAccess.get_file_as_bytes(up1.get_meta("cfg")["paths"][1]) == before_files[0] and FileAccess.get_file_as_bytes(up1.get_meta("cfg")["paths"][2]) == before_files[1]
+		and not ST.has_backup(up1.get_meta("cfg")["paths"], up1.account_path), "оновлення з версії без хмари: гість, у хмарі порожньо (404), свій рід вивантажено, файли не чіпано")
+	var u_uid: String = up1.uid()
+	var u_stamp: String = ud["updateTime"]
+	await up1.bind_email("rid@sich.ua", "пароль3")
+	check(up1.uid() == u_uid and u_fake.docs.size() == 1 and u_fake.docs["players/" + u_uid]["updateTime"] == u_stamp, "прив'язка пошти: той самий uid і той самий документ")
+	up1.queue_free()
+	# ---- Родовід: той самий рід переходить між телефонами сам, замінений — лише з вибором ----
+	var l_fake = Fake.new()
+	var l1: Node = dev.call("l1", l_fake)
+	hero.call(l1, 1, 10, 100)
+	await go.call(l1)
+	await l1.bind_email("line@sich.ua", "пароль4")
+	var l_uid: String = l1.uid()
+	var line_of := func() -> String: return str(FA.decode_value(l_fake.docs["players/" + l_uid]["fields"]["summary"]).get("line", ""))
+	var line0: String = line_of.call()
+	check(line0 != "" and line0.length() <= 32 and l1.session["synced_line"] == line0, "у документі родовід (%d знаків), пристрій пам'ятає його" % line0.length())
+	var l2: Node = dev.call("l2", l_fake)
+	await go.call(l2)
+	await l2.sign_in("line@sich.ua", "пароль4")
+	check(l2.session["synced_line"] == line0 and l2.local()["digest"] == l1.local()["digest"], "завантажений рід бере родовід документа")
+	hero.call(l2, 1, 11, 110)
+	clock[0] += 100.0
+	await l2.upload_now()
+	check(line_of.call() == line0, "звичайний запис родоводу не міняє")
+	var lnotes := []
+	l1.notice.connect(func(t, _g): lnotes.append(t))
+	l1._last_check = -1.0e12
+	await l1.on_main_menu()
+	check(not l1.conflict and l1.local()["digest"] == l2.local()["digest"] and lnotes == [CloudS.DOWNLOADED % 1] and ST.has_backup(l1.get_meta("cfg")["paths"], l1.account_path)
+		and l1.session["synced_line"] == line0, "той самий родовід, пристрій без змін: рід з іншого телефона взято одразу, без питань (запас лишився)")
+	hero.call(l2, 1, 12, 120)
+	clock[0] += 100.0
+	await l2.upload_now()
+	hero.call(l1, 1, 13, 130)
+	l1._last_check = -1.0e12
+	await l1.on_main_menu()
+	check(l1.conflict and l1.local()["digest"] != l2.local()["digest"], "той самий родовід, але пристрій мінявся: вибір")
+	var kept_l: Dictionary = await l1.keep_local()
+	var line1: String = line_of.call()
+	check(kept_l["ok"] and line1 != "" and line1 != line0 and l1.session["synced_line"] == line1, "«Лишити рід із цього пристрою» починає новий родовід")
+	l2._last_check = -1.0e12
+	await l2.on_main_menu()
+	check(l2.conflict and l2.local()["digest"] != l1.local()["digest"], "інший пристрій без змін, але родовід інший: вибір, а не тихе завантаження")
+	await l2.take_cloud()
+	check(not l2.conflict and l2.session["synced_line"] == line1, "«Взяти рід із хмари» бере родовід документа")
+	hero.call(l2, 1, 14, 140)
+	clock[0] += 100.0
+	await l2.upload_now()
+	check(line_of.call() == line1 and l2.session["synced_line"] == line1, "наступний звичайний запис родовід зберігає")
+	l1._last_check = -1.0e12
+	await l1.on_main_menu()
+	check(not l1.conflict and l1.local()["digest"] == l2.local()["digest"], "і перший пристрій, не мінявшись, знову бере рід сам")
+	# порожній родовід у документі (старий запис) — лише вибір
+	hero.call(l2, 1, 15, 150)
+	clock[0] += 100.0
+	await l2.upload_now()
+	var dl: Dictionary = l_fake.docs["players/" + l_uid]
+	var summ_l: Dictionary = FA.decode_value(dl["fields"]["summary"])
+	summ_l.erase("line")
+	dl["fields"]["summary"] = FA.encode_value(summ_l)
+	dl["fields"]["rev"] = {"integerValue": str(int(dl["fields"]["rev"]["integerValue"]) + 1)}
+	dl["updateTime"] = "2026-11-14T11:00:00.000001Z"
+	l1._last_check = -1.0e12
+	await l1.on_main_menu()
+	check(l1.conflict, "документ без родоводу: вибір, а не тихе завантаження")
+	# Документ чекає, доки заміна дозволена (can_apply)
+	var allow := [false]
+	var l3: Node = dev.call("l3", l_fake)
+	var cfg3: Dictionary = l3.get_meta("cfg")
+	cfg3["can_apply"] = func() -> bool: return allow[0]
+	await go.call(l3)
+	await l3.sign_in("line@sich.ua", "пароль4")
+	check(l3.local()["empty"] and not l3._pending.is_empty(), "заміна зараз не дозволена: документ чекає")
+	allow[0] = true
+	await l3.on_main_menu()
+	check(not l3.local()["empty"] and l3._pending.is_empty(), "щойно дозволено (головне меню) — рід застосовано")
+	for c in [l1, l2, l3]:
+		c.queue_free()
+	# ---- Запуск: один запит документа, а не два ----
+	var s_fake = Fake.new()
+	var s1: Node = dev.call("s1", s_fake)
+	hero.call(s1, 1, 5, 50)
+	await go.call(s1)
+	s1.queue_free()
+	s_fake.deferred = true
+	s_fake.calls.clear()
+	var s2: Node = dev.call("s1", s_fake)
+	s2.start(s2.get_meta("cfg"))  # як у грі: не чекаючи
+	s2.on_main_menu()  # головне меню з'являється одразу після запуску
+	for i in 30:
+		await process_frame
+	var gets: Array = s_fake.calls.filter(func(x): return x["method"] == "GET" and x["path"].ends_with("players/" + s2.uid()))
+	check(s2.state == "guest" and gets.size() == 1 and not s2.is_busy(), "звичайний запуск і головне меню: документ прочитано один раз (%d)" % gets.size())
+	s2.queue_free()
+	await _frames(2)
+	await _cloud_game_checks()
+	await _cloud_board_checks()
+
+
+func _cloud_read(path: String):
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var v = f.get_var()
+	f.close()
+	return v
+
+
+## Спільні таблиці рекордів і скарги на ім'я: FirebaseApi, RecordService.board_rows, Cloud на підставному Firebase, екрани.
+func _cloud_board_checks() -> void:
+	suite("Спільні таблиці рекордів")
+	var FA = load("res://scripts/core/firebase_api.gd")
+	var CloudS = load("res://scripts/core/cloud.gd")
+	var Fake = load("res://tests/cloud_fake.gd")
+	var RS = load("res://scripts/game/record_service.gd")
+	var UiB = load("res://scripts/ui/ui_board.gd")
+	# ---- Дані: у кожного рекорду таблиця, назва годиться для правил ----
+	var boards: Array = CloudS.board_ids()
+	check(boards.size() == 17 and boards == GameDB.ids("records") and boards.all(func(b): return GameDB.board_id_ok(b)), "усі 17 рекордів мають спільну таблицю, назви за правилами ^[a-z_]{1,24}$")
+	check(GameDB.board_id_ok("zz_test") and not GameDB.board_id_ok("Tower") and not GameDB.board_id_ok("a-b") and not GameDB.board_id_ok("x".repeat(25)), "перевірка назви таблиці")
+	var CS: Dictionary = GameDB.settings("cloud")
+	check(CloudS.BOARD_TOP == CS["board_top"] and CloudS.BOARD_CACHE == CS["board_cache"] and CloudS.BOARD_GAP == CS["board_gap"] and CloudS.BOARD_TOP == 20, "числа таблиць — у записі cloud")
+	# ---- Запити й відповіді ----
+	var base := "https://firestore.googleapis.com/v1/projects/kozatska-zvytiaha/databases/(default)/documents/"
+	var q1: Dictionary = FA.board_top("tower", 20, "T")
+	check(q1["method"] == "POST" and q1["url"] == base + "boards/tower:runQuery" and "Authorization: Bearer T" in q1["headers"]
+		and JSON.parse_string(q1["body"]) == {"structuredQuery": {"from": [{"collectionId": "scores"}], "orderBy": [{"field": {"fieldPath": "value"}, "direction": "DESCENDING"}], "limit": 20.0}}, "найкращі: runQuery за value від більшого з межею")
+	var q2: Dictionary = FA.board_count_above("tower", 41, "T")
+	var body2: Dictionary = JSON.parse_string(q2["body"])
+	check(q2["url"] == base + "boards/tower:runAggregationQuery" and body2["structuredAggregationQuery"]["structuredQuery"]["where"]["fieldFilter"] == {"field": {"fieldPath": "value"}, "op": "GREATER_THAN", "value": {"integerValue": "41"}}
+		and body2["structuredAggregationQuery"]["aggregations"] == [{"alias": "n", "count": {}}], "місце: лічильник рядків, вищих за своє значення")
+	var q3: Dictionary = FA.report("ME", "HIM", "Сірко", "tower", 1794664320, "T")
+	check(q3["url"] == base + "reports" and JSON.parse_string(q3["body"])["fields"] == FA.encode_fields({"from": "ME", "target": "HIM", "name": "Сірко", "board": "tower", "time": FA.ts(1794664320)}), "скарга: from, target, name, board, time")
+	check(FA.board_row_path("tower", "U") == "boards/tower/scores/U" and FA.parse_board(JSON.stringify([{"readTime": "x"}])) == [] and FA.parse_board("не json") == []
+		and FA.parse_count(JSON.stringify([{"result": {"aggregateFields": {"n": {"integerValue": "2"}}}}])) == 2 and FA.parse_count("[]") == -1, "порожня таблиця й лічильник читаються")
+	# ---- Рядок із рекорду ----
+	var r1: Dictionary = RS.board_row({"value": 2000000000, "nick": "Сірко", "cls": "kharakternyk", "level": 300})
+	var r2: Dictionary = RS.board_row({"value": -5, "nick": "", "cls": "cossack", "level": 0})
+	var r3: Dictionary = RS.board_row({"value": 7, "slot": 2}, {"nick": "Байда", "cls": "strilets", "level": 44})
+	var r4: Dictionary = RS.board_row({"value": 7, "nick": "Д" .repeat(30), "cls": "cossack", "level": 5})
+	check(r1 == {"value": 1000000000, "name": "Сірко", "cls": "kharakternyk", "level": 200} and r2 == {"value": 0, "name": "Безіменний", "cls": "cossack", "level": 1}
+		and r3 == {"value": 7, "name": "Байда", "cls": "strilets", "level": 44} and r4["name"].length() == 24, "рядок: межі правил, «Безіменний», давній запис бере героя слота")
+	var asked := []
+	var rows0: Dictionary = RS.board_rows({"tower": {"value": 12, "slot": 3, "who": "Козак 20 рівня"}, "level": {"value": 30, "slot": 1, "nick": "Сірко", "cls": "cossack", "level": 30}},
+		func(sl: int) -> Dictionary:
+			asked.append(sl)
+			return {"nick": "Мамай", "cls": "cossack", "level": 20})
+	check(rows0.size() == 17 and rows0["tower"] == {"value": 12, "name": "Мамай", "cls": "cossack", "level": 20} and rows0["level"]["name"] == "Сірко" and asked == [3] and rows0["depth"]["value"] == 0,
+		"рядки всіх таблиць: давній рекорд — герой свого слота, новий — свої поля, без рекорду — 0")
+	var old_recs := {}
+	for i in boards.size():
+		old_recs[boards[i]] = {"value": 5 + i, "slot": 1 + i % 2, "who": "Козак 20 рівня"}  # давні: без імені, два слоти
+	var reads := {}
+	var rows_old: Dictionary = RS.board_rows(old_recs, func(sl: int) -> Dictionary:
+		reads[sl] = int(reads.get(sl, 0)) + 1
+		return {"nick": "Слот%d" % sl, "cls": "cossack", "level": 10 + sl})
+	check(reads == {1: 1, 2: 1} and rows_old[boards[0]]["name"] == "Слот1" and rows_old[boards[1]]["name"] == "Слот2" and rows_old[boards[1]]["level"] == 12,
+		"17 давніх рекордів двох слотів: кожен слот прочитано раз за виклик (%s)" % str(reads))
+	var Pl = load("res://scripts/entities/player.gd").new()
+	Pl._ready()
+	Pl.nick = "Гнат"
+	Pl.level = 9
+	var Wd = WorldState.new()
+	Wd.tower["best"] = 6
+	RS.sync(Wd, Pl, 2)
+	check(Wd.records["tower"]["nick"] == "Гнат" and Wd.records["tower"]["cls"] == str(Pl.job) and Wd.records["tower"]["level"] == 9 and Wd.records["tower"]["slot"] == 2, "новий рекорд пам'ятає ім'я, клас і рівень героя")
+	Pl.free()
+	# ---- Надсилання ----
+	var fake = Fake.new()
+	var clock := [1794800000.0]
+	var rows_box := [{}]
+	for b in boards:
+		rows_box[0][b] = {"value": 0, "name": "Сірко", "cls": "cossack", "level": 30}
+	rows_box[0]["tower"] = {"value": 12, "name": "Сірко", "cls": "cossack", "level": 30}
+	rows_box[0]["level"] = {"value": 30, "name": "Сірко", "cls": "cossack", "level": 30}
+	var mk := func(name: String) -> Node:
+		var c: Node = CloudS.new()
+		root.add_child(c)
+		c.set_process(false)
+		return c
+	var c1: Node = mk.call("b1")
+	await c1.start({"transport": fake, "session_path": "user://cloud_test/b1.session", "paths": {1: "user://cloud_test/b1_1.save"}, "account_path": "user://cloud_test/b1_acc.save",
+		"clock": func(): return clock[0], "rows_fn": func(): return rows_box[0].duplicate(true)})
+	var u1: String = c1.uid()
+	var n0: int = fake.calls.size()
+	await c1.sync_boards()
+	var sent1: Array = fake.calls.slice(n0)
+	check(sent1.size() == 2 and sent1.all(func(x): return x["method"] == "PATCH") and fake.docs.has("boards/tower/scores/" + u1) and fake.docs.has("boards/level/scores/" + u1)
+		and Fake.row_ok("tower", fake.docs["boards/tower/scores/" + u1]["fields"]), "гість теж у таблицях: лише рядки зі значенням, кожен окремим записом, будова за правилами")
+	n0 = fake.calls.size()
+	await c1.sync_boards()
+	check(fake.calls.size() == n0, "не частіше за %d с" % int(CloudS.BOARD_GAP))
+	clock[0] += CloudS.BOARD_GAP
+	await c1.sync_boards()
+	check(fake.calls.size() == n0, "нічого не змінилось — нічого не шле")
+	rows_box[0]["tower"]["value"] = 14
+	clock[0] += CloudS.BOARD_GAP
+	await c1.sync_boards()
+	check(fake.calls.size() == n0 + 1 and fake.calls[n0]["path"].ends_with("boards/tower/scores/" + u1), "змінилось значення — лише ця таблиця")
+	rows_box[0]["level"]["name"] = "Сірко Великий"
+	clock[0] += CloudS.BOARD_GAP
+	await c1.sync_boards()
+	check(fake.calls.size() == n0 + 2 and fake.calls[n0 + 1]["path"].ends_with("boards/level/scores/" + u1), "змінилось ім'я — теж шле")
+	# рід замінено: значення менші, а рекорду може й не бути
+	rows_box[0]["tower"]["value"] = 3
+	rows_box[0]["level"]["value"] = 0
+	clock[0] += CloudS.BOARD_GAP
+	await c1.sync_boards()
+	check(int(FA.decode_value(fake.docs["boards/tower/scores/" + u1]["fields"]["value"])) == 3 and not fake.docs.has("boards/level/scores/" + u1) and not c1.session["boards_sent"].has("level"),
+		"рядки йдуть за родом і вниз: менше значення записано, рядок без рекорду стерто")
+	# інший гравець
+	var c2: Node = mk.call("b2")
+	var rows2 := {}
+	for b in boards:
+		rows2[b] = {"value": 0, "name": "Байда", "cls": "strilets", "level": 50}
+	rows2["tower"] = {"value": 40, "name": "Байда", "cls": "strilets", "level": 50}
+	await c2.start({"transport": fake, "session_path": "user://cloud_test/b2.session", "paths": {1: "user://cloud_test/b2_1.save"}, "account_path": "user://cloud_test/b2_acc.save",
+		"clock": func(): return clock[0], "rows_fn": func(): return rows2})
+	await c2.sync_boards()
+	var u2: String = c2.uid()
+	# третій, щоб місце було не перше
+	var c3: Node = mk.call("b3")
+	var rows3 := {"tower": {"value": 1, "name": "Мамай", "cls": "cossack", "level": 2}}
+	await c3.start({"transport": fake, "session_path": "user://cloud_test/b3.session", "paths": {1: "user://cloud_test/b3_1.save"}, "account_path": "user://cloud_test/b3_acc.save",
+		"clock": func(): return clock[0], "rows_fn": func(): return rows3})
+	await c3.sync_boards()
+	# ---- Читання ----
+	n0 = fake.calls.size()
+	var top: Dictionary = await c1.board("tower")
+	var order: Array = top["rows"].map(func(r): return r["value"])
+	check(top["ok"] and order == [40, 3, 1] and top["rows"][1]["mine"] and not top["rows"][0]["mine"] and top["rows"][0]["name"] == "Байда" and top["rows"][0]["cls"] == "strilets"
+		and top["rows"][0]["uid"] == u2 and top["place"] == 2 and top["mine"] == 3 and fake.calls.size() == n0 + 2, "таблиця: від більшого, свій рядок позначено, місце 2 (лічильник)")
+	n0 = fake.calls.size()
+	var again: Dictionary = await c1.board("tower")
+	check(again == top and fake.calls.size() == n0, "у межах %d с — з пам'яті, без запитів" % int(CloudS.BOARD_CACHE))
+	clock[0] += CloudS.BOARD_CACHE
+	await c1.board("tower")
+	check(fake.calls.size() == n0 + 2, "пізніше — читає знову")
+	var empty_b: Dictionary = await c1.board("dice_streak")
+	check(empty_b["ok"] and empty_b["rows"].is_empty() and empty_b["place"] == 0 and empty_b["mine"] == 0, "порожня таблиця й своє нульове значення: місця нема, лічильник не питаємо")
+	# ---- Скарга ----
+	n0 = fake.calls.size()
+	var rep1: Dictionary = await c1.report_name("tower", u2, "Байда")
+	var rep2: Dictionary = await c1.report_name("tower", u2, "Байда")
+	check(rep1["ok"] and rep1["text"] == "Скаргу надіслано." and fake.reports == [{"from": u1, "target": u2, "name": "Байда", "board": "tower"}] and fake.calls.size() == n0 + 1
+		and c1.reported("tower", u2) and rep2["text"] == "Скаргу вже надіслано.", "скарга: from — свій uid, target — чий рядок; удруге за запуск не шле")
+	# ---- Не ввійшов — нічого ----
+	c3.sign_out()
+	n0 = fake.calls.size()
+	rows3["tower"]["value"] = 99
+	clock[0] += CloudS.BOARD_GAP
+	await c3.sync_boards()
+	var off: Dictionary = await c3.board("tower")
+	check(fake.calls.size() == n0 and not off["ok"], "вийшов: ні запису, ні читання")
+	# ---- Вхід із гостя стирає рядки гостя; новий обліковий запис — пам'ять рядків порожня ----
+	await c2.bind_email("bayda@sich.ua", "пароль5")
+	await c1.sign_in("bayda@sich.ua", "пароль5")
+	check(not fake.docs.has("boards/tower/scores/" + u1) and c1.session["boards_sent"].is_empty() and c1.uid() == u2, "вхід із гостя: рядки гостя стерто, пам'ять рядків нового облікового запису порожня")
+	# ---- Видалення облікового запису стирає всі рядки ----
+	n0 = fake.calls.size()
+	await c2.delete_account()
+	var dels: Array = fake.calls.slice(n0).filter(func(x): return x["method"] == "DELETE" and "/scores/" + u2 in x["path"])
+	check(dels.size() == boards.size() and not fake.docs.has("boards/tower/scores/" + u2), "видалення облікового запису: запит на стирання рядка кожної таблиці (%d)" % dels.size())
+	for c in [c1, c2, c3]:
+		c.queue_free()
+	# ---- Гра: рядки з пам'яті чи з файлу, кнопки «Таблиця», екрани ----
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game("Сірко")
+	game.hud.close_dialogue()
+	game.player.level = 21
+	game.world.records["tower"] = {"value": 9, "slot": 1, "who": "", "day": "", "nick": "Сірко", "cls": str(game.player.job), "level": 21}
+	RS.sync(game.world, game.player, 1)
+	var gr: Dictionary = game.cloud_board_rows()
+	check(gr["tower"] == {"value": 9, "name": "Сірко", "cls": str(game.player.job), "level": 21}, "гра: рядок таблиці з рекорду героя в пам'яті")
+	game.save_game()
+	game._forget_hero()
+	check(game.cloud_board_rows()["tower"]["value"] == 9, "героя в пам'яті нема (головне меню, після заміни роду) — рекорди з файлу")
+	game._continue_game()
+	await _frames(2)
+	var glory: Control = load("res://scripts/ui/ui_character.gd")._glory(game)
+	var tb: Array = glory.find_children("*", "Button", true, false).filter(func(b): return b.text == "Таблиця")
+	check(tb.size() == 17, "вкладка «Слава»: кнопка «Таблиця» біля кожного рекорду (%d)" % tb.size())
+	glory.free()
+	game.open_character()
+	await _frames(2)
+	# без хмари
+	await game.UiBoard.open(game, "tower")
+	await _frames(2)
+	check(_screen_text(game).contains(UiB.OFFLINE) and _screen_btn(game, "Назад") != null and _screen_btn(game, "Оновити") == null, "без хмари: «Таблиця доступна, коли є зв'язок із хмарою.» і «Назад»")
+	game.go_back(true)
+	await _frames(2)
+	check(game.board_key == "" and game.state == game.State.CHARACTER, "системне «Назад» — знову екран героя")
+	# з хмарою
+	var cg: Node = CloudS.new()
+	root.add_child(cg)
+	cg.set_process(false)
+	game.use_cloud(cg)
+	var cfg: Dictionary = game.cloud_config()
+	cfg["transport"] = fake
+	cfg["session_path"] = "user://cloud_test/bg.session"
+	cfg["clock"] = func(): return clock[0]
+	if FileAccess.file_exists(cfg["session_path"]):
+		DirAccess.remove_absolute(cfg["session_path"])
+	await cg.start(cfg)
+	await cg.sync_boards()
+	await game.UiBoard.open(game, "dice_streak")
+	await _frames(2)
+	check(_screen_text(game).contains(UiB.EMPTY) and _screen_text(game).contains("Тебе ще немає в таблиці."), "порожня таблиця: «Тут ще нікого немає. Будь першим.»")
+	game.close_board()
+	await game.UiBoard.open(game, "tower")
+	await _frames(2)
+	var txt := _screen_text(game)
+	check(txt.contains("Башта Кощія") and txt.contains("1. Мамай") == false and txt.contains("Сірко, ") and txt.contains("(ти)") and txt.contains("Твоє місце: ")
+		and txt.contains("Байда") == false, "таблиця з гравцями, свій рядок позначено, своє місце: %s" % txt.substr(0, 200))
+	var reps: Array = _screen_buttons(game).filter(func(b): return b.text == "Скарга")
+	check(reps.size() >= 1, "біля чужих рядків — «Скарга»")
+	reps[0].pressed.emit()
+	await _frames(2)
+	check(_screen_text(game).contains("Поскаржитись на ім'я «") and _screen_text(game).contains("Ми перевіримо його.") and _screen_btn(game, "Ні") != null, "скарга спершу питає")
+	_screen_btn(game, "Ні").pressed.emit()
+	await _frames(2)
+	var nrep: int = fake.reports.size()
+	check(_screen_btn(game, "Скарга") != null and fake.reports.size() == nrep, "«Ні» — назад до таблиці, нічого не надіслано")
+	_screen_btn(game, "Скарга").pressed.emit()
+	await _frames(2)
+	_screen_btn(game, "Так, поскаржитись").pressed.emit()
+	await _frames(3)
+	check(_screen_text(game).contains("Скаргу надіслано.") and fake.reports.size() == nrep + 1 and _screen_btn(game, "Надіслано") != null and _screen_btn(game, "Надіслано").disabled, "скаргу надіслано; удруге на той самий рядок не можна")
+	var n1: int = fake.calls.size()
+	_screen_btn(game, "Оновити").pressed.emit()
+	await _frames(2)
+	check(fake.calls.size() == n1, "«Оновити» поважає кеш: без запитів")
+	game.go_back(true)
+	await _frames(2)
+	check(game.board_key == "" and game.state == game.State.CHARACTER, "«Назад» із таблиці — екран героя")
+	game.use_cloud(root.get_node("Cloud"))
+	cg.queue_free()
+	game.queue_free()
+	await _frames(2)
+	# ---- Довідник ----
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var be: Dictionary = WS.board_entry()
+	var found := false
+	for e in WS.sections()[WS.index_of("basics")]["entries"]:
+		found = found or e["title"] == be["title"]
+	check(found and be["text"].contains("ім'я героя, клас, рівень") and be["text"].contains("Скарга") and be["text"].contains("Видалити обліковий запис") and be["text"].contains("%d" % CloudS.BOARD_TOP)
+		and not be["text"].contains("—"), "довідник: запис про спільні таблиці (що видно іншим, місце, скарга, як вийти)")
+
+
+func _screen_buttons(game) -> Array:
+	return game.hud.find_children("*", "Button", true, false).filter(func(b): return not b.is_queued_for_deletion() and b.is_visible_in_tree())
+
+
+func _screen_btn(game, text: String) -> Button:
+	for b in _screen_buttons(game):
+		if b.text == text:
+			return b
+	return null
+
+
+func _screen_text(game) -> String:
+	var out := []
+	for l in game.hud.find_children("*", "Label", true, false):
+		if not l.is_queued_for_deletion() and l.is_visible_in_tree():
+			out.append(l.text)
+	return "\n".join(out)
+
+
+## Видимі (не ті, що вже йдуть геть) кнопки й написи меню.
+func _cloud_buttons(game) -> Array:
+	return game.hud.overlay_box.find_children("*", "Button", true, false).filter(func(b): return not b.is_queued_for_deletion())
+
+
+func _cloud_btn(game, text: String) -> Button:
+	for b in _cloud_buttons(game):
+		if b.text == text:
+			return b
+	return null
+
+
+func _cloud_text(game) -> String:
+	var out := []
+	for l in game.hud.overlay_box.find_children("*", "Label", true, false):
+		if not l.is_queued_for_deletion():
+			out.append(l.text)
+	return "\n".join(out)
+
+
+## Гра й екрани облікового запису: гра з тестів хмари не запускає; меню, форма, вибір роду, вихід, видалення.
+func _cloud_game_checks() -> void:
+	suite("Хмарне збереження: у грі")
+	var CloudS = load("res://scripts/core/cloud.gd")
+	var Fake = load("res://tests/cloud_fake.gd")
+	var UiA = load("res://scripts/ui/ui_account.gd")
+	var ST = load("res://scripts/core/save_transfer.gd")
+	var auto: Node = root.get_node("Cloud")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	for path in [TEST_SAVE, TEST_ACCOUNT]:
+		for suffix in [ST.BACKUP, ST.NONE]:
+			if FileAccess.file_exists(path + suffix):
+				DirAccess.remove_absolute(path + suffix)
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	game.allow_quit = false
+	root.add_child(game)
+	await _frames(2)
+	check(auto != null and auto.process_mode == Node.PROCESS_MODE_ALWAYS and game.cloud == auto and current_scene == null, "автозавантаження Cloud є, гра бачить його; сцену додано до кореня руками")
+	var labels: Array = _cloud_buttons(game).map(func(b): return b.text)
+	var wi: int = labels.find("Довідник")
+	var wb: Button = _cloud_btn(game, "Довідник")
+	var ab: Button = _cloud_btn(game, "Обліковий запис")
+	check(wi >= 0 and labels.find("Обліковий запис") == wi + 1 and ab != null and wb.get_parent() == ab.get_parent() and wb.get_parent() is HBoxContainer,
+		"у головному меню «Довідник» і «Обліковий запис» — одним рядком: %s" % str(labels))
+	game.new_game()
+	game.hud.close_dialogue()
+	game.player.level = 7
+	game.save_game()
+	game._notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	game._show_main_menu()
+	await _frames(2)
+	_cloud_btn(game, "Обліковий запис").pressed.emit()
+	await _frames(2)
+	check(_cloud_text(game).contains(UiA.OFFLINE_TEXT) and _cloud_btn(game, "Спробувати ще раз") != null, "незапущена хмара: «Немає зв'язку з хмарою…» і «Спробувати ще раз»")
+	_cloud_btn(game, "Спробувати ще раз").pressed.emit()
+	await _frames(2)
+	check(not auto.started and auto.transport == null and auto.requests == 0 and auto.state == "off", "гра, створена як у тестах, хмари не запускає й нічого не шле (і після меню, згортання й «Спробувати ще раз»)")
+	game.go_back(true)
+	await _frames(2)
+	check(game.hud._overlay_key == "main", "«Назад» з екрана облікового запису — головне меню")
+	check(game.cloud_can_apply(), "замінити рід можна: відкрите головне меню")
+	game._show_heroes_menu()
+	await _frames(2)
+	var on_heroes: bool = game.cloud_can_apply()
+	game._ask_new_hero(game._show_main_menu)
+	await _frames(2)
+	var on_name: bool = game.cloud_can_apply()
+	game._name_cancel()
+	await _frames(2)
+	game.open_wiki(game._show_main_menu)
+	await _frames(2)
+	var on_wiki: bool = game.cloud_can_apply()
+	game.close_wiki()
+	await _frames(2)
+	UiA.open(game)
+	await _frames(1)
+	var on_acc: bool = game.cloud_can_apply()
+	game._show_main_menu()
+	await _frames(2)
+	check(not on_heroes and not on_name and not on_wiki and on_acc and game.cloud_can_apply(), "не можна в «Персонажах», на екрані імені, у довіднику; можна в головному меню й на екрані облікового запису")
+	# Свій екземпляр Cloud на підставному Firebase
+	var fake = Fake.new()
+	var clock := [1794700000.0]
+	var c: Node = CloudS.new()
+	root.add_child(c)
+	c.set_process(false)
+	game.use_cloud(c)
+	var cfg: Dictionary = game.cloud_config()
+	cfg["transport"] = fake
+	cfg["session_path"] = "user://cloud_test/game.session"
+	cfg["clock"] = func(): return clock[0]
+	if FileAccess.file_exists(cfg["session_path"]):
+		DirAccess.remove_absolute(cfg["session_path"])
+	await c.start(cfg)
+	check(c.state == "guest" and fake.docs.has("players/" + c.uid()) and CloudS.digest(ST.unpack(fake.docs["players/" + c.uid()]["fields"]["save"]["stringValue"])["profile"]) == c.local()["digest"],
+		"гра з героєм: гість, рід гри в хмарі")
+	UiA.open(game)
+	await _frames(2)
+	labels = _cloud_buttons(game).map(func(b): return b.text)
+	check(_cloud_text(game).contains(UiA.GUEST_TEXT) and labels == ["Захистити рід: прив'язати пошту", "Увійти в наявний обліковий запис", "Зберегти в хмару зараз", "Видалити обліковий запис", "Назад"],
+		"екран гостя: пояснення й кнопки %s" % str(labels))
+	_cloud_btn(game, "Захистити рід: прив'язати пошту").pressed.emit()
+	await _frames(2)
+	var mail: LineEdit = game.account_ui["mail"]
+	var pw: LineEdit = game.account_ui["pass"]
+	check(game.hud._overlay_key == "account_form" and mail.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS and pw.secret and mail.max_length == 0 and pw.max_length == 0
+		and _cloud_btn(game, "Показати") != null and _cloud_btn(game, "Готово") != null and _cloud_btn(game, "Назад") != null, "форма: поле пошти з поштовою клавіатурою, прихований пароль, «Показати», без max_length")
+	_cloud_btn(game, "Показати").button_pressed = true
+	check(not pw.secret and _cloud_btn(game, "Сховати") != null, "«Показати» відкриває пароль")
+	var n0: int = fake.calls.size()
+	UiA.fill(game, "не пошта", "пароль1")
+	check(game.account_ui["hint"].text == "Пошта написана з помилкою." and fake.calls.size() == n0, "хибна пошта: причина під полем, запиту нема")
+	UiA.fill(game, "otaman@sich.ua", "12")
+	check(game.account_ui["hint"].text == "Пароль закороткий: треба щонайменше 6 знаків." and fake.calls.size() == n0, "короткий пароль: причина, запиту нема")
+	game.go_back(true)
+	await _frames(2)
+	check(game.hud._overlay_key == "account", "системне «Назад» із форми — екран облікового запису")
+	_cloud_btn(game, "Захистити рід: прив'язати пошту").pressed.emit()
+	await _frames(2)
+	var uid0: String = c.uid()
+	UiA.fill(game, "otaman@sich.ua", "пароль1")
+	await _frames(2)
+	check(c.state == "email" and c.uid() == uid0 and _cloud_text(game).contains("Обліковий запис: otaman@sich.ua") and _cloud_text(game).contains("Останнє збереження в хмару: ")
+		and _cloud_text(game).contains(CloudS.BOUND), "пошту прив'язано: той самий uid; на екрані «Пошту прив'язано…», пошта й час збереження")
+	labels = _cloud_buttons(game).map(func(b): return b.text)
+	check(labels == ["Зберегти в хмару зараз", "Вийти з облікового запису", "Видалити обліковий запис", "Назад"], "кнопки облікового запису з поштою: %s" % str(labels))
+	# Другий пристрій бере рід і міняє його; гра знаходить розбіжність у головному меню
+	var d2: Node = CloudS.new()
+	root.add_child(d2)
+	d2.set_process(false)
+	await d2.start({"transport": fake, "session_path": "user://cloud_test/d2.session", "paths": {1: "user://cloud_test/d2_1.save"}, "account_path": "user://cloud_test/d2_acc.save", "clock": func(): return clock[0]})
+	for f in ["user://cloud_test/d2_1.save", "user://cloud_test/d2_acc.save"]:
+		SaveSystem.delete(f)
+	await d2.sign_in("otaman@sich.ua", "пароль1")
+	SaveSystem.save(_transfer_hero(33, 3300), "user://cloud_test/d2_1.save")
+	clock[0] += 100.0
+	await d2.upload_now()
+	var cloud_doc: Dictionary = fake.docs["players/" + uid0].duplicate(true)
+	game._continue_game()
+	await _frames(2)
+	game.player.level = 8
+	game.save_game()
+	game._show_main_menu()
+	await _frames(2)
+	check(game.hud._overlay_key == "account_conflict" and _cloud_text(game).contains("Який рід лишити?") and _cloud_text(game).contains("Слот 1: ") and _cloud_text(game).contains("рівень 33")
+		and _cloud_text(game).contains("рівень 8") and _cloud_text(game).contains(UiA.CONFLICT_NOTE), "розбіжність у головному меню: одразу вибір, обидва роди й пояснення")
+	# «Лишити рід із цього пристрою»: друге підтвердження; «Ні» нічого не міняє
+	_cloud_btn(game, "Лишити рід із цього пристрою").pressed.emit()
+	await _frames(2)
+	check(game.hud._overlay_key == "account_keep" and _cloud_text(game).contains("Замінити рід у хмарі?") and _cloud_text(game).contains("Ці герої в хмарі зникнуть назавжди:")
+		and _cloud_text(game).contains("рівень 33") and _cloud_btn(game, "Так, замінити рід у хмарі") != null and _cloud_btn(game, "Ні") != null and fake.docs["players/" + uid0] == cloud_doc,
+		"«Лишити рід із цього пристрою» спершу питає ще раз і показує, хто в хмарі зникне; до згоди нічого не послано")
+	_cloud_btn(game, "Ні").pressed.emit()
+	await _frames(2)
+	check(game.hud._overlay_key == "account_conflict" and c.conflict and fake.docs["players/" + uid0] == cloud_doc, "«Ні»: назад до вибору, хмара та сама")
+	_cloud_btn(game, "Лишити рід із цього пристрою").pressed.emit()
+	await _frames(2)
+	game.go_back(true)
+	await _frames(2)
+	check(game.hud._overlay_key == "account_conflict" and fake.docs["players/" + uid0] == cloud_doc, "системне «Назад» із підтвердження — теж до вибору")
+	_cloud_btn(game, "Лишити рід із цього пристрою").pressed.emit()
+	await _frames(2)
+	_cloud_btn(game, "Так, замінити рід у хмарі").pressed.emit()
+	await _frames(2)
+	check(not c.conflict and CloudS.digest(ST.unpack(fake.docs["players/" + uid0]["fields"]["save"]["stringValue"])["profile"]) == c.local()["digest"] and game.hud._overlay_key == "account",
+		"«Так, замінити рід у хмарі»: у хмарі рід цього пристрою")
+	# Розбіжність посеред гри: один банер, гра йде далі; у меню — «Взяти рід із хмари»
+	SaveSystem.save(_transfer_hero(34, 3400), "user://cloud_test/d2_1.save")
+	clock[0] += 100.0
+	d2._last_check = -1.0e12
+	await d2.on_main_menu()
+	await d2.take_cloud()
+	SaveSystem.save(_transfer_hero(35, 3500), "user://cloud_test/d2_1.save")
+	await d2.upload_now()
+	game._continue_game()
+	await _frames(2)
+	game.player.level = 9
+	game.save_game()
+	var banners0: int = game.hud.banner_count
+	clock[0] += 1000.0
+	await c.upload_now()
+	await _frames(1)
+	check(c.conflict and game.state != game.State.MENU and game.player != null and game.hud.banner_count == banners0 + 1 and game.hud.last_banner["text"] == CloudS.CONFLICT_PLAY,
+		"розбіжність посеред гри: один банер «…Вийди в головне меню, щоб вибрати.», гра йде далі")
+	await c.on_focus_out()
+	check(game.hud.banner_count == banners0 + 1, "банер не повторюється")
+	game._show_main_menu()
+	await _frames(2)
+	check(game.hud._overlay_key == "account_conflict", "у головному меню — вибір")
+	_cloud_btn(game, "Вирішити пізніше").pressed.emit()
+	await _frames(2)
+	check(game.hud._overlay_key == "main" and c.conflict, "«Вирішити пізніше»: головне меню, розбіжність лишилась")
+	game._show_main_menu()
+	await _frames(2)
+	check(game.hud._overlay_key == "main", "та сама розбіжність меню більше не перекриває")
+	_cloud_btn(game, "Обліковий запис").pressed.emit()
+	await _frames(2)
+	check(game.hud._overlay_key == "account_conflict", "екран облікового запису показує вибір")
+	_cloud_btn(game, "Взяти рід із хмари").pressed.emit()
+	await _frames(3)
+	check(not c.conflict and game.player == null and int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 35 and game.hud._overlay_key == "main"
+		and game.hud.last_banner["text"] == CloudS.DOWNLOADED % 1, "«Взяти рід із хмари»: рід із хмари на пристрої, героя в пам'яті нема, банер")
+	game._show_transfer_menu()
+	await _frames(2)
+	_cloud_btn(game, "Повернути рід, який був до перенесення").pressed.emit()
+	await _frames(2)
+	check(int(SaveSystem.load_data(TEST_SAVE)["player"]["level"]) == 9, "«Повернути рід, який був до перенесення» вертає рід, що був до завантаження з хмари")
+	# Вихід і повернення гостем
+	UiA.open(game)
+	await _frames(2)
+	_cloud_btn(game, "Вийти з облікового запису").pressed.emit()
+	await _frames(2)
+	check(_cloud_text(game).contains("Вийти з облікового запису?") and c.state == "email", "вихід питає підтвердження")
+	_cloud_btn(game, "Так, вийти").pressed.emit()
+	await _frames(2)
+	labels = _cloud_buttons(game).map(func(b): return b.text)
+	check(c.state == "signed_out" and _cloud_text(game).contains(UiA.SIGNED_OUT_TEXT) and labels == ["Увійти", "Грати як гість", "Назад"], "вийшов: пояснення, «Увійти» й «Грати як гість»")
+	_cloud_btn(game, "Увійти").pressed.emit()
+	await _frames(2)
+	check(_cloud_btn(game, "Забув пароль") != null and game.account_ui["mail"].text == "otaman@sich.ua", "форма входу: «Забув пароль», пошта вже вписана")
+	_cloud_btn(game, "Забув пароль").pressed.emit()
+	await _frames(1)
+	check(game.account_ui["hint"].text == CloudS.RESET_SENT and fake.resets == ["otaman@sich.ua"], "«Забув пароль»: лист і та сама відповідь")
+	game.go_back(true)
+	await _frames(2)
+	_cloud_btn(game, "Грати як гість").pressed.emit()
+	await _frames(3)
+	check(c.state == "guest" and c.uid() != uid0 and _cloud_text(game).contains(UiA.GUEST_TEXT), "«Грати як гість»: новий гість")
+	# Видалення: два кроки, рід на пристрої лишається
+	var g_uid: String = c.uid()
+	_cloud_btn(game, "Видалити обліковий запис").pressed.emit()
+	await _frames(2)
+	check(_cloud_text(game).contains("Видалити обліковий запис?") and _cloud_text(game).contains("Рід на цьому пристрої лишиться"), "видалення: перше питання каже, що рід на пристрої лишиться")
+	_cloud_btn(game, "Так, видалити").pressed.emit()
+	await _frames(2)
+	check(_cloud_text(game).contains("Точно видалити?") and fake.users.has(g_uid), "друге питання; ще нічого не стерто")
+	_cloud_btn(game, "Видалити назавжди").pressed.emit()
+	await _frames(3)
+	check(c.state == "signed_out" and not fake.users.has(g_uid) and not fake.docs.has("players/" + g_uid) and SaveSystem.exists(TEST_SAVE), "видалено: обліковий запис і документ, рід на пристрої лишився")
+	# Повернути все, як було
+	game.use_cloud(auto)
+	c.queue_free()
+	d2.queue_free()
+	game.queue_free()
+	await _frames(2)
+	# ---- Довідник ----
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var basics: Array = WS.sections()[WS.index_of("basics")]["entries"]
+	var entry: Dictionary = {}
+	for e in basics:
+		if e["title"] == "Обліковий запис і хмара":
+			entry = e
+	var mins := roundi(CloudS.UPLOAD_GAP / 60.0)
+	check(not entry.is_empty() and entry["text"].contains("що %d хв" % mins) and entry["text"].contains("гостем") and entry["text"].contains("Видалити обліковий запис") and entry["text"].contains("Без мережі"),
+		"довідник: запис про обліковий запис і хмару (гість, пошта, як часто, два пристрої, без мережі, видалення)")
+	var gap0: float = CloudS.UPLOAD_GAP
+	CloudS.UPLOAD_GAP = 600.0
+	var e10: Dictionary = WS.cloud_entry()
+	CloudS.UPLOAD_GAP = gap0
+	check(e10["text"].contains("що 10 хв") and not e10["text"].contains("—"), "хвилини в довіднику — з налаштувань (upload_gap)")
+	var presets := FileAccess.get_file_as_string("res://export_presets.cfg").split("\n[preset.1]")
+	check(presets.size() == 2 and presets[0].count("permissions/internet=true") == 1 and presets[1].count("permissions/internet=true") == 1, "обидва пресети Android просять дозвіл INTERNET самі")
+	var autoloads := FileAccess.get_file_as_string("res://project.godot")
+	check('Cloud="*res://scripts/core/cloud.gd"' in autoloads, "Cloud зареєстровано автозавантаженням")
 
 
 ## Справжня реклама AdMob без Android: «Ads» з підставним плагіном (FakeAds) проходить усі шляхи показу.

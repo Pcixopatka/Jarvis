@@ -20,6 +20,7 @@ Audio="*res://scripts/core/audio.gd"
 Ads="*res://scripts/core/ads.gd"
 Billing="*res://scripts/core/billing.gd"
 TouchScroll="*res://scripts/core/touch_scroll.gd"
+Cloud="*res://scripts/core/cloud.gd"
 
 [display]
 

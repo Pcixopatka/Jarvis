@@ -18,7 +18,22 @@
 | Безпечна зона екрана: на Android 15 і новіших гра малюється й під вирізом камери, тож інтерфейс відсувається сам | `scripts/ui/hud.gd` |
 | Перевірка всього переліченого | `python3 tools/store_check.py` |
 
-Пробний AAB зібрано й перевірено в цій же збірці: цільовий рівень 36, найменший 24 (Android 7.0), підпис проходить перевірку, бібліотеки arm64 вирівняні під 16 КБ. Відколи в грі реклама, у маніфесті є дозволи, які додає бібліотека Google: `INTERNET`, `ACCESS_NETWORK_STATE`, `com.google.android.gms.permission.AD_ID` і дозволи Privacy Sandbox (`ACCESS_ADSERVICES_*`); сама гра мережею не користується.
+Пробний AAB зібрано й перевірено в цій же збірці: цільовий рівень 36, найменший 24 (Android 7.0), підпис проходить перевірку, бібліотеки arm64 вирівняні під 16 КБ. Відколи в грі реклама, у маніфесті є дозволи, які додає бібліотека Google: `INTERNET`, `ACCESS_NETWORK_STATE`, `com.google.android.gms.permission.AD_ID` і дозволи Privacy Sandbox (`ACCESS_ADSERVICES_*`); мережею користується й сама гра: обліковий запис і хмарне збереження на Firebase.
+
+## Обліковий запис і хмарне збереження (Firebase)
+
+Гра заводить обліковий запис і зберігає рід у Cloud Firestore проєкту Firebase `kozatska-zvytiaha` (докладно — `docs/online.md`). Правила доступу до бази, опубліковані в консолі Firebase, лежать у `firestore.rules`: кожен гравець читає, пише й стирає лише свій документ `players/{uid}` суворої будови; там же правила майбутніх таблиць рекордів (`boards/…`) і скарг (`reports/…`). Змінюєш правила в консолі — зміни й цей файл, і навпаки. Для анкет це означає: пошта (необов'язково), ідентифікатор користувача й ігровий прогрес, шифрування під час передавання, видалення облікового запису в грі (див. `forms.md` і `privacy-policy.md`). У маніфесті є дозвіл `INTERNET`: обидва пресети просять його самі.
+
+## Публічні сторінки (GitHub Pages)
+
+Play Console вимагає дві вебадреси: політику приватності й сторінку видалення облікового запису. Обидві лежать у сховищі й збираються з текстів цієї теки:
+
+- `python3 tools/store_pages.py` робить `docs/index.html`, `docs/privacy/index.html`, `docs/delete-account/index.html` і `docs/.nojekyll`.
+- Джерела: `privacy-policy.md` і `delete-account.md`. Після зміни тексту онови дату «Чинна від» і запусти скрипт. `tools/store_check.py` стежить, щоб сторінки не відставали від текстів.
+- У сховищі на GitHub: Settings → Pages → Source «Deploy from a branch», гілка `claude/mobile-rpg-game-0qp6lm`, тека `/docs`.
+- Адреси після ввімкнення: `https://pcixopatka.github.io/Jarvis/privacy/` і `https://pcixopatka.github.io/Jarvis/delete-account/`.
+
+Скарги на імена (`reports` у Firestore) обіцяно зберігати до 12 місяців: раз на рік старі треба стирати в консолі Firebase.
 
 ## Чинні вимоги магазину
 

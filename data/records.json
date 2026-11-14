@@ -4,118 +4,135 @@
 		"name": "Найвищий рівень",
 		"fmt": "%d рівень",
 		"step": 0,
-		"glory": 0
+		"glory": 0,
+		"board": true
 	},
 	"glory": {
 		"num": 9832,
 		"name": "Слава",
 		"fmt": "%d слави",
 		"step": 0,
-		"glory": 0
+		"glory": 0,
+		"board": true
 	},
 	"tower": {
 		"num": 9833,
 		"name": "Башта Кощія",
 		"fmt": "%d поверх",
 		"step": 5,
-		"glory": 5
+		"glory": 5,
+		"board": true
 	},
 	"depth": {
 		"num": 9834,
 		"name": "Глибини зарази",
 		"fmt": "глибина %d",
 		"step": 5,
-		"glory": 5
+		"glory": 5,
+		"board": true
 	},
 	"vigil": {
 		"num": 9835,
 		"name": "Козацька варта",
 		"fmt": "time",
 		"step": 0,
-		"glory": 0
+		"glory": 0,
+		"board": true
 	},
 	"vigil_kills": {
 		"num": 9836,
 		"name": "Вбито за одну варту",
 		"fmt": "%d ворогів",
 		"step": 0,
-		"glory": 0
+		"glory": 0,
+		"board": true
 	},
 	"duel_titles": {
 		"num": 9837,
 		"name": "Чемпіон майдану",
 		"fmt": "титулів: %d",
 		"step": 1,
-		"glory": 3
+		"glory": 3,
+		"board": true
 	},
 	"duel_streak": {
 		"num": 9838,
 		"name": "Серія у вільному герці",
 		"fmt": "%d поспіль",
 		"step": 5,
-		"glory": 4
+		"glory": 4,
+		"board": true
 	},
 	"muster_titles": {
 		"num": 9839,
 		"name": "Гетьманський огляд",
 		"fmt": "перемог: %d",
 		"step": 1,
-		"glory": 3
+		"glory": 3,
+		"board": true
 	},
 	"ring_titles": {
 		"num": 9840,
 		"name": "Коло Кожум'яки",
 		"fmt": "пройдено: %d",
 		"step": 5,
-		"glory": 5
+		"glory": 5,
+		"board": true
 	},
 	"peril_bosses": {
 		"num": 9841,
 		"name": "Надважкі боси",
 		"fmt": "здолано: %d",
 		"step": 1,
-		"glory": 10
+		"glory": 10,
+		"board": true
 	},
 	"valor": {
 		"num": 9842,
 		"name": "Звитяги",
 		"fmt": "звитяга %d",
 		"step": 10,
-		"glory": 5
+		"glory": 5,
+		"board": true
 	},
 	"boss_day": {
 		"num": 9843,
 		"name": "Боси дня",
 		"fmt": "переможено: %d",
 		"step": 10,
-		"glory": 4
+		"glory": 4,
+		"board": true
 	},
 	"boss_week": {
 		"num": 9844,
 		"name": "Боси тижня",
 		"fmt": "переможено: %d",
 		"step": 4,
-		"glory": 6
+		"glory": 6,
+		"board": true
 	},
 	"bounties": {
 		"num": 9845,
 		"name": "Голови з дошки розшуку",
 		"fmt": "%d голів",
 		"step": 10,
-		"glory": 5
+		"glory": 5,
+		"board": true
 	},
 	"trade_profit": {
 		"num": 9846,
 		"name": "Зиск із торгівлі",
 		"fmt": "%d грн",
 		"step": 0,
-		"glory": 0
+		"glory": 0,
+		"board": true
 	},
 	"dice_streak": {
 		"num": 9847,
 		"name": "Серія перемог у кості",
 		"fmt": "%d поспіль",
 		"step": 0,
-		"glory": 0
+		"glory": 0,
+		"board": true
 	}
 }

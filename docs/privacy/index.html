@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Політика приватності • Козацька Звитяга</title>
+<style>
+body{margin:0;background:#14110d;color:#eadfc8;font:17px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:24px 18px 64px}
+h1{font-size:28px;line-height:1.25;color:#f2c14e;margin:8px 0 20px}
+h2{font-size:23px;color:#f2c14e;margin:40px 0 12px;padding-top:16px;border-top:1px solid #4a3d24}
+h3{font-size:19px;color:#f2c14e;margin:26px 0 8px}
+a{color:#f2c14e}
+li{margin:6px 0}
+code{background:#241e15;padding:1px 5px;border-radius:4px}
+nav{margin:0 0 8px;font-size:15px}
+nav a{margin-right:16px}
+</style>
+</head>
+<body>
+<main>
+<nav><a href="../">Козацька Звитяга</a><a href="../privacy/">Політика приватності</a><a href="../delete-account/">Видалення облікового запису</a></nav>
+<h1>Політика приватності гри «Козацька Звитяга»</h1>
+<p><strong>Чинна від:</strong> 14 листопада 2026 року</p>
+<p><strong>Розробник:</strong> Sich Lab Studio</p>
+<p><strong>Контакт:</strong> sichlab.studio@ukr.net</p>
+<h2>Українською</h2>
+<p>Гра «Козацька Звитяга» зберігає ігровий прогрес у хмарі, щоб його можна було відновити, показує рекорди в спільних таблицях гравців і для цього заводить обліковий запис гравця (див. «Обліковий запис і хмарне збереження»). Інших персональних даних гра не збирає й не продає. Окремо є реклама, описана нижче: її показує Google, і дані для неї збирає Google.</p>
+<ul>
+<li>Збереження гри лежать у приватній пам'яті застосунку на вашому пристрої, а їхня копія — у хмарі (див. нижче).</li>
+<li>Перенесення збереження кодом відбувається лише з вашої ініціативи: гра копіює код збереження в буфер обміну, а далі ви самі вирішуєте, куди його вставити.</li>
+<li>У грі немає власної аналітики й покупок.</li>
+</ul>
+<h3>Обліковий запис і хмарне збереження</h3>
+<ul>
+<li><strong>Що зберігається.</strong> Під час першого запуску з мережею гра без жодних питань створює анонімний обліковий запис (гість) у службі <strong>Google Firebase</strong> (Firebase Authentication). Він має лише випадковий ідентифікатор, без імені й пошти. За бажанням ви прив'язуєте до нього адресу електронної пошти й пароль (пароль зберігає Firebase у захищеному вигляді, гра його не зберігає). У базі <strong>Cloud Firestore</strong> (Google Firebase) лежить ваш ігровий прогрес: збереження героїв і спільного майна роду, номер версії гри, час збереження, короткий перелік героїв (ім'я героя, клас, рівень) і випадковий ідентифікатор пристрою, який створює сама гра. Як і будь-який сервер, Firebase бачить IP-адресу, з якої надходить запит.</li>
+<li><strong>Навіщо.</strong> Щоб прогрес не загубився й переходив на новий пристрій, коли ви входите в той самий обліковий запис. Пошта потрібна лише для входу й листа зі зміною пароля, інші гравці її не бачать, розсилок немає.</li>
+<li><strong>Де.</strong> На серверах Google Firebase (Google LLC). Дані передаються зашифрованим з'єднанням (HTTPS). Доступ до запису має лише сам обліковий запис. Умови Google: <a href="https://firebase.google.com/support/privacy">Конфіденційність і безпека в Firebase</a>, <a href="https://policies.google.com/privacy">Політика конфіденційності Google</a>.</li>
+<li><strong>Як видалити.</strong> У грі: головне меню → «Обліковий запис» → «Видалити обліковий запис». Гра стирає ваш запис у хмарі, ваші рядки в усіх таблицях рекордів і сам обліковий запис; збереження на пристрої лишаються. Або напишіть на sichlab.studio@ukr.net з адресою пошти облікового запису, і ми видалимо його вручну. Якщо видалити гру, не видаливши обліковий запис, хмарна копія лишається, доки ви не попросите її стерти.</li>
+<li><strong>Що бачать інші гравці.</strong> У грі є спільні таблиці рекордів. У них іншим гравцям видно ім'я героя, його клас і рівень та рекорд роду (наприклад, поверх Башти), а також випадковий ідентифікатор облікового запису, до якого належить рядок. Пошти, IP-адреси чи інших даних іншим гравцям не видно. Ім'я героя ви вигадуєте самі; не пишіть у нього справжнє ім'я чи контакти.</li>
+<li><strong>Скарги.</strong> Біля чужого рядка таблиці є кнопка «Скарга». Скарга містить ідентифікатор того, хто скаржиться, ідентифікатор і ім'я героя, на якого скаржаться, назву таблиці й час. Скарги бачить лише розробник: він перевіряє ім'я й може його прибрати. Гравці скарг не бачать.</li>
+<li><strong>Без мережі</strong> гра працює як завжди, лише без хмарного збереження. Вийти з облікового запису можна будь-коли («Обліковий запис» → «Вийти з облікового запису»): тоді гра більше нічого не надсилає в хмару.</li>
+</ul>
+<h3>Реклама</h3>
+<p>У грі є добровільна реклама «за нагороду»: оголошення з'являється лише тоді, коли ви самі натискаєте кнопку подарунка (наприклад, «×2 досвіду»). Рекламу показує мережа <strong>Google AdMob</strong> (компанія Google). Для цього гра має бібліотеку Google Mobile Ads, і вона користується інтернетом.</p>
+<ul>
+<li><strong>Що збирає Google.</strong> Щоб показати й порахувати рекламу, бібліотека Google може збирати й надсилати Google рекламний ідентифікатор Android та інші ідентифікатори пристрою, IP-адресу (з неї видно приблизне місцезнаходження), відомості про пристрій і застосунок, про перегляди й натискання реклами, журнали збоїв і діагностику. Google використовує ці дані для показу реклами, її вимірювання, аналітики й захисту від шахрайства. Як саме, описано тут: <a href="https://policies.google.com/technologies/partner-sites">Як Google використовує дані з сайтів і застосунків партнерів</a>, <a href="https://policies.google.com/privacy">Політика конфіденційності Google</a>, <a href="https://developers.google.com/admob/android/privacy/play-data-disclosure">Дані, які збирає Google Mobile Ads SDK</a>.</li>
+<li><strong>Згода.</strong> У Європейському економічному просторі, Великій Британії, Швейцарії та інших місцях, де цього вимагає закон, перед першою рекламою гра показує форму згоди Google (Google User Messaging Platform). Там ви обираєте, чи погоджуєтесь на персоналізовану рекламу й обробку даних. Змінити рішення можна будь-коли: кнопка «Згода на рекламу» в головному меню, у паузі й на привалі (вона є там, де діє такий закон).</li>
+<li><strong>Як скинути чи вимкнути рекламний ідентифікатор.</strong> На Android: «Налаштування» → «Конфіденційність» (або «Google») → «Реклама». Там можна скинути рекламний ідентифікатор або видалити його (на старших версіях — «Вимкнути персоналізацію реклами»). Після цього реклама може лишатися, але не персоналізована.</li>
+<li><strong>Як обійтися без реклами.</strong> Реклама в грі завжди добровільна: якщо не натискати кнопок подарунків, оголошень не буде, і гра нічого не надсилає Google для реклами (крім запуску самої бібліотеки й завантаження оголошення наперед). Гетьманський універсал прибирає рекламу зовсім.</li>
+</ul>
+<p>Гра не призначена спеціально для дітей і свідомо не збирає даних про дітей.</p>
+<p>Якщо в майбутніх версіях з'являться покупки чи інші онлайн-можливості, цю політику буде оновлено до виходу такої версії.</p>
+<h2>English</h2>
+<p>Cossack Valor (“Козацька Звитяга”) keeps your game progress in the cloud so that it can be restored, shows records in shared player tables, and for that it creates a player account (see “Account and cloud save”). The game collects no other personal data and sells none. Separately there is advertising, described below: it is served by Google, and Google collects the data needed for it.</p>
+<ul>
+<li>Save files are kept in the app's private storage on your device, with a copy in the cloud (see below).</li>
+<li>Moving a save with a code happens only when you ask for it: the game copies a save code to the clipboard and you decide where to paste it.</li>
+<li>There are no analytics of our own and no purchases in the game.</li>
+</ul>
+<h3>Account and cloud save</h3>
+<ul>
+<li><strong>What is stored.</strong> On the first start with a network connection the game silently creates an anonymous account (guest) in <strong>Google Firebase</strong> (Firebase Authentication). It has only a random identifier, no name and no e-mail. If you choose, you link an e-mail address and a password to it (the password is kept by Firebase in protected form; the game does not store it). <strong>Cloud Firestore</strong> (Google Firebase) holds your game progress: the saves of your heroes and of the clan's shared property, the game version, the save time, a short list of heroes (hero name, class, level) and a random device identifier created by the game. Like any server, Firebase sees the IP address a request comes from.</li>
+<li><strong>Why.</strong> So that progress is not lost and moves to a new device when you sign in to the same account. The e-mail is used only for signing in and for the password reset message; other players cannot see it, and there is no mailing.</li>
+<li><strong>Where.</strong> On Google Firebase servers (Google LLC). Data is sent over an encrypted connection (HTTPS). Only the account itself can access its record. Google's terms: <a href="https://firebase.google.com/support/privacy">Privacy and Security in Firebase</a>, <a href="https://policies.google.com/privacy">Google Privacy Policy</a>.</li>
+<li><strong>How to delete.</strong> In the game: main menu → “Обліковий запис” (Account) → “Видалити обліковий запис” (Delete account). The game erases your cloud record, your rows in all record tables and the account itself; saves on the device stay. Or write to sichlab.studio@ukr.net with the account's e-mail address and we will delete it manually. Uninstalling the game without deleting the account leaves the cloud copy until you ask for it to be erased.</li>
+<li><strong>What other players see.</strong> The game has shared record tables (leaderboards). Other players see the hero's name, class and level and the clan's record (for example, the Tower floor), plus the random identifier of the account the row belongs to. Other players do not see your e-mail, IP address or any other data. You choose the hero's name yourself; do not put your real name or contact details in it.</li>
+<li><strong>Reports.</strong> Next to another player's row there is a “Скарга” (Report) button. A report contains the reporter's identifier, the identifier and hero name being reported, the table name and the time. Only the developer sees reports: they check the name and may remove it. Players cannot see reports.</li>
+<li><strong>Without a network</strong> the game works as usual, only without the cloud save. You can sign out at any time (“Обліковий запис” → “Вийти з облікового запису”): after that the game sends nothing to the cloud.</li>
+</ul>
+<h3>Advertising</h3>
+<p>The game contains optional rewarded ads: an ad appears only when you tap a reward button yourself (for example “×2 experience”). Ads are served by <strong>Google AdMob</strong> (Google). For this the game includes the Google Mobile Ads SDK, which uses the internet.</p>
+<ul>
+<li><strong>What Google collects.</strong> To serve and measure ads, Google's SDK may collect and send to Google the Android advertising ID and other device identifiers, your IP address (which shows your approximate location), device and app information, ad views and taps, crash logs and diagnostics. Google uses this data for serving and measuring ads, analytics and fraud prevention. Details: <a href="https://policies.google.com/technologies/partner-sites">How Google uses information from sites or apps that use its services</a>, <a href="https://policies.google.com/privacy">Google Privacy Policy</a>, <a href="https://developers.google.com/admob/android/privacy/play-data-disclosure">Google Mobile Ads SDK data disclosure</a>.</li>
+<li><strong>Consent.</strong> In the European Economic Area, the UK, Switzerland and other places where the law requires it, the game shows Google's consent form (Google User Messaging Platform) before the first ad. There you choose whether you agree to personalised ads and data processing. You can change your choice at any time with the “Згода на рекламу” (ad consent) button in the main menu, the pause menu and the camp menu (it is shown where such a law applies).</li>
+<li><strong>How to reset or turn off the advertising ID.</strong> On Android: Settings → Privacy (or Google) → Ads. There you can reset or delete your advertising ID (on older versions, “Opt out of Ads Personalization”). Ads may still be shown, but not personalised.</li>
+<li><strong>How to avoid ads.</strong> Ads are always optional: if you do not tap reward buttons, no ads are shown and the game sends nothing to Google for advertising beyond starting the SDK and preloading an ad. The Hetman's Charter (“Гетьманський універсал”) removes ads completely.</li>
+</ul>
+<p>The game is not directed at children and does not knowingly collect data about children.</p>
+<p>If a future version adds purchases or other online features, this policy will be updated before that version is released.</p>
+</main>
+</body>
+</html>

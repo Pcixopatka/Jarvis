@@ -1,22 +1,32 @@
 # Політика приватності гри «Козацька Звитяга»
 
-Текст нижче треба розмістити за публічним посиланням (наприклад, GitHub Pages чи Google Sites) і вказати це посилання в Play Console. Перед публікацією встав дату й контактну пошту. Розділ про рекламу описує бібліотеку Google так, як її описує Google; перед публікацією звір його зі сторінками, на які він посилається.
+Це джерело тексту. Публічну сторінку з нього робить `python3 tools/store_pages.py`: вона лягає в `docs/privacy/index.html` і відкривається через GitHub Pages. Посилання на неї вказується в Play Console. Після кожної зміни тексту онови дату «Чинна від» і запусти скрипт ще раз. Розділ про рекламу описує бібліотеку Google так, як її описує Google; перед публікацією звір його зі сторінками, на які він посилається.
 
 ---
 
-**Чинна від:** [дата]
+**Чинна від:** 14 листопада 2026 року
 
-**Розробник:** [ім'я або назва, як у Play Console]
+**Розробник:** Sich Lab Studio
 
-**Контакт:** [контактна пошта]
+**Контакт:** sichlab.studio@ukr.net
 
 ## Українською
 
-Сама гра «Козацька Звитяга» не збирає, не зберігає на серверах і не передає третім особам ваших персональних даних. Виняток — реклама, описана нижче: її показує Google, і дані для неї збирає Google.
+Гра «Козацька Звитяга» зберігає ігровий прогрес у хмарі, щоб його можна було відновити, показує рекорди в спільних таблицях гравців і для цього заводить обліковий запис гравця (див. «Обліковий запис і хмарне збереження»). Інших персональних даних гра не збирає й не продає. Окремо є реклама, описана нижче: її показує Google, і дані для неї збирає Google.
 
-- Збереження гри лежать лише у приватній пам'яті застосунку на вашому пристрої. Якщо видалити гру, вони зникнуть.
-- Перенесення збереження на інший пристрій відбувається лише з вашої ініціативи: гра копіює код збереження в буфер обміну, а далі ви самі вирішуєте, куди його вставити.
-- У грі немає облікових записів, власної аналітики й покупок.
+- Збереження гри лежать у приватній пам'яті застосунку на вашому пристрої, а їхня копія — у хмарі (див. нижче).
+- Перенесення збереження кодом відбувається лише з вашої ініціативи: гра копіює код збереження в буфер обміну, а далі ви самі вирішуєте, куди його вставити.
+- У грі немає власної аналітики й покупок.
+
+### Обліковий запис і хмарне збереження
+
+- **Що зберігається.** Під час першого запуску з мережею гра без жодних питань створює анонімний обліковий запис (гість) у службі **Google Firebase** (Firebase Authentication). Він має лише випадковий ідентифікатор, без імені й пошти. За бажанням ви прив'язуєте до нього адресу електронної пошти й пароль (пароль зберігає Firebase у захищеному вигляді, гра його не зберігає). У базі **Cloud Firestore** (Google Firebase) лежить ваш ігровий прогрес: збереження героїв і спільного майна роду, номер версії гри, час збереження, короткий перелік героїв (ім'я героя, клас, рівень) і випадковий ідентифікатор пристрою, який створює сама гра. Як і будь-який сервер, Firebase бачить IP-адресу, з якої надходить запит.
+- **Навіщо.** Щоб прогрес не загубився й переходив на новий пристрій, коли ви входите в той самий обліковий запис. Пошта потрібна лише для входу й листа зі зміною пароля, інші гравці її не бачать, розсилок немає.
+- **Де.** На серверах Google Firebase (Google LLC). Дані передаються зашифрованим з'єднанням (HTTPS). Доступ до запису має лише сам обліковий запис. Умови Google: [Конфіденційність і безпека в Firebase](https://firebase.google.com/support/privacy), [Політика конфіденційності Google](https://policies.google.com/privacy).
+- **Як видалити.** У грі: головне меню → «Обліковий запис» → «Видалити обліковий запис». Гра стирає ваш запис у хмарі, ваші рядки в усіх таблицях рекордів і сам обліковий запис; збереження на пристрої лишаються. Або напишіть на sichlab.studio@ukr.net з адресою пошти облікового запису, і ми видалимо його вручну. Якщо видалити гру, не видаливши обліковий запис, хмарна копія лишається, доки ви не попросите її стерти.
+- **Що бачать інші гравці.** У грі є спільні таблиці рекордів. У них іншим гравцям видно ім'я героя, його клас і рівень та рекорд роду (наприклад, поверх Башти), а також випадковий ідентифікатор облікового запису, до якого належить рядок. Пошти, IP-адреси чи інших даних іншим гравцям не видно. Ім'я героя ви вигадуєте самі; не пишіть у нього справжнє ім'я чи контакти.
+- **Скарги.** Біля чужого рядка таблиці є кнопка «Скарга». Скарга містить ідентифікатор того, хто скаржиться, ідентифікатор і ім'я героя, на якого скаржаться, назву таблиці й час. Скарги бачить лише розробник: він перевіряє ім'я й може його прибрати. Гравці скарг не бачать.
+- **Без мережі** гра працює як завжди, лише без хмарного збереження. Вийти з облікового запису можна будь-коли («Обліковий запис» → «Вийти з облікового запису»): тоді гра більше нічого не надсилає в хмару.
 
 ### Реклама
 
@@ -29,15 +39,25 @@
 
 Гра не призначена спеціально для дітей і свідомо не збирає даних про дітей.
 
-Якщо в майбутніх версіях з'являться покупки чи хмарні збереження, цю політику буде оновлено до виходу такої версії.
+Якщо в майбутніх версіях з'являться покупки чи інші онлайн-можливості, цю політику буде оновлено до виходу такої версії.
 
 ## English
 
-Cossack Valor (“Козацька Звитяга”) itself does not collect, store on servers or share your personal data. The exception is advertising, described below: it is served by Google, and Google collects the data needed for it.
+Cossack Valor (“Козацька Звитяга”) keeps your game progress in the cloud so that it can be restored, shows records in shared player tables, and for that it creates a player account (see “Account and cloud save”). The game collects no other personal data and sells none. Separately there is advertising, described below: it is served by Google, and Google collects the data needed for it.
 
-- Save files are kept only in the app's private storage on your device. Uninstalling the game removes them.
-- Moving a save to another device happens only when you ask for it: the game copies a save code to the clipboard and you decide where to paste it.
-- There are no accounts, no analytics of our own and no purchases in the game.
+- Save files are kept in the app's private storage on your device, with a copy in the cloud (see below).
+- Moving a save with a code happens only when you ask for it: the game copies a save code to the clipboard and you decide where to paste it.
+- There are no analytics of our own and no purchases in the game.
+
+### Account and cloud save
+
+- **What is stored.** On the first start with a network connection the game silently creates an anonymous account (guest) in **Google Firebase** (Firebase Authentication). It has only a random identifier, no name and no e-mail. If you choose, you link an e-mail address and a password to it (the password is kept by Firebase in protected form; the game does not store it). **Cloud Firestore** (Google Firebase) holds your game progress: the saves of your heroes and of the clan's shared property, the game version, the save time, a short list of heroes (hero name, class, level) and a random device identifier created by the game. Like any server, Firebase sees the IP address a request comes from.
+- **Why.** So that progress is not lost and moves to a new device when you sign in to the same account. The e-mail is used only for signing in and for the password reset message; other players cannot see it, and there is no mailing.
+- **Where.** On Google Firebase servers (Google LLC). Data is sent over an encrypted connection (HTTPS). Only the account itself can access its record. Google's terms: [Privacy and Security in Firebase](https://firebase.google.com/support/privacy), [Google Privacy Policy](https://policies.google.com/privacy).
+- **How to delete.** In the game: main menu → “Обліковий запис” (Account) → “Видалити обліковий запис” (Delete account). The game erases your cloud record, your rows in all record tables and the account itself; saves on the device stay. Or write to sichlab.studio@ukr.net with the account's e-mail address and we will delete it manually. Uninstalling the game without deleting the account leaves the cloud copy until you ask for it to be erased.
+- **What other players see.** The game has shared record tables (leaderboards). Other players see the hero's name, class and level and the clan's record (for example, the Tower floor), plus the random identifier of the account the row belongs to. Other players do not see your e-mail, IP address or any other data. You choose the hero's name yourself; do not put your real name or contact details in it.
+- **Reports.** Next to another player's row there is a “Скарга” (Report) button. A report contains the reporter's identifier, the identifier and hero name being reported, the table name and the time. Only the developer sees reports: they check the name and may remove it. Players cannot see reports.
+- **Without a network** the game works as usual, only without the cloud save. You can sign out at any time (“Обліковий запис” → “Вийти з облікового запису”): after that the game sends nothing to the cloud.
 
 ### Advertising
 
@@ -50,4 +70,4 @@ The game contains optional rewarded ads: an ad appears only when you tap a rewar
 
 The game is not directed at children and does not knowingly collect data about children.
 
-If a future version adds purchases or cloud saves, this policy will be updated before that version is released.
+If a future version adds purchases or other online features, this policy will be updated before that version is released.

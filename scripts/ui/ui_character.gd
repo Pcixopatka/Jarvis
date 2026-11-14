@@ -669,10 +669,10 @@ static func _glory(game) -> Control:
 		v.add_child(sl)
 	v.add_child(UI.label("Рекорди роду", 24, UI.GOLD, false))
 	v.add_child(UI.label("Найкраще серед усіх твоїх персонажів. Золотим позначено рекорди, які тримає цей герой.", 15, UI.MUTED, false))
-	var table := UI.grid(3)
+	var table := UI.grid(4)
 	table.add_theme_constant_override("h_separation", 36)
 	table.add_theme_constant_override("v_separation", 6)
-	for head in ["", "Цей герой", "Рекорд роду"]:
+	for head in ["", "Цей герой", "Рекорд роду", ""]:
 		table.add_child(UI.label(head, 16, UI.MUTED, false))
 	for row in RS.rows(w, p, game.slot):
 		table.add_child(UI.label(row["name"], 18, UI.TEXT, false))
@@ -683,6 +683,12 @@ static func _glory(game) -> Control:
 		elif row["holder"]:
 			best += "  (твій)"
 		table.add_child(UI.label(best, 18, UI.GOLD if row["holder"] else UI.TEXT, false))
+		# спільна таблиця гравців (data/records.json, «board»)
+		if bool(game.GameDB.row("records", row["key"]).get("board", false)):
+			var key: String = row["key"]
+			table.add_child(UI.button("Таблиця", func(): game.open_board(key), Vector2(130, 40), 16))
+		else:
+			table.add_child(Control.new())
 	v.add_child(table)
 	return v
 
