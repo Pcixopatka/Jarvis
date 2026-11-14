@@ -169,6 +169,7 @@ func _run() -> void:
 	await _suite_pets()
 	await _suite_enchant_fair()
 	await _suite_auto()
+	await _suite_joystick()
 	await _suite_saga()
 	await _suite_loot_rates()
 	await _suite_divine()
@@ -14391,6 +14392,83 @@ func _suite_auto() -> void:
 		if str(e["title"]) == "Автобій":
 			art = str(e["text"])
 	check("%d рази" % AS.MIN_CLEARS in art and "%d%%" % roundi(AS.POTION_AT * 100.0) in art, "довідник описує автобій")
+	game.queue_free()
+	await _frames(3)
+	get_root().get_tree().paused = false
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+
+
+## Палець торкається start, веде на d і відпускає; повертає вектор джойстика під пальцем.
+func _joy_drag(j, start: Vector2, d: Vector2) -> Vector2:
+	var t := InputEventScreenTouch.new()
+	t.index = 0
+	t.pressed = true
+	t.position = start
+	j._input(t)
+	var m := InputEventScreenDrag.new()
+	m.index = 0
+	m.position = start + d
+	j._input(m)
+	var out: Vector2 = j.vector
+	var up := InputEventScreenTouch.new()
+	up.index = 0
+	up.pressed = false
+	up.position = start + d
+	j._input(up)
+	return out
+
+
+func _suite_joystick() -> void:
+	suite("Джойстик: швидкість від ходу пальця")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	game.enter_location("wild_field")
+	await _frames(3)
+	var j = game.hud.joystick
+	check(game.state == game.State.PLAYING and j.is_visible_in_tree(), "у бою джойстик видно")
+	var s := Vector2(200, 400)
+	var r: float = j.base_radius
+	check(_joy_drag(j, s, Vector2(10, 0)) == Vector2.ZERO and _joy_drag(j, s, Vector2(16, 0)) == Vector2.ZERO, "мертва зона: хід до 16 не рухає героя")
+	check(is_equal_approx(_joy_drag(j, s, Vector2(20, 0)).x, 20.0 / 55.0), "хід 20 — третина з гаком швидкості")
+	check(is_equal_approx(_joy_drag(j, s, Vector2(27.5, 0)).x, 0.5), "чверть радіуса — половина швидкості")
+	check(is_equal_approx(_joy_drag(j, s, Vector2(55, 0)).x, 1.0), "на половині радіуса швидкість уже повна")
+	check(is_equal_approx(_joy_drag(j, s, Vector2(r, 0)).length(), 1.0) and is_equal_approx(_joy_drag(j, s, Vector2(150, 0)).length(), 1.0), "далі за половину й за коло — так само повна")
+	var diag := _joy_drag(j, s, Vector2(30, 40))
+	check(diag.normalized().is_equal_approx(Vector2(0.6, 0.8)) and is_equal_approx(diag.length(), 50.0 / 55.0), "навскіс: напрям пальця зберігається")
+	var far := _joy_drag(j, s, Vector2(-300, -400))
+	check(far.normalized().is_equal_approx(Vector2(-0.6, -0.8)) and far.length() <= 1.0 + 1e-6, "довжина ніколи не більша за одиницю")
+	check(is_equal_approx(_joy_drag(j, Vector2(60, 400), Vector2(-60, 0)).x, -1.0), "60 до краю екрана — повна швидкість")
+	check(absf(_joy_drag(j, Vector2(30, 400), Vector2(-30, 0)).x + 30.0 / 55.0) < 0.001, "30 до краю — близько 55%")
+	# кружальце й далі йде за пальцем до краю кола
+	var t := InputEventScreenTouch.new()
+	t.index = 0
+	t.pressed = true
+	t.position = s
+	j._input(t)
+	var m := InputEventScreenDrag.new()
+	m.index = 0
+	m.position = s + Vector2(60, 0)
+	j._input(m)
+	check(j._knob_pos.is_equal_approx(s + Vector2(60, 0)) and j.touched() and game.hud.move_vector() == j.vector, "кружальце йде за пальцем, герой — за джойстиком")
+	m.position = s + Vector2(200, 0)
+	j._input(m)
+	check(j._knob_pos.is_equal_approx(s + Vector2(r, 0)), "кружальце не виходить за коло")
+	j.release()
+	check(j.vector == Vector2.ZERO and not j.touched(), "відпустив — герой стоїть")
+	var txt := ""
+	for e in WS._entries("basics"):
+		txt += str(e["text"])
+	check("Що далі відведеш палець, то швидше біжить герой: повна швидкість настає на половині кола." in txt, "довідник пояснює швидкість джойстика")
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false

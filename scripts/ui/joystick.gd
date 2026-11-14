@@ -4,6 +4,8 @@ extends Node2D
 var vector := Vector2.ZERO
 var rest_pos := Vector2(190, 530)
 var base_radius := 110.0
+var full_at := 0.5  # частка радіуса, на якій швидкість уже повна
+const DEAD_ZONE := 0.15  # частка радіуса, менший хід пальця не рухає героя
 var knob_radius := 48.0
 var _touch_index := -1
 var _base_pos := Vector2.ZERO
@@ -28,9 +30,10 @@ func _input(event: InputEvent) -> void:
 		var d: Vector2 = event.position - _base_pos
 		d = d.limit_length(base_radius)
 		_knob_pos = _base_pos + d
-		vector = d / base_radius
-		if vector.length() < 0.15:
+		if d.length() < base_radius * DEAD_ZONE:
 			vector = Vector2.ZERO
+		else:
+			vector = (d / (base_radius * full_at)).limit_length(1.0)
 		queue_redraw()
 
 
