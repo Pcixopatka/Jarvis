@@ -264,6 +264,7 @@ func _process(delta: float) -> void:
 		_travel_tick(delta)
 	player.xp_boost = AdRewards.xp_mult(world)
 	combat.drop_boost = AdRewards.drop_mult(world)
+	combat.premium = PremiumService.active(world)
 	# стрілка до мети в бою: розшук, сторож скарбу, сліди, вихід, те, що боронимо
 	var goal: Dictionary = combat.objective() if state == State.PLAYING else {}
 	if goal.is_empty():
@@ -2038,7 +2039,7 @@ func _on_tower_cleared(floor_: int) -> void:
 			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl + 1, 3), true)
 			msg += "\nЛегендарна річ!"
 		else:
-			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl, Data.roll_rarity(lvl, 1)))
+			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl, Data.roll_rarity(lvl, 1)), true)  # разова нагорода: не зникає
 	combat._resource_bundle(pos, 3 + floor_ / 5)
 	hud.show_banner(msg, UI.GOLD)
 	save_game()

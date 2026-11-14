@@ -5,12 +5,14 @@ extends RefCounted
 ##  - усе, що дається за рекламу, без реклами: ×2 досвіду й ×2 здобичі діють постійно,
 ##    швидкий похід і безпечна заточка не просять перегляду;
 ##  - швидких походів на день QUICK_PER_DAY замість звичайних, безпечних заточок SAFE_PER_DAY;
-##  - щоденна платня червінцями, більша торба, швидша дорога мапою, автобій у будь-якому пройденому місці.
+##  - щоденна платня червінцями, більша торба, швидша дорога мапою, автобій у будь-якому пройденому місці;
+##  - здобич лежить на землі довше (Pickup.PREMIUM_MULT; Combat.premium, рахується, коли вона впала).
 
 const GameDB := preload("res://scripts/core/game_db.gd")
 
 const Shop := preload("res://scripts/data/shop.gd")
 const Clock := preload("res://scripts/core/clock.gd")
+const Pickup := preload("res://scripts/entities/pickup.gd")
 
 const DAY := 86400.0
 static var DAYS: int  # на скільки днів один універсал
@@ -114,4 +116,21 @@ static func perks(base_quick: int, base_safe: int) -> Array:
 		"Торба більша на %d місць" % BAG_BONUS,
 		"Дорога мапою вдвічі швидша",
 		"Автобій у будь-якому пройденому місці, а не лише там, де був тричі",
+		"Здобич лежить на землі %s довше: %s с замість %s" % [times_word(Pickup.PREMIUM_MULT), _sec(Pickup.life_for(true)), _sec(Pickup.LIFE)],
 	]
+
+
+## «вдвічі», «втричі» чи «у 2,5 раза»: у скільки разів.
+static func times_word(m: float) -> String:
+	match m:
+		2.0:
+			return "вдвічі"
+		3.0:
+			return "втричі"
+		4.0:
+			return "вчетверо"
+	return "у %s раза" % str(snappedf(m, 0.1)).replace(".", ",")
+
+
+static func _sec(t: float) -> String:
+	return str(roundi(t)) if is_equal_approx(t, roundf(t)) else str(snappedf(t, 0.1)).replace(".", ",")

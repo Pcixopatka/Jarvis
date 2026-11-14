@@ -89,7 +89,10 @@
 		"item_price_spent": 0.3,
 		"xp_gold_max_top": 16.7,
 		"xp_gold_top_level": 99,
-		"xp_gold_top_rarity": 3
+		"xp_gold_top_rarity": 3,
+		"ground_life": 60.0,
+		"ground_premium_mult": 2.0,
+		"ground_blink": 10.0
 	},
 	"potions": {
 		"num": 11006,

@@ -115,6 +115,7 @@ var _sweep_sold := 0  # скільки речей продано при приб
 var _sweep_gold := 0
 static var FIELD_PAIR_CHANCE: float  # шанс, що в далекому полі замість одного ворога вийдуть двоє
 var drop_boost := 1.0  # ×2 здобичі за рекламу (виставляє Game щокадру)
+var premium := false  # діє Гетьманський універсал: здобич лежить довше (виставляє Game щокадру)
 var autosell := false  # звичайні речі при повній торбі одразу продаються (налаштування)  # Глибини зарази: опис печери обраної глибини (див. DepthService)  # бій-оборона: опис від DefenseService (замість місця з data/places.json)
 var gate = null
 var wave := 0
@@ -1562,6 +1563,7 @@ func drop_item(item: Dictionary) -> void:
 	p.item = item
 	p.manual = true
 	p.hold = 1.5
+	p.life = PickupScript.life_for(premium)  # викинута річ теж зникає, якщо її не підняти
 	p.position = _clamp_in(player.global_position + Vector2.from_angle(randf() * TAU) * 110.0, 60.0)
 	entities.add_child(p)
 
@@ -1985,6 +1987,7 @@ func spawn_pickup(pos: Vector2, kind: String, value: int, item: Dictionary = {},
 	p.value = value
 	p.item = item
 	p.keep = keep
+	p.life = PickupScript.life_for(premium, keep)  # скільки лежатиме, вирішено раз, при появі
 	p.position = pos
 	p.spawn_vel = Vector2.from_angle(randf() * TAU) * randf_range(60, 200)
 	entities.add_child(p)

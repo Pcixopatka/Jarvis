@@ -109,6 +109,9 @@ const SCHEMAS := {
 		"xp_gold_max_top": {"type": "float", "check": "pos", "about": "найбільший бонус досвіду чи гривень від однієї речі при найвищій заточці, %"},
 		"xp_gold_top_level": {"type": "int", "check": "level", "about": "рівень найкращої звичайної речі, від якої рахується масштаб досвіду й гривень"},
 		"xp_gold_top_rarity": {"type": "int", "check": "rarity", "about": "і її рідкість"},
+		"ground_life": {"type": "float", "check": "pos", "about": "секунд бою лежить на землі непідібрана здобич, тоді зникає (разові нагороди лежать без ліку)"},
+		"ground_premium_mult": {"type": "float", "check": "pos", "about": "з Гетьманським універсалом здобич лежить у стільки разів довше (рахується, коли вона впала)"},
+		"ground_blink": {"type": "float", "check": "pos", "about": "останні стільки секунд перед зникненням здобич блимає"},
 	},
 	"potions": {
 		"num": _NUM,
@@ -617,7 +620,7 @@ const MODULES := {
 	"experience": [["res://scripts/data/data.gd", ""], ["res://scripts/data/classes.gd", ""]],
 	"hero_combat": [["res://scripts/data/data.gd", ""], ["res://scripts/entities/player.gd", ""]],
 	"battle": [["res://scripts/data/data.gd", ""], ["res://scripts/game/combat.gd", ""], ["res://scripts/entities/enemy.gd", ""], ["res://scripts/game/status.gd", "status_"], ["res://scripts/entities/gate.gd", "gate_"], ["res://scripts/entities/pet.gd", "pet_"]],
-	"loot": [["res://scripts/data/data.gd", ""]],
+	"loot": [["res://scripts/data/data.gd", ""], ["res://scripts/entities/pickup.gd", "ground_"]],
 	"potions": [["res://scripts/data/data.gd", ""]],
 	"buffs": [["res://scripts/data/data.gd", ""]],
 	"death": [["res://scripts/data/data.gd", ""]],

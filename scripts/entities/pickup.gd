@@ -1,20 +1,54 @@
 extends Node2D
-## Здобич: гривня (досвід і гроші), вареник (лікування) або річ спорядження.
+## Здобич на землі: гривня (досвід і гроші), вареник (лікування), зілля, зілля наснаги, ресурс, жетон свята
+## або річ спорядження. Непідібране за LIFE секунд бою зникає; останні BLINK секунд блимає.
 
+const GameDB := preload("res://scripts/core/game_db.gd")
 const Data := preload("res://scripts/data/data.gd")
 const Camp := preload("res://scripts/data/camp_data.gd")
 const Gfx := preload("res://scripts/world/gfx.gd")
 
 var combat: Combat
-var kind := "coin"  # "coin", "varenyk" або "item"
+var kind := "coin"  # "coin", "varenyk", "potion", "mana", "res", "token" або "item"
 var item := {}
 var value := 1
 var phase := randf() * TAU
 var pull_speed := 0.0
 var spawn_vel := Vector2.ZERO
-var keep := false  # разова нагорода (бос дня, перше проходження): за повну торбу лягає понад місце
+var keep := false  # разова нагорода (бос дня, перше проходження): за повну торбу лягає понад місце, не зникає
 var manual := false  # викинута з торби річ: сама до героя не летить, підбирається лише впритул
 var hold := 0.0  # скільки секунд викинуту річ ще не можна підібрати
+var life := 0.0  # скільки секунд бою лежить, поки не зникне (0 — не зникає); ставить Combat при появі
+var age := 0.0  # скільки секунд бою вже лежить
+static var LIFE: float  # секунд лежить на землі непідібрана здобич
+static var PREMIUM_MULT: float  # з універсалом лежить у стільки разів довше
+static var BLINK: float  # останні стільки секунд блимає
+
+
+## Числа-правила вище лежать у data/settings.json (запис «loot»; docs/data.md, «Налаштування балансу»):
+## тут їхні робочі копії. Їх заповнює apply_settings(), щойно скрипт завантажено.
+static func _static_init() -> void:
+	apply_settings()
+
+
+## Бере числа з налаштувань (GameDB.settings). GameDB.apply_settings() кличе це знову, коли налаштування
+## змінено під час гри.
+static func apply_settings() -> void:
+	var S := GameDB.settings("loot")
+	LIFE = S["ground_life"]
+	PREMIUM_MULT = S["ground_premium_mult"]
+	BLINK = S["ground_blink"]
+
+
+## Скільки секунд лежатиме нова здобич: з універсалом довше. Разова нагорода (keep) не зникає: 0.
+static func life_for(premium: bool, keep_: bool = false) -> float:
+	if keep_:
+		return 0.0
+	return LIFE * (PREMIUM_MULT if premium else 1.0)
+
+
+## Скоро зникне: останні BLINK секунд блимає.
+func fading() -> bool:
+	return life > 0.0 and age >= life - BLINK
 
 
 func _process(delta: float) -> void:
@@ -27,13 +61,21 @@ func _process(delta: float) -> void:
 	if not p.alive:
 		queue_redraw()
 		return
+	# час на землі йде, лише поки йде бій: у паузі й на екранах поверх бою _process не кличеться,
+	# а поки герой лежить мертвий, вихід вище
+	if life > 0.0:
+		age += delta
+		if age >= life:
+			queue_free()  # ніхто не підібрав: пропадає, нічого не дає
+			return
 	var to: Vector2 = p.global_position - global_position
 	var dist := to.length()
 	hold = maxf(0.0, hold - delta)
 	var block := _block(p)
-	modulate.a = 0.45 if block == "filter" else 1.0  # річ, яку фільтр не бере, лежить тьмяна
+	var a := 0.45 if block == "filter" else 1.0  # річ, яку фільтр не бере, лежить тьмяна
+	modulate.a = _blink(a) if life > 0.0 and age >= life - BLINK else a  # те саме, що fading()
 	if block != "":
-		# нема куди покласти або фільтр не бере: здобич лежить далі, а не зникає
+		# нема куди покласти або фільтр не бере: здобич лежить далі (поки не скінчиться її час)
 		pull_speed = 0.0
 		if block == "full" and kind == "item" and dist < 70.0:
 			combat.note_bag_full()
@@ -51,6 +93,15 @@ func _process(delta: float) -> void:
 		queue_free()
 		return
 	queue_redraw()
+
+
+## Блимання перед зникненням: світла фаза — звична яскравість, темна — майже прозоро (тож видно й на
+## тьмяній речі), під кінець частіше, а останні півсекунди тане.
+func _blink(a: float) -> float:
+	var left := life - age
+	var per := 0.3 if left < 3.0 else 0.6
+	var out := a if fmod(left, per) > per * 0.45 else a * 0.15
+	return out * clampf(left / 0.5, 0.0, 1.0)
 
 
 ## Чому це не підбирається: "" — підбирається, "full" — нема куди покласти (повна торба чи повний

@@ -145,6 +145,7 @@ func _run() -> void:
 	await _suite_journal()
 	await _suite_skills_tab()
 	await _suite_full_bag_and_scroll()
+	await _suite_ground_life()
 	await _suite_event_lift()
 	await _suite_guide()
 	await _suite_way()
@@ -11123,6 +11124,312 @@ func _suite_full_bag_and_scroll() -> void:
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
+
+
+func _suite_ground_life() -> void:
+	suite("Здобич на землі зникає")
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	var Pick = load("res://scripts/entities/pickup.gd")
+	var Prem = load("res://scripts/game/premium_service.gd")
+	var DS = load("res://scripts/game/divine_service.gd")
+	var SH = load("res://scripts/game/shop_service.gd")
+	var HolS = load("res://scripts/game/holiday_service.gd")
+	var L: Dictionary = GameDB.settings("loot")
+	check(is_same(Pick.LIFE, L["ground_life"]) and is_same(Pick.PREMIUM_MULT, L["ground_premium_mult"]) and is_same(Pick.BLINK, L["ground_blink"]),
+		"час здобичі на землі, множник універсалу й блимання беруться з налаштувань (loot.ground_*)")
+	check(Pick.LIFE == 60.0 and Pick.PREMIUM_MULT == 2.0 and Pick.BLINK == 10.0 and Pick.life_for(true) == 120.0 and Pick.life_for(false, true) == 0.0,
+		"60 с, з універсалом удвічі довше, блимає останні 10 с; разова нагорода не зникає")
+	var game = load("res://scenes/main.tscn").instantiate()
+	game.save_path = TEST_SAVE
+	game.account_path = TEST_ACCOUNT
+	game.use_slots = false
+	root.add_child(game)
+	await _frames(2)
+	game.new_game()
+	game.hud.close_dialogue()
+	var p = game.player
+	var c = game.combat
+	for k in ["combat", "block", "elite", "city", "map", "boss", "item", "cleared", "trail", "stones", "char", "bag_full", "mana_potion"]:
+		game.world.hints[k] = true
+	p.change_class("cossack")
+	p.level = 20
+	p.stats["vit"] = 80
+	p.recalc()
+	_quests_set(game.world, "story", {"chapter": 4, "step": 0, "stage": "active", "progress": 0})
+	game.enter_location("wild_field")
+	await _frames(3)
+	c.autosell = false
+	c.pickup_filter = [true, true, true, true]
+	# кадри справжнього бою: нечисть прибрано, герой цілий і стоїть на місці
+	var run := func(n: int) -> void:
+		for i in n:
+			_clear_enemies(game)
+			p.hp = p.max_hp
+			p.invuln = 1.0
+			await process_frame
+	var ground := func() -> Array:
+		return c.entities.get_children().filter(func(ch): return ch.get_script() == c.PickupScript and not ch.is_queued_for_deletion())
+	var clear_ground := func() -> void:
+		for ch in ground.call():
+			ch.queue_free()
+	var newest := func():
+		var g: Array = ground.call()
+		return g[-1]
+	# здобич лягає саме там, куди її кинули, далеко від героя
+	var put := func(pos: Vector2):
+		var pk = newest.call()
+		pk.spawn_vel = Vector2.ZERO
+		pk.position = c._clamp_in(pos, 30.0)
+		return pk
+	var hero_state := func() -> Array:
+		return [p.gold, p.xp, p.inventory.size(), p.potions, p.mana_potions, p.resources.duplicate(), HolS.tokens(game.world), int(game.world.stats.get("holiday_token", 0))]
+	await run.call(2)
+	clear_ground.call()
+	await run.call(1)
+	var far: Vector2 = c._clamp_in(p.global_position + Vector2(600, 0), 60.0)
+	check(far.distance_to(p.global_position) > p.pickup_radius * 2.0, "здобичі, що лежить далеко, герой не дістає")
+	# ---- Кожен вид здобичі зникає за ground_life, герой нічого не дістає ----
+	p.potions = 0
+	p.mana_potions = 0
+	var kinds := {"coin": [5, {}], "varenyk": [10, {}], "potion": [1, {}], "mana": [1, {}], "res": [3, {"res": "wood"}], "token": [1, {"icon": "glory"}], "item": [0, Data.gen_item(20, 1, "boots")]}
+	var lying := {}
+	for k in kinds:
+		c.spawn_pickup(far, k, kinds[k][0], kinds[k][1])
+		lying[k] = put.call(far + Vector2(0, 40 * lying.size()))
+	var lives_ok := true
+	for k in lying:
+		lives_ok = lives_ok and lying[k].life == Pick.LIFE and not lying[k].keep
+	check(lives_ok and lying.size() == 7, "кожен вид здобичі (%s) дістає час %s с" % [", ".join(lying.keys()), Pick.LIFE])
+	for k in lying:
+		lying[k].age = lying[k].life - 0.25
+	var before: Array = hero_state.call()
+	await run.call(6)  # 0,1 с: ще до межі
+	var all_there := true
+	for k in lying:
+		all_there = all_there and is_instance_valid(lying[k]) and not lying[k].is_queued_for_deletion()
+	check(all_there and lying["coin"].age > lying["coin"].life - 0.25, "перед самою межею вся здобич ще лежить, а час іде кадрами бою")
+	await run.call(12)  # ще 0,2 с: межу пройдено
+	var all_gone := true
+	for k in lying:
+		all_gone = all_gone and not (is_instance_valid(lying[k]) and not lying[k].is_queued_for_deletion())
+	check(all_gone and ground.call().is_empty(), "щойно межу пройдено, кожен вид здобичі зник")
+	check(hero_state.call() == before, "те, що зникло, пропало: гривні, досвід, торба, зілля, ресурси й жетони ті самі")
+	# ---- Здобич, якої не взяти: повна торба, повний запас зілля, фільтр, викинута річ ----
+	var spot: Vector2 = p.global_position
+	c.pickup_filter = [false, true, true, true]
+	c.spawn_pickup(spot, "item", 0, Data.gen_item(20, 0, "belt"))
+	var dim_item = put.call(spot + Vector2(-10, 0))
+	p.add_item(Data.gen_item(5, 1))
+	var thrown_item: Dictionary = p.remove_from_bag(p.inventory[0]["uid"])
+	c.drop_item(thrown_item)
+	var thrown = newest.call()
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 1))
+	p.potions = p.potion_max()
+	c.spawn_pickup(spot, "item", 0, Data.gen_item(20, 1, "head"))
+	var full_item = put.call(spot + Vector2(0, 10))
+	c.spawn_pickup(spot, "potion", 1)
+	var full_potion = put.call(spot + Vector2(10, 0))
+	await run.call(3)
+	check(c.loot_block("item", full_item.item) == "full" and c.loot_block("potion") == "full" and c.loot_block("item", dim_item.item) == "filter" and thrown.manual,
+		"лежать: річ за повну торбу, зілля за повний запас, річ за фільтром і викинута річ")
+	var blocked := [full_item, full_potion, dim_item, thrown]
+	var blk_ok := true
+	for pk in blocked:
+		blk_ok = blk_ok and is_instance_valid(pk) and pk.life == Pick.LIFE
+		pk.age = pk.life - 0.25
+	check(blk_ok, "і в них той самий час, що й у решти здобичі")
+	var bag_n: int = p.inventory.size()
+	before = hero_state.call()
+	await run.call(6)
+	var blk_there := true
+	for pk in blocked:
+		blk_there = blk_there and is_instance_valid(pk) and not pk.is_queued_for_deletion()
+	check(blk_there, "перед межею здобич, якої не взяти, ще лежить")
+	await run.call(12)
+	var blk_gone := true
+	for pk in blocked:
+		blk_gone = blk_gone and not (is_instance_valid(pk) and not pk.is_queued_for_deletion())
+	check(blk_gone and ground.call().is_empty() and p.inventory.size() == bag_n and hero_state.call() == before,
+		"річ за повну торбу, зілля за повний запас, річ за фільтром і викинута річ зникли, нічого не продано й не взято")
+	c.pickup_filter = [true, true, true, true]
+	# ---- Разова нагорода не зникає ----
+	c.spawn_pickup(far, "item", 0, Data.gen_item(20, 3, "head"), true)
+	var reward = put.call(far)
+	reward.age = Pick.LIFE * 5.0
+	await run.call(6)
+	check(reward.keep and reward.life == 0.0 and is_instance_valid(reward) and not reward.is_queued_for_deletion() and not reward.fading() and reward.modulate.a == 1.0,
+		"разова нагорода (keep) лежить і далеко за межею, не блимає")
+	reward.queue_free()
+	await run.call(1)
+	# перше проходження звичайного поверху Башти: річ — разова нагорода, без таймера; повтор речі не дає
+	var TowS = load("res://scripts/game/tower_service.gd")
+	check(not TowS.is_super(1) and int(TowS.state(game.world)["best"]) == 0, "поверх 1 звичайний і ще не пройдений")
+	var kept := func() -> Array:
+		return ground.call().filter(func(ch): return ch.kind == "item" and ch.keep)
+	clear_ground.call()
+	await run.call(1)
+	game._on_tower_cleared(1)
+	var tw: Array = kept.call()
+	check(tw.size() == 1 and tw[0].life == 0.0, "перше проходження звичайного поверху Башти: річ лежить без таймера (keep)")
+	if tw.size() == 1:
+		tw[0].spawn_vel = Vector2.ZERO
+		tw[0].position = far
+		tw[0].age = Pick.LIFE * 3.0
+	await run.call(6)
+	check(tw.size() == 1 and is_instance_valid(tw[0]) and not tw[0].is_queued_for_deletion() and not tw[0].fading(), "і лежить далеко за межею")
+	clear_ground.call()
+	await run.call(1)
+	game._on_tower_cleared(1)
+	check(kept.call().is_empty(), "повторне проходження того самого поверху разової речі не дає")
+	clear_ground.call()
+	await run.call(1)
+	# ---- Блимання ----
+	c.spawn_pickup(far, "coin", 3)
+	var blink = put.call(far)
+	c.pickup_filter = [false, true, true, true]
+	c.spawn_pickup(far, "item", 0, Data.gen_item(20, 0, "belt"))
+	var blink_dim = put.call(far + Vector2(0, 60))
+	blink.age = blink.life - Pick.BLINK - 0.5
+	blink_dim.age = blink_dim.life - Pick.BLINK - 0.5
+	await run.call(3)
+	check(not blink.fading() and blink.modulate.a == 1.0 and not blink_dim.fading() and is_equal_approx(blink_dim.modulate.a, 0.45), "до останніх %s с здобич не блимає (тьмяна за фільтром лишається тьмяною)" % Pick.BLINK)
+	blink.age = blink.life - Pick.BLINK + 0.5
+	blink_dim.age = blink_dim.life - Pick.BLINK + 0.5
+	var lo := [1.0, 1.0]
+	var hi := [0.0, 0.0]
+	for i in 45:
+		await run.call(1)
+		lo[0] = minf(lo[0], blink.modulate.a)
+		hi[0] = maxf(hi[0], blink.modulate.a)
+		lo[1] = minf(lo[1], blink_dim.modulate.a)
+		hi[1] = maxf(hi[1], blink_dim.modulate.a)
+	check(blink.fading() and hi[0] > 0.9 and lo[0] < 0.25, "останні %s с здобич блимає: яскравість %.2f…%.2f" % [Pick.BLINK, lo[0], hi[0]])
+	check(blink_dim.fading() and hi[1] > 0.4 and lo[1] < 0.1, "тьмяна річ за фільтром теж помітно блимає: %.2f…%.2f" % [lo[1], hi[1]])
+	c.pickup_filter = [true, true, true, true]
+	clear_ground.call()
+	await run.call(1)
+	# ---- Універсал: удвічі довше; час вирішено, коли здобич упала ----
+	c.spawn_pickup(far, "coin", 3)
+	var plain_pk = put.call(far)
+	game.world.shop["premium_until"] = Prem.now() + 86400.0
+	await run.call(1)
+	c.spawn_pickup(far, "coin", 3)
+	var prem_pk = put.call(far + Vector2(0, 60))
+	check(c.premium and prem_pk.life == Pick.LIFE * Pick.PREMIUM_MULT and plain_pk.life == Pick.LIFE, "з універсалом нова здобич лежить %s с, а та, що впала до нього, лишила свої %s с" % [prem_pk.life, plain_pk.life])
+	prem_pk.age = Pick.LIFE + 1.0
+	plain_pk.age = Pick.LIFE - 0.25
+	await run.call(18)
+	check(is_instance_valid(prem_pk) and not prem_pk.is_queued_for_deletion() and not (is_instance_valid(plain_pk) and not plain_pk.is_queued_for_deletion()),
+		"за межею звичайного часу здобич з універсалом лежить, а давніша зникла")
+	game.world.shop["premium_until"] = 0.0
+	await run.call(1)
+	c.spawn_pickup(far, "coin", 3)
+	var after_pk = put.call(far + Vector2(0, 120))
+	check(not c.premium and prem_pk.life == Pick.LIFE * Pick.PREMIUM_MULT and after_pk.life == Pick.LIFE, "універсал скінчився: що вже лежить, лежить свої %s с, нове знову %s с" % [prem_pk.life, after_pk.life])
+	prem_pk.age = prem_pk.life - 0.25
+	await run.call(18)
+	check(not (is_instance_valid(prem_pk) and not prem_pk.is_queued_for_deletion()), "і зникає на своїй межі")
+	clear_ground.call()
+	await run.call(1)
+	# ---- Пауза й екрани поверх бою: час стоїть ----
+	c.spawn_pickup(far, "coin", 3)
+	var still = put.call(far)
+	await run.call(2)
+	var a0: float = still.age
+	get_root().get_tree().paused = true
+	await _frames(10)
+	check(still.age == a0, "поки дерево на паузі, час здобичі стоїть")
+	get_root().get_tree().paused = false
+	game._show_pause()
+	await _frames(10)
+	check(still.age == a0 and get_root().get_tree().paused, "меню паузи: час стоїть")
+	game._resume_play()
+	await _frames(1)
+	game.open_character()
+	await _frames(10)
+	var a1: float = still.age
+	await _frames(10)
+	check(still.age == a1 and a1 - a0 < 0.05, "екран героя поверх бою: час стоїть")
+	game.close_character()
+	await _frames(1)
+	p.alive = false
+	var a2: float = still.age
+	await _frames(10)
+	check(still.age == a2, "поки герой лежить поранений, час здобичі стоїть")
+	p.alive = true
+	await run.call(10)
+	check(still.age > a2 + 0.1, "бій триває: час здобичі йде далі")
+	# ---- Вихід із бою: collect_all бере те, що ще лежить ----
+	clear_ground.call()
+	await run.call(1)
+	c.spawn_pickup(far, "coin", 7)
+	var old_coin = put.call(far)
+	old_coin.age = old_coin.life - 0.5
+	while not p.bag_full():
+		p.add_item(Data.gen_item(5, 1))
+	var extra: Dictionary = Data.gen_item(20, 1, "boots")
+	c.spawn_pickup(far, "item", 0, extra)
+	put.call(far + Vector2(0, 60)).age = Pick.LIFE - 0.5
+	p.potions = p.potion_max()
+	c.spawn_pickup(far, "potion", 1)
+	put.call(far + Vector2(0, 120)).age = Pick.LIFE - 0.5
+	var g0: int = p.gold
+	var cg: int = Data.coin_gold(7)
+	c.collect_all()
+	await _frames(1)
+	check(ground.call().is_empty() and p.gold - g0 >= cg + Data.sell_price(extra) + Data.potion_price(p.level) / 2,
+		"на виході collect_all, як і раніше, бере гривні, продає річ, що не вмістилась, і зайве зілля за півціни (+%d грн)" % (p.gold - g0))
+	# ---- Хованець: те, що впало, бо його не взяти, зникає так само ----
+	SH.state(game.world)["coins"] = 100000
+	check(DS.buy(game.world, p, "khovanets") and bool(p.divine_fx.get("loot", false)), "Хованець вдягнено")
+	while p.inventory.size() > 6:
+		p.remove_from_bag(p.inventory[-1]["uid"])
+	p.potions = p.potion_max()
+	var pot0: int = p.potions
+	c.spawn_pickup(far, "potion", 1)
+	c.spawn_pickup(far, "coin", 4)
+	var kh: Array = ground.call()
+	check(kh.size() == 1 and kh[0].kind == "potion" and kh[0].life == Pick.LIFE, "із Хованцем на землю впало лише зілля, якому нема місця, і в нього той самий час")
+	var kh_pk = kh[0]
+	kh_pk.spawn_vel = Vector2.ZERO
+	game.open_character()
+	await _frames(2)
+	game.char_do("trader", null)
+	await _frames(2)
+	var a3: float = kh_pk.age
+	await _frames(10)
+	check(game.trader_open and kh_pk.age == a3, "крамниця Хованця посеред бою: час здобичі стоїть")
+	game.close_trader()
+	await _frames(2)
+	game.close_character()
+	await _frames(2)
+	kh_pk.age = kh_pk.life - 0.25
+	var g1: int = p.gold
+	await run.call(6)
+	var kh_there: bool = is_instance_valid(kh_pk) and not kh_pk.is_queued_for_deletion()
+	await run.call(12)
+	check(kh_there and not (is_instance_valid(kh_pk) and not kh_pk.is_queued_for_deletion()) and p.potions == pot0 and p.gold == g1, "із Хованцем зілля за повний запас теж зникає на межі, нічого не давши")
+	# ---- Довідник і картка універсалу ----
+	var wiki := {}
+	for sx in load("res://scripts/game/wiki_service.gd").sections():
+		for e in sx["entries"]:
+			wiki[str(e["title"])] = str(e["text"])
+	var life_s := "%d с" % roundi(Pick.LIFE)
+	var prem_s := "%d с" % roundi(Pick.life_for(true))
+	var rule: String = str(wiki.get("Здобич на землі", ""))
+	check(life_s in rule and prem_s in rule and "вдвічі довше" in rule and ("Останні %d с" % roundi(Pick.BLINK)) in rule and "Разові нагороди не зникають" in rule and "те пропало" in rule and "Хованцем" in rule,
+		"довідник: здобич лежить %s, з універсалом %s, блимає останні %d с, разові нагороди не зникають, що зникло, пропало" % [life_s, prem_s, roundi(Pick.BLINK)])
+	check(life_s in str(wiki.get("Фільтр автопідбору", "")) and life_s in str(wiki.get("Повна торба", "")) and life_s in str(wiki.get("Божі дари", "")) and life_s in str(wiki.get("Цінна здобич не губиться", "")),
+		"фільтр, повна торба, Хованець і цінна здобич теж кажуть про час на землі")
+	var perk := "Здобич лежить на землі вдвічі довше: %d с замість %d" % [roundi(Pick.life_for(true)), roundi(Pick.LIFE)]
+	check(perk in Prem.perks(1, 1) and perk in str(wiki.get(Prem.NAME, "")), "універсал у крамниці й у довіднику: «%s»" % perk)
+	game.queue_free()
+	await _frames(2)
+	SaveSystem.delete(TEST_SAVE)
+	SaveSystem.delete(TEST_ACCOUNT)
+	get_root().get_tree().paused = false
 
 
 func _suite_events_wiki() -> void:
