@@ -1,5 +1,5 @@
 extends RefCounted
-## Екран крамниці за донат: набори червінців і все рідкісне за них (золоті речі, набори, артефакти, душі).
+## Екран крамниці за донат: набори червінців і все рідкісне за них (золоті речі, набори, артефакти, душі, камені долі).
 ## Відкривається з паузи, привалу на мапі й екрана героя (game.open_shop). Усі дії йдуть через
 ## game.shop_do(дія, аргумент), після чого екран перебудовується. Покупка за червінці просить другий дотик.
 
@@ -13,6 +13,7 @@ const Artifacts := preload("res://scripts/data/artifacts.gd")
 const Sets := preload("res://scripts/data/sets.gd")
 const Souls := preload("res://scripts/data/souls.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
+const StoneService := preload("res://scripts/game/stone_service.gd")
 const Premium := preload("res://scripts/game/premium_service.gd")
 const Costumes := preload("res://scripts/data/costumes.gd")
 const CostumeService := preload("res://scripts/game/costume_service.gd")
@@ -22,6 +23,7 @@ const AdRewards := preload("res://scripts/game/ad_rewards.gd")
 const CARD_BG := Color(0.14, 0.11, 0.09)
 const CARD_LINE := Color(0.45, 0.36, 0.22)
 const COIN_COLOR := Color(1.0, 0.78, 0.3)
+const STONES_TAB := "Камені долі"  # вкладка після розділів крамниці, перед «Божими дарами»
 
 
 static func build(game) -> Control:
@@ -29,6 +31,7 @@ static func build(game) -> Control:
 	var pages := [["Червінці", func(): return _packs(game)]]
 	for kind in Shop.kinds():
 		pages.append([Shop.kind_name(kind), (func(): return _sets(game)) if kind == "set" else _goods.bind(game, kind)])
+	pages.append([STONES_TAB, func(): return _stones(game)])
 	pages.append(["Божі дари", func(): return load("res://scripts/ui/ui_divine.gd").shop_page(game)])
 	pages.append(["Вбрання", func(): return _costumes(game)])
 	pages.append(["Універсал", func(): return _premium(game)])
@@ -65,7 +68,7 @@ static func _note(game) -> Control:
 static func _packs(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
-	v.add_child(_wrap("Червінці купують за справжні гроші. Вони спільні для всіх твоїх героїв і не зникають. За них продається все рідкісне: золоті речі, речі наборів, артефакти й душі. Усе це можна здобути й у грі без жодної покупки.", 16, UI.TEXT))
+	v.add_child(_wrap("Червінці купують за справжні гроші. Вони спільні для всіх твоїх героїв і не зникають. За них продається все рідкісне: золоті речі, речі наборів, артефакти, душі й камені долі. Усе це можна здобути й у грі без жодної покупки.", 16, UI.TEXT))
 	v.add_child(_note(game))
 	var grid := UI.grid(2)
 	grid.add_theme_constant_override("h_separation", 12)
@@ -90,6 +93,43 @@ static func _packs(game) -> Control:
 		else:  # купівлю червінців вимкнено (Shop.COINS_ON_SALE): ціну видно, кнопка не працює
 			h.add_child(UI.button("%s\n%s" % [ShopService.OFF_TEXT, str(p["price"])], game.shop_do.bind("pack", str(pid)), Vector2(170, 64), 15, false))
 		grid.add_child(panel)
+	return v
+
+
+# ---------------- Камені долі ----------------
+
+## Камені долі: картка на кожен камінь. Купуються скільки завгодно, лягають героєві, що купує.
+static func _stones(game) -> Control:
+	var world = game.world
+	var p = game.player
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	v.add_child(_wrap("Камені долі лягають героєві, яким ти граєш, і їх можна купувати скільки завгодно. Ужити камінь можна у вікні героя, вкладка «Вміння».", 15, UI.MUTED))
+	for id in ShopService.ids("stone"):
+		var panel := PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.add_theme_stylebox_override("panel", UI.style(CARD_BG, CARD_LINE, 10, 10))
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 14)
+		panel.add_child(h)
+		h.add_child(UI.icon("stone_" + id, 64))
+		var col := VBoxContainer.new()
+		col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		col.add_theme_constant_override("separation", 2)
+		h.add_child(col)
+		col.add_child(_wrap(StoneService.name_of(id), 22, UI.GOLD))
+		col.add_child(_wrap(str(GameDB.row("stones", id)["text"]), 16, UI.TEXT))
+		col.add_child(_wrap("У тебе %d" % StoneService.count(p, id), 15, UI.GOOD if StoneService.count(p, id) > 0 else UI.MUTED))
+		var right := VBoxContainer.new()
+		right.custom_minimum_size = Vector2(BTN_W, 0)
+		right.alignment = BoxContainer.ALIGNMENT_CENTER
+		right.add_theme_constant_override("separation", 2)
+		h.add_child(right)
+		var why: String = ShopService.block_reason(world, p, "stone", id)
+		right.add_child(_buy_button(game, ShopService.key("stone", id), ShopService.price("stone", id), why, game.shop_do.bind("buy", ["stone", id])))
+		if why != "":
+			right.add_child(_wrap(why, 14, UI.BAD))
+		v.add_child(panel)
 	return v
 
 

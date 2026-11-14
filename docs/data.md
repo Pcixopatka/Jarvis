@@ -216,7 +216,7 @@
 | 10111–10129 | клейноди роду (`kleinody.json`) |
 | 10131–10139 | ступені клейнодів (`kleinod_tiers.json`) |
 | 10141–10149 | камені долі (`stones.json`) |
-| 10151–10169 | дрібний товар ярмарку (`fair_goods.json`) |
+| 10151–10169 | дрібний товар ярмарку (`fair_goods.json`); 10152 і 10153 (колишні камені долі на ярмарку) вилучено, ці номери більше нікому не віддають |
 | 10171–10179 | рівні лояльності міст (`loyalty_levels.json`) |
 | 10201–10249 | дорожні пригоди (`road_events.json`) |
 | 10251–10299 | події й заняття (`events.json`) |
@@ -2092,7 +2092,7 @@ scripts/mechanics/
 |---|---|---|
 | `num`* | ціле | 9901… |
 | `name`*, `desc`* | рядки | Назва й опис (вкладка «Свята», довідник). |
-| `rank`* | `great` чи `small` | Велике свято перебиває мале, вищі пороги жетонів, Алатир-камінь за найвищу нагороду. |
+| `rank`* | `great` чи `small` | Велике свято перебиває мале, вищі пороги жетонів, щедріші нагороди. |
 | `from` + `to`, або `easter`, або `nth` + `days` | дата | Рівно одне: `[місяць, день]` початку й кінця (включно); `[від, до]` днів від Великодня за східним обрядом; `[місяць, котрий за ліком, день тижня 0–6]` і скільки днів. |
 | `token`*, `tokens`* | рядки | Жетон свята й родовий множини («зірок»). |
 | `bonus`* | запис | Що дає свято. Ключі — лише ті, що вміє `HolidayService`: показники героя `PLAYER_KEYS` (gold, xp, hp, dmg, armor, crit, regen, mana, skill, cd, potion, status), здобич бою `COMBAT_KEYS` (loot, rare, res, varenyk, trophy, boss) і служби `SERVICE_KEYS` (glory, harvest, dice, rumor, loyalty, outdoor, sharpen, hire). `trophy` і `dice` — цілі, решта — дробові. |
@@ -2127,8 +2127,8 @@ scripts/mechanics/
 | `brews.json` | зілля Зілляварні: трави, залізо, рівень, опис | 10091… | `CampData.brew(id)`, `brew_ids()` |
 | `kleinody.json` | клейноди роду: що росте, приріст за ступінь, ресурс оздоби, текст | 10111… | `CampData.kleinod(id)`, `kleinod_ids()` |
 | `kleinod_tiers.json` | ціни ступенів клейнода (драбина за `tier`, від 1): гривні, трофеї, ресурс | 10131… | `CampData.kleinod_tier(рівень)`, `kleinod_tiers()` |
-| `stones.json` | камені долі: назва, шанс із боса, ціна в скарбника, опис | 10141… | `StoneService.name_of(id)`, `KleinodService.stone_price` |
-| `fair_goods.json` | дрібний товар Трофейного ярмарку: камені й жетон безпечної заточки (`safe`) | 10151… | `FairService.stock` |
+| `stones.json` | камені долі: назва, шанс із боса (`chance`), ціна в крамниці в червінцях (`coins`), опис | 10141… | `StoneService.name_of(id)`, `ShopService.price("stone", id)` |
+| `fair_goods.json` | дрібний товар Трофейного ярмарку: жетон безпечної заточки (`safe`) | 10151… | `FairService.stock` |
 | `loyalty_levels.json` | рівні лояльності міст (драбина за `level`, від 0): з якої кількості очок, назва, знижка | 10171… | `Data.loyalty_level(очки)`, `loyalty_name`, `loyalty_from`, `loyalty_discount` |
 
 Кування й оновлення речей — у записах рідкостей (`data/rarities.json`): `forge` — з якого рівня кузні цю

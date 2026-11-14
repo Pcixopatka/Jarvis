@@ -1,6 +1,6 @@
 extends RefCounted
 ## Трофейний ярмарок на хуторі. Раз на тиждень скупник привозить рідкісне й міняє на трофеї та гривні:
-## три золоті речі під клас героя, артефакт, камені долі й жетони безпечної заточки.
+## три золоті речі під клас героя, артефакт і жетони безпечної заточки.
 ## Товар у всіх той самий, бо його обирає номер тижня; кожну річ герой бере раз на тиждень.
 ## Стан у героя свій, world.fair: {"week": ключ тижня, "bought": {ключ товару: скільки взято}}.
 
@@ -9,7 +9,6 @@ const Uniques := preload("res://scripts/data/uniques.gd")
 const Artifacts := preload("res://scripts/data/artifacts.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const ChallengeService := preload("res://scripts/game/challenge_service.gd")
-const StoneService := preload("res://scripts/game/stone_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
@@ -37,8 +36,8 @@ static func apply_settings() -> void:
 	ARTIFACT_GOLD = S["artifact_gold"]
 
 
-## Дрібний товар — data/fair_goods.json: камені долі (ключ — камінь із stones.json) і жетон безпечної
-## заточки («safe»): назва, трофеї, гривні, скільки на тиждень. Порядок файлу — порядок на прилавку.
+## Дрібний товар — data/fair_goods.json: жетон безпечної заточки («safe»): назва, трофеї, гривні,
+## скільки на тиждень. Порядок файлу — порядок на прилавку.
 const SAFE := "safe"
 
 
@@ -159,6 +158,4 @@ static func buy(world, player, key: String) -> Dictionary:
 		"good":
 			if str(e["id"]) == SAFE:
 				world.boosts["safe_sharpen"] = int(world.boosts.get("safe_sharpen", 0)) + 1
-			else:
-				StoneService.grant(player, str(e["id"]))
 	return {"ok": true, "msg": "Виміняно: %s" % e["name"]}

@@ -287,8 +287,7 @@ static func win(world, player, ev: Dictionary, gate_part: float = 1.0) -> String
 			player.gold += g * 2
 			player.resources["trophy"] = int(player.resources.get("trophy", 0)) + 5
 			world.add_loyalty("sich", 120)
-			load("res://scripts/game/stone_service.gd").grant(player, "zabuttia")
-			return "Січ відстояно! +%d грн, 5 трофеїв, +120 лояльності й Камінь забуття від кошового." % (g * 2)
+			return "Січ відстояно! +%d грн, 5 трофеїв і +120 лояльності." % (g * 2)
 		"captives":
 			s["freed"] = int(s["freed"]) + 1
 			s["free_hire"] = int(s["free_hire"]) + 1

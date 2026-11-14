@@ -127,6 +127,28 @@ static func _pct(v: float) -> String:
 	return (str(int(round(p))) if is_equal_approx(p, round(p)) else ("%.1f" % p).replace(".", ",")) + "%"
 
 
+## Сюжетні дарунки каменів: перша перемога над босом із «boss.stones» (сьогодні лише останній бос історії,
+## раз на рід, бо лік перемог спільний), ранги слави й останній крок «Шляху козака» (кожному героєві).
+static func _stone_story() -> String:
+	var bosses := []
+	for kind in Wiki.boss_order():
+		if not _svc("stone_service").first_kill(kind).is_empty():
+			bosses.append(GameDB.mob_name(kind))
+	return "перша перемога над останнім босом історії (%s; раз на весь рід, бо лік перемог спільний для героїв), а кожному героєві ранги слави й останній крок «Шляху козака»" % ", ".join(bosses)
+
+
+## Звідки береться камінь долі: шанс із боса, раз за гру від сюжету й ціна в крамниці (числа з data/stones.json).
+static func _stone_where(id: String) -> String:
+	var St: Dictionary = GameDB.row("stones", id)
+	var arts := []  # артефакти, що підіймають шанс каменя (бонус «stone»)
+	for aid in Artifacts.ids():
+		if Artifacts.def(aid).get("bonus", {}).has("stone"):
+			arts.append(str(Artifacts.def(aid)["name"]))
+	var art := (", а %s підіймає шанс" % " і ".join(arts)) if not arts.is_empty() else ""
+	return " З переможеного боса падає з шансом %s%s. Кілька таких каменів дає сюжет, кожен лише раз за гру: %s. У крамниці на вкладці «%s» продається за %d червінців, скільки завгодно." % [
+		_pct(float(St["chance"])), art, _stone_story(), load("res://scripts/ui/ui_shop.gd").STONES_TAB, int(St["coins"])]
+
+
 ## Стаття «Здобич із нечисті»: усі шанси з таблиць гри, тож числа завжди справжні.
 static func _loot_entry() -> Dictionary:
 	var Camp = load("res://scripts/data/camp_data.gd")
@@ -234,7 +256,7 @@ static func _basics() -> Array:
 	var Shop = load("res://scripts/data/shop.gd")
 	var packs: Array = Shop.pack_ids()
 	var SoulsD = load("res://scripts/data/souls.gd")
-	out.append(_e("Крамниця", "усе рідкісне за червінці", "Крамниця відкривається з привалу на мапі, з паузи в бою й з екрана героя. За червінці тут продається все рідкісне: усі золоті речі, речі трьох наборів, артефакти всіх босів і душі всієї нечисті. Червінці купують за справжні гроші наборами від %s до %s.%s Вони спільні для всіх героїв роду й не зникають. Ціни в червінцях: золота річ %d–%d залежно від ступеня, річ набору %d, увесь набір одразу %d, артефакт %d, трофей надважкого боса %d, душа %d–%d залежно від ступеня. Куплена річ має рівень героя, що її купив, і лягає в торбу навіть понад місце. Душа летить у торбинку душ. Зброю, що не до руки твоєму класу, теж можна купити й передати іншому героєві через спільну скриню. Товари стоять сіткою значків, як торба на екрані героя: під значком ціна в червінцях, зелена галочка означає, що це вже куплено, а тьмяний значок, що річ не для твого класу. У клітинці артефакта намальований його бос, у клітинці душі та нечисть, чия це душа. Торкнись клітинки, і праворуч з'явиться картка товару з кнопкою «Купити». Покупку за червінці треба підтвердити другим дотиком тієї ж кнопки. Усе, що є в крамниці, можна здобути й у грі без жодної покупки." % [
+	out.append(_e("Крамниця", "усе рідкісне за червінці", "Крамниця відкривається з привалу на мапі, з паузи в бою й з екрана героя. За червінці тут продається все рідкісне: усі золоті речі, речі трьох наборів, артефакти всіх босів, душі всієї нечисті й камені долі. Червінці купують за справжні гроші наборами від %s до %s.%s Вони спільні для всіх героїв роду й не зникають. Ціни в червінцях: золота річ %d–%d залежно від ступеня, річ набору %d, увесь набір одразу %d, артефакт %d, трофей надважкого боса %d, душа %d–%d залежно від ступеня. Куплена річ має рівень героя, що її купив, і лягає в торбу навіть понад місце. Душа летить у торбинку душ. Зброю, що не до руки твоєму класу, теж можна купити й передати іншому героєві через спільну скриню. Товари стоять сіткою значків, як торба на екрані героя: під значком ціна в червінцях, зелена галочка означає, що це вже куплено, а тьмяний значок, що річ не для твого класу. У клітинці артефакта намальований його бос, у клітинці душі та нечисть, чия це душа. Торкнись клітинки, і праворуч з'явиться картка товару з кнопкою «Купити». Покупку за червінці треба підтвердити другим дотиком тієї ж кнопки. Усе, що є в крамниці, можна здобути й у грі без жодної покупки." % [
 		_big(int(Shop.pack(packs[0])["coins"])), _big(int(Shop.pack(packs[packs.size() - 1])["coins"])), "" if _svc("shop_service").coins_on_sale else " Зараз набори червінців тимчасово не продаються.", Uniques.tier_price(1), Uniques.tier_price(Uniques.max_tier()), Shop.kind_price("set"), Shop.kind_price("set", "full_price"),
 		Shop.kind_price("artifact"), Shop.kind_price("artifact", "peril_price"), SoulsD.tier_price(1), SoulsD.tier_price(SoulsD.max_tier())]))
 	var Ench = load("res://scripts/data/enchants.gd")
@@ -683,7 +705,7 @@ static func _camp() -> Array:
 		out.append(_e(R["name"], ", ".join(need), "%s на %d хвилин бою. Та сама страва додає час, інша замінює попередню." % [R["desc"], int(Data.MEAL_TIME / 60.0)], {"loot": "meat"}, head))
 		head = ""
 	out.append(_e("Пасіка", "мед накопичується до %d годин" % int(Camp.PASIKA_CAP_HOURS), "Мед продається сам: %s грн на годину за рівнями пасіки, більше з рівнем героя. Накопичується, навіть коли гра закрита." % " / ".join(PackedStringArray(Camp.building("pasika")["levels"].map(func(x): return str(x["rate"]))))))
-	out.append(_e("Скриня", "спільна для всіх героїв", "Сюди кладуть гривні, речі й камені долі, щоб забрати іншим персонажем. Місць %d, кожен рівень складу додає ще %d. Чумацький віз додає ще %d місць, поки він вдягнений на героєві, яким граєш. Скриня й торба показані двома сітками значків, як торба на екрані героя. Торкнись речі, і праворуч з'явиться її картка з кнопкою «%s» або «%s». Другий дотик по тій самій клітинці переносить річ одразу." % [int(_svc("account").CHEST_SIZE), int(_svc("account").CHEST_PER_SKLAD), int(load("res://scripts/data/divine.gd").def("mazha").get("chest", 0)), load("res://scripts/ui/ui_camp.gd").CHEST_TAKE, load("res://scripts/ui/ui_camp.gd").CHEST_PUT], {"map": "chest"}))
+	out.append(_e("Скриня", "спільна для всіх героїв", "Сюди кладуть гривні, речі й камені долі, щоб забрати іншим персонажем. Гривні кладуть і забирають повзунком або вписаною сумою, а ще всі одразу. Місць %d, кожен рівень складу додає ще %d. Чумацький віз додає ще %d місць, поки він вдягнений на героєві, яким граєш. Скриня й торба показані двома сітками значків, як торба на екрані героя. Торкнись речі, і праворуч з'явиться її картка з кнопкою «%s» або «%s». Другий дотик по тій самій клітинці переносить річ одразу." % [int(_svc("account").CHEST_SIZE), int(_svc("account").CHEST_PER_SKLAD), int(load("res://scripts/data/divine.gd").def("mazha").get("chest", 0)), load("res://scripts/ui/ui_camp.gd").CHEST_TAKE, load("res://scripts/ui/ui_camp.gd").CHEST_PUT], {"map": "chest"}))
 	head = "Клейноди роду"
 	var KS = _svc("kleinod_service")
 	var total := 0
@@ -697,10 +719,6 @@ static func _camp() -> Array:
 			"%s\nКожен ступінь: %s, на п'ятому %s. Ступені коштують %s грн, разом %d грн." % [K["desc"], KS.bonus_text(id, 1), KS.bonus_text(id, 5),
 				", ".join(PackedStringArray(golds.map(func(x): return str(x)))), total], {"loot": "kl_" + id}, head))
 		head = ""
-	var SS = _svc("stone_service")
-	for sid in GameDB.ids("stones"):
-		var St: Dictionary = GameDB.row("stones", sid)
-		out.append(_e(St["name"], "у скарбника за %d грн" % int(St["price"]), St["text"], {"loot": "stone_" + sid}, "Скарбник" if sid == GameDB.ids("stones")[0] else ""))
 	return out
 
 
@@ -747,9 +765,18 @@ static func _items() -> Array:
 		_num(CR.renew_step(probe, 5)["gold"]), _num(CR.renew_step(probe, 20)["gold"]), _num(CR.renew_step(probe, 50)["gold"]), _num(CR.renew_step(probe, 75)["gold"]), _num(CR.renew_step(probe, 99)["gold"]),
 		roundi(CR.renew_mult(0) * 100.0), roundi(CR.renew_mult(1) * 100.0), roundi(CR.renew_mult(2) * 100.0)]))
 	var SS = _svc("stone_service")
-	out.append(_e(SS.name_of("zabuttia"), "камінь долі", GameDB.row("stones", "zabuttia")["text"] + " Подарунки сюжету лишаються.", {"loot": "stone_zabuttia"}, "Камені долі"))
-	out.append(_e(SS.name_of("alatyr"), "камінь долі", GameDB.row("stones", "alatyr")["text"] + " Козак може стати Волхвом і навпаки, спеціалізація — іншою спеціалізацією своєї гілки.", {"loot": "stone_alatyr"}))
-	out.append(_e("Де взяти камені", "", "Рідко падають із босів, перша перемога над сюжетним босом дає камінь напевно. Ще — нагороди рангів слави, великих свят і Башти, а в скарбника на хуторі — за гривні."))
+	out.append(_e(SS.name_of("zabuttia"), "камінь долі", GameDB.row("stones", "zabuttia")["text"] + " Подарунки сюжету лишаються." + _stone_where("zabuttia"), {"loot": "stone_zabuttia"}, "Камені долі"))
+	out.append(_e(SS.name_of("alatyr"), "камінь долі", GameDB.row("stones", "alatyr")["text"] + " Козак може стати Волхвом і навпаки, спеціалізація — іншою спеціалізацією своєї гілки." + _stone_where("alatyr"), {"loot": "stone_alatyr"}))
+	var ranks := []
+	for r in Acts.glory_ranks():
+		if str(r.get("stone", "")) != "":
+			ranks.append("«%s»" % r["name"])
+	var shop := []
+	for sid in GameDB.ids("stones"):
+		shop.append("%s за %d червінців" % [SS.name_of(sid), int(GameDB.row("stones", sid)["coins"])])
+	out.append(_e("Де взяти камені", "", "Рідко падають із босів: %s. Кілька каменів дає сюжет, кожен лише раз за гру: %s. Ранги слави з каменем: %s. Решту продає крамниця за червінці, вкладка «%s»: %s. Купувати можна скільки завгодно, камінь лягає героєві, яким граєш." % [
+		", ".join(GameDB.ids("stones").map(func(sid): return "%s з шансом %s" % [SS.name_of(sid), _pct(float(GameDB.row("stones", sid)["chance"]))])),
+		_stone_story(), ", ".join(ranks), load("res://scripts/ui/ui_shop.gd").STONES_TAB, ", ".join(shop)]))
 	out.append(_e("Продаж", "крамниця в місті", "Речі продаються в крамниці, кілька разом — кнопками «Продати звичайні» й далі. Під час ярмарку продаж удвічі дорожчий. Можна ввімкнути автопродаж звичайних речей, коли торба повна."))
 	return out + _uniques() + _artifacts()
 

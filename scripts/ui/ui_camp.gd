@@ -113,7 +113,7 @@ static func _ad_row(game, v: VBoxContainer) -> void:
 		v.add_child(row)
 
 
-# ---------- Клейноди роду й скарбник ----------
+# ---------- Клейноди роду ----------
 
 static func _kleinody(game) -> Control:
 	var w = game.world
@@ -145,21 +145,6 @@ static func _kleinody(game) -> Control:
 			var txt := ("Здобути" if lvl == 0 else "Оздобити") + "\n" + KleinodService.cost_text(cost)
 			row.add_child(UI.button(txt, _do(game, "kleinod", id), Vector2(330, 84), 15, KleinodService.can_buy(w, p, id)))
 		v.add_child(row)
-	# Скарбник: камені долі за гривні
-	v.add_child(UI.label("Скарбник", 22, UI.GOLD, false))
-	v.add_child(UI.label("Камені долі рідко падають із босів. Скарбник дістане їх за гривні будь-коли.", 15, UI.MUTED, false))
-	for id in GameDB.ids("stones"):
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 14)
-		row.add_child(UI.icon("stone_" + id, 64))
-		var info := VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_child(UI.label("%s — у тебе %d" % [StoneService.name_of(id), StoneService.count(p, id)], 22, UI.TEXT, false))
-		info.add_child(UI.label(GameDB.row("stones", id)["text"], 15, UI.MUTED, false))
-		row.add_child(info)
-		var price := KleinodService.stone_price(id)
-		row.add_child(UI.button("Купити\n%s грн" % UI.num(price), _do(game, "buy_stone", id), Vector2(330, 72), 16, p.gold >= price))
-		v.add_child(row)
 	return v
 
 
@@ -170,6 +155,110 @@ const CHEST_COLS := 6
 const CHEST_TAKE := "Забрати в торбу"
 const CHEST_PUT := "Покласти до скрині"
 
+const CHEST_GOLD_PUT := "Покласти"
+const CHEST_GOLD_TAKE := "Забрати"
+const CHEST_GOLD_H := 44  # висота повзунка, поля й кнопок гривень: як у кнопок скрині
+static var _grabber: ImageTexture = null
+
+
+## Гривні скрині: рядок сум, під ним повзунок, поле суми, «Покласти», «Забрати», «↓ усе», «↑ усе».
+## Повзунок і поле міняють одне одного й вмикають кнопки на місці, без перебудови екрана:
+## перебудова закрила б клавіатуру телефона й обірвала б тягнення повзунка.
+static func _chest_gold(game) -> Control:
+	var have: int = int(game.player.gold)
+	var there: int = int(game.account.chest["gold"])
+	var top: int = maxi(have, there)
+	game.chest_gold_sum = clampi(int(game.chest_gold_sum), 0, top)  # після дії межі інші
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	box.add_child(UI.label("У скрині: %s грн   •   у тебе: %s грн" % [UI.num(there), UI.num(have)], 20, UI.GOLD, false))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	box.add_child(row)
+	var slider := HSlider.new()
+	slider.name = "ChestGoldSlider"
+	slider.min_value = 0
+	slider.max_value = top
+	slider.step = 1
+	slider.value = game.chest_gold_sum
+	slider.editable = top > 0
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	slider.custom_minimum_size = Vector2(160, CHEST_GOLD_H)
+	_style_slider(slider)
+	row.add_child(slider)
+	var edit := LineEdit.new()
+	edit.name = "ChestGoldSum"
+	# max_length не ставимо (див. game._name_screen): Android рахує межу клавіатури з тексту, що вже в полі.
+	# Межу суми стереже код нижче.
+	edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	edit.text = str(game.chest_gold_sum)
+	edit.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	edit.select_all_on_focus = true
+	edit.custom_minimum_size = Vector2(150, CHEST_GOLD_H)
+	edit.add_theme_font_size_override("font_size", 18)
+	row.add_child(edit)
+	var put := UI.button(CHEST_GOLD_PUT, func(): game.camp_do("chest_put_gold", int(game.chest_gold_sum)), Vector2(120, CHEST_GOLD_H), 16)
+	var take := UI.button(CHEST_GOLD_TAKE, func(): game.camp_do("chest_take_gold", int(game.chest_gold_sum)), Vector2(120, CHEST_GOLD_H), 16)
+	row.add_child(put)
+	row.add_child(take)
+	var sync := func() -> void:
+		var s: int = int(game.chest_gold_sum)
+		put.disabled = s <= 0 or s > have
+		take.disabled = s <= 0 or s > there
+	slider.value_changed.connect(func(val: float) -> void:
+		game.chest_gold_sum = int(val)
+		edit.text = str(int(val))
+		sync.call())
+	edit.text_changed.connect(func(t: String) -> void:
+		var digits := ""
+		for ch in t:
+			if ch >= "0" and ch <= "9":
+				digits += ch
+		digits = digits.lstrip("0") if digits.lstrip("0") != "" or digits == "" else "0"
+		# понад межу — межа (і завеликі числа, щоб не переповнити int)
+		var val: int = 0 if digits == "" else (top if digits.length() > 15 else mini(int(digits), top))
+		var shown: String = "" if digits == "" else str(val)
+		if shown != t:
+			var caret: int = edit.caret_column - (t.length() - shown.length())
+			edit.text = shown
+			edit.caret_column = clampi(caret, 0, shown.length())
+		game.chest_gold_sum = val
+		slider.set_value_no_signal(val)
+		sync.call())
+	sync.call()
+	row.add_child(UI.button("↓ усе", _do(game, "chest_put_gold", have), Vector2(90, CHEST_GOLD_H), 14, have > 0))
+	row.add_child(UI.button("↑ усе", _do(game, "chest_take_gold", there), Vector2(90, CHEST_GOLD_H), 14, there > 0))
+	return box
+
+
+## Повзунок під палець: товща смуга, золота заповнена частина й великий бігунець.
+static func _style_slider(s: HSlider) -> void:
+	var track := UI.style(Color(0.12, 0.1, 0.09), Color(0.45, 0.36, 0.22), 6, 0)
+	track.set_border_width_all(2)
+	track.content_margin_top = 5
+	track.content_margin_bottom = 5
+	var fill := UI.style(Color(0.95, 0.75, 0.2), Color(0.95, 0.75, 0.2), 6, 0)
+	fill.set_border_width_all(0)
+	fill.content_margin_top = 5
+	fill.content_margin_bottom = 5
+	s.add_theme_stylebox_override("slider", track)
+	s.add_theme_stylebox_override("grabber_area", fill)
+	s.add_theme_stylebox_override("grabber_area_highlight", fill)
+	if _grabber == null:
+		var n := 30
+		var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+		var c := Vector2(n - 1, n - 1) / 2.0
+		for y in n:
+			for x in n:
+				var d := Vector2(x, y).distance_to(c)
+				if d <= n / 2.0 - 0.5:
+					img.set_pixel(x, y, Color(1.0, 0.92, 0.7) if d <= n / 2.0 - 4.0 else Color(0.55, 0.12, 0.1))
+		_grabber = ImageTexture.create_from_image(img)
+	s.add_theme_icon_override("grabber", _grabber)
+	s.add_theme_icon_override("grabber_highlight", _grabber)
+	s.add_theme_icon_override("grabber_disabled", _grabber)
+
+
 static func _chest(game) -> Control:
 	var p = game.player
 	var acc = game.account
@@ -179,18 +268,7 @@ static func _chest(game) -> Control:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 8)
 	v.add_child(UI.label("Спільна скриня: усе, що тут лежить, бачать усі твої персонажі. Склад на хуторі й Чумацький віз роблять її більшою.", 16, UI.MUTED, false))
-	# Гривні
-	var grow := HBoxContainer.new()
-	grow.add_theme_constant_override("separation", 8)
-	var gl := UI.label("У скрині: %d грн   •   у тебе: %d грн" % [acc.chest["gold"], p.gold], 20, UI.GOLD, false)
-	gl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grow.add_child(gl)
-	for amt in [100, 1000]:
-		grow.add_child(UI.button("↓%d" % amt, _do(game, "chest_put_gold", amt), Vector2(86, 44), 14, p.gold >= amt))
-		grow.add_child(UI.button("↑%d" % amt, _do(game, "chest_take_gold", amt), Vector2(86, 44), 14, int(acc.chest["gold"]) >= amt))
-	grow.add_child(UI.button("↓ усе", _do(game, "chest_put_gold", p.gold), Vector2(90, 44), 14, p.gold > 0))
-	grow.add_child(UI.button("↑ усе", _do(game, "chest_take_gold", int(acc.chest["gold"])), Vector2(90, 44), 14, int(acc.chest["gold"]) > 0))
-	v.add_child(grow)
+	v.add_child(_chest_gold(game))
 	# Камені долі
 	var SS = game.StoneService
 	var srow := HBoxContainer.new()
@@ -559,7 +637,7 @@ static func _enchant_block(game, det: VBoxContainer, it: Dictionary) -> void:
 
 ## Трофейний ярмарок: тижневий товар скупника за трофеї й гривні.
 const FAIR_BUY := "Виміняти"
-const FAIR_ICONS := {"safe": "kl_pechatka", "zabuttia": "stone_zabuttia", "alatyr": "stone_alatyr"}
+const FAIR_ICONS := {"safe": "kl_pechatka"}
 
 ## Ярмарок: товари скупника сіткою значків, як торба героя. Під значком ціна в трофеях,
 ## дотик показує картку товару праворуч із кнопкою «Виміняти».

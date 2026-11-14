@@ -112,17 +112,3 @@ static func cost_text(c: Dictionary) -> String:
 			parts.append("%s %s" % [Camp.res_name(r).to_lower(), UI.num(int(c[r]))])
 	return ", ".join(parts)
 
-
-# ---------- Камені долі за гривні ----------
-
-static func stone_price(id: String) -> int:
-	return int(GameDB.row("stones", id).get("price", 0))
-
-
-static func buy_stone(player, id: String) -> bool:
-	var price := stone_price(id)
-	if price <= 0 or player.gold < price:
-		return false
-	player.gold -= price
-	load("res://scripts/game/stone_service.gd").grant(player, id)
-	return true

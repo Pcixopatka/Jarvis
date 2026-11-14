@@ -5,19 +5,5 @@
 		"trophy": 15,
 		"gold": 2000,
 		"limit": 5
-	},
-	"zabuttia": {
-		"num": 10152,
-		"name": "Камінь забуття",
-		"trophy": 150,
-		"gold": 15000,
-		"limit": 1
-	},
-	"alatyr": {
-		"num": 10153,
-		"name": "Алатир-камінь",
-		"trophy": 300,
-		"gold": 40000,
-		"limit": 1
 	}
 }

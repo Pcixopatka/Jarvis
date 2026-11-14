@@ -274,7 +274,7 @@ static func reward_text(i: int, level: int, id: String = "") -> String:
 		1:
 			return "рідкісна річ і 3 трофеї" if great else "добротна річ і 2 трофеї"
 	if great:
-		return "Алатир-камінь, %d слави й %d грн" % [Acts.TOKEN_GLORY, reward_gold(2, level, great)]
+		return "%d слави й %d грн" % [Acts.TOKEN_GLORY, reward_gold(2, level, great)]
 	return "рідкісна річ, %d слави й %d грн" % [Acts.TOKEN_GLORY_SMALL, reward_gold(2, level, great)]
 
 
@@ -313,7 +313,6 @@ static func claim(world, player, i: int, t: int = -1) -> Array:
 			var GloryService = load("res://scripts/game/glory_service.gd")
 			player.gold += reward_gold(2, player.level, great)
 			if great:
-				load("res://scripts/game/stone_service.gd").grant(player, "alatyr")
 				msgs.append("%s: %s" % [name, reward_text(2, player.level, id)])
 			else:
 				var it2: Dictionary = Data.gen_item(player.level, maxi(2, Data.roll_rarity(player.level, 2)))

@@ -1093,16 +1093,16 @@ const KLEINOD_TIER_SCHEMA := {
 	"res": {"type": "int", "required": true},
 }
 
-## Камінь долі: назва, шанс із боса, ціна в скарбника, що робить (текст; саму дію пише StoneService).
+## Камінь долі: назва, шанс із боса, ціна в крамниці, що робить (текст; саму дію пише StoneService).
 const STONE_SCHEMA := {
 	"num": _NUM,
 	"name": _TEXT,
 	"chance": {"type": "float", "required": true},  # шанс із переможеного боса
-	"price": {"type": "int", "required": true},  # у скарбника хутора
+	"coins": {"type": "int", "required": true},  # у крамниці, червінців
 	"text": _TEXT,
 }
 
-## Дрібний товар Трофейного ярмарку: ключ — камінь (stones.json) чи жетон безпечної заточки (safe).
+## Дрібний товар Трофейного ярмарку: ключ — жетон безпечної заточки (safe).
 const FAIR_GOOD_SCHEMA := {
 	"num": _NUM,
 	"name": _TEXT,
@@ -3848,7 +3848,7 @@ static func _life_rules(name: String, rows: Dictionary) -> Array:
 			"kleinod_tiers":
 				_positive(R, ["gold", "trophy", "res"], where, out)
 			"stones":
-				_positive(R, ["price", "chance"], where, out)
+				_positive(R, ["coins", "chance"], where, out)
 				if float(R.get("chance", 0.0)) > 1.0:
 					out.append("%s: «chance» не більший за 1" % where)
 			"fair_goods":
@@ -4082,8 +4082,8 @@ static func _life_links(name: String, rows: Dictionary) -> Array:
 		"fair_goods":
 			var safe: String = load("res://scripts/game/fair_service.gd").SAFE
 			for id in rows:
-				if id != safe and not _has_row("stones", id):
-					out.append("fair_goods/%s: це не камінь зі stones.json і не жетон «%s»" % [id, safe])
+				if id != safe:
+					out.append("fair_goods/%s: ярмарок знає лише жетон «%s»" % [id, safe])
 		"road_events":
 			var CH: Dictionary = load("res://scripts/game/travel_service.gd").CHOICES
 			_same_ids(name, rows, CH.keys(), "TravelService.CHOICES", out)

@@ -2158,14 +2158,75 @@ func _suite_stones() -> void:
 	check(rp.learn_skill("whirl") and rp.learn_skill("vyly") and rp.learn_skill("kydok"), "і їх можна розкласти наново в будь-яке дерево дороги")
 	rp.free()
 	# Боси
-	var msgs: Array = ST.on_boss(sp, "koshchii", true)
-	check(ST.count(sp, "alatyr") == 1 and not msgs.is_empty(), "перший Кощій — гарантований Алатир")
-	var n0: int = ST.count(sp, "alatyr") + ST.count(sp, "zabuttia")
+	var msgs: Array = ST.on_boss(sp, "putinoid", true)
+	check(ST.count(sp, "alatyr") == 1 and ST.count(sp, "zabuttia") == 1 and msgs.size() == 2, "перший Путіноїд — гарантовано обидва камені")
+	check(is_equal_approx(float(GameDB.row("stones", "zabuttia")["chance"]), 0.01) and is_equal_approx(float(GameDB.row("stones", "alatyr")["chance"]), 0.005), "шанс із боса: 1% Камінь забуття, 0,5% Алатир-камінь")
+	check(int(GameDB.row("stones", "zabuttia")["coins"]) == 150 and int(GameDB.row("stones", "alatyr")["coins"]) == 300 and not GameDB.row("stones", "zabuttia").has("price"), "ціна в крамниці: 150 і 300 червінців, гривневої ціни нема")
+	var z0: int = ST.count(sp, "zabuttia")
+	var a0: int = ST.count(sp, "alatyr")
 	seed(5)
-	for i in 200:
+	for i in 20000:
 		ST.on_boss(sp, "upyr", false)
-	var got: int = ST.count(sp, "alatyr") + ST.count(sp, "zabuttia") - n0
-	check(got > 15 and got < 70, "з босів камені падають рідко (%d за 200)" % got)
+	var gz: int = ST.count(sp, "zabuttia") - z0
+	var ga: int = ST.count(sp, "alatyr") - a0
+	check(gz >= 150 and gz <= 250 and ga >= 65 and ga <= 135, "з босів камені падають рідко: %d забуття й %d Алатирів за 20000 (чекаємо 200 і 100)" % [gz, ga])
+	var sk = _new_player()
+	check(ST.on_boss(sk, "putinoid", true).size() == 2 and ST.count(sk, "alatyr") == 1 and ST.count(sk, "zabuttia") == 1, "перша перемога над Путіноїдом і далі дає обидва камені")
+	sk.free()
+	var with_stones := []
+	for kind in GameDB.mob_ids():
+		if GameDB.mob(kind).get("boss", {}).has("stones"):
+			with_stones.append(kind)
+	var pz: Array = ST.first_kill("putinoid")
+	check(with_stones == ["putinoid"] and pz.size() == 2 and pz.count("zabuttia") == 1 and pz.count("alatyr") == 1, "«boss.stones» лише в Путіноїда, по одному каменю кожного виду: %s" % str(with_stones))
+	var nine := ["zmii", "chaklun", "koshchii", "baba_yaha", "solovei", "lykho", "oprychnyk", "vidma", "vii"]
+	var nine_ok := true
+	var nine_roll := true
+	for kind in nine:
+		var np = _new_player()
+		np.art = {"stone": -1.0}  # шанс нуль: гарантованого каменя нема, тож нічого
+		nine_ok = nine_ok and ST.first_kill(kind).is_empty() and ST.on_boss(np, kind, true).is_empty() and np.stones.is_empty()
+		np.art = {"stone": 1000.0}  # шанс понад одиницю: перша перемога йде звичайним кидком і дає обидва
+		nine_roll = nine_roll and ST.on_boss(np, kind, true).size() == 2
+		np.free()
+	check(nine_ok, "перша перемога над дев'ятьма колишніми босами з каменем гарантованого каменя не дає")
+	check(nine_roll, "перша перемога над ними йде звичайним кидком, як будь-яка інша")
+	# Ранги слави й останній крок «Шляху козака» камені дають, як і раніше
+	var gw = WorldState.new()
+	var gp = _new_player()
+	var want := {}
+	for r in load("res://scripts/data/activities.gd").glory_ranks():
+		if str(r.get("stone", "")) != "":
+			want[str(r["stone"])] = int(want.get(str(r["stone"]), 0)) + 1
+	load("res://scripts/game/glory_service.gd").add(gw, gp, 100000000)
+	check(want.size() == 2 and int(want["zabuttia"]) + int(want["alatyr"]) == 3 and ST.count(gp, "zabuttia") == int(want["zabuttia"]) and ST.count(gp, "alatyr") == int(want["alatyr"]), "три ранги слави дають свої камені: %s" % str(gp.stones))
+	var WayS = load("res://scripts/game/way_service.gd")
+	var last: Dictionary = load("res://scripts/data/way_data.gd").steps()[-1]
+	var lid: String = str(last["reward"].get("stone", ""))
+	WayS._grant(last, gp)
+	check(lid != "" and ST.count(gp, lid) == int(want.get(lid, 0)) + 1, "останній крок «Шляху козака» дає камінь: %s" % lid)
+	gp.free()
+	# Довідник: звідки камені тепер
+	var arts := {}
+	var heads := []
+	var all_txt := ""
+	for sec in load("res://scripts/game/wiki_service.gd").sections():
+		for e in sec["entries"]:
+			arts[str(e["title"])] = str(e["text"])
+			heads.append(str(e.get("head", "")))
+			all_txt += str(e["title"]) + " " + str(e.get("sub", "")) + " " + str(e["text"]) + "\n"
+	var stone_ok := true
+	for sid in ["zabuttia", "alatyr"]:
+		var at: String = arts.get(ST.name_of(sid), "")
+		var pct: String = load("res://scripts/game/wiki_service.gd")._pct(float(GameDB.row("stones", sid)["chance"]))
+		stone_ok = stone_ok and pct in at and "%d червінців" % int(GameDB.row("stones", sid)["coins"]) in at and "останнім босом історії (Путіноїд; раз на весь рід" in at and not "сюжетними босами" in at and "ранги слави" in at and "«Шляху козака»" in at and "«Камені долі»" in at
+	check(stone_ok and "1%" in arts.get("Камінь забуття", "") and "0,5%" in arts.get("Алатир-камінь", "") and "150 червінців" in arts.get("Камінь забуття", "") and "300 червінців" in arts.get("Алатир-камінь", ""), "статті каменів: шанс із боса, сюжет раз за гру, ціна в крамниці: %s" % arts.get("Алатир-камінь", ""))
+	var where: String = arts.get("Де взяти камені", "")
+	check("1%" in where and "0,5%" in where and "Путіноїд" in where and "150 червінців" in where and "300 червінців" in where and "раз за гру" in where and not "свят" in where and not "Башт" in where and not "гривн" in where, "«Де взяти камені»: бос, сюжет і крамниця, без свят, Башти й гривень: %s" % where)
+	check(not "скарбник" in all_txt.replace("Скарбник Кам'яного Поясу", "").to_lower() and not "Скарбник" in heads, "у довіднику більше нема скарбника (звання «Скарбник Кам'яного Поясу» — інше)")
+	check(not "амін" in arts.get("Трофейний ярмарок", "x амін") and "Жетон безпечної заточки" in arts.get("Трофейний ярмарок", ""), "ярмарок у довіднику без каменів, із жетоном")
+	check("камені долі" in arts.get("Крамниця", ""), "стаття крамниці згадує камені долі")
+	check("Гривні кладуть і забирають повзунком або вписаною сумою, а ще всі одразу." in arts.get("Скриня", ""), "стаття скрині каже, як класти гривні")
 	var w = sp.to_dict()
 	check(w["stones"]["alatyr"] >= 1 and w.has("stat_gifts"), "камені зберігаються")
 	# Зілля відновлює й наснагу
@@ -2267,6 +2328,20 @@ func _suite_depth_battle() -> void:
 		frames += 1
 	check(game.DepthService.state(game.world)["best"] == 1 and game.DepthService.state(game.world)["max"] == 2, "глибину 1 пройдено (кадрів: %d)" % frames)
 	check(int(game.world.stats.get("depth", 0)) == 1 and int(game.world.stats.get("depth_clear", 0)) == 1, "рекорд глибини записано, пройдена глибина йде у виклики")
+	# Пройдена глибина каменя долі не дає (раніше — 15% і більше щоразу): п'ятдесят зачисток поспіль
+	var dc = game.combat
+	var st_before: Dictionary = p.stones.duplicate()
+	var fx_before: int = dc.effects.get_child_count()
+	var depth_banners := ""
+	for i in 50:
+		game._on_dungeon_cleared(game.DepthService.LOC_ID)
+		depth_banners += game.hud.banner.text + " "
+	var fx_txt := ""
+	for t in dc.effects.get_children().slice(fx_before):
+		if "text" in t:
+			fx_txt += str(t.text) + " "
+	check(dc.loc.has("depth") and int(game.world.stats.get("depth_clear", 0)) == 51 and p.stones == st_before, "п'ятдесят пройдених глибин — жодного каменя долі")
+	check(not "амін" in depth_banners and not "амін" in fx_txt and not "амін" in str(GameDB.row("events", "depths")["reward"]), "про камінь із глибин не пишуть: %s" % str(GameDB.row("events", "depths")["reward"]))
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -2320,10 +2395,10 @@ func _suite_tower() -> void:
 		if wq._gen_quest("lviv")["loc"] == TS.LOC_ID or wq._gen_quest("chernihiv")["loc"] == TS.LOC_ID:
 			bad = true
 	check(not bad, "доручення не ведуть у Башту")
-	# Нові боси: є назви й камінь за першу перемогу
+	# Нові боси: є назви; каменя за першу перемогу в них нема (його дає лише Путіноїд)
 	var SS = load("res://scripts/game/stone_service.gd")
 	for k in TS.super_bosses():
-		check(not SS.first_kill(k).is_empty() and (GameDB.mob_plural(k) != ""), "%s: камінь за першу перемогу" % k)
+		check(SS.first_kill(k).is_empty() and (GameDB.mob_plural(k) != ""), "%s: має назву, каменя за першу перемогу нема" % k)
 	var CS = load("res://scripts/game/challenge_service.gd")
 	CS.now_override = 1762700000
 	var w3 = WorldState.new()
@@ -2385,9 +2460,11 @@ func _suite_events() -> void:
 	check(DS.is_besieged(w, "sich"), "програна облога: Січ зачинена, поки не відіб'єш")
 	DS.state(w)["sieges"].erase("sich")
 	ES.start(w, p, "sich_siege")
-	var st0: int = int(p.stones.get("zabuttia", 0))
-	ES.win(w, p, ES.active(w))
-	check(int(ES.state(w)["sich_done"]) == 3 and int(p.stones.get("zabuttia", 0)) == st0 + 1, "Січ відстояно: камінь і позначка розділу")
+	var st0: Dictionary = p.stones.duplicate()
+	var sich_msg: String = ES.win(w, p, ES.active(w))
+	check(int(ES.state(w)["sich_done"]) == 3 and p.stones == st0, "Січ відстояно: позначка розділу, каменя долі не дають")
+	var sich_txt: String = sich_msg + " " + str(GameDB.row("events", "sich_siege")["reward"])
+	check(not "амін" in sich_txt and "трофеї" in sich_msg, "у нагороді за Січ камінь не згадано: %s" % sich_txt)
 	# Полон: значок рухається до Кремля
 	w.events = {}
 	ES.start(w, p, "captives", "black_forest")
@@ -4082,7 +4159,7 @@ func _suite_holidays() -> void:
 	check(HS.token_roll(true, false, 0.9) == Acts.TOKEN_BOSS and HS.token_roll(false, true, 0.9) == Acts.TOKEN_ELITE and HS.token_roll(false, false, 0.01) == 1 and HS.token_roll(false, false, 0.5) == 0, "жетони: бос, еліта, інколи звичайна нечисть")
 	check(HS.tiers("nezalezhnist") == Acts.token_need("short") and HS.tiers("rizdvo") == Acts.token_need("great") and HS.tiers("velykden") == Acts.token_need("great"), "коротке свято має нижчі пороги")
 	check(HS.tiers("mykhaila") == Acts.token_need("tiny") and HS.tiers("malanka") == Acts.token_need("short") and HS.tiers("andrii") == Acts.token_need("great") and HS.length("mykhaila") == 3 and HS.length("rizdvo") == 15, "мале свято: пороги нижчі, найкоротші — найнижчі")
-	check("Алатир" in HS.reward_text(2, 10, "pokrova") and "Алатир" not in HS.reward_text(2, 10, "mykhaila") and "рідкісна" in HS.reward_text(2, 10, "mykhaila") and "добротна" in HS.reward_text(1, 10, "mykhaila"), "нагороди малого свята скромніші")
+	check(not "Алатир" in HS.reward_text(2, 10, "pokrova") and not "амін" in HS.reward_text(2, 10, "pokrova") and "слави" in HS.reward_text(2, 10, "pokrova") and "Алатир" not in HS.reward_text(2, 10, "mykhaila") and "рідкісна" in HS.reward_text(2, 10, "mykhaila") and "добротна" in HS.reward_text(1, 10, "mykhaila"), "нагороди малого свята скромніші")
 	var acc = Account.new()
 	var w1 = WorldState.new()
 	acc.attach(w1)
@@ -4105,11 +4182,12 @@ func _suite_holidays() -> void:
 	var items0: int = p2.inventory.size()
 	msgs = HS.claim(w2, p2, 1)
 	check(msgs.size() == 1 and p2.inventory.size() == items0 + 1 and int(p2.inventory[-1]["rarity"]) >= 2 and int(p2.resources.get("trophy", 0)) == 3, "друга нагорода: рідкісна річ і трофеї")
-	var stones0: int = int(p2.stones.get("alatyr", 0))
+	var stones0: Dictionary = p2.stones.duplicate()
 	var gl0: int = GS.glory(w2)
 	msgs = HS.claim(w2, p2, 2)
-	check(int(p2.stones.get("alatyr", 0)) == stones0 + 1 and GS.glory(w2) == gl0 + Acts.TOKEN_GLORY, "третя нагорода: Алатир-камінь і слава (без святкового подвоєння)")
-	# Мале свято: Михайла. Пороги 6, 15, 30; замість Алатир-каменя — рідкісна річ
+	check(p2.stones == stones0 and GS.glory(w2) == gl0 + Acts.TOKEN_GLORY, "третя нагорода великого свята: слава й гривні (без святкового подвоєння), каменя долі нема")
+	check(not "амін" in "\n".join(msgs) and not "Алатир" in "\n".join(msgs), "у повідомленні великого свята камінь не згадано: %s" % "\n".join(msgs))
+	# Мале свято: Михайла. Пороги 6, 15, 30; третя нагорода — рідкісна річ
 	CS.now_override = _ts(2026, 11, 9)
 	var p3 = _new_player()
 	p3.level = 20
@@ -4583,7 +4661,7 @@ func _suite_new_bosses() -> void:
 			if Data.city(c)["pos"].distance_to(L["pos"]) < 0.6:
 				clash = true
 		check(not clash, "%s: не налазить на інші місця мапи" % id)
-		check(not Stones.first_kill(L["boss"]).is_empty(), "%s: перша перемога дає камінь долі" % L["boss"])
+		check(Stones.first_kill(L["boss"]).is_empty(), "%s: перша перемога каменя долі напевно не дає" % L["boss"])
 	SaveSystem.delete(TEST_SAVE)
 	SaveSystem.delete(TEST_ACCOUNT)
 	var game = load("res://scenes/main.tscn").instantiate()
@@ -4661,10 +4739,9 @@ func _suite_new_bosses() -> void:
 	w.take_damage(w.max_hp * 0.55, Vector2.ZERO)
 	await _frames(2)
 	check(w.phase2 and c.alive_enemy_count() >= 4, "на половині здоров'я відьма скликає шабаш")
-	var stones0: int = int(p.stones.get("zabuttia", 0))
 	w.take_damage(1.0e9, Vector2.ZERO)
 	await _frames(5)
-	check(int(game.world.stats.get("boss:vidma", 0)) == 1 and game.account.challenges["ach"].has("vidma") and int(p.stones.get("zabuttia", 0)) == stones0 + 1, "Відьму здолано: досягнення й Камінь забуття")
+	check(int(game.world.stats.get("boss:vidma", 0)) == 1 and game.account.challenges["ach"].has("vidma") and game.StoneService.first_kill("vidma").is_empty(), "Відьму здолано: досягнення є, гарантованого каменя нема")
 	game.enter_map()
 	await _frames(2)
 	# ---------------- Вій ----------------
@@ -4759,10 +4836,9 @@ func _suite_new_bosses() -> void:
 		if t.has_method("contains") and t.shape == "circle" and not t.is_queued_for_deletion():
 			rings += 1
 	check(rings > rocks0, "зі стелі падає каміння")
-	var alatyr0: int = int(p.stones.get("alatyr", 0))
 	v.take_damage(1.0e9, Vector2.ZERO)
 	await _frames(5)
-	check(int(game.world.stats.get("boss:vii", 0)) == 1 and game.account.challenges["ach"].has("vii") and int(p.stones.get("alatyr", 0)) == alatyr0 + 1, "Вія здолано: досягнення й Алатир-камінь")
+	check(int(game.world.stats.get("boss:vii", 0)) == 1 and game.account.challenges["ach"].has("vii") and game.StoneService.first_kill("vii").is_empty(), "Вія здолано: досягнення є, гарантованого Алатиря нема")
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -5350,6 +5426,23 @@ func _suite_tower_battle() -> void:
 		e.take_damage(e.max_hp, Vector2.ZERO)
 	await _frames(3)
 	check(p.alive, "герой живий після здібностей босів")
+	# Перше проходження суперповерху: легендарна річ є, каменя долі нема
+	var sf: int = game.TowerService.SUPER_EVERY
+	var st_before: Dictionary = p.stones.duplicate()
+	var c = game.combat
+	var legend_before: int = c.entities.get_children().filter(func(ch): return ch.get_script() == c.PickupScript and ch.kind == "item" and int(ch.item.get("rarity", 0)) == 3).size()
+	var fx_before: int = c.effects.get_child_count()
+	game._on_tower_cleared(sf)
+	await _frames(1)
+	var legend_after: int = c.entities.get_children().filter(func(ch): return ch.get_script() == c.PickupScript and ch.kind == "item" and int(ch.item.get("rarity", 0)) == 3).size()
+	var fx_txt := ""
+	for t in c.effects.get_children().slice(fx_before):
+		if "text" in t:
+			fx_txt += str(t.text) + " "
+	check(p.stones == st_before and legend_after == legend_before + 1, "перший суперповерх %d: легендарна річ, каменя долі нема" % sf)
+	check("Легендарна річ" in game.hud.banner.text and not "амін" in game.hud.banner.text and not "амін" in fx_txt, "про камінь на суперповерсі не пишуть: %s" % game.hud.banner.text.replace("\n", " / "))
+	var tower_texts: String = str(GameDB.row("events", "tower")["reward"]) + " " + FileAccess.get_file_as_string("res://data/side.json")
+	check(not "камінь долі" in tower_texts and "легендарна річ" in str(GameDB.row("events", "tower")["reward"]), "Башта й Глибини в довіднику й розмовах не обіцяють каменя: %s" % str(GameDB.row("events", "tower")["reward"]))
 	game.queue_free()
 	await _frames(2)
 	SaveSystem.delete(TEST_SAVE)
@@ -6400,14 +6493,9 @@ func _suite_kleinody() -> void:
 	# Тексти
 	check(KS.bonus_text("lytavry", 3) == "+12% досвіду" and KS.bonus_text("surmy", 5) == "вміння відновлюються на 10% швидше" and KS.bonus_text("pechatka", 2) == "+20% лояльності міст", "бонуси словами")
 	check(KS.cost_text({"gold": 600000, "trophy": 600, "iron": 7000}) == "600 000 грн, трофеї 600, залізо 7 000", "ціна словами: %s" % KS.cost_text({"gold": 600000, "trophy": 600, "iron": 7000}))
-	# Скарбник продає камені долі
+	# Скарбника нема: камені долі за гривні не продаються
 	var ps = _new_player()
-	check(KS.stone_price("zabuttia") == 40000 and KS.stone_price("alatyr") == 120000 and KS.stone_price("nema") == 0, "ціни каменів долі")
-	ps.gold = 39999
-	check(not KS.buy_stone(ps, "zabuttia") and StoneService.count(ps, "zabuttia") == 0 and ps.gold == 39999, "без гривень камінь не купити")
-	ps.gold = 160000
-	check(KS.buy_stone(ps, "zabuttia") and KS.buy_stone(ps, "alatyr") and ps.gold == 0 and StoneService.count(ps, "zabuttia") == 1 and StoneService.count(ps, "alatyr") == 1, "купив обидва камені")
-	check(not KS.buy_stone(ps, "nema"), "невідомого каменя скарбник не має")
+	check(not "func buy_stone" in FileAccess.get_file_as_string("res://scripts/game/kleinod_service.gd") and not "func stone_price" in FileAccess.get_file_as_string("res://scripts/game/kleinod_service.gd") and not "buy_stone" in FileAccess.get_file_as_string("res://scripts/game/game.gd"), "скарбника й дії «buy_stone» більше нема")
 	check(Gfx.icon_tex("stone_zabuttia") != null and Gfx.icon_tex("stone_alatyr") != null and GameDB.row("stones", "zabuttia").has("text") and GameDB.row("stones", "alatyr").has("text"), "у каменів є значки й описи")
 	# Заточка без ризику: утричі дорожча, зате рівень не падає
 	var it: Dictionary = Data.gen_item(20, 2, "boots")
@@ -6468,7 +6556,7 @@ func _suite_kleinody_game() -> void:
 		return null
 	check("Клейноди" in titles.call(game), "на хуторі є вкладка клейнодів: %s" % str(titles.call(game)))
 	var t: String = texts.call(game)
-	check("Булава — ступінь 0/5" in t and "Наступний ступінь: +3% шкоди" in t and "Скарбник" in t and "Алатир-камінь — у тебе 0" in t, "вкладка показує клейноди й камені")
+	check("Булава — ступінь 0/5" in t and "Наступний ступінь: +3% шкоди" in t and not "Скарбник" in t and not "Купити\n" in t and not "Алатир-камінь — у тебе" in t, "вкладка показує клейноди, а скарбника з каменями нема")
 	var b: Button = button.call(game, "10 000 грн, трофеї 10, залізо 50")
 	check(b != null and b.disabled and b.text.begins_with("Здобути"), "без гривень кнопка неактивна")
 	game.camp_do("kleinod", "bulava")
@@ -6494,7 +6582,7 @@ func _suite_kleinody_game() -> void:
 		game.camp_do("kleinod", "bulava")
 	await _frames(2)
 	check(KS.level(game.world, "bulava") == 5 and button.call(game, "Досконалий") != null and button.call(game, "Досконалий").disabled, "досконалий клейнод більше не продається")
-	# Камені долі. Список після покупки лишається там, де був, а не стрибає на початок
+	# Список після покупки лишається там, де був, а не стрибає на початок
 	var scroller := func(g) -> ScrollContainer:
 		var tc: TabContainer = g.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 		return tc.get_current_tab_control() as ScrollContainer
@@ -6505,19 +6593,20 @@ func _suite_kleinody_game() -> void:
 	tabs.current_tab = titles.call(game).find("Клейноди")
 	await _frames(2)
 	check(game.camp_tab == titles.call(game).find("Клейноди"), "гра пам'ятає відкриту вкладку клейнодів")
-	scroller.call(game).scroll_vertical = 240
+	scroller.call(game).scroll_vertical = 150
 	await _frames(1)
-	check(scroller.call(game).scroll_vertical == 240, "список клейнодів довгий і гортається")
-	var gold0: int = p.gold
-	game.camp_do("buy_stone", "alatyr")
+	check(scroller.call(game).scroll_vertical == 150, "список клейнодів довгий і гортається")
+	game.camp_do("kleinod", "lytavry")
 	await _frames(2)
-	check(game.StoneService.count(p, "alatyr") == 1 and gold0 - p.gold == 120000 and "Алатир-камінь — у тебе 1" in texts.call(game), "скарбник продав Алатир-камінь")
-	check(scroller.call(game).scroll_vertical == 240, "після покупки список лишився на місці: %d" % scroller.call(game).scroll_vertical)
+	check(KS.level(game.world, "lytavry") == 1 and "Литаври — ступінь 1/5" in texts.call(game), "купив литаври, вкладка оновилась")
+	check(scroller.call(game).scroll_vertical == 150, "після покупки список лишився на місці: %d" % scroller.call(game).scroll_vertical)
 	game.camp_do("select", p.equipment["weapon"]["uid"])
 	await _frames(2)
-	check(scroller.call(game).scroll_vertical == 240, "вибір речі теж лишає список на місці: %d" % scroller.call(game).scroll_vertical)
+	check(scroller.call(game).scroll_vertical == 150, "вибір речі теж лишає список на місці: %d" % scroller.call(game).scroll_vertical)
 	root.size = win_size
-	# Збереження й повернення в гру
+	# Збереження й повернення в гру. Камені, що вже назбирались, нікуди не діваються
+	p.stones = {"zabuttia": 78, "alatyr": 32}
+	game.account.chest["stones"] = {"zabuttia": 40, "alatyr": 25}
 	game.save_game()
 	check(int(game.account.camp.get("kleinody", {}).get("bulava", 0)) == 5, "клейноди лежать у спільному хуторі акаунта")
 	game.queue_free()
@@ -6530,6 +6619,7 @@ func _suite_kleinody_game() -> void:
 	await _frames(2)
 	check(game.load_game(), "гра завантажилась")
 	p = game.player
+	check(int(p.stones.get("zabuttia", 0)) == 78 and int(p.stones.get("alatyr", 0)) == 32 and int(game.account.chest["stones"].get("zabuttia", 0)) == 40 and int(game.account.chest["stones"].get("alatyr", 0)) == 25, "78 і 32 камені в героя та 40 і 25 у скрині пережили збереження: %s / %s" % [str(p.stones), str(game.account.chest["stones"])])
 	check(KS.level(game.world, "bulava") == 5 and is_equal_approx(float(p.klein.get("dmg", 0.0)), 0.15), "після завантаження булава діє: %s" % str(p.klein))
 	# Заточка без ризику на хуторі
 	p.gold = 5000000
@@ -6544,7 +6634,7 @@ func _suite_kleinody_game() -> void:
 	game.camp_do("select", uid)
 	await _frames(2)
 	check(not ("Заточити без ризику" in texts.call(game)), "до +6 ризику нема, тож і кнопки нема")
-	gold0 = p.gold
+	var gold0: int = p.gold
 	var plain: int = int(Data.sharpen_cost(it) * game.CampService.forge_cost_mult(game.world))
 	game.camp_do("sharpen_safe", uid)
 	check(gold0 - p.gold == plain, "до +6 заточка без ризику коштує як звичайна")
@@ -12955,7 +13045,7 @@ func _suite_shop_game() -> void:
 	var tc = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
 	for i in tc.get_tab_count():
 		tabs.append(tc.get_tab_title(i))
-	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Божі дари", "Вбрання", "Універсал"], "крамницю відкрито: вкладки %s" % str(tabs))
+	check(game.shop_open and not game.hud.overlay.visible and tabs == ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Камені долі", "Божі дари", "Вбрання", "Універсал"], "крамницю відкрито: вкладки %s" % str(tabs))
 	game.shop_do("pack", "coins_1200")
 	await _frames(3)
 	check(SH.coins(w) == 1200 and int(game.account.shop["coins"]) == 1200, "набір червінців оплачено й зараховано")
@@ -12979,13 +13069,65 @@ func _suite_shop_game() -> void:
 	game.shop_do("buy", ["set_full", "sviatohor"])
 	await _frames(2)
 	check(SH.coins(w) == 1200 - cost and game.shop_confirm == "", "на що бракує червінців, те не купується")
+	# ---- Камені долі: вкладка після «Душ», перед «Божими дарами» ----
+	var ST = load("res://scripts/game/stone_service.gd")
+	var stab: int = game._shop_tab_index("Камені долі")
+	check(stab == tabs.find("Душі") + 1 and tabs[stab] == "Камені долі" and tabs[stab + 1] == "Божі дари", "вкладка «Камені долі» між «Душами» й «Божими дарами» (%d)" % stab)
+	var stone_page := func() -> Control:
+		var stc: TabContainer = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0]
+		stc.current_tab = stab
+		return stc.get_tab_control(stab)
+	var page_text := func(pg: Control) -> String:
+		var out := ""
+		for n in pg.find_children("*", "", true, false):
+			if (n is Label or n is Button) and not n.is_queued_for_deletion():
+				out += n.text + "\n"
+		return out
+	SH.state(w)["coins"] = 1000
+	game.shop_tab = stab
+	game.shop_do("select", "")
+	await _frames(2)
+	var spg: Control = stone_page.call()
+	await _frames(1)
+	var stxt: String = page_text.call(spg)
+	var icons := spg.find_children("*", "TextureRect", true, false).size()
+	check(ST.name_of("zabuttia") in stxt and ST.name_of("alatyr") in stxt and GameDB.row("stones", "alatyr")["text"] in stxt and "У тебе 0" in stxt and "Купити • 150 черв." in stxt and "Купити • 300 черв." in stxt and icons >= 2, "дві картки каменів: значок, назва, опис, скільки є, ціна й кнопка")
+	var spent0: int = int(SH.state(w)["spent"])
+	var z0: int = ST.count(p, "zabuttia")
+	game.shop_do("buy", ["stone", "zabuttia"])
+	await _frames(2)
+	check(game.shop_confirm == "stone:zabuttia" and ST.count(p, "zabuttia") == z0 and SH.coins(w) == 1000, "перший дотик по каменю лише просить підтвердити")
+	game.shop_do("buy", ["stone", "zabuttia"])
+	await _frames(2)
+	check(ST.count(p, "zabuttia") == z0 + 1 and SH.coins(w) == 850 and int(SH.state(w)["spent"]) == spent0 + 150 and "Камінь забуття" in game.hud.banner.text, "другий дотик купує: камінь у героя, 150 червінців списано й пораховано")
+	game.shop_do("buy", ["stone", "zabuttia"])
+	game.shop_do("buy", ["stone", "zabuttia"])
+	game.shop_do("buy", ["stone", "alatyr"])
+	game.shop_do("buy", ["stone", "alatyr"])
+	await _frames(2)
+	check(ST.count(p, "zabuttia") == z0 + 2 and ST.count(p, "alatyr") == 1 and SH.coins(w) == 400 and int(SH.state(w)["spent"]) == spent0 + 600 and SH.bought(w, "stone", "zabuttia") == 2, "камені купуються вдруге й скільки завгодно")
+	stxt = page_text.call(stone_page.call())
+	check("У тебе %d" % (z0 + 2) in stxt and "У тебе 1" in stxt, "картка показує, скільки каменів у героя")
+	SH.state(w)["coins"] = 250
+	game.shop_do("buy", ["stone", "alatyr"])
+	game.shop_do("buy", ["stone", "alatyr"])
+	await _frames(2)
+	spg = stone_page.call()
+	await _frames(1)
+	stxt = page_text.call(spg)
+	var abtn: Button = null
+	for b in spg.find_children("*", "Button", true, false):
+		if "300 черв." in b.text:
+			abtn = b
+	check(ST.count(p, "alatyr") == 1 and SH.coins(w) == 250 and game.shop_confirm == "" and SH.block_reason(w, p, "stone", "alatyr") == "Бракує червінців: 50" and "Бракує червінців: 50" in stxt and abtn != null and abtn.disabled, "на Алатир бракує 50 червінців: кнопка неактивна, причина та сама, що й у інших товарів")
+	check(SH.price("stone", "nema") == 0 and SH.block_reason(w, p, "stone", "nema") == "Такого товару нема", "невідомого каменя крамниця не продає")
 	game.close_shop()
 	await _frames(2)
 	check(not game.shop_open and game.state == game.State.PAUSED and game.hud.overlay.visible and "Продовжити" in menu_texts.call(), "«Назад» вертає в паузу")
 	# Збережено в акаунті
 	var f := FileAccess.open(TEST_ACCOUNT, FileAccess.READ)
 	var saved: Dictionary = f.get_var() if f != null else {}
-	check(int(saved.get("shop", {}).get("coins", -1)) == 1200 - cost, "червінці й покупки збережено у файлі роду")
+	check(int(saved.get("shop", {}).get("coins", -1)) == SH.coins(w) and SH.coins(w) == 250, "червінці й покупки збережено у файлі роду")
 	# ---- Привал і екран героя ----
 	game.enter_map()
 	await _frames(2)
@@ -14222,8 +14364,10 @@ func _suite_enchant_fair() -> void:
 	check("уже взято" in Fair.block_reason(w, p, g["key"]) and not Fair.buy(w, p, g["key"])["ok"], "ту саму річ цього тижня вдруге не взяти")
 	var a: Dictionary = arts[0]
 	check(Fair.buy(w, p, a["key"])["ok"] and Arts.has(p.inventory, a["id"]), "артефакт виміняно")
-	var st0: int = load("res://scripts/game/stone_service.gd").count(p, "alatyr")
-	check(Fair.buy(w, p, "g:alatyr")["ok"] and load("res://scripts/game/stone_service.gd").count(p, "alatyr") == st0 + 1, "камінь долі виміняно")
+	var st0: Dictionary = p.stones.duplicate()
+	var stone_goods := stock.filter(func(e): return e["kind"] == "good" and GameDB.table("stones").has(str(e["id"])))
+	check(stone_goods.is_empty() and GameDB.ids("fair_goods") == ["safe"] and not Fair.buy(w, p, "g:alatyr")["ok"] and not Fair.buy(w, p, "g:zabuttia")["ok"] and p.stones == st0, "каменів долі на ярмарку нема")
+	check(goods.size() == 1 and str(goods[0]["id"]) == "safe", "дрібний товар ярмарку — лише жетон безпечної заточки")
 	var safe_n := 0
 	for i in int(GameDB.row("fair_goods", "safe")["limit"]) + 2:
 		if Fair.buy(w, p, "g:safe")["ok"]:
@@ -15500,6 +15644,98 @@ func _suite_grid_shops() -> void:
 	DSc.apply(gw, gp)
 	game.chest_sel = ""
 	game.smith_msg = ""
+	# ---- Гривні скрині: повзунок, поле суми, «Покласти» й «Забрати» ----
+	var gold_ui := func() -> Dictionary:
+		var pg: Control = game.hud.screen_root.find_children("*", "TabContainer", true, false)[0].get_tab_control(game.camp_tab)
+		var out := {"btn": {}, "label": "", "slider": null, "edit": null, "row": null}
+		for n in pg.find_children("*", "", true, false):
+			if n.is_queued_for_deletion():
+				continue
+			if n is HSlider and n.name == "ChestGoldSlider":
+				out["slider"] = n
+				out["row"] = n.get_parent()
+			elif n is LineEdit and n.name == "ChestGoldSum":
+				out["edit"] = n
+			elif n is Button:
+				out["btn"][n.text] = n
+			elif n is Label and n.text.begins_with("У скрині:"):
+				out["label"] = n.text
+		return out
+	var type_sum := func(g: Dictionary, t: String) -> void:
+		g["edit"].text = t
+		g["edit"].text_changed.emit(t)
+	var win0: Vector2i = root.size
+	root.size = Vector2i(1280, 720)
+	gp.gold = 82800
+	game.account.chest["gold"] = 26300009
+	game.chest_gold_sum = 0
+	game._build_camp()
+	await _frames(2)
+	var gu: Dictionary = gold_ui.call()
+	var old_gone := true
+	for t in ["↓100", "↑100", "↓1000", "↑1000"]:
+		old_gone = old_gone and not gu["btn"].has(t)
+	check(old_gone and gu["btn"].has(UCamp.CHEST_GOLD_PUT) and gu["btn"].has(UCamp.CHEST_GOLD_TAKE) and gu["btn"].has("↓ усе") and gu["btn"].has("↑ усе") and gu["slider"] != null and gu["edit"] != null, "у скрині нема «↓100», «↑1000» і подібних, є повзунок, поле, «Покласти», «Забрати», «↓ усе» й «↑ усе»")
+	check(gu["label"] == "У скрині: 26 300 009 грн   •   у тебе: 82 800 грн", "суми з проміжками: %s" % gu["label"])
+	var sl: HSlider = gu["slider"]
+	var ed: LineEdit = gu["edit"]
+	var put_b: Button = gu["btn"][UCamp.CHEST_GOLD_PUT]
+	var take_b: Button = gu["btn"][UCamp.CHEST_GOLD_TAKE]
+	check(int(sl.min_value) == 0 and int(sl.max_value) == 26300009 and int(sl.value) == 0 and ed.text == "0" and put_b.disabled and take_b.disabled, "повзунок від 0 до більшої суми, на нулі обидві кнопки вимкнені")
+	check(ed.virtual_keyboard_type == LineEdit.KEYBOARD_TYPE_NUMBER and ed.max_length == 0, "поле суми відкриває цифрову клавіатуру й не має max_length")
+	var row: Control = gu["row"]
+	var row_kids: Array = row.get_children().filter(func(ch): return ch is Control)
+	var tall := true
+	for ch in row_kids:
+		tall = tall and ch.size.y >= 44.0
+	check(row_kids[0] == sl and row_kids[1] == ed and row_kids[2] == put_b and row_kids[3] == take_b and row_kids[4] == gu["btn"]["↓ усе"] and row_kids[5] == gu["btn"]["↑ усе"] and tall and not gu["label"] in row.get_children().map(func(ch): return ch.get("text")), "повзунок, поле, «Покласти», «Забрати», «↓ усе», «↑ усе» одним рядком під сумами, усе заввишки з кнопки")
+	sl.value = 50000
+	check(ed.text == "50000" and game.chest_gold_sum == 50000 and not put_b.disabled and not take_b.disabled, "повзунок міняє поле, кнопки вмикаються на місці")
+	sl.value = 100000
+	check(ed.text == "100000" and put_b.disabled and not take_b.disabled and is_instance_valid(put_b) and not put_b.is_queued_for_deletion(), "сума понад гривні героя: «Покласти» вимкнено, екран не перебудовано")
+	type_sum.call(gu, "12a3 4")
+	check(ed.text == "1234" and int(sl.value) == 1234 and game.chest_gold_sum == 1234, "у полі лише цифри, повзунок іде за полем: %s" % ed.text)
+	type_sum.call(gu, "999999999")
+	check(ed.text == "26300009" and int(sl.value) == 26300009 and game.chest_gold_sum == 26300009 and put_b.disabled and not take_b.disabled, "сума понад межу обрізана до межі: %s" % ed.text)
+	type_sum.call(gu, "")
+	check(ed.text == "" and game.chest_gold_sum == 0 and int(sl.value) == 0 and put_b.disabled and take_b.disabled, "порожнє поле — нуль")
+	type_sum.call(gu, "82801")
+	check(put_b.disabled and not take_b.disabled, "на гривню більше, ніж у героя: «Покласти» вимкнено")
+	type_sum.call(gu, "30000")
+	check(not put_b.disabled and not take_b.disabled, "30 000: обидві кнопки ввімкнено")
+	put_b.pressed.emit()
+	await _frames(2)
+	gu = gold_ui.call()
+	check(gp.gold == 52800 and int(game.account.chest["gold"]) == 26330009 and game.chest_gold_sum == 30000 and gu["edit"].text == "30000" and int(gu["slider"].value) == 30000, "«Покласти» кладе рівно 30 000, сума пережила перебудову")
+	gu["btn"][UCamp.CHEST_GOLD_TAKE].pressed.emit()
+	await _frames(2)
+	gu = gold_ui.call()
+	check(gp.gold == 82800 and int(game.account.chest["gold"]) == 26300009 and gu["label"] == "У скрині: 26 300 009 грн   •   у тебе: 82 800 грн", "«Забрати» забирає рівно 30 000")
+	# ширина: найгірші суми не виходять за правий край ні на 1280, ні на широкому телефоні
+	for wsz in [Vector2i(1280, 720), Vector2i(1560, 720)]:
+		root.size = wsz
+		game._build_camp()
+		await _frames(3)
+		gu = gold_ui.call()
+		var right := 0.0
+		for ch in gu["row"].get_children():
+			if ch is Control:
+				right = maxf(right, ch.get_global_rect().end.x)
+		var vis_w: float = game.hud.screen_root.get_viewport_rect().size.x
+		check(right <= vis_w - 8.0 and gu["row"].get_global_rect().end.x <= vis_w, "рядок гривень уміщається: правий край %d із %d" % [int(right), int(vis_w)])
+	root.size = Vector2i(1280, 720)
+	# обрізання після дії: хтось забрав гривні зі скрині, а сума стояла велика
+	type_sum.call(gu, "26300009")
+	game.account.chest["gold"] = 1000
+	gu["btn"]["↓ усе"].pressed.emit()
+	await _frames(2)
+	gu = gold_ui.call()
+	check(gp.gold == 0 and int(game.account.chest["gold"]) == 83800 and game.chest_gold_sum == 83800 and gu["edit"].text == "83800" and int(gu["slider"].max_value) == 83800, "«↓ усе» кладе все, сума обрізана до нової межі")
+	gu["btn"]["↑ усе"].pressed.emit()
+	await _frames(2)
+	check(gp.gold == 83800 and int(game.account.chest["gold"]) == 0, "«↑ усе» забирає все")
+	root.size = win0
+	game.chest_gold_sum = 0
 	# ---- Донатна крамниця сіткою ----
 	var UShop = load("res://scripts/ui/ui_shop.gd")
 	var SHs = load("res://scripts/game/shop_service.gd")
@@ -18035,7 +18271,7 @@ func _suite_sale_off() -> void:
 			if tc.get_tab_title(i) == title:
 				tc.current_tab = i
 		return tc.get_current_tab_control()
-	var expect_tabs := ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Божі дари", "Вбрання", "Універсал"]
+	var expect_tabs := ["Червінці", "Золоті речі", "Набори", "Артефакти", "Душі", "Камені долі", "Божі дари", "Вбрання", "Універсал"]
 	_set_sale(false)
 	# ---- Червінці: набори видно з цінами, кнопки не працюють ----
 	SH.state(gw)["coins"] = 500
@@ -21581,7 +21817,7 @@ func _suite_quest_db() -> void:
 	check(Story.step("choose")["choice_key"] == "trial" and Story.step("choose")["choices"].map(func(c): return c["class"]) == ["cossack", "volkhv", "strilets"], "вибір дороги: ключ збереження й класи — у кроці «choose»")
 	check(Story.step("oath")["reward"]["banner"] == "Ти — козак Запорозького війська!" and Story.step("kremlin")["reward"]["banner"] == "Тебе обрано гетьманом України!", "напис про новий клас і звання — у нагороді")
 	check(Story.chapter(1)["cleanse"].size() == 5 and Story.chapter(5).get("cleanse_all", false) and not Story.chapter(0).has("cleanse"), "що очищає зараза після розділу — у записі розділу")
-	check(Stone.first_kill("putinoid") == ["alatyr", "zabuttia"] and Stone.first_kill("vii") == ["alatyr"] and GameDB.mob("zmii")["boss"]["stones"] == ["zabuttia"], "камені за першу перемогу — у записі боса")
+	check(Stone.first_kill("putinoid") == ["alatyr", "zabuttia"] and Stone.first_kill("vii").is_empty() and not GameDB.mob("zmii")["boss"].has("stones"), "камені за першу перемогу — у записі боса, лише в Путіноїда")
 	check(Spec.trial("plastun")["objective"]["type"] == "elite" and Spec.trial("molfar")["item"]["type"] == "staff", "випробування спеціалізації — у своїй таблиці")
 	# ---- Умови відкриття: рівень, «після чого», лінія ----
 	# Історія — один ланцюжок: кожен крок чекає на попередній крок своєї лінії, а перший крок ланки (розділу чи
@@ -21811,7 +22047,7 @@ func _suite_life_db() -> void:
 	var expect := {"glory_ranks": 6, "glory_sources": 5, "rivals": 5, "duel_rounds": 3, "muster_teams": 5, "muster_rounds": 3, "ring_rounds": 3, "spots": 4,
 		"trade_goods": 7, "trade_cities": 16, "hunt_animals": 3, "fish": 3, "recipes": 4, "dice_rivals": 3, "trail_kinds": 3, "expeditions": 3, "records": 17,
 		"escorts": 4, "holidays": 28, "months": 12, "token_scales": 3, "camps": 1, "resources": 7, "buildings": 6, "crops": 3, "brews": 4, "kleinody": 7,
-		"kleinod_tiers": 5, "stones": 2, "fair_goods": 3, "loyalty_levels": 4, "road_events": 9, "events": 30, "event_kinds": 5, "boss_hunts": 2,
+		"kleinod_tiers": 5, "stones": 2, "fair_goods": 1, "loyalty_levels": 4, "road_events": 9, "events": 30, "event_kinds": 5, "boss_hunts": 2,
 		"boss_pools": 2, "boss_mods": 6, "statuses": 6, "wiki_sections": 12, "wiki_basics": 20, "wiki_orders": 2, "sounds": 40, "ambients": 7, "name_pools": 9}
 	var count_bad := []
 	for t in expect:
@@ -21864,7 +22100,7 @@ func _suite_life_db() -> void:
 		and Camp.level_value("sklad", "bag", 2) == 16 and Camp.kleinod_tier(0)["gold"] == 10000 and Camp.kleinod_tier(5).is_empty() and Camp.kleinod_tiers() == 5, "що дає рівень будівлі й ціна ступеня клейнода — у записах")
 	check(CR.tier_count() == 4 and CR.tier_name(2) == "Рідкісна" and int(CR.forge_tier(3)["kuznia"]) == 3 and is_equal_approx(CR.renew_mult(4), 1.5) and is_equal_approx(CR.renew_mult(9), 1.5), "кування й оновлення — у записах рідкостей")
 	check(Acts.rival("hnat")["mechanic"] == "rival/strilets" and Acts.rival("marko")["nicks"] == ["Химородник", "Сивий", "Ворон"] and Acts.muster_names().size() == 14 and Acts.ring_pool().size() == 11
-		and GameDB.row("boss_pools", "hunt")["bosses"].size() == 18 and GameDB.row("stones", "zabuttia")["price"] == 40000 and is_equal_approx(float(GameDB.row("stones", "alatyr")["chance"]), 0.06), "суперники, боси, камені — у таблицях")
+		and GameDB.row("boss_pools", "hunt")["bosses"].size() == 18 and int(GameDB.row("stones", "zabuttia")["coins"]) == 150 and is_equal_approx(float(GameDB.row("stones", "alatyr")["chance"]), 0.005), "суперники, боси, камені — у таблицях")
 	check(Data.loyalty_name(2) == "Шанований" and Data.loyalty_from(3) == 500 and Data.loyalty_level(249) == 1 and Data.loyalty_level(250) == 2 and Acts.month_gen(1) == "січня" and Acts.month_gen(12) == "грудня"
 		and Acts.token_need("tiny") == [6, 15, 30] and HS.tiers("rizdvo") == Acts.token_need("great"), "лояльність, місяці й пороги жетонів — драбини й записи")
 	check(Wiki.section_ids()[0] == "basics" and Wiki.section_title("rules") == "Правила" and Wiki.basics()[0]["title"] == "Рух і удар" and Wiki.enemy_order()[0] == "mavka" and Wiki.boss_order()[-1] == "chornoboh"
@@ -21941,7 +22177,7 @@ func _suite_life_db() -> void:
 	ob["sounds"].erase("step")
 	ob["wiki_orders"]["enemies"]["ids"].erase("mavka")
 	ob["boss_pools"]["ring"]["bosses"].append("mavka")
-	ob["stones"]["nova"] = {"num": 10149, "name": "x", "chance": 0.1, "price": 1, "text": "x"}
+	ob["stones"]["nova"] = {"num": 10149, "name": "x", "chance": 0.1, "coins": 1, "text": "x"}
 	ob["glory_ranks"]["otaman"]["from"] = 100
 	ob["loyalty_levels"]["znaiomyi"]["discount"] = 1.5
 	ob["name_pools"].erase("bad_lat")

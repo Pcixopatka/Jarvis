@@ -152,6 +152,7 @@ var dice_anim := {}  # шинок: з якої кості анімувати к�
 var holiday_id := ""  # сезонне свято, що йде зараз ("" — будень); оновлюється на порозі мапи, міста й хутора
 var camp_sel_uid := -1
 var chest_sel := ""  # вибрана річ на вкладці «Скриня»: "c:uid" — у скрині, "b:uid" — у торбі ("" — нічого)
+var chest_gold_sum := 0  # сума на повзунку гривень у скрині: переживає перебудову екрана після дії
 
 
 func _ready() -> void:
@@ -917,7 +918,7 @@ func _shop_tab_index(title: String) -> int:
 	var names := ["Червінці"]
 	for kind in ShopService.Shop.kinds():
 		names.append(ShopService.Shop.kind_name(kind))
-	names.append_array(["Божі дари", "Вбрання", "Універсал"])
+	names.append_array([UiShop.STONES_TAB, "Божі дари", "Вбрання", "Універсал"])
 	return maxi(0, names.find(title))
 
 
@@ -1482,9 +1483,6 @@ func _on_dungeon_cleared(loc_id: String) -> void:
 		depth_sel = int(DepthService.state(world)["max"])
 		_record("depth", d)
 		_record("depth_clear")
-		if randf() < 0.15 + 0.005 * d:
-			StoneService.grant(player, "zabuttia" if randf() < 0.6 else "alatyr")
-			combat.float_text(player.global_position + Vector2(0, -150), "Камінь долі з глибин!", Color(0.85, 0.7, 1.0))
 	if PerilService.is_peril(loc_id):
 		var pm: Array = PerilService.on_clear(world, player, loc_id, combat.run_time, slot)
 		if not pm.is_empty():
@@ -2037,11 +2035,8 @@ func _on_tower_cleared(floor_: int) -> void:
 		player.add_gold(g)
 		msg += "\n+%d грн за перше проходження" % g
 		if TowerService.is_super(floor_):
-			var stone := "alatyr" if randf() < 0.4 else "zabuttia"
-			StoneService.grant(player, stone)
 			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl + 1, 3), true)
-			combat.float_text(pos + Vector2(0, -40), "Знайдено: %s!" % StoneService.name_of(stone), Color(0.85, 0.7, 1.0))
-			msg += "\nЛегендарна річ і камінь долі!"
+			msg += "\nЛегендарна річ!"
 		else:
 			combat.spawn_pickup(pos, "item", 0, Data.gen_item(lvl, Data.roll_rarity(lvl, 1)))
 	combat._resource_bundle(pos, 3 + floor_ / 5)
@@ -3872,10 +3867,6 @@ func camp_do(action: String, arg) -> void:
 				Audio.play("quest", 0.0)
 				hud.show_banner("%s: ступінь %d!\n%s" % [Camp.kleinod(arg)["name"], kl, KleinodService.bonus_text(arg, kl)], UI.GOLD)
 				_record("kleinod")
-		"buy_stone":
-			if KleinodService.buy_stone(player, arg):
-				Audio.play("coin", 0.0)
-				hud.show_banner("Куплено: %s" % StoneService.name_of(arg), UI.GOLD)
 		"salvage":
 			# цінна річ плавиться лише з другого дотику, як «Знищити» на екрані героя
 			var sv: Dictionary = player.find_item(arg)

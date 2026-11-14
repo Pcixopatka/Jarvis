@@ -232,7 +232,7 @@ static func build_tower(world, player, sel: int, on_change: Callable, on_go: Cal
 	var boss_line: String = ("СУПЕРБОС: %s." % GameDB.boss_name(L["boss"])) if L["boss"] != "" else ("%s: %s." % [L["mini_title"], GameDB.mob_name(L["mini"])])
 	v.add_child(_wrapped("Нечисть: %s. %s Еліти: +%d%%." % [", ".join(names), boss_line, roundi(L["elite_bonus"] * 100)], 16, UI.MUTED))
 	if sel > int(s["best"]):
-		v.add_child(_wrapped("Перше проходження: +%d грн%s." % [TS.first_gold(sel), ", легендарна річ і камінь долі" if TS.is_super(sel) else " і річ"], 16, UI.GOLD))
+		v.add_child(_wrapped("Перше проходження: +%d грн%s." % [TS.first_gold(sel), " і легендарна річ" if TS.is_super(sel) else " і річ"], 16, UI.GOLD))
 	v.add_child(UI.button("Піднятися", func(): on_go.call(sel), Vector2(350, 70), 26))
 	return v
 

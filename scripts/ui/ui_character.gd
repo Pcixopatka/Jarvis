@@ -540,11 +540,11 @@ static func _holidays(game) -> Control:
 		v.add_child(UI.label("Сьогодні будень", 26, UI.GOLD, false))
 		if not nx.is_empty():
 			v.add_child(UI.label("Найближче свято: %s — за %d дн." % [Acts.holiday(nx["id"])["name"], int(nx["in_days"])], 20, UI.TEXT, false))
-		var hint := UI.label("У свята діє особливий бонус, а з нечисті падають жетони. За жетони дають три нагороди: гривні з ресурсами, річ і славу, а на великі свята ще й Алатир-камінь.", 16, UI.MUTED, false)
+		var hint := UI.label("У свята діє особливий бонус, а з нечисті падають жетони. За жетони дають три нагороди: гривні з ресурсами, річ і славу.", 16, UI.MUTED, false)
 		hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		v.add_child(hint)
 	v.add_child(UI.label("Календар свят", 24, UI.GOLD, false))
-	var legend := UI.label("★ велике свято: жетонів треба більше, зате найвища нагорода — Алатир-камінь. Малі свята коротші, і нагороди в них скромніші.", 15, UI.MUTED, false)
+	var legend := UI.label("★ велике свято: жетонів треба більше, зате гривень, трофеїв і слави дають більше. Малі свята коротші, і нагороди в них скромніші.", 15, UI.MUTED, false)
 	legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(legend)
 	var table := UI.grid(3)

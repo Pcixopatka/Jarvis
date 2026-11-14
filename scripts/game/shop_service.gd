@@ -1,5 +1,6 @@
 extends RefCounted
-## Крамниця за донат: баланс червінців, каталог усього рідкісного й покупка (ціни — у Shop).
+## Крамниця за донат: баланс червінців, каталог усього рідкісного й покупка (ціни — у Shop;
+## камені долі — «coins» у data/stones.json, купуються скільки завгодно й лягають героєві, що купує).
 ## Стан спільний для роду й лежить в акаунті (world.shop):
 ##   {"coins": залишок, "paid": скільки червінців куплено за гроші, "spent": скільки витрачено,
 ##    "packs": {товар: скільки разів куплено}, "bought": {"вид:id": скільки разів}}
@@ -13,6 +14,7 @@ const Sets := preload("res://scripts/data/sets.gd")
 const Souls := preload("res://scripts/data/souls.gd")
 const Classes := preload("res://scripts/data/classes.gd")
 const SoulService := preload("res://scripts/game/soul_service.gd")
+const StoneService := preload("res://scripts/game/stone_service.gd")
 const PerilService := preload("res://scripts/game/peril_service.gd")
 const GameDB := preload("res://scripts/core/game_db.gd")
 
@@ -90,9 +92,12 @@ static func _peril_bosses() -> Array:
 	return out
 
 
-## Ціна товару в червінцях (0 — такого товару нема): ступені золота й душ, розділи крамниці (data/shop_kinds.json).
+## Ціна товару в червінцях (0 — такого товару нема): ступені золота й душ, розділи крамниці (data/shop_kinds.json),
+## камені долі (data/stones.json).
 static func price(kind: String, id: String) -> int:
 	match kind:
+		"stone":
+			return int(GameDB.row("stones", id).get("coins", 0)) if StoneService.has(id) else 0
 		"soul":
 			if not Souls.has(id):
 				return 0
@@ -118,6 +123,8 @@ static func price(kind: String, id: String) -> int:
 ## Усі товари одного виду за порядком показу: ["id", ...].
 static func ids(kind: String) -> Array:
 	match kind:
+		"stone":
+			return GameDB.ids("stones")
 		"soul":
 			return SoulService.known()
 		"unique":
@@ -200,6 +207,9 @@ static func buy(world, player, kind: String, id: String) -> Dictionary:
 	if kind == "soul":
 		SoulService.grant(player, id)
 		what = "%s у торбинці душ" % SoulService.soul_name(id)
+	elif kind == "stone":
+		StoneService.grant(player, id)
+		what = "%s (у тебе %d)" % [StoneService.name_of(id), StoneService.count(player, id)]
 	else:
 		items = _make(player, kind, id)
 		for it in items:
