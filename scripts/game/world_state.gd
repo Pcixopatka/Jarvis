@@ -7,6 +7,7 @@ const StoryService := preload("res://scripts/game/story_service.gd")
 const DefenseService := preload("res://scripts/game/defense_service.gd")
 const Acts := preload("res://scripts/data/activities.gd")
 const EscortService := preload("res://scripts/game/escort_service.gd")
+const DUNGEON_QUEST_MULT := 2.0  # завдання на печеру: нагорода вдвічі більша за звичайне
 
 var loyalty := {}  # місто -> очки
 var boards := {}  # місто -> доступні завдання
@@ -151,17 +152,14 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 	var eff: int = Data.loc_level(L, hero_level)
 	var q := {"id": next_quest_id, "city": city, "loc": loc_id, "progress": 0, "lvl": eff}
 	next_quest_id += 1
-	var mult := 1.0
 	var r := randf()
 	if L["type"] == "dungeon" and r < 0.7:
 		q["type"] = "dungeon"
 		q["target"] = loc_id
 		q["count"] = 1
 		q["text"] = "Очисти: %s" % L["name"]
-		mult = 2.0
 	elif L["type"] != "dungeon" and (want_escort or r < Acts.ESCORT_CHANCE):
 		EscortService.fill(q, randf())  # проведи мандрівника через цю місцевість
-		mult = Acts.ESCORT_MULT
 	else:
 		var enemies: Array = L["enemies"]
 		var e: String = enemies[randi() % enemies.size()]
@@ -174,10 +172,26 @@ func _gen_quest(city: String, want_escort: bool = false) -> Dictionary:
 			q["type"] = "fetch"
 			q["count"] = 4 + L["level"] / 2
 			q["text"] = "Принеси: %s × %d (%s)" % [GameDB.quest_item(e), q["count"], L["name"]]
+	var mult := quest_mult(q)
 	q["gold"] = int((40 + 25 * eff) * mult)
-	q["xp"] = int((30 + 20 * eff) * mult)
 	q["loyalty"] = int((30 + 5 * L["level"]) * mult)
-	return q
+	return q  # досвіду числом нема: його рахує quest_xp_share за рівнем героя, коли завдання здають
+
+
+## Множник нагороди завдання міста за його видом: печера (DUNGEON_QUEST_MULT), супровід (Acts.ESCORT_MULT), решта 1.
+## Вид пишеться в завдання, тож множник той самий і для завдань зі старих збережень.
+static func quest_mult(q: Dictionary) -> float:
+	match str(q.get("type", "")):
+		"dungeon":
+			return DUNGEON_QUEST_MULT
+		"escort":
+			return Acts.ESCORT_MULT
+	return 1.0
+
+
+## Частка смуги досвіду (Player.add_mission_xp) за завдання міста: Data.CITY_QUEST_XP × множник завдання.
+static func quest_xp_share(q: Dictionary) -> float:
+	return Data.mission_share("city") * quest_mult(q)
 
 
 func can_take() -> bool:
@@ -325,6 +339,12 @@ func from_dict(d: Dictionary) -> void:
 	loyalty = d.get("loyalty", {})
 	boards = d.get("boards", {})
 	quests = d.get("quests", [])
+	# давні завдання несли досвід числом («xp»): тепер його рахує quest_xp_share за рівнем героя
+	for q in quests:
+		q.erase("xp")
+	for c in boards:
+		for q in boards[c]:
+			q.erase("xp")
 	companions = d.get("companions", [])
 	cleared = d.get("cleared", {})
 	last_city = d.get("last_city", "sich")

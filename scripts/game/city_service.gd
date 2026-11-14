@@ -184,12 +184,13 @@ static func dismiss(world, index: int) -> void:
 		world.companions.remove_at(index)
 
 
-## Здає завдання; повертає {"quest", "loyalty_up"} або порожній словник.
+## Здає завдання; повертає {"quest", "loyalty_up", "xp": скільки досвіду дістав рівень чи звитяга} або порожній словник.
+## Досвід — частка смуги нинішнього рівня (WorldState.quest_xp_share, Player.add_mission_xp), без надбавок.
 static func turn_in(world, player: Player, qid: int) -> Dictionary:
 	var q: Dictionary = world.turn_in(qid)
 	if q.is_empty():
 		return {}
 	player.gold += q["gold"]
-	player.add_xp(q["xp"])
+	var got: int = player.add_mission_xp(world.quest_xp_share(q))
 	var up: bool = world.add_loyalty(q["city"], q["loyalty"])
-	return {"quest": q, "loyalty_up": up}
+	return {"quest": q, "loyalty_up": up, "xp": got}

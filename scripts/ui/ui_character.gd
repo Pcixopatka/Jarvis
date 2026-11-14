@@ -109,7 +109,7 @@ static func _hero(game) -> Control:
 	sum.add_theme_constant_override("separation", 0)
 	top.add_child(sum)
 	for pair in [["Шкода за секунду", UI.num(int(p.Power.dps(p)))], ["Здоров'я", "%s / %s" % [UI.num(int(p.hp)), UI.num(int(p.max_hp))]],
-			["Захист", "%d%%" % roundi(p.armor * 100)], ["Наснага", "%d / %d" % [int(p.mana), int(p.max_mana)]]]:
+			["Захист", HeroSheet.armor_text(p)], ["Наснага", "%d / %d" % [int(p.mana), int(p.max_mana)]]]:
 		sum.add_child(UI.label(pair[0], 14, UI.MUTED, false))
 		sum.add_child(UI.label(pair[1], 21, UI.GOLD if pair[0] == "Шкода за секунду" else UI.TEXT, false))
 	var doll_box := VBoxContainer.new()

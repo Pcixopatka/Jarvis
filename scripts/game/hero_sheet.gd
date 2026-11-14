@@ -18,7 +18,8 @@ const OTHER := "Інше"
 const PROC_KEYS := [["bleed_hit", "bleed"], ["burn_hit", "burn"], ["chill_hit", "chill"], ["weak_hit", "weak"], ["curse_hit", "curse"], ["stun_hit", ""]]
 const STUN_LABEL := "Оглушення"
 const SHOT_LABEL := "Сила пострілу"
-const SPEED_CAP_MARK := "(стеля)"  # після швидкості бігу, коли вона вперлась у стелю
+const CRIT_MULT_LABEL := "Множник криту"
+const CAP_MARK := "(стеля)"  # біля числа, що вперлось у тверду межу (див. _capped)
 
 
 # ---------------- Числа ----------------
@@ -168,11 +169,13 @@ static func res_drop_mult(p, drop_boost: float) -> float:
 static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Array:
 	var atk := [
 		["Зброя", Data.weapon_name(p.weapon_type)],
-		["Ударів за секунду", "%.2f" % (1.0 / p.attack_cooldown)],
+		# стрілець частіше за RANGED_MIN_CD не стріляє (Player.recalc): надлишок іде в силу пострілу
+		["Ударів за секунду", _capped("%.2f" % (1.0 / p.attack_cooldown), uses_shot_mult(p) and p.attack_cooldown <= PlayerScript.RANGED_MIN_CD)],
 		["Шкода удару", "%.1f" % p.damage],
-		["Шанс криту", "%d%%  (x%s)" % [roundi(p.crit_chance * 100), _trim(p.crit_mult)]],
+		["Шанс криту", _capped("%d%%" % roundi(p.crit_chance * 100), p.crit_chance >= PlayerScript.CRIT_CAP)],
+		[CRIT_MULT_LABEL, "x" + _trim(p.crit_mult)],
 		["Сила вмінь", "%d%%" % roundi(p.skill_power * 100)],
-		["Перезарядка вмінь", "%d%%" % roundi(p.skill_cd_mult * 100)],
+		["Перезарядка вмінь", _capped("%d%%" % roundi(p.skill_cd_mult * 100), p.skill_cd_mult <= PlayerScript.SKILL_CD_MIN)],
 		["Дальність удару", "%d" % int(p.attack_range)],
 		["Замах", "%d°" % roundi(rad_to_deg(p.attack_arc))],
 	]
@@ -197,13 +200,14 @@ static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Arra
 		["Відновлення", "%.1f / с" % p.regen],
 		["Вампіризм", "%.1f%%" % (p.lifesteal * 100)],
 		["Вампіризм лікує до", "%s / с" % _share(Data.LIFESTEAL_MAX_HPS)],
-		["Блок гасить", _share(1.0 - block_pass(p))],
-		["Оберіг", _share(1.0 - ward_pass(p))],
+		# частини від умінь мають свої межі (Player.take_damage, recalc): на межі — позначка, хоч інші джерела ще рухають число
+		["Блок гасить", _capped(_share(1.0 - block_pass(p)), p.fx("block") >= PlayerScript.BLOCK_FX_CAP)],
+		["Оберіг", _capped(_share(1.0 - ward_pass(p)), p.fx("ward") >= PlayerScript.WARD_FX_CAP)],
 		["Шипи", _share(p.thorns)],
 		["Парирування лікує", _share(parry_heal(p))],
 		["За вбивство: здоров'я", _share(kill_heal(p))],
-		["Перекид раз на", "%.2f с" % p.dodge_cooldown],
-		["Стани коротші", _share(status_res(p))],
+		["Перекид раз на", _capped("%.2f с" % p.dodge_cooldown, 1.0 - p.fx("dodge_cd") / 100.0 <= PlayerScript.DODGE_FX_MIN)],
+		["Стани коротші", _capped(_share(status_res(p)), status_res(p) >= PlayerScript.STATUS_RES_CAP)],
 		["Зараза слабша", _share(1.0 - plague_pass(p))],
 		["Лікування героя", _share(heal_taken(p))],
 	]
@@ -227,7 +231,18 @@ static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Arra
 ## Швидкість бігу; коли частина без умінь уперлась у стелю (Player.SPEED_CAP) — з позначкою, навіть якщо
 ## вміння женуть число вище: речами, душами й Спритністю більше вже не додати.
 static func speed_text(p) -> String:
-	return "%d" % int(p.speed) + (" " + SPEED_CAP_MARK if p.speed_base >= PlayerScript.SPEED_CAP else "")
+	return _capped("%d" % int(p.speed), p.speed_base >= PlayerScript.SPEED_CAP)
+
+
+## «Захист» у зведенні вкладки: частка, яку гасить броня; на Data.ARMOR_CAP — з позначкою.
+static func armor_text(p) -> String:
+	return _capped("%d%%" % roundi(p.armor * 100), p.armor >= Data.ARMOR_CAP)
+
+
+## Число з позначкою CAP_MARK, коли показник чи його частина вже на твердій межі; нижче межі — без змін.
+## Умову пишуть з тих самих полів і сталих, що й бій: minf/maxf/clampf дають рівно сталу, тож порівняння точне.
+static func _capped(text: String, at_cap: bool) -> String:
+	return text + (" " + CAP_MARK if at_cap else "")
 
 
 ## Множник як надбавка: 1.12 → «+12%», 0.92 → «−8%».

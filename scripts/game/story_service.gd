@@ -299,8 +299,8 @@ static func _apply_reward(world, player, r: Dictionary, msgs: Array) -> void:
 		player.recalc()
 	if r.has("gold"):
 		player.gold += int(r["gold"])
-	if r.has("xp"):
-		player.add_xp(int(r["xp"]))
+	if r.has("xp"):  # частка смуги нинішнього рівня й майстерності, без надбавок (Player.add_mission_xp)
+		msgs.append({"text": "+%d досвіду" % QuestEngine.pay_xp(player, r), "big": false})
 	if r.has("loyalty"):
 		for city in r["loyalty"]:
 			world.add_loyalty(city, int(r["loyalty"][city]))

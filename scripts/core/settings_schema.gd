@@ -57,6 +57,9 @@ const SCHEMAS := {
 		"skill_points_per_level": {"type": "int", "check": "nonneg", "about": "очок умінь за рівень майстерності класу"},
 		"perk_points_per_level": {"type": "int", "check": "nonneg", "about": "очок Загартування за кожні harden_every рівнів героя"},
 		"perk_tier_step": {"type": "int", "check": "count", "about": "скільки очок треба вкласти в гілку Загартування, щоб відкрити наступний ярус"},
+		"mission_xp": {"type": "float", "check": "chance", "about": "крок історії, переказу чи доручення (reward.xp «mission»): частка смуги нинішнього рівня героя, без надбавок; та сама частка смуги майстерності"},
+		"boss_mission_xp": {"type": "float", "check": "chance", "about": "крок, мети якого не досягти без перемоги над босом (reward.xp «boss»): частка смуги рівня й майстерності"},
+		"city_quest_xp": {"type": "float", "check": "chance", "about": "завдання міста: частка смуги рівня й майстерності, помножена на множник завдання (печера, супровід)"},
 	},
 	"hero_combat": {
 		"num": _NUM,

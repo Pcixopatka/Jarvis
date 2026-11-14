@@ -75,7 +75,8 @@ static func sections(world, player) -> Array:
 	for id in StoryService.missions(world):
 		var target: String = StoryService.QuestEngine.target(world, id)
 		var back: bool = StoryService.QuestEngine.stage(world, id) == "turnin"
-		story_rows.append(_row(marked(id, StoryService.mission_line(world, id)), Data.place_name(target) if target != "" else "", "", "", back, "Повертайся по нагороду", target))
+		var xp_reward: String = StoryService.QuestEngine.xp_text(StoryService.QuestEngine.step(id).get("reward", {}), player)  # досвід, який герой дістане зараз
+		story_rows.append(_row(marked(id, StoryService.mission_line(world, id)), Data.place_name(target) if target != "" else "", "", xp_reward, back, "Повертайся по нагороду", target))
 	# Наступна сюжетна місія, якій бракує лише рівня: видно, що далі й чому ще закрито (вона замінює примітку саги)
 	var waits := {"story": [], "legend": [], "side": []}
 	for id in StoryService.QuestEngine.waiting(world):
@@ -111,7 +112,7 @@ static func sections(world, player) -> Array:
 	var LegendS = load("res://scripts/game/legend_service.gd")  # рядки — відкриті місії переказів рушія
 	rows = []
 	var lms: Array = LegendS.missions(world)
-	var lrs: Array = LegendS.rows(world)
+	var lrs: Array = LegendS.rows(world, player)
 	for i in lrs.size():
 		var lr: Dictionary = lrs[i]
 		var lplace: String = str(lr["target"])
@@ -124,7 +125,7 @@ static func sections(world, player) -> Array:
 	# Доручення: місії поза історією й переказами (SideService)
 	var SideS = load("res://scripts/game/side_service.gd")
 	rows = []
-	for sr in SideS.rows(world):
+	for sr in SideS.rows(world, player):
 		var splace: String = str(sr["target"])
 		rows.append(_row(marked(str(sr["id"]), "%s: %s" % [sr["title"], _clean(str(sr["text"]))]), Data.place_name(splace) if splace != "" else "", "", str(sr["reward"]),
 			bool(sr["back"]), "Повертайся по нагороду", splace))
@@ -138,8 +139,7 @@ static func sections(world, player) -> Array:
 		var reward := []
 		if int(q.get("gold", 0)) > 0:
 			reward.append("%d грн" % int(q["gold"]))
-		if int(q.get("xp", 0)) > 0:
-			reward.append("досвіду %d" % int(q["xp"]))
+		reward.append(StoryService.QuestEngine.share_text(world.quest_xp_share(q), player))
 		if int(q.get("loyalty", 0)) > 0:
 			reward.append("лояльності %d" % int(q["loyalty"]))
 		var city: String = Data.place_name(str(q["city"]))

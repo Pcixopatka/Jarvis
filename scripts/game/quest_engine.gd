@@ -31,6 +31,7 @@ extends RefCounted
 ## позначки мапи питають часто.
 
 const GameDB := preload("res://scripts/core/game_db.gd")
+const Data := preload("res://scripts/data/data.gd")
 
 ## Служба, що веде кроки кожного виду лінії («kind» у quest_lines.json).
 const KIND_SERVICES := {"story": "res://scripts/game/story_service.gd", "legend": "res://scripts/game/legend_service.gd", "saga": "res://scripts/game/saga_service.gd",
@@ -395,6 +396,33 @@ static func set_stage(world, id: String, stage_name: String) -> void:
 
 static func set_progress(world, id: String, n: int) -> void:
 	_entry(world, id)["progress"] = n
+
+
+# ---------- Досвід за місію ----------
+
+## Частка смуги, яку дає нагорода r (reward.xp — вид частки, Data.MISSION_XP); 0 — без досвіду.
+static func xp_share(r: Dictionary) -> float:
+	return Data.mission_share(str(r["xp"])) if r.has("xp") else 0.0
+
+
+## Дати досвід нагороди r (Player.add_mission_xp). Повертає, скільки дістав рівень чи звитяга.
+static func pay_xp(player, r: Dictionary) -> int:
+	return player.add_mission_xp(xp_share(r)) if r.has("xp") else 0
+
+
+## Досвід частки share словами: для героя player — число, яке дасть Player.mission_xp (те саме, що заплатить
+## pay_xp зараз); без героя (довідник) — частка смуги. share 0 — "".
+static func share_text(share: float, player = null) -> String:
+	if share <= 0.0:
+		return ""
+	if player != null:
+		return "досвіду %d" % int(player.mission_xp(share)[0])
+	return "%s%% досвіду рівня" % str(snappedf(share * 100.0, 0.1)).trim_suffix(".0")
+
+
+## Досвід нагороди r словами (share_text).
+static func xp_text(r: Dictionary, player = null) -> String:
+	return share_text(xp_share(r), player)
 
 
 ## Крок здано: він пройдений для всіх, хто на нього чекає.

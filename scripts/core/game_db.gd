@@ -665,11 +665,14 @@ const REWARD_ITEM := {"type": "record", "fields": {
 	"name": {"type": "string", "required": true},
 }}
 
+## Вид частки досвіду в нагороді кроку (reward.xp): звичайний крок чи крок, мети якого не досягти без боса.
+const XP_KINDS := ["mission", "boss"]
+
 ## Нагорода. Які поля читає служба кожної таблиці, — QUEST_REWARDS.
 const REWARD_FIELDS := {
 	"gold": {"type": "int"},
 	"gold_lvl": {"type": "int"},  # гривень за кожен рівень героя (перекази)
-	"xp": {"type": "int"},
+	"xp": {"type": "enum", "values": XP_KINDS},  # вид частки досвіду (Data.MISSION_XP): смуга рівня й майстерності, без надбавок
 	"trophy": {"type": "int"},  # трофеї (ресурс CampData.TROPHY)
 	"rank": {"type": "string"},  # звання героя (StoryService.RANKS)
 	"class": {"type": "string"},  # новий клас героя (classes.json)
@@ -3073,10 +3076,14 @@ const QUEST_OBJECTIVES := {
 ## Які поля нагороди читає служба кожної таблиці (нагорода кроку, вибору й бонусу) і чи річ має свій рівень («ilvl»).
 const QUEST_REWARDS := {
 	"story": {"keys": ["gold", "xp", "rank", "class", "banner", "skills", "stats", "loyalty", "item"], "ilvl": true},
-	"legend_steps": {"keys": ["gold_lvl", "trophy", "item"], "ilvl": true},
-	"saga": {"keys": ["gold", "trophy", "xp", "item"], "ilvl": true},
+	"legend_steps": {"keys": ["gold_lvl", "xp", "trophy", "item"], "ilvl": true},
+	"saga": {"keys": ["gold", "trophy", "item"], "ilvl": true},
 	"side": {"keys": ["gold", "xp", "trophy", "loyalty", "res", "item"], "ilvl": true},
 }
+## Нагорода виборів і «bonus» кроку історії: те саме, що в кроку, крім досвіду (його дає сам крок).
+const CHOICE_REWARD_KEYS := ["gold", "rank", "class", "banner", "skills", "stats", "loyalty", "item"]
+## Таблиці, де кожен крок дає досвід (reward.xp обов'язкове й збігається з objective_xp_kind).
+const XP_STEP_TABLES := ["story", "legend_steps"]
 ## Яка лінія (kind у quest_lines.json) у кроків кожної таблиці.
 const QUEST_LINE_KIND := {"story": "story", "legend_steps": "legend", "saga": "saga", "side": "side"}
 
@@ -3146,7 +3153,7 @@ static func _quest_rules(name: String, rows: Dictionary) -> Array:
 					var C: Dictionary = R["choices"][j]
 					var cw := "%s.choices[%d]" % [where, j]
 					_not_blank(C, ["text", "reply", "memo", "class"], cw, out)
-					_reward_rules(cw + ".reward", C.get("reward", _EMPTY), QUEST_REWARDS["story"]["keys"], true, out)
+					_reward_rules(cw + ".reward", C.get("reward", _EMPTY), CHOICE_REWARD_KEYS, true, out)
 					with_class += 1 if C.has("class") else 0
 				if with_class > 0 and with_class != R["choices"].size():
 					out.append("%s: «class» мають або всі вибори (вибір дороги), або жоден" % where)
@@ -3154,7 +3161,7 @@ static func _quest_rules(name: String, rows: Dictionary) -> Array:
 					var B: Dictionary = R["bonus"][j]
 					if not _is_cond(str(B.get("if", ""))):
 						out.append("%s.bonus[%d]: «if» має бути \"ключ=номер вибору\"" % [where, j])
-					_reward_rules("%s.bonus[%d].reward" % [where, j], B.get("reward", _EMPTY), QUEST_REWARDS["story"]["keys"], true, out)
+					_reward_rules("%s.bonus[%d].reward" % [where, j], B.get("reward", _EMPTY), CHOICE_REWARD_KEYS, true, out)
 			"quest_lines":
 				var kind := str(R.get("kind", ""))
 				var need: Array = {"story": [], "legend": ["title", "land", "source", "min_level"], "saga": ["title", "min_level"], "side": ["title"]}.get(kind, [])
@@ -3235,7 +3242,7 @@ static func _reward_rules(where: String, r: Dictionary, allowed: Array, ilvl: bo
 	for k in r:
 		if not k in allowed:
 			out.append("%s: служба не читає «%s» (читає %s)" % [where, k, str(allowed)])
-	_positive(r, ["gold", "gold_lvl", "xp", "trophy"], where, out, true)
+	_positive(r, ["gold", "gold_lvl", "trophy"], where, out, true)
 	for m in ["skills", "stats", "loyalty", "res"]:
 		for k in r.get(m, _EMPTY):
 			if int(r[m][k]) <= 0:
@@ -3486,6 +3493,41 @@ static func _objective_links(where: String, o: Dictionary, out: Array) -> void:
 		out.append("%s: «%s» не водиться в «%s»" % [where, o["enemy"], loc])
 
 
+## Вид частки досвіду, якого просить мета кроку: «boss» — мети не досягти без перемоги над босом (печера з босом;
+## kill чи fetch виду, що буває лише босом: є «boss» у mobs.json, а звичайним не водиться ніде), інакше «mission».
+static func objective_xp_kind(o: Dictionary) -> String:
+	match str(o.get("type", "")):
+		"dungeon":
+			if str(row("places", str(o.get("loc", ""))).get("boss", "")) != "":
+				return "boss"
+		"kill", "fetch":
+			var e := str(o.get("enemy", ""))
+			if mob(e).has("boss") and not _roams(e):
+				return "boss"
+	return "mission"
+
+
+## Чи вид e водиться звичайним хоч в одному місці (enemies у places.json).
+static func _roams(e: String) -> bool:
+	for id in ids("places"):
+		if e in row("places", id).get("enemies", []):
+			return true
+	return false
+
+
+## reward.xp кроку: в історії й переказах — обов'язкове й таке, як каже мета (objective_xp_kind); у доручення — лише «mission».
+static func _xp_kind_links(table_name: String, where: String, R: Dictionary, out: Array) -> void:
+	var r: Dictionary = R.get("reward", _EMPTY)
+	var want := objective_xp_kind(R.get("objective", _EMPTY))
+	if table_name in XP_STEP_TABLES:
+		if not r.has("xp"):
+			out.append("%s.reward: «xp» обов'язкове: кожен крок дає частку досвіду («%s» за його метою)" % [where, want])
+		elif str(r["xp"]) != want:
+			out.append("%s.reward: «xp» «%s», а мета каже «%s» (GameDB.objective_xp_kind)" % [where, r["xp"], want])
+	elif r.has("xp") and str(r["xp"]) != "mission":
+		out.append("%s.reward: «xp» доручення — лише «mission»" % where)
+
+
 ## Нагорода: клас, уміння, характеристики, міста, звання й річ — ті, що є в грі.
 static func _reward_links(where: String, r: Dictionary, out: Array) -> void:
 	if r.has("class") and not _has_row("classes", r["class"]):
@@ -3575,6 +3617,7 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 					_dialogue_links(where, k, R.get(k, []), keys, null, out)  # чи вибір зроблено раніше — _quest_graph_links
 				_objective_links(where, R.get("objective", _EMPTY), out)
 				_reward_links(where + ".reward", R.get("reward", _EMPTY), out)
+				_xp_kind_links(name, where, R, out)
 				var first: Array = row("classes", "peasant").get("next", [])
 				for j in R.get("choices", []).size():
 					var C: Dictionary = R["choices"][j]
@@ -3632,6 +3675,7 @@ static func _quest_links(name: String, rows: Dictionary) -> Array:
 					_dialogue_links(where, k, R.get(k, []), story_keys, null, out)
 				_objective_links(where, R.get("objective", _EMPTY), out)
 				_reward_links(where + ".reward", R.get("reward", _EMPTY), out)
+				_xp_kind_links(name, where, R, out)
 		"way":
 			var WS = load("res://scripts/game/way_service.gd")
 			var CS = load("res://scripts/game/challenge_service.gd")

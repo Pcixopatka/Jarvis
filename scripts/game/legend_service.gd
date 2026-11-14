@@ -122,12 +122,15 @@ static func objective_met(world, _player, id: String) -> Array:
 	return [{"text": "✦ Переказ: мету виконано!\nПовертайся: %s" % Data.place_name(str(QuestEngine.step(id)["city"])), "big": true}]
 
 
-## Нагорода кроку словами (для довідника й журналу).
-static func reward_text(st: Dictionary, level: int = 0) -> String:
+## Нагорода кроку словами (для довідника й журналу). player — герой: гривні й досвід числами, які він дістане
+## зараз (без героя — за рівень і частка смуги).
+static func reward_text(st: Dictionary, player = null) -> String:
 	var r: Dictionary = st.get("reward", {})
 	var parts := []
 	if r.has("gold_lvl"):
-		parts.append(("%d грн" % (int(r["gold_lvl"]) * level)) if level > 0 else ("%d грн за рівень героя" % int(r["gold_lvl"])))
+		parts.append(("%d грн" % (int(r["gold_lvl"]) * int(player.level))) if player != null else ("%d грн за рівень героя" % int(r["gold_lvl"])))
+	if r.has("xp"):
+		parts.append(QuestEngine.xp_text(r, player))
 	if r.has("trophy"):
 		parts.append("%d трофеїв" % int(r["trophy"]))
 	if r.has("item"):
@@ -149,6 +152,8 @@ static func _complete(world, player, id: String) -> Array:
 	if r.has("trophy"):
 		player.resources["trophy"] = int(player.resources.get("trophy", 0)) + int(r["trophy"])
 		parts.append("+%d трофеїв" % int(r["trophy"]))
+	if r.has("xp"):  # частка смуги нинішнього рівня й майстерності, без надбавок
+		parts.append("+%d досвіду" % QuestEngine.pay_xp(player, r))
 	msgs.append({"text": "Переказ «%s»: «%s» завершено!" % [L["title"], st["title"]], "big": true})
 	if not parts.is_empty():
 		msgs.append({"text": ", ".join(parts), "big": false})
@@ -210,14 +215,15 @@ static func mission_line(world, id: String) -> String:
 	return "Поговори: %s (%s)" % [Story.npc_name(st["giver"]), Data.place_name(str(st["city"]))]
 
 
-## Рядки для журналу: [{"line", "title", "text", "target", "back": чи час повертатися, "reward"}].
-static func rows(world) -> Array:
+## Рядки для журналу: [{"line", "title", "text", "target", "back": чи час повертатися, "reward"}]. player — для
+## гривень і досвіду числами (reward_text).
+static func rows(world, player = null) -> Array:
 	var out := []
 	for id in missions(world):
 		var st := QuestEngine.step(id)
 		var line := QuestEngine.line_of(id)
 		out.append({"line": line, "title": "%s. %s" % [Legends.line(line)["title"], st["title"]], "text": mission_line(world, id),
-			"target": mission_target(world, id), "back": QuestEngine.stage(world, id) == "turnin", "reward": reward_text(st, int(world.hero_level))})
+			"target": mission_target(world, id), "back": QuestEngine.stage(world, id) == "turnin", "reward": reward_text(st, player)})
 	return out
 
 

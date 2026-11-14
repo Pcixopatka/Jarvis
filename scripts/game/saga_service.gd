@@ -107,8 +107,6 @@ static func _complete(world, player, id: String) -> Array:
 	if r.has("trophy"):
 		player.resources["trophy"] = int(player.resources.get("trophy", 0)) + int(r["trophy"])
 		parts.append("+%d трофеїв" % int(r["trophy"]))
-	if r.has("xp"):
-		player.add_xp(int(r["xp"]))
 	if not parts.is_empty():
 		msgs.append({"text": ", ".join(parts), "big": false})
 	if r.has("item"):

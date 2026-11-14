@@ -131,8 +131,9 @@ static func _hall(game, city: String, rows: Array) -> Control:
 	return v
 
 
-static func _reward_text(q: Dictionary) -> String:
-	return "Нагорода: %d грн, %d досвіду, +%d лояльності" % [q["gold"], q["xp"], q["loyalty"]]
+## Нагорода завдання; досвід — те, що герой player дістане, якщо здасть його зараз (CityService.turn_in).
+static func _reward_text(q: Dictionary, world, player) -> String:
+	return "Нагорода: %d грн, %d досвіду, +%d лояльності" % [q["gold"], int(player.mission_xp(world.quest_xp_share(q))[0]), q["loyalty"]]
 
 
 # ---------------- Завдання ----------------
@@ -180,7 +181,7 @@ static func _quest_row(game, q: Dictionary, mode: String) -> Control:
 	# завдання в закрите місце висить сірим: узяти ще зарано (WorldState.quest_open)
 	var shut: bool = mode == "take" and not w.quest_open(q, int(game.player.level))
 	info.add_child(UI.label(q["text"] + prog, 21, UI.MUTED if shut else (UI.GOOD if done and mode != "take" else UI.TEXT), false))
-	info.add_child(UI.label(_reward_text(q), 16, UI.MUTED, false))
+	info.add_child(UI.label(_reward_text(q, game.world, game.player), 16, UI.MUTED, false))
 	row.add_child(info)
 	if shut:
 		row.add_child(_wait_note(w.quest_open_from(q), 170))

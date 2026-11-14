@@ -26,7 +26,7 @@
 		"end": [
 			["kobzar", "Добра смола, чорна. Обмаж нею свитку, як Кирило, і хай змій кусає на здоров'я."]
 		],
-		"reward": {"gold_lvl": 80, "trophy": 2}
+		"reward": {"gold_lvl": 80, "xp": "mission", "trophy": 2}
 	},
 	"kozhumiaka_2": {
 		"num": 9252,
@@ -53,6 +53,7 @@
 		],
 		"reward": {
 			"gold_lvl": 150,
+			"xp": "mission",
 			"trophy": 5,
 			"item": {"slot": "belt", "rarity": 3, "ilvl": 10, "up": 1, "name": "Пояс Кожум'яки"}
 		}
@@ -78,7 +79,7 @@
 			"text": "Очисть Чорногору, щоб дійти до скелі Довбуша"
 		},
 		"end": [["yakym", "Стежка вільна. Бачиш, ти й не спитав, скільки там золота. Це добрий знак."]],
-		"reward": {"gold_lvl": 120, "trophy": 3}
+		"reward": {"gold_lvl": 120, "xp": "mission", "trophy": 3}
 	},
 	"dovbush_2": {
 		"num": 9254,
@@ -102,7 +103,7 @@
 			"text": "Здобудь шість вовчих шкур із вовкулак"
 		},
 		"end": [["yakym", "Горять. Чуєш, як стихло в горах? Лишився той, що сидить у самій печері."]],
-		"reward": {"gold_lvl": 150, "trophy": 4}
+		"reward": {"gold_lvl": 150, "xp": "mission", "trophy": 4}
 	},
 	"dovbush_3": {
 		"num": 9255,
@@ -129,6 +130,7 @@
 		],
 		"reward": {
 			"gold_lvl": 250,
+			"xp": "boss",
 			"trophy": 8,
 			"item": {"slot": "belt", "rarity": 3, "ilvl": 22, "up": 2, "name": "Черес Довбуша"}
 		}
@@ -152,7 +154,7 @@
 			"text": "Очисть Путивльську пущу від Солов'євої зграї"
 		},
 		"end": [["les", "Пуща притихла. Тепер він знає, що по нього йдуть, і свистітиме на повну."]],
-		"reward": {"gold_lvl": 120, "trophy": 3}
+		"reward": {"gold_lvl": 120, "xp": "mission", "trophy": 3}
 	},
 	"solovei_2": {
 		"num": 9257,
@@ -175,7 +177,7 @@
 			["les", "Купці вже питають, чи правда, що дорога вільна. Правда. Гетьманська скарбниця тобі дякує."],
 			["les", "А Соловей, кажуть, навчився свистіти в Баби Яги. Її хатка стоїть на Поліссі."]
 		],
-		"reward": {"gold_lvl": 200, "trophy": 6}
+		"reward": {"gold_lvl": 200, "xp": "boss", "trophy": 6}
 	},
 	"solovei_3": {
 		"num": 9258,
@@ -200,6 +202,7 @@
 		],
 		"reward": {
 			"gold_lvl": 280,
+			"xp": "boss",
 			"trophy": 8,
 			"item": {"slot": "amulet", "rarity": 3, "ilvl": 26, "up": 2, "name": "Солов'їний манок"}
 		}
@@ -222,7 +225,7 @@
 		"end": [
 			["polkovnyk", "Отже, Вій. Старі люди кажуть, що його повіки сягають землі, а погляд убиває."]
 		],
-		"reward": {"gold_lvl": 150, "trophy": 4}
+		"reward": {"gold_lvl": 150, "xp": "boss", "trophy": 4}
 	},
 	"vii_2": {
 		"num": 9260,
@@ -247,7 +250,7 @@
 			"text": "Здобудь вісім чортових рогів на крейду для кола"
 		},
 		"end": [["polkovnyk", "Крейда готова. Пам'ятай одне: не дивись йому в очі, хоч би як кликав."]],
-		"reward": {"gold_lvl": 180, "trophy": 5}
+		"reward": {"gold_lvl": 180, "xp": "mission", "trophy": 5}
 	},
 	"vii_3": {
 		"num": 9261,
@@ -269,6 +272,7 @@
 		],
 		"reward": {
 			"gold_lvl": 300,
+			"xp": "boss",
 			"trophy": 10,
 			"item": {"slot": "amulet", "rarity": 3, "ilvl": 30, "up": 3, "name": "Оберіг бурсака"}
 		}
@@ -296,7 +300,7 @@
 			"text": "Розжени п'ятнадцять мар довкола замку"
 		},
 		"end": [["chumak", "Дорога знову проїжджа. Та вікно світиться й далі."]],
-		"reward": {"gold_lvl": 150, "trophy": 4}
+		"reward": {"gold_lvl": 150, "xp": "mission", "trophy": 4}
 	},
 	"bila_pani_2": {
 		"num": 9263,
@@ -317,6 +321,7 @@
 		],
 		"reward": {
 			"gold_lvl": 300,
+			"xp": "boss",
 			"trophy": 10,
 			"item": {"slot": "head", "rarity": 3, "ilvl": 33, "up": 2, "name": "Вінець Білої Пані"}
 		}
@@ -346,7 +351,7 @@
 		"end": [
 			["koval", "Тепер у шахту можна спуститись. Візьми мій ліхтар: Шубін не любить темряви, якої не сам наробив."]
 		],
-		"reward": {"gold_lvl": 180, "trophy": 5}
+		"reward": {"gold_lvl": 180, "xp": "mission", "trophy": 5}
 	},
 	"shubin_2": {
 		"num": 9265,
@@ -372,6 +377,7 @@
 		],
 		"reward": {
 			"gold_lvl": 320,
+			"xp": "boss",
 			"trophy": 10,
 			"item": {"slot": "body", "rarity": 3, "ilvl": 43, "up": 3, "name": "Шахтарський кожух"}
 		}
@@ -397,7 +403,7 @@
 		"end": [
 			["chumak", "Берег чистий. Та сіті порожні й далі: цар сидить у палаці під Зміїним островом."]
 		],
-		"reward": {"gold_lvl": 200, "trophy": 6}
+		"reward": {"gold_lvl": 200, "xp": "mission", "trophy": 6}
 	},
 	"morskyi_tsar_2": {
 		"num": 9267,
@@ -419,6 +425,7 @@
 		],
 		"reward": {
 			"gold_lvl": 350,
+			"xp": "boss",
 			"trophy": 12,
 			"item": {"slot": "boots", "rarity": 3, "ilvl": 48, "up": 3, "name": "Чоботи морехода"}
 		}
@@ -447,7 +454,7 @@
 			"text": "Знищ дванадцять песиголовців на Тарханкуті"
 		},
 		"end": [["koval", "На березі стало тихіше. Тепер слухай, як дід вибрався, бо тобі знадобиться."]],
-		"reward": {"gold_lvl": 250, "trophy": 8}
+		"reward": {"gold_lvl": 250, "xp": "mission", "trophy": 8}
 	},
 	"lykho_2": {
 		"num": 9269,
@@ -470,6 +477,7 @@
 		],
 		"reward": {
 			"gold_lvl": 420,
+			"xp": "boss",
 			"trophy": 14,
 			"item": {"slot": "amulet", "rarity": 3, "ilvl": 51, "up": 3, "name": "Оберіг від лиха"}
 		}
@@ -498,7 +506,7 @@
 			"text": "Здобудь вісім лісовикових шишок біля Вишнього Волочка"
 		},
 		"end": [["oksana", "Вистачить на намисто. Смішне, зате з ним ти в лісі свій."]],
-		"reward": {"gold_lvl": 250, "trophy": 8}
+		"reward": {"gold_lvl": 250, "xp": "mission", "trophy": 8}
 	},
 	"lisovyi_did_2": {
 		"num": 9271,
@@ -521,6 +529,7 @@
 		],
 		"reward": {
 			"gold_lvl": 420,
+			"xp": "boss",
 			"trophy": 14,
 			"item": {"slot": "boots", "rarity": 3, "ilvl": 55, "up": 3, "name": "Постоли від блуду"}
 		}
@@ -545,7 +554,7 @@
 			"text": "Очисть Боярську вотчину, звідки годують Ідолище"
 		},
 		"end": [["sava", "Вози стали. Тепер воно голодне й зле, а голодний ненажера думає гірше."]],
-		"reward": {"gold_lvl": 300, "trophy": 10}
+		"reward": {"gold_lvl": 300, "xp": "mission", "trophy": 10}
 	},
 	"idolyshche_2": {
 		"num": 9273,
@@ -571,7 +580,7 @@
 			"text": "Здобудь шість горлатних шапок у бояр над озером Неро"
 		},
 		"end": [["sava", "Пошию з них одну добру. Зайдеш як свій і сядеш близько."]],
-		"reward": {"gold_lvl": 340, "trophy": 12}
+		"reward": {"gold_lvl": 340, "xp": "mission", "trophy": 12}
 	},
 	"idolyshche_3": {
 		"num": 9274,
@@ -597,6 +606,7 @@
 		],
 		"reward": {
 			"gold_lvl": 520,
+			"xp": "boss",
 			"trophy": 20,
 			"item": {"slot": "head", "rarity": 3, "ilvl": 60, "up": 4, "name": "Шапка непроханого гостя"}
 		}
@@ -625,7 +635,7 @@
 		"end": [
 			["zoreslava", "Стежка вільна. Я запалила на ній дванадцять вогнищ, по одному на кожен місяць, що має вернутися."]
 		],
-		"reward": {"gold_lvl": 320, "trophy": 10}
+		"reward": {"gold_lvl": 320, "xp": "mission", "trophy": 10}
 	},
 	"karachun_2": {
 		"num": 9276,
@@ -653,6 +663,7 @@
 		],
 		"reward": {
 			"gold_lvl": 520,
+			"xp": "boss",
 			"trophy": 20,
 			"item": {"slot": "body", "rarity": 3, "ilvl": 64, "up": 4, "name": "Кожух сонцевороту"}
 		}
@@ -676,7 +687,7 @@
 		"end": [
 			["opryshok", "Валки рушили. Старі кажуть: мрець, що встає по рідню, зветься стригой, а той, що тягне силу, морой."]
 		],
-		"reward": {"gold_lvl": 250, "trophy": 8}
+		"reward": {"gold_lvl": 250, "xp": "mission", "trophy": 8}
 	},
 	"drakula_2": {
 		"num": 9278,
@@ -704,7 +715,7 @@
 			["paraska", "Оберіг готовий. Кусатиме він тебе й далі, та кров твою пити не зможе."],
 			["paraska", "І ще: він лікується, коли п'є своїх слуг. Бий його саме тоді."]
 		],
-		"reward": {"gold_lvl": 300, "trophy": 10}
+		"reward": {"gold_lvl": 300, "xp": "mission", "trophy": 10}
 	},
 	"drakula_3": {
 		"num": 9279,
@@ -728,6 +739,7 @@
 		],
 		"reward": {
 			"gold_lvl": 500,
+			"xp": "boss",
 			"trophy": 20,
 			"item": {"slot": "body", "rarity": 3, "ilvl": 71, "up": 4, "name": "Плащ нічного мисливця"}
 		}

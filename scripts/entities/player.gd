@@ -914,6 +914,36 @@ func add_xp(value: int) -> void:
 	if level >= Classes.BASE_LEVEL_MAX:
 		_add_valor_xp(gained)
 		return
+	_add_level_xp(gained)
+
+
+## Досвід за місію (крок історії, переказу, доручення, завдання міста): частка share смуги нинішнього рівня, на
+## останньому рівні — смуги звитяги (на найбільшій звитязі — нічого), і та сама частка смуги майстерності (на
+## вершині — нічого). Надбавки досвіду й подвоєння не діють. Повертає [рівню чи звитязі, майстерності];
+## цим самим числом місії й пишуть нагороду (QuestEngine.xp_text).
+func mission_xp(share: float) -> Array:
+	var bar := 0
+	if level < Classes.BASE_LEVEL_MAX:
+		bar = Data.xp_for_level(level)
+	elif valor < Valor.max_valor():
+		bar = valor_next()
+	var job_bar: int = job_next() if job_level < job_max() else 0
+	return [roundi(bar * share), roundi(job_bar * share)]
+
+
+## Дати досвід за місію (mission_xp): надлишок понад смугу переходить далі, як у add_xp. Повертає досвід рівню чи звитязі.
+func add_mission_xp(share: float) -> int:
+	var g := mission_xp(share)
+	_add_job_xp(int(g[1]))
+	if level >= Classes.BASE_LEVEL_MAX:
+		_add_valor_xp(int(g[0]))
+	else:
+		_add_level_xp(int(g[0]))
+	return int(g[0])
+
+
+## Досвід на смугу рівня: нові рівні з усім, що вони дають.
+func _add_level_xp(gained: int) -> void:
 	xp += gained
 	while xp >= xp_next and level < Classes.BASE_LEVEL_MAX:
 		xp -= xp_next

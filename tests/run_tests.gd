@@ -199,6 +199,7 @@ func _run() -> void:
 	await _suite_events_wiki_game()
 	await _suite_job_limits()
 	await _suite_mission_game()
+	_suite_mission_xp()  # останнім: він сіє seed() для швидкого походу, а випадковість інших наборів не має зсуватися
 	print("\n==== Перевірок: %d, провалено: %d, час: %.1f с ====" % [checks, failures, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if failures > 0 else 0)
 
@@ -560,7 +561,7 @@ func _suite_data() -> void:
 		for i in 10:
 			var q: Dictionary = w._gen_quest(city)
 			check(q["type"] in ["kill", "fetch", "dungeon", "escort"], "тип завдання")
-			check(int(q["count"]) > 0 and int(q["gold"]) > 0 and int(q["xp"]) > 0 and int(q["loyalty"]) > 0, "нагорода/кількість")
+			check(int(q["count"]) > 0 and int(q["gold"]) > 0 and not q.has("xp") and w.quest_xp_share(q) > 0.0 and int(q["loyalty"]) > 0, "нагорода/кількість (досвід — частка смуги, не число)")
 			check(Data.is_place(q["loc"]), "локація завдання")
 		var b: Array = w.board(city)
 		check(b.size() == 3, "дошка %s має 3 завдання" % city)
@@ -767,6 +768,185 @@ func _suite_city() -> void:
 	p.free()
 
 
+# ======================= Досвід за місії: частка смуги рівня =======================
+
+func _suite_mission_xp() -> void:
+	suite("Досвід за місії: частка смуги рівня")
+	var Q = StoryService.QuestEngine
+	var LS = load("res://scripts/game/legend_service.gd")
+	var SideS = load("res://scripts/game/side_service.gd")
+	var Journal = load("res://scripts/game/journal_service.gd")
+	var UCity = load("res://scripts/ui/ui_city.gd")
+	var Valor = load("res://scripts/data/valor.gd")
+	var Classes = load("res://scripts/data/classes.gd")
+	var WS = load("res://scripts/game/wiki_service.gd")
+	var Acts = load("res://scripts/data/activities.gd")
+	var S: Dictionary = GameDB.settings("experience")
+	check(Data.mission_share("mission") == 0.3 and Data.mission_share("boss") == 0.5 and Data.mission_share("city") == 0.05
+		and Data.mission_share("mission") == float(S["mission_xp"]) and Data.mission_share("boss") == float(S["boss_mission_xp"]) and Data.mission_share("city") == float(S["city_quest_xp"]),
+		"частки з налаштувань: крок %s, крок із босом %s, завдання міста %s" % [Data.mission_share("mission"), Data.mission_share("boss"), Data.mission_share("city")])
+	# ---- Дані: кожен крок історії й переказу має вид частки, і вид той, що каже мета ----
+	var boss_rule := func(o: Dictionary) -> String:  # те саме правило, записане окремо від GameDB
+		if str(o["type"]) == "dungeon" and str(Data.place(str(o["loc"])).get("boss", "")) != "":
+			return "boss"
+		if str(o["type"]) in ["kill", "fetch"] and GameDB.mob(str(o["enemy"])).has("boss"):
+			var roams := false
+			for pid in GameDB.ids("places"):
+				roams = roams or str(o["enemy"]) in GameDB.row("places", pid).get("enemies", [])
+			if not roams:
+				return "boss"
+		return "mission"
+	var bad_steps := []
+	var n_boss := 0
+	var n_steps := 0
+	for tname in ["story", "legend_steps"]:
+		for id in GameDB.ids(tname):
+			var R: Dictionary = GameDB.row(tname, id)
+			var x = R["reward"].get("xp", null)
+			n_steps += 1
+			n_boss += 1 if str(x) == "boss" else 0
+			if typeof(x) != TYPE_STRING or not str(x) in GameDB.XP_KINDS or str(x) != boss_rule.call(R["objective"]) or str(x) != GameDB.objective_xp_kind(R["objective"]):
+				bad_steps.append("%s/%s: %s" % [tname, id, str(x)])
+			for c in R.get("choices", []) + R.get("bonus", []):
+				if c.get("reward", {}).has("xp"):
+					bad_steps.append("%s/%s: досвід у виборі" % [tname, id])
+	check(bad_steps.is_empty() and n_steps == GameDB.ids("story").size() + GameDB.ids("legend_steps").size() and n_boss > 0 and n_boss < n_steps,
+		"кожен з %d кроків історії й переказів має вид частки за метою (з босом: %d), числа досвіду нема (не так: %s)" % [n_steps, n_boss, str(bad_steps)])
+	var side_xp := []
+	for id in GameDB.ids("side"):
+		if GameDB.row("side", id)["reward"].has("xp"):
+			side_xp.append("%s=%s" % [id, GameDB.row("side", id)["reward"]["xp"]])
+	var saga_xp := GameDB.ids("saga").filter(func(id): return GameDB.row("saga", id)["reward"].has("xp"))
+	check(side_xp == ["tower_intro=mission", "depths_intro=mission"] and saga_xp.is_empty(), "доручення з досвідом — Башта й Глибини, звичайні (%s); сага без досвіду" % str(side_xp))
+	var vout := []
+	GameDB._xp_kind_links("story", "t/лігво", {"objective": {"type": "dungeon", "loc": "zmii_cave"}, "reward": {"xp": "mission"}}, vout)
+	GameDB._xp_kind_links("story", "t/поле", {"objective": {"type": "clear", "loc": "wild_field"}, "reward": {"xp": "boss"}}, vout)
+	GameDB._xp_kind_links("legend_steps", "t/без", {"objective": {"type": "clear", "loc": "wild_field"}, "reward": {}}, vout)
+	GameDB._xp_kind_links("side", "t/дор", {"objective": {"type": "stat", "loc": "bashta"}, "reward": {"xp": "boss"}}, vout)
+	var vok := []
+	GameDB._xp_kind_links("story", "t/так", {"objective": {"type": "dungeon", "loc": "zmii_cave"}, "reward": {"xp": "boss"}}, vok)
+	check(vout.size() == 4 and vok.is_empty() and GameDB.objective_xp_kind({"type": "kill", "enemy": "zmii", "loc": "zmii_cave"}) == "boss" and GameDB.objective_xp_kind({"type": "kill", "enemy": "upyr", "loc": "crypt"}) == "mission",
+		"перевірка бази ловить хибний вид, крок без досвіду й «boss» у доручення; вбити Змія — бос, упирів — ні: %s" % str(vout))
+	# ---- Нагорода: частка смуги рівня й майстерності, надбавки й подвоєння не діють ----
+	var p = _new_player()
+	var w = WorldState.new()
+	p.festive = {"xp": 0.7}  # надбавка до досвіду через справжнє джерело (свято), recalc її тримає
+	p.recalc()
+	p.xp_boost = 2.0
+	check(p.xp_mult > 1.6 and p.xp_boost == 2.0, "у героя надбавка досвіду ×%s і подвоєння" % p.xp_mult)
+	var prep := func(lvl: int) -> void:
+		p.level = lvl
+		p.xp = 0
+		p.xp_next = Data.xp_for_level(lvl)
+		p.job_level = 5
+		p.job_xp = 0
+		p.valor = 0
+		p.valor_xp = 0
+	var pays := {  # що здають: [вид частки, як здати]
+		"історія «%s»" % Q.title("flee"): ["mission", func() -> Array: return StoryService._complete(w, p, "flee", -1)],
+		"історія з босом «%s»" % Q.title("lair"): ["boss", func() -> Array: return StoryService._complete(w, p, "lair", -1)],
+		"переказ «%s»" % Q.title("vii_2"): ["mission", func() -> Array: return LS._complete(w, p, "vii_2")],
+		"переказ з босом «%s»" % Q.title("vii_3"): ["boss", func() -> Array: return LS._complete(w, p, "vii_3")],
+		"доручення «%s»" % Q.title("tower_intro"): ["mission", func() -> Array: return SideS._complete(w, p, "tower_intro")],
+	}
+	for lvl in [5, 40, 80]:
+		for what in pays:
+			prep.call(lvl)
+			var share: float = Data.mission_share(pays[what][0])
+			var want: int = roundi(share * Data.xp_for_level(lvl))
+			var want_job: int = roundi(share * p.job_next())
+			var text: String = Q.share_text(share, p)
+			var msgs: Array = pays[what][1].call()
+			var said: bool = msgs.any(func(m): return ("+%d досвіду" % want) in str(m["text"]))
+			check(p.level == lvl and p.xp == want and p.job_level == 5 and p.job_xp == want_job and text == "досвіду %d" % want and said,
+				"%d-й рівень, %s: %s смуги — %d досвіду (%d), майстерності %d (%d); журнал «%s», банер каже те саме: %s" % [lvl, what, share, want, p.xp, want_job, p.job_xp, text, said])
+		# завдання міста: давнє «xp» числом не читається; печера ×2, супровід ×ESCORT_MULT
+		for qt in ["kill", "dungeon", "escort"]:
+			prep.call(lvl)
+			var q := {"id": 900 + lvl, "city": "sich", "loc": "wild_field", "type": qt, "target": "mavka", "progress": 5, "count": 5, "text": "Тест", "lvl": 1, "gold": 10, "xp": 999, "loyalty": 5}
+			w.quests = [q]
+			var mult: float = {"kill": 1.0, "dungeon": 2.0, "escort": Acts.ESCORT_MULT}[qt]
+			var share_q: float = Data.mission_share("city") * mult
+			var want_q: int = roundi(share_q * Data.xp_for_level(lvl))
+			var want_qj: int = roundi(share_q * p.job_next())
+			var card: String = UCity._reward_text(q, w, p)
+			var jrow: Dictionary = Journal.sections(w, p).filter(func(sx): return str(sx["title"]).begins_with("Завдання міст"))[0]["rows"][0]
+			var r: Dictionary = CityService.turn_in(w, p, q["id"])
+			check(not r.is_empty() and p.xp == want_q and int(r["xp"]) == want_q and p.job_xp == want_qj and card == "Нагорода: 10 грн, %d досвіду, +5 лояльності" % want_q and ("досвіду %d" % want_q) in str(jrow["reward"]),
+				"%d-й рівень, завдання міста «%s»: %s смуги — %d досвіду (%d), майстерності %d; дошка «%s», журнал «%s», банер +%s" % [lvl, qt, share_q, want_q, p.xp, p.job_xp, card, jrow["reward"], r.get("xp")])
+	# ---- Перехід через смугу: надлишок іде на наступний рівень ----
+	prep.call(40)
+	p.xp = Data.xp_for_level(40) - 10
+	var pts0: int = p.stat_points
+	var cross: int = Q.pay_xp(p, {"xp": "boss"})
+	check(cross == roundi(0.5 * Data.xp_for_level(40)) and p.level == 41 and p.xp == cross - 10 and p.xp_next == Data.xp_for_level(41) and p.stat_points == pts0 + Data.STAT_POINTS_PER_LEVEL,
+		"нагорода понад смугу: 41-й рівень, решта %d переходить (%d)" % [cross - 10, p.xp])
+	# ---- Останній рівень: частка смуги звитяги; на найбільшій звитязі й вершині майстерності — нічого ----
+	prep.call(Classes.BASE_LEVEL_MAX)
+	p.valor = 3
+	var vbar: int = p.valor_next()
+	var vgot: int = Q.pay_xp(p, {"xp": "mission"})
+	check(p.level == Classes.BASE_LEVEL_MAX and vgot == roundi(0.3 * vbar) and p.valor_xp == vgot and p.valor == 3 and p.xp == 0, "останній рівень: 30%% смуги звитяги (%d з %d) іде у звитягу" % [p.valor_xp, vbar])
+	p.valor = Valor.max_valor()
+	p.valor_xp = 5
+	p.job_level = p.job_max()
+	p.job_xp = 0
+	var top_text: String = Q.share_text(0.5, p)
+	check(Q.pay_xp(p, {"xp": "boss"}) == 0 and p.valor_xp == 5 and p.valor == Valor.max_valor() and p.job_level == p.job_max() and p.job_xp == 0 and top_text == "досвіду 0",
+		"найбільша звитяга й вершина майстерності: нічого не додано й не переповнено")
+	# ---- Решта досвіду — як була, з надбавками (числа з того самого сценарію до зміни) ----
+	seed(4242)
+	var p2 = _new_player()
+	p2.level = 20
+	p2.xp = 0
+	p2.xp_next = Data.xp_for_level(20)
+	p2.xp_mult = 1.25
+	p2.xp_boost = 2.0
+	p2.add_xp(137)  # нечисть
+	var pin_a := [p2.level, p2.xp, p2.job_level, p2.job_xp]
+	p2.add_xp(5)  # монета
+	var pin_b := [p2.level, p2.xp, p2.job_level, p2.job_xp]
+	var w2 = WorldState.new()
+	w2.cleared["wild_field"] = 5
+	var qr: Dictionary = load("res://scripts/game/quick_service.gd").run(w2, p2, "wild_field", 1.0, {}, [false, false, false, false])
+	# скільки нечисті впало в швидкому поході, залежить від випадку; надбавки — ті самі, що до зміни (add_xp)
+	var q_gain: int = maxi(int(qr["xp"]), roundi(int(qr["xp"]) * 1.25 * 2.0))
+	check(pin_a == [20, 343, 2, 177] and pin_b == [20, 356, 2, 190] and int(qr["xp"]) > 0 and p2.level == 20 and p2.xp == 356 + q_gain,
+		"нечисть і монета дають досвід із надбавками, як до зміни (%s, %s); швидкий похід: %d × 1,25 × 2 = %d" % [str(pin_a), str(pin_b), int(qr["xp"]), q_gain])
+	p2.free()
+	# ---- Давнє збереження: завдання з досвідом числом ----
+	var wo = WorldState.new()
+	var d: Dictionary = wo.to_dict()
+	d["quests"] = [{"id": 5, "city": "sich", "loc": "zmii_cave", "type": "dungeon", "target": "zmii_cave", "progress": 1, "count": 1, "text": "Очисти", "lvl": 7, "gold": 380, "xp": 380, "loyalty": 140}]
+	d["boards"] = {"sich": [{"id": 6, "city": "sich", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 0, "count": 5, "text": "Знищ", "lvl": 1, "gold": 65, "xp": 50, "loyalty": 35}]}
+	wo.from_dict(d)
+	prep.call(30)
+	var old_r: Dictionary = CityService.turn_in(wo, p, 5)
+	check(not wo.boards["sich"][0].has("xp") and int(old_r.get("xp", -1)) == roundi(0.1 * Data.xp_for_level(30)) and p.xp == int(old_r["xp"]),
+		"давнє завдання на печеру (380 досвіду числом) платить 10%% смуги 30-го рівня: %d" % int(old_r.get("xp", -1)))
+	# ---- Журнал: рядок історії пише досвід числом для нинішнього рівня ----
+	var wj = WorldState.new()
+	prep.call(12)
+	var srow: Dictionary = Journal.sections(wj, p)[0]["rows"][0]
+	var cur: String = str(StoryService.current(wj)["id"])
+	check(srow["reward"] == "досвіду %d" % roundi(Data.mission_share(str(Q.step(cur)["reward"]["xp"])) * Data.xp_for_level(12)), "журнал, рядок історії «%s»: %s" % [cur, srow["reward"]])
+	check(LS.reward_text(Q.step("vii_3"), p).contains("досвіду %d" % roundi(0.5 * Data.xp_for_level(12))) and LS.reward_text(Q.step("vii_3")).contains("50% досвіду рівня")
+		and SideS.reward_text(Q.step("tower_intro"), p).contains("досвіду %d" % roundi(0.3 * Data.xp_for_level(12))),
+		"переказ і доручення пишуть досвід числом для героя, а без героя — частку смуги: %s / %s" % [LS.reward_text(Q.step("vii_3"), p), LS.reward_text(Q.step("vii_3"))])
+	# ---- Довідник каже правило з частками з налаштувань ----
+	var rule: String = WS.mission_xp_rule()
+	var texts := {}
+	for sx in WS.sections():
+		for e in sx["entries"]:
+			texts[str(e["title"])] = str(e["text"])
+	var top: int = Classes.BASE_LEVEL_MAX
+	check(rule.contains("30%") and rule.contains("50%") and rule.contains("5%") and rule.contains("10%") and rule.contains("не діють") and rule.contains("Майстерність") and rule.contains("звитяги")
+		and texts.get("Місії: зірка, знак оклику й рівень", "").contains(rule) and texts.get("Дорога до %d-го рівня" % top, "").contains(rule) and texts.get("Завдання", "").contains(rule)
+		and texts.get("Переказ «Три ночі в проклятій церкві»", "").contains("50% досвіду рівня") and texts.get("Доручення", "").contains("30% досвіду рівня"),
+		"довідник: правило в «Місіях», «Дорозі до %d-го», «Завданнях»; перекази й доручення пишуть частку" % top)
+	p.free()
+
+
 # ======================= 5. Сюжет =======================
 
 func _suite_story() -> void:
@@ -864,7 +1044,8 @@ func _suite_story() -> void:
 			StoryService.on_dialogue_done(w, p, "end", 0 if not d["choices"].is_empty() else -1)
 			steps_done += 1
 	check(StoryService.stage(w) == "done", "розділ пройдено до кінця")
-	check(one_link and legends_told == 12 and p.level == 80, "ланцюжком: щоразу одна ланка, усі 12 переказів, Кремль на 80-му (рівень %d, переказів %d)" % [p.level, legends_told])
+	# місії дають частку смуги рівня, тож герой доходить до Кремля й вище за його 80-й
+	check(one_link and legends_told == 12 and Q.level_needed("kremlin") == 80 and p.level >= 80, "ланцюжком: щоразу одна ланка, усі 12 переказів, Кремль на 80-му (рівень %d, переказів %d)" % [p.level, legends_told])
 	check(not p.is_peasant() and p.sk("whirl") >= 1, "після посвяти — козак із вихором")
 	check(p.rank == "hetman" and "Гетьманська булава" in p.inventory.map(func(it): return it["name"]), "фінал: гетьман із булавою")
 	check(StoryService.effect(w, "koshchii_mortal") == 1.0, "зламана голка — Кощій смертний")
@@ -9468,7 +9649,7 @@ func _suite_journal() -> void:
 	w.quests.append({"id": 950, "city": "sich", "loc": "wild_field", "type": "kill", "target": "mavka", "progress": 2, "count": 5, "text": "Знищ 5 мавок (Дике Поле)", "lvl": 1, "gold": 100, "xp": 50, "loyalty": 20})
 	cityq = find.call("Завдання міст")
 	var r: Dictionary = cityq["rows"][0]
-	check(str(cityq["title"]) == "Завдання міст (1/%d)" % Data.MAX_ACTIVE_QUESTS and r["text"] == "Знищ 5 мавок (Дике Поле)  2/5" and r["where"] == "Дике Поле" and r["from"] == "Запорозька Січ" and r["reward"] == "100 грн, досвіду 50, лояльності 20" and not r["ready"], "завдання міста: поступ, де, від кого, нагорода")
+	check(str(cityq["title"]) == "Завдання міст (1/%d)" % Data.MAX_ACTIVE_QUESTS and r["text"] == "Знищ 5 мавок (Дике Поле)  2/5" and r["where"] == "Дике Поле" and r["from"] == "Запорозька Січ" and r["reward"] == "100 грн, досвіду %d, лояльності 20" % int(p.mission_xp(Data.mission_share("city"))[0]) and not r["ready"], "завдання міста: поступ, де, від кого, нагорода (давнє «xp» 50 не читається: досвід — частка смуги)")
 	w.quests[0]["progress"] = 5
 	r = find.call("Завдання міст")["rows"][0]
 	check(r["ready"] and r["ready_text"] == "Готово: здай у місті Запорозька Січ" and Journal.ready_count(w, p) == 1, "виконане завдання позначено: де здати")
@@ -16456,7 +16637,7 @@ func _suite_hero_sheet() -> void:
 	gp.recalc()
 	game.enter_map()
 	await _frames(2)
-	var NEW := ["Замах", "Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду", "Удар парирування", "Вибух убитого",
+	var NEW := [HS.CRIT_MULT_LABEL, "Замах", "Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду", "Удар парирування", "Вибух убитого",
 		"Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення",
 		"Блок гасить", "Оберіг", "Шипи", "Вампіризм лікує до", "Парирування лікує", "За вбивство: здоров'я", "Перекид раз на", "Стани коротші", "Зараза слабша", "Лікування героя",
 		"Наснага за удар", "За вбивство: наснага", "Радіус збору", "Здобич: речі", "Здобич: ресурси"]
@@ -16466,7 +16647,7 @@ func _suite_hero_sheet() -> void:
 		["Зброя", Data.weapon_name(gp.weapon_type)],
 		["Ударів за секунду", "%.2f" % (1.0 / gp.attack_cooldown)],
 		["Шкода удару", "%.1f" % gp.damage],
-		["Шанс криту", "%d%%  (x%s)" % [roundi(gp.crit_chance * 100), ("%.2f" % gp.crit_mult).trim_suffix("0").trim_suffix("0").trim_suffix(".")]],
+		["Шанс криту", "%d%%" % roundi(gp.crit_chance * 100)],
 		["Сила вмінь", "%d%%" % roundi(gp.skill_power * 100)],
 		["Перезарядка вмінь", "%d%%" % roundi(gp.skill_cd_mult * 100)],
 		["Наснага за секунду", "+%.1f" % gp.mana_regen],
@@ -16488,7 +16669,7 @@ func _suite_hero_sheet() -> void:
 		check(n_same == 1 and n_label == 1 and G.get(old_group[o[0]], []).has(o[0]), "давній рядок «%s: %s» є рівно раз і стоїть у групі «%s»" % [o[0], o[1], old_group[o[0]]])
 	check(not G.has(""), "рядків без заголовка нема: %s" % str(G.get("", [])))
 	var want_groups := {
-		HS.ATTACK: ["Зброя", "Ударів за секунду", "Шкода удару", "Шанс криту", "Сила вмінь", "Перезарядка вмінь", "Дальність удару",
+		HS.ATTACK: ["Зброя", "Ударів за секунду", "Шкода удару", "Шанс криту", HS.CRIT_MULT_LABEL, "Сила вмінь", "Перезарядка вмінь", "Дальність удару",
 			"Замах", "Шкода всіх ударів", "По босах", "По елітах", "Добивання", "Перший удар", "По ворогах зі станом", "По оглушених", "Після перекиду", "Удар парирування", "Вибух убитого"],
 		HS.PROCS: ["Кровотеча", "Горіння", "Холод", "Слабкість", "Прокляття", "Оглушення"],
 		HS.DEFENSE: ["Відновлення", "Вампіризм", "Вампіризм лікує до", "Блок гасить", "Оберіг", "Шипи", "Парирування лікує", "За вбивство: здоров'я", "Перекид раз на", "Стани коротші", "Зараза слабша", "Лікування героя"],
@@ -16514,6 +16695,7 @@ func _suite_hero_sheet() -> void:
 	var base_ok: bool = B.get("Замах", "") == "%d°" % roundi(130.0 * gp.weapon["arc"]) and B.get("Радіус збору", "") == "120" and B.get("Перекид раз на", "") == "1.20 с"
 	base_ok = base_ok and B.get("Блок гасить", "") == HS._share(1.0 - gp.BLOCK_MULT) and B.get("Вампіризм лікує до", "") == "%s / с" % HS._share(Data.LIFESTEAL_MAX_HPS)
 	base_ok = base_ok and B.get("Удар парирування", "") == "%.1f" % (gp.damage * gp.PARRY_HIT * gp.crit_mult)
+	base_ok = base_ok and B.get(HS.CRIT_MULT_LABEL, "") == "x" + ("%.2f" % gp.crit_mult).trim_suffix("0").trim_suffix("0").trim_suffix(".")
 	check(base_ok, "і основу: замах %s, перекид %s, блок %s, удар парирування %s" % [B.get("Замах"), B.get("Перекид раз на"), B.get("Блок гасить"), B.get("Удар парирування")])
 	# ---- Герой із відомими бонусами: показане = те, що робить бій ----
 	gp.level = 40
@@ -16521,6 +16703,7 @@ func _suite_hero_sheet() -> void:
 	var souls := ["kamiana_baba", "b_oprychnyk", "pesyholovets", "mara", "zlyden", "zarazhenyi"]
 	var ench := ["zviroboi", "kolyuchka", "obereh", "zhyvytsia", "dzherelo", "dobyvach"]
 	gp.equipment = {}
+	seed(16434)  # речі героя — ті самі за будь-якого порядку наборів: перевірки швидкості бігу нижче міряють від них
 	var si := 0
 	for slot in Data.slots():
 		var it: Dictionary = Data.gen_item(40, 2, slot, "sabre" if slot == "weapon" else "")
@@ -16687,7 +16870,7 @@ func _suite_hero_sheet() -> void:
 	var high_raw: float = raw_speed.call()
 	check(skill_sp.call() == 0.0 and high_raw > cap and gp.speed == cap and gp.speed_base == high_raw, "герой понад стелю: формула дає %s, біжить %s" % [high_raw, gp.speed])
 	tab = _hero_tab(UChar, game)
-	check(tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(cap), HS.SPEED_CAP_MARK], "на стелі екран героя показує «%s»" % tab["by"].get("Швидкість бігу", ""))
+	check(tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(cap), HS.CAP_MARK], "на стелі екран героя показує «%s»" % tab["by"].get("Швидкість бігу", ""))
 	# підсилення вмінь так, як їх кладе шаблон «buff»: множать стелю, а коли спливуть — знову стеля
 	var ClsD = load("res://scripts/data/classes.gd")
 	var buff_am = gp._act_mech("buff")
@@ -16700,7 +16883,7 @@ func _suite_hero_sheet() -> void:
 		sum_sp += cast_buff.call(id)
 	var want_sp: float = cap * (1.0 + sum_sp / 100.0)
 	tab = _hero_tab(UChar, game)
-	check(sum_sp > 100.0 and gp.buffs.size() == 4 and is_equal_approx(gp.speed, want_sp) and tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(gp.speed), HS.SPEED_CAP_MARK],
+	check(sum_sp > 100.0 and gp.buffs.size() == 4 and is_equal_approx(gp.speed, want_sp) and tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(gp.speed), HS.CAP_MARK],
 		"«Відскік», «Втеча горами», «Трембіта» й «Стійка: рухливий» понад стелю: %s = стеля × (1 + %s / 100), на екрані «%s»" % [gp.speed, sum_sp, tab["by"].get("Швидкість бігу", "")])
 	for bid in gp.buffs:
 		gp.buffs[bid]["t"] = 0.0
@@ -16820,10 +17003,12 @@ func _suite_hero_sheet() -> void:
 	var want_bow: Array = want_groups[HS.ATTACK].duplicate()
 	want_bow.insert(want_bow.find("Замах") + 1, HS.SHOT_LABEL)
 	check(tab["groups"].get(HS.ATTACK, []) == want_bow, "з луком «%s» стоїть у «%s» одразу під «Замах»" % [HS.SHOT_LABEL, HS.ATTACK])
+	check(gp.attack_cooldown > gp.RANGED_MIN_CD and tab["by"].get("Ударів за секунду", "") == "%.2f" % (1.0 / gp.attack_cooldown), "лук нижче межі пострілів: «Ударів за секунду» %s без позначки" % tab["by"].get("Ударів за секунду", ""))
 	gp.buffs = {"s": {"t": 999.0, "fx": {"aspd": 400.0}, "group": ""}}
 	gp.recalc()
 	tab = _hero_tab(UChar, game)
 	check(gp.shot_mult > 1.0 and gp.attack_cooldown == gp.RANGED_MIN_CD and tab["by"].get(HS.SHOT_LABEL, "") == "x" + HS._trim(gp.shot_mult), "швидкість понад межу йде в силу пострілу: %s" % tab["by"].get(HS.SHOT_LABEL, ""))
+	check(tab["by"].get("Ударів за секунду", "") == "%.2f %s" % [1.0 / gp.RANGED_MIN_CD, HS.CAP_MARK], "лук на межі пострілів: «Ударів за секунду» %s" % tab["by"].get("Ударів за секунду", ""))
 	check(near.call(HS.mana_per_hit(gp), Data.MANA_ON_HIT * Data.MANA_ON_SHOT * minf(1.0, gp.attack_cooldown / Data.MANA_ON_HIT_CD)) and tab["by"].get("Наснага за удар", "") == "+" + HS._trim(HS.mana_per_hit(gp)), "стрілець бачить наснагу за постріл: %s" % tab["by"].get("Наснага за удар", ""))
 	var shot_labels: Array = []
 	for r in tab["rows"]:
@@ -16948,6 +17133,77 @@ func _suite_hero_sheet() -> void:
 	gp.resources = res0
 	await _frames(2)
 	loot_ok.call("ворона відпущено")
+	# ---- Позначка «(стеля)»: лише на твердій межі, з тих самих полів і сталих, що й бій ----
+	var CM: String = HS.CAP_MARK
+	var sum_armor := func() -> String:  # «Захист» у зведенні над рядками
+		var hero: Control = UChar._hero(game)
+		var sm: Node = hero.get_child(0).get_child(0).get_child(0)
+		var out := ""
+		for i in sm.get_child_count() - 1:
+			if sm.get_child(i).text == "Захист":
+				out = sm.get_child(i + 1).text
+		hero.free()
+		return out
+	var stats1: Dictionary = gp.stats.duplicate()
+	var fest1: Dictionary = gp.festive.duplicate()
+	var equip1: Dictionary = gp.equipment
+	gp.equipment = {}  # речі кидаються випадково й можуть самі дотягти захист до межі: нижче меж — герой без речей
+	# нижче меж: ті самі написи, що й до позначки; підсилення доводить частку вмінь рівно до межі чи на 1 нижче
+	gp.buffs = {}
+	gp.recalc()
+	var own_fx: Array = [gp.fx("block"), gp.fx("ward"), gp.fx("dodge_cd"), gp.fx("cd")]
+	check(own_fx[0] == 0.0 and own_fx[2] == 0.0 and own_fx[3] == 0.0 and own_fx[1] == roundf(own_fx[1]) and own_fx[1] < gp.WARD_FX_CAP - 1.0, "без підсилень уміння дають блок, оберіг (зачарування), перекид і перезарядку: %s" % str(own_fx))
+	var ward_to: float = gp.WARD_FX_CAP - own_fx[1]  # до межі оберегу бракує стільки
+	gp.buffs = {"t": {"t": 999.0, "fx": {"block": 59.0, "ward": ward_to - 1.0, "dodge_cd": 59.0}, "group": ""}}
+	gp.festive = {"status": 0.3}
+	gp.recalc()
+	tab = _hero_tab(UChar, game)
+	B = tab["by"]
+	var below := {"Шанс криту": "%d%%" % roundi(gp.crit_chance * 100), "Перезарядка вмінь": "%d%%" % roundi(gp.skill_cd_mult * 100), "Ударів за секунду": "%.2f" % (1.0 / gp.attack_cooldown),
+		"Стани коротші": HS._share(HS.status_res(gp)), "Блок гасить": HS._share(1.0 - HS.block_pass(gp)), "Оберіг": HS._share(1.0 - HS.ward_pass(gp)), "Перекид раз на": "%.2f с" % gp.dodge_cooldown, "Швидкість бігу": "%d" % int(gp.speed)}
+	var below_ok: bool = HS.status_res(gp) < gp.STATUS_RES_CAP and gp.crit_chance < gp.CRIT_CAP and gp.skill_cd_mult > gp.SKILL_CD_MIN and gp.armor < Data.ARMOR_CAP and gp.speed_base < gp.SPEED_CAP
+	for l in below:
+		below_ok = below_ok and B.get(l, "") == below[l]
+	check(below_ok and sum_armor.call() == "%d%%" % roundi(gp.armor * 100) and not str(tab["rows"]).contains(CM), "нижче меж (блок 59, оберіг 39, перекид 59, стани %s, захист %s) рядки як були, без «%s»: %s" % [HS._share(HS.status_res(gp)), sum_armor.call(), CM, str(below)])
+	gp.equipment = equip1
+	# на межах: Спритність — крит, Статура — захист, Спритність — біг; уміння — перезарядка, блок, оберіг, перекид; свято — стани
+	gp.stats["agi"] = stats1["agi"] + 400
+	gp.stats["vit"] = stats1["vit"] + 400
+	gp.buffs = {"t": {"t": 999.0, "fx": {"cd": 90.0, "block": 60.0, "ward": ward_to, "dodge_cd": 60.0}, "group": ""}}
+	gp.festive = {"status": 0.6}
+	gp.recalc()
+	tab = _hero_tab(UChar, game)
+	B = tab["by"]
+	var at_cap := {"Шанс криту": "%d%% %s" % [roundi(gp.CRIT_CAP * 100), CM], "Перезарядка вмінь": "%d%% %s" % [roundi(gp.SKILL_CD_MIN * 100), CM], "Стани коротші": "%d%% %s" % [roundi(gp.STATUS_RES_CAP * 100), CM],
+		"Блок гасить": HS._share(1.0 - HS.block_pass(gp)) + " " + CM, "Оберіг": HS._share(1.0 - HS.ward_pass(gp)) + " " + CM, "Перекид раз на": "%.2f с %s" % [gp.dodge_cooldown, CM], "Швидкість бігу": "%d %s" % [int(gp.speed), CM]}
+	var at_ok: bool = gp.crit_chance == gp.CRIT_CAP and gp.skill_cd_mult == gp.SKILL_CD_MIN and gp.armor == Data.ARMOR_CAP
+	var bad := []
+	for l in at_cap:
+		if B.get(l, "") != at_cap[l]:
+			bad.append([l, B.get(l, "")])
+	check(at_ok and bad.is_empty() and sum_armor.call() == "%d%% %s" % [roundi(Data.ARMOR_CAP * 100), CM], "на межах позначка в кожному рядку з межею й у зведенні «Захист» %s (не так: %s)" % [sum_armor.call(), str(bad)])
+	check(B.get("Ударів за секунду", "") == "%.2f" % (1.0 / gp.attack_cooldown), "у шаблі межі пострілів нема: «Ударів за секунду» %s без позначки" % B.get("Ударів за секунду", ""))
+	# межа частини від умінь: душі й звитяга ще рухають число, а позначка вже стоїть
+	var blk_ok: bool = B.get("Блок гасить", "").ends_with(CM) and gp.fx("block") == gp.BLOCK_FX_CAP
+	check(blk_ok and B.get("Оберіг", "").ends_with(CM) and B.get("Перекид раз на", "").ends_with(CM), "блок 60, оберіг 40 і перекид −60% від умінь — на межі")
+	# решта рядків без меж: позначки нема навіть на крайніх числах
+	var marked := ["Ударів за секунду", "Шанс криту", "Перезарядка вмінь", "Блок гасить", "Оберіг", "Перекид раз на", "Стани коротші", "Швидкість бігу"]
+	var huge := {}
+	for k in ["dmg", "aspd", "crit_dmg", "skill", "lifesteal", "thorns", "regen_pct", "parry_heal", "kill_heal", "kill_mana", "mana", "mana_regen", "pickup", "hp", "range", "big_dmg", "execute", "opener", "status_dmg", "stun_dmg", "dodge_dmg", "parry_dmg",
+			"bleed_hit", "burn_hit", "chill_hit", "weak_hit", "curse_hit", "stun_hit", "cd", "block", "ward", "dodge_cd", "speed", "armor", "crit"]:
+		huge[k] = 900.0
+	gp.stats = {"str": stats1["str"] + 900, "agi": stats1["agi"] + 900, "vit": stats1["vit"] + 900, "spi": stats1["spi"] + 900}
+	gp.buffs = {"t": {"t": 999.0, "fx": huge, "group": ""}}
+	gp.festive = {"status": 5.0}
+	gp.recalc()
+	tab = _hero_tab(UChar, game)
+	var stray: Array = tab["rows"].filter(func(r): return CM in str(r[1]) and not marked.has(r[0]))
+	var all_marked: Array = tab["rows"].filter(func(r): return marked.has(r[0]) and r[0] != "Ударів за секунду" and not str(r[1]).ends_with(CM))
+	check(stray.is_empty() and all_marked.is_empty() and tab["rows"].size() == 14 + NEW.size(), "крайній герой: позначка лише в рядках із межею (зайві: %s, без неї: %s)" % [str(stray), str(all_marked)])
+	gp.stats = stats1
+	gp.festive = fest1
+	gp.buffs = {}
+	gp.recalc()
 	# ---- Довідник: стаття «Показники героя» називає кожен рядок ----
 	var art_text := ""
 	for e in WS._entries("basics"):
@@ -16972,7 +17228,16 @@ func _suite_hero_sheet() -> void:
 		"стаття: бонус досвіду з подвоєнням іде на рівень і майстерність, два рядки здобичі з їхніми джерелами")
 	var limits := ["%d%%" % roundi(Data.ARMOR_CAP * 100.0), "%d%%" % roundi(gp.CRIT_CAP * 100.0), "%d%%" % roundi(gp.SKILL_CD_MIN * 100.0), "%d%%" % roundi(gp.BLOCK_FX_CAP), "%d%%" % roundi(gp.WARD_FX_CAP), "%d%%" % roundi((1.0 - gp.DODGE_FX_MIN) * 100.0), str(gp.RANGED_MIN_CD).replace(".", ","), "%d очок" % int(Data.SPI_SOFT), "%d очок" % int(Data.AGI_ASPD_SOFT)]
 	check(limits.all(func(x): return x in art_text), "стаття називає межі з тих самих сталих, що й бій: %s" % str(limits))
-	check(("зачарування й божі дари, разом не більше %d" % int(gp.SPEED_CAP)) in art_text and HS.SPEED_CAP_MARK in art_text and "Кожен бонус умінь, сталий чи на час, додає понад стелю" in art_text and "«Вовча подоба»" in art_text and "«Бойовий клич»" in art_text,
+	var cap_lines := []
+	for ln in art_text.split("\n"):
+		if "на межі біля числа стоїть «%s»" % HS.CAP_MARK in ln:
+			cap_lines.append(ln)
+	var no_mark := []
+	for l in ["Захист", "Ударів за секунду", "Шанс криту", "Перезарядка вмінь", "Блок гасить", "Оберіг", "Перекид раз на", "Стани коротші", "Швидкість бігу"]:
+		if cap_lines.filter(func(ln): return ("«%s»" % l) in ln).is_empty():
+			no_mark.append(l)
+	check(no_mark.is_empty() and cap_lines.size() == 9 and cap_lines.filter(func(ln): return "«Вампіризм лікує до»" in ln).is_empty(), "стаття однаково називає «%s» для кожного рядка з межею (бракує: %s)" % [HS.CAP_MARK, str(no_mark)])
+	check(("зачарування й божі дари, разом не більше %d" % int(gp.SPEED_CAP)) in art_text and HS.CAP_MARK in art_text and "Кожен бонус умінь, сталий чи на час, додає понад стелю" in art_text and "«Вовча подоба»" in art_text and "«Бойовий клич»" in art_text,
 		"стаття: стеля %d тримає Спритність, речі, душі, набори, зачарування й дари, а вміння додають понад неї" % int(gp.SPEED_CAP))
 	game.queue_free()
 	await _frames(3)
@@ -23269,7 +23534,7 @@ func _suite_quest_db() -> void:
 			for stage in ["offer", "active", "turnin"]:
 				_quests_set(w, "legends", {line: {"step": i, "stage": stage, "progress": 1}}, true)
 				w.hero_level = 99
-				var ok: bool = LS.objective_text(w, line) != "" and LS.target(w, line) != "" and LS.reward_text(Leg.steps(line)[i], 30) != "" and LS.rows(w).any(func(r): return r["line"] == line and str(r["text"]) != "")
+				var ok: bool = LS.objective_text(w, line) != "" and LS.target(w, line) != "" and LS.reward_text(Leg.steps(line)[i]) != "" and LS.rows(w).any(func(r): return r["line"] == line and str(r["text"]) != "")
 				for l in Leg.steps(line)[i]["start"] + Leg.steps(line)[i]["end"]:
 					ok = ok and Story.npc_name(l[0]) != ""
 				if not ok:

@@ -51,6 +51,9 @@ static func apply_settings() -> void:
 	SKILL_POINTS_PER_LEVEL = S_experience["skill_points_per_level"]
 	PERK_POINTS_PER_LEVEL = S_experience["perk_points_per_level"]
 	PERK_TIER_STEP = S_experience["perk_tier_step"]
+	MISSION_XP = S_experience["mission_xp"]
+	BOSS_MISSION_XP = S_experience["boss_mission_xp"]
+	CITY_QUEST_XP = S_experience["city_quest_xp"]
 	var S_hero_combat := GameDB.settings("hero_combat")
 	ARMOR_CAP = S_hero_combat["armor_cap"]
 	LIFESTEAL_MAX_HPS = S_hero_combat["lifesteal_max_hps"]
@@ -331,6 +334,22 @@ static var STAT_POINTS_PER_LEVEL: int  # очок характеристик з�
 static var SKILL_POINTS_PER_LEVEL: int  # очок умінь за рівень майстерності класу
 static var PERK_POINTS_PER_LEVEL: int  # очок Загартування за кожні harden_every рівнів героя
 static var PERK_TIER_STEP: int  # скільки очок треба вкласти в гілку Загартування, щоб відкрити наступний ярус
+## Досвід за місію — частка смуги нинішнього рівня (і смуги майстерності), без надбавок: Player.add_mission_xp.
+static var MISSION_XP: float  # крок історії, переказу чи доручення (reward.xp «mission»)
+static var BOSS_MISSION_XP: float  # крок, мети якого не досягти без боса (reward.xp «boss»)
+static var CITY_QUEST_XP: float  # завдання міста, до множника завдання
+
+
+## Частка смуги за місію виду kind: позначка reward.xp кроку («mission», «boss») чи «city» (завдання міста); інше — 0.
+static func mission_share(kind: String) -> float:
+	match kind:
+		"mission":
+			return MISSION_XP
+		"boss":
+			return BOSS_MISSION_XP
+		"city":
+			return CITY_QUEST_XP
+	return 0.0
 
 # Характеристики героя (назва й опис) лежать у data/base_stats.json, Загартування — у
 # data/perk_branches.json і perks.json (docs/data.md, «Класи й уміння»); що вони дають — Player.recalc.

@@ -37,7 +37,10 @@
 		"stat_points_per_level": 3,
 		"skill_points_per_level": 1,
 		"perk_points_per_level": 1,
-		"perk_tier_step": 2
+		"perk_tier_step": 2,
+		"mission_xp": 0.3,
+		"boss_mission_xp": 0.5,
+		"city_quest_xp": 0.05
 	},
 	"hero_combat": {
 		"num": 11003,

@@ -2578,7 +2578,7 @@ func city_do(action: String, arg) -> void:
 				if r["loyalty_up"]:
 					hud.show_banner("Лояльність зросла!\n%s: %s" % [Data.place_name(q["city"]), Data.loyalty_name(world.loyalty_level(q["city"]))], UI.GOOD)
 				else:
-					hud.show_banner("Завдання виконано!\n+%d грн, +%d досвіду" % [q["gold"], q["xp"]], UI.GOLD)
+					hud.show_banner("Завдання виконано!\n+%d грн, +%d досвіду" % [q["gold"], r["xp"]], UI.GOLD)
 		"select":
 			city_sel_uid = arg
 			smith_msg = ""

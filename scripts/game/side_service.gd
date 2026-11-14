@@ -91,14 +91,14 @@ static func objective_met(world, player, id: String) -> Array:
 	return [{"text": "%s Доручення: мету виконано!\nПовертайся: %s" % [QuestEngine.mark(id), Data.place_name(str(st["turn_in"]))], "big": true}]
 
 
-## Нагорода словами (журнал).
-static func reward_text(st: Dictionary) -> String:
+## Нагорода словами (журнал). player — герой: досвід числом, яке він дістане зараз (без героя — частка смуги).
+static func reward_text(st: Dictionary, player = null) -> String:
 	var r: Dictionary = st.get("reward", {})
 	var parts := []
 	if r.has("gold"):
 		parts.append("%d грн" % int(r["gold"]))
 	if r.has("xp"):
-		parts.append("досвіду %d" % int(r["xp"]))
+		parts.append(QuestEngine.xp_text(r, player))
 	if r.has("trophy"):
 		parts.append("%d трофеїв" % int(r["trophy"]))
 	for res in r.get("res", {}):
@@ -122,6 +122,8 @@ static func _complete(world, player, id: String) -> Array:
 	for res in r.get("res", {}):  # ресурси й провіант: дерево, трави, м'ясо, риба...
 		player.resources[res] = int(player.resources.get(res, 0)) + int(r["res"][res])
 		parts.append("%s +%d" % [Camp.res_name(res).to_lower(), int(r["res"][res])])
+	if r.has("xp"):
+		parts.append("+%d досвіду" % int(player.mission_xp(QuestEngine.xp_share(r))[0]))  # дасть pay_xp нижче, на цьому ж рівні
 	if not parts.is_empty():
 		msgs.append({"text": ", ".join(parts), "big": false})
 	if r.has("loyalty"):
@@ -136,8 +138,7 @@ static func _complete(world, player, id: String) -> Array:
 			player.inventory.append(it)  # нагороду доручення не губимо навіть із повною торбою
 		msgs.append({"text": "Отримано: %s" % Data.item_title(it), "big": false})
 	QuestEngine.complete(world, id)
-	if r.has("xp"):
-		player.add_xp(int(r["xp"]))  # досвід — останнім: новий рівень може відкрити наступну місію
+	QuestEngine.pay_xp(player, r)  # досвід — останнім: новий рівень може відкрити наступну місію
 	return msgs
 
 
@@ -167,11 +168,11 @@ static func mission_target(world, id: String) -> String:
 	return str(st["objective"].get("loc", ""))
 
 
-## Рядки для журналу: [{"id", "title", "text", "target", "back", "reward"}].
-static func rows(world) -> Array:
+## Рядки для журналу: [{"id", "title", "text", "target", "back", "reward"}]. player — для досвіду числом (reward_text).
+static func rows(world, player = null) -> Array:
 	var out := []
 	for id in missions(world):
 		var st := QuestEngine.step(id)
 		out.append({"id": id, "title": QuestEngine.title(id), "text": mission_line(world, id), "target": mission_target(world, id),
-			"back": QuestEngine.stage(world, id) == "turnin", "reward": reward_text(st)})
+			"back": QuestEngine.stage(world, id) == "turnin", "reward": reward_text(st, player)})
 	return out
