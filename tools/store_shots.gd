@@ -17,6 +17,8 @@ func _shot(name: String, keep_banner: bool = false) -> void:
 	if not keep_banner:
 		game.hud.banner.text = ""  # «Рівень 9!» після складання героя в кадрі зайвий
 	game.hud.hint_panel.visible = false
+	# «Авто» в бою налазить на назву місця вгорі по центру (на 16:9 рядок кнопок у кутку ширший за вільне місце)
+	game.hud.auto_btn.visible = false
 	await _frames(2)
 	var img: Image = root.get_texture().get_image()
 	img.convert(Image.FORMAT_RGB8)  # магазин не приймає знімків із прозорістю
@@ -72,16 +74,28 @@ func _stage(spots: Array, lvl: int) -> Array:
 		# Міцні, щоб дожили до знімка: герой для кадру сильніший за місцевість
 		e.max_hp *= 40.0
 		e.hp = e.max_hp
+		# Повільні, щоб за секунду бою не збились у купу на героєві й не розбіглись за край кадру
+		e.speed *= 0.35
 		out.append(e)
 	return out
 
 
 ## Кілька секунд бою, потім вихор шаблі — і знімок, поки ефект у кадрі.
-func _clash(name: String, seconds: float) -> void:
+## Герой б'є з місця, де його поставили: інакше він біжить за нечистю, камера їде слідом, і зграя опиняється на краю кадру.
+## Розставлену нечисть (foes) м'яко тягне назад на свої місця: булава й вихор відкидають її за край кадру або в купу на героя.
+func _clash(name: String, seconds: float, foes: Array = []) -> void:
 	var p = game.player
+	var home: Vector2 = p.global_position
+	var spots := {}
+	for f in foes:
+		spots[f] = f.global_position
 	var t := 0.0
 	while t < seconds:
 		game.hud.btn_attack.held = true
+		p.global_position = home
+		for f in foes:
+			if is_instance_valid(f) and not f.dead:
+				f.global_position = f.global_position.lerp(spots[f], 0.25)
 		p.hp = p.max_hp
 		for comp in game.combat.companion_nodes:
 			if is_instance_valid(comp):
@@ -119,35 +133,43 @@ func _run() -> void:
 	var p
 	var c
 
-	# 1. Бій у пущі: козак із загоном, вихор шаблі серед зграї
+	# 1. Бій у пущі: козак із загоном, вихор шаблі серед зграї. Біловезька пуща — поле 14-го рівня: з 0.56 у поле
+	# пускають героя не більш як на Data.FIELD_OPEN_ABOVE (3) рівні нижчого, тож козак 12-го рівня (Data.place_open).
+	# Нечисть пущі — вовкулаки, мавки й упирі: без «заражених московитів» у підписах (docs/store/README.md, рішення 4).
 	seed(11)
-	_hero("cossack", 9)
+	_hero("cossack", 12)
 	game.world.companions = [{"type": "dzhura", "downed": false}, {"type": "znakhar", "downed": false}]
 	game.enter_location("bilovezha")
 	await _frames(20)
 	_clear_enemies()
+	# Стежка слідів буває не в кожному полі; без неї над героєм не висить стрілка «Сліди»
+	if is_instance_valid(game.combat.trail):
+		game.combat.trail.queue_free()
+	game.combat.trail = null
 	p = game.player
 	p.global_position = Vector2(-300, 120)
 	await _frames(20)
-	_stage([["vovkulaka", Vector2(-120, -70)], ["upyr", Vector2(110, -90)], ["mavka", Vector2(170, 30)], ["vovkulaka", Vector2(-150, 60), true],
-		["upyr", Vector2(40, 130)], ["mavka", Vector2(-40, -150)], ["vovkulaka", Vector2(250, -120)], ["upyr", Vector2(-260, -40)]], 8)
-	await _clash("01_battle", 1.3)
+	_clear_enemies()  # і тих, хто встиг набігти, поки герой ставав на місце
+	var pack := _stage([["vovkulaka", Vector2(-120, -70)], ["upyr", Vector2(110, -90)], ["mavka", Vector2(170, 30)], ["vovkulaka", Vector2(-150, 60), true],
+		["upyr", Vector2(40, 130)], ["mavka", Vector2(-40, -150)], ["vovkulaka", Vector2(250, -120)], ["upyr", Vector2(-260, -40)]], 14)
+	await _clash("01_battle", 1.3, pack)
 
-	# 2. Бос: Вій підіймає повіки
+	# 2. Бос: Вій підіймає повіки. Проклята церква — печера з босом 29-го рівня: туди пускають лише з її рівня,
+	# тож мольфар 30-го (печера росте з героєм: бос його рівня, Data.loc_level).
 	game.enter_map()
 	await _frames(3)
 	seed(5)
-	_hero("molfar", 22)
+	_hero("molfar", 30)
 	game.enter_location("vii_church")
 	await _frames(3)
+	# Вій стає на арену того ж кадру, що й зникає перша кімната: інакше кімната «зачищена» і з'являється прохід «Далі»
 	_clear_enemies()
-	await _frames(2)
 	p = game.player
 	c = game.combat
 	p.global_position = Vector2(180, 60)
 	game.hud.joystick.vector = Vector2.ZERO
 	game.hud.btn_attack.held = false
-	c.spawn_enemy("vii", 15, true, p.global_position + Vector2(-290, -70))
+	c.spawn_enemy("vii", Data.loc_level(Data.place("vii_church"), int(p.level)), true, p.global_position + Vector2(-210, 30))
 	var boss = c._last_enemy()
 	boss.ability_timer = 999.0
 	boss.mechanic.rock_timer = 999.0
@@ -157,21 +179,30 @@ func _run() -> void:
 		b.speed = 0.0
 		b.max_hp *= 50.0  # повікарі мають дожити до знімка, інакше погляд обірветься
 		b.hp = b.max_hp
+	# Смуга здоров'я над босом видна лише в пораненого: перші удари вже були
+	boss.hp = boss.max_hp * 0.72
 	await _frames(50)
 	await _shot("02_boss")
 
-	# 3. Мапа земель
+	# 3. Мапа земель: Святі гори (поле 10-го рівня) для козака 12-го відкриті — на панелі «Вирушити».
+	# Мапа трохи ближче й на півдні: без чужого опису й назви «Московія» в кадрі.
 	game.enter_map()
 	await _frames(3)
 	seed(3)
-	_hero("cossack", 9)
+	_hero("cossack", 12)
 	game.world.board("kyiv")
 	for q in game.world.board("kyiv").duplicate():
 		game.world.take("kyiv", q["id"])
 	game.enter_map()
 	await _frames(3)
-	game._on_map_select("black_forest")
+	game._on_map_select("sviati_hory")
+	var mv = game.hud.map_view
+	mv.zoom = 4.6
+	mv.focus_ll(Vector2(35.6, 48.7))
 	await _frames(6)
+	if mv.guide_btn:
+		mv.guide_btn.visible = false  # порада «Далі: …» у кадрі зайва, як і підказки
+	await _frames(2)
 	await _shot("03_map")
 
 	# 4. Місто: крамниця
@@ -195,10 +226,11 @@ func _run() -> void:
 	await _frames(6)
 	await _shot("05_camp")
 
-	# 6. Дерево вмінь
+	# 6. Дерево вмінь. Мольфар: дерево з чотирьох гілок і всі п'ять підсилень на кнопках, тож ряд кнопок бою праворуч влазить у кадр цілим
+	# (п'ять гілок характерника виштовхують його за край).
 	game.enter_map()
 	await _frames(3)
-	_hero("kharakternyk", 26)
+	_hero("molfar", 30)
 	game.char_tab = 2
 	game.open_character()
 	await _frames(6)
@@ -234,11 +266,13 @@ func _run() -> void:
 	c.wave = 2
 	c.wave_timer = 99.0
 	await _frames(20)
-	var foes := _stage([["zarazhenyi", Vector2(-170, -120)], ["pishchalnyk", Vector2(-330, -240)], ["chort", Vector2(140, -110)], ["zarazhenyi", Vector2(260, -30)],
-		["vovkulaka", Vector2(-60, -190)], ["zarazhenyi", Vector2(330, -220), true], ["zarazhenyi", Vector2(-300, 20)], ["pishchalnyk", Vector2(60, -300)]], 22)
+	_clear_enemies()  # перша хвиля може привести «заражених московитів» — у кадрі лише ті, кого ставимо нижче
+	# Зсуви в межах кадру: камера тримає героя в центрі, ліворуч угорі смуги героя, праворуч кнопки бою
+	var foes := _stage([["upyr", Vector2(-170, -100)], ["pishchalnyk", Vector2(-250, -130)], ["chort", Vector2(150, -100)], ["vovkulaka", Vector2(210, -10)],
+		["upyr", Vector2(-70, -140)], ["chort", Vector2(60, -140), true], ["vovkulaka", Vector2(-240, 0)], ["pishchalnyk", Vector2(-120, -40)]], 22)
 	for i in foes.size():
 		foes[i].rams_gate = i % 2 == 1
-	await _clash("08_defense", 1.3)
+	await _clash("08_defense", 1.3, foes)
 	SaveSystem.delete("user://store_shots.save")
 	SaveSystem.delete("user://store_shots_account.save")
 	quit()
