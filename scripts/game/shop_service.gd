@@ -128,7 +128,7 @@ static func ids(kind: String) -> Array:
 		"soul":
 			return SoulService.known()
 		"unique":
-			return Uniques.ids().duplicate()
+			return _by_tier(Uniques.ids())
 		"artifact":
 			return Artifacts.ids().duplicate()
 		"set":
@@ -140,6 +140,22 @@ static func ids(kind: String) -> Array:
 		"set_full":
 			return Sets.ids().duplicate()
 	return []
+
+
+## Золоті речі за ступенем, від найнижчого; усередині ступеня — за порядком таблиці.
+static func _by_tier(list: Array) -> Array:
+	var by := {}
+	for id in list:
+		var t: int = int(Uniques.def(id)["tier"])
+		if not by.has(t):
+			by[t] = []
+		by[t].append(id)
+	var tiers: Array = by.keys()
+	tiers.sort()
+	var out := []
+	for t in tiers:
+		out.append_array(by[t])
+	return out
 
 
 ## Скільки разів цей товар уже куплено родом.

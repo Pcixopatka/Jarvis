@@ -87,6 +87,7 @@ var radius := 22.0
 var max_hp := 100.0
 var hp := 100.0
 var speed := 260.0
+var speed_base := 260.0  # швидкість бігу без бонусів умінь, до стелі (рахує recalc)
 var damage := 20.0
 var crit_chance := 0.05
 var crit_mult := 2.0
@@ -161,7 +162,7 @@ static var PARRY_WINDOW: float  # натиснув «Блок» не раніш�
 static var BLOCK_MULT: float  # частка шкоди, що проходить крізь блок
 static var CHARGE_MIN: float  # з якого часу утримання блоку, с, удар уже заряджений
 static var CHARGE_FULL: float  # з якого часу утримання блоку удар заряджений повністю, с
-static var SPEED_CAP: float  # швидкість бігу не вища; «Вовча подоба» й «Бойовий клич» (SPEED_MULT) додають понад неї
+static var SPEED_CAP: float  # стеля швидкості бігу без умінь; бонуси вмінь і SPEED_MULT («Вовча подоба», «Бойовий клич») додають понад неї
 ## Межі й пороги бою: їх показують екран героя (HeroSheet) і довідник, тож вони названі тут
 const CRIT_CAP := 0.8  # шанс криту не більший
 const SKILL_CD_MIN := 0.3  # перезарядка вмінь не коротша за цю частку
@@ -784,8 +785,13 @@ func recalc() -> void:
 	thorns = 0.25 * pk("thorns") + fx("thorns") / 100.0
 	varenyk_bonus = pk("varenyk")
 
-	speed = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0) * (1.0 + fx("speed") / 100.0)
-	speed = minf(speed, SPEED_CAP)
+	# стеля тримає те, що не від умінь (зачарування й божі дари теж під нею); бонуси вмінь — пасивних вузлів
+	# і підсилень — множать понад неї. Нижче стелі число те саме, що й без неї
+	var sp_pre: float = 260.0 * (1.0 + 0.015 * s_agi + 0.05 * pk("boots") + eq("speed") / 100.0) * (1.0 + float(soul_fx.get("speed", 0.0))) * (1.0 + float(set_fx.get("speed", 0.0)) / 100.0)
+	speed = sp_pre * (1.0 + fx("speed") / 100.0)
+	speed_base = sp_pre * (1.0 + (float(ench.get("speed", 0.0)) + float(dfx.get("speed", 0.0))) / 100.0)
+	if speed_base > SPEED_CAP:
+		speed = SPEED_CAP * (speed / speed_base)
 	pickup_radius = 120.0 * (1.0 + 0.25 * pk("purse") + eq("pickup") / 100.0 + float(art.get("pickup", 0.0))) * (1.0 + float(soul_fx.get("pickup", 0.0))) * (1.0 + fx("pickup") / 100.0) * (1.0 + float(pet_fx.get("pickup", 0.0))) * (1.0 + float(divine_fx.get("pickup", 0.0)))
 	xp_mult = 1.0 + 0.1 * pk("kobzar") + eq("xp") / 100.0 + (0.15 if trip_buffs.has("inspired") else 0.0) + (0.1 if meal == "borshch" else 0.0) + float(festive.get("xp", 0.0)) + float(klein.get("xp", 0.0)) + float(art.get("xp", 0.0)) + float(pet_fx.get("xp", 0.0)) + float(divine_fx.get("xp", 0.0))
 	gold_mult = 1.0 + 0.08 * pk("h_gold") + eq("gold") / 100.0 + float(festive.get("gold", 0.0)) + float(art.get("gold", 0.0)) + float(soul_fx.get("gold", 0.0)) + float(valor_fx.get("gold", 0.0)) / 100.0 + float(divine_fx.get("gold", 0.0))

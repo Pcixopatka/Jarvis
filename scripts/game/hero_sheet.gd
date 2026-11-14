@@ -224,9 +224,10 @@ static func groups(p, festive: Dictionary = {}, drop_boost: float = 1.0) -> Arra
 	return [[ATTACK, atk], [PROCS, procs], [DEFENSE, dfn], [MANA, mana], [OTHER, other]]
 
 
-## Швидкість бігу; на стелі (Player.SPEED_CAP) — з позначкою, щоб було видно, що більше вже не буде.
+## Швидкість бігу; коли частина без умінь уперлась у стелю (Player.SPEED_CAP) — з позначкою, навіть якщо
+## вміння женуть число вище: речами, душами й Спритністю більше вже не додати.
 static func speed_text(p) -> String:
-	return "%d" % int(p.speed) + (" " + SPEED_CAP_MARK if p.speed >= PlayerScript.SPEED_CAP else "")
+	return "%d" % int(p.speed) + (" " + SPEED_CAP_MARK if p.speed_base >= PlayerScript.SPEED_CAP else "")
 
 
 ## Множник як надбавка: 1.12 → «+12%», 0.92 → «−8%».

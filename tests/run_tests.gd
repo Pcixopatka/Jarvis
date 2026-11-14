@@ -13266,6 +13266,31 @@ func _suite_shop() -> void:
 	# ---- У крамниці є все рідкісне ----
 	check(SH.ids("unique").size() == Uniques.ids().size() and SH.ids("artifact").size() == Arts.ids().size() and SH.ids("soul").size() == SS.known().size() and SH.ids("set").size() == Sets.ids().size() * Data.slots().size() and SH.ids("set_full").size() == Sets.ids().size(),
 		"у крамниці всі золоті речі (%d), артефакти (%d), душі (%d) й речі наборів (%d)" % [SH.ids("unique").size(), SH.ids("artifact").size(), SH.ids("soul").size(), SH.ids("set").size()])
+	# золоті речі за ступенем, усередині ступеня — як у таблиці; порядок беремо з самих json-файлів
+	var raw_keys := func(path: String) -> Array:
+		return (JSON.parse_string(FileAccess.get_file_as_string(path)) as Dictionary).keys()
+	var gold_raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/golden.json"))
+	var raw_gold: Array = gold_raw.keys()
+	var want_u := []
+	for t in range(1, Uniques.max_tier() + 1):
+		for id in raw_gold:
+			if int(gold_raw[id]["tier"]) == t:
+				want_u.append(id)
+	var su: Array = SH.ids("unique")
+	var u_once := true
+	for id in raw_gold:
+		u_once = u_once and su.count(id) == 1
+	var u_up := true
+	for i in range(1, su.size()):
+		u_up = u_up and int(Uniques.def(su[i])["tier"]) >= int(Uniques.def(su[i - 1])["tier"])
+	check(raw_gold.size() == 51 and su.size() == 51 and u_once and u_up and su == want_u and raw_gold == Uniques.ids() and raw_gold != su,
+		"золоті речі в крамниці за ступенем, від найнижчого, усередині ступеня — за таблицею; таблицю не переставлено")
+	var want_s := []
+	for id in raw_keys.call("res://data/souls.json"):
+		if SS.owner_name(id) != "":
+			want_s.append(id)
+	check(SH.ids("artifact") == raw_keys.call("res://data/artifacts.json") and SH.ids("soul") == want_s and want_s.size() > 0,
+		"артефакти й душі в крамниці — за порядком своїх таблиць, як і були")
 	var priced := true
 	for kind in ["unique", "artifact", "soul", "set", "set_full"]:
 		for id in SH.ids(kind):
@@ -16255,6 +16280,25 @@ func _suite_grid_shops() -> void:
 			got[tt] = _cells(stc.get_tab_control(i), UShop.CELL).size()
 			grid_ok = grid_ok and int(got[tt]) == int(want[tt])
 	check(grid_ok and got.size() == want.size(), "золоті речі, артефакти, душі, набори, дари й вбрання стоять клітинками: %s" % str(got))
+	# на вкладці «Золоті речі» кожен ступінь — один заголовок, під ним усі речі цього ступеня
+	var UniqD = load("res://scripts/data/uniques.gd")
+	stc.current_tab = game._shop_tab_index("Золоті речі")
+	var ug: Array = stc.get_tab_control(stc.current_tab).find_children("*", "GridContainer", true, false)
+	var heads := []
+	var per_head := []
+	if not ug.is_empty():
+		for ch in ug[0].get_parent().get_children():
+			if ch is Label:
+				heads.append(ch.text)
+			elif ch is GridContainer and not heads.is_empty():
+				per_head.append(ch.get_child_count())
+	var want_heads := []
+	var want_per := []
+	for t in range(1, UniqD.max_tier() + 1):
+		want_heads.append("«%s»" % UniqD.tier_name(t))
+		want_per.append(UniqD.ids().filter(func(id): return int(UniqD.def(id)["tier"]) == t).size())
+	check(heads.size() == 6 and heads == want_heads and per_head == want_per,
+		"золоті речі в крамниці: по одному заголовку на ступінь %s, під ними %s речей" % [str(heads), str(per_head)])
 	# дотик до клітинки показує картку, покупка лишається за кнопкою картки
 	var uid0: String = SHs.ids("unique")[0]
 	game.shop_tab = game._shop_tab_index("Золоті речі")
@@ -16589,24 +16633,121 @@ func _suite_hero_sheet() -> void:
 	gp.attack_timer = 0.0
 	gp.attack()
 	check(tgt.hp < tgt.max_hp and near.call(gp.mana, HS.mana_per_hit(gp)) and B.get("Наснага за удар", "") == "+" + HS._trim(gp.mana), "«Наснага за удар» %s: влучний удар шаблею дав %.3f" % [B.get("Наснага за удар"), gp.mana])
-	# ---- Стеля швидкості бігу: обрізано після всіх множників; «Вовча подоба» й «Бойовий клич» додають понад неї ----
+	# ---- Стеля швидкості бігу: тримає частину без умінь; бонуси вмінь (вузли й підсилення), «Вовча подоба» й «Бойовий клич» — понад неї ----
 	_clear_enemies(game)
 	var cap: float = gp.SPEED_CAP
 	check(cap == float(GameDB.settings("hero_combat")["speed_cap"]) and is_equal_approx(cap, 520.0), "стеля швидкості бігу з налаштувань: %s" % cap)
-	var raw_speed := func() -> float:  # та сама формула, що в recalc, без стелі
+	var skill_sp := func() -> float:  # частка fx.speed від умінь: пасивні вузли й підсилення
+		var s: float = float(gp.skill_fx.get("speed", 0.0))
+		for bid in gp.buffs:
+			s += float(gp.buffs[bid]["fx"].get("speed", 0.0))
+		return s
+	var raw_speed := func() -> float:  # формула до стелі, разом з уміннями
 		return 260.0 * (1.0 + 0.015 * gp._bonus("agi") + 0.05 * gp.pk("boots") + gp.eq("speed") / 100.0) * (1.0 + float(gp.soul_fx.get("speed", 0.0))) * (1.0 + float(gp.set_fx.get("speed", 0.0)) / 100.0) * (1.0 + gp.fx("speed") / 100.0)
+	var raw_base := func() -> float:  # та сама формула без бонусів умінь
+		return 260.0 * (1.0 + 0.015 * gp._bonus("agi") + 0.05 * gp.pk("boots") + gp.eq("speed") / 100.0) * (1.0 + float(gp.soul_fx.get("speed", 0.0))) * (1.0 + float(gp.set_fx.get("speed", 0.0)) / 100.0) * (1.0 + (gp.fx("speed") - skill_sp.call()) / 100.0)
 	var low_raw: float = raw_speed.call()
 	check(low_raw < cap and gp.speed == low_raw and tab["by"].get("Швидкість бігу", "") == "%d" % int(low_raw), "герой під стелею біжить як раніше: %s (без стелі %s), на екрані «%s» без позначки" % [gp.speed, low_raw, tab["by"].get("Швидкість бігу", "")])
 	var buffs0: Dictionary = gp.buffs.duplicate(true)
 	var skills0: Dictionary = gp.skills.duplicate()
-	gp.buffs["spd"] = {"t": 999.0, "fx": {"speed": 500.0}, "group": ""}
+	var stats0: Dictionary = gp.stats.duplicate()
+	var divine0: Dictionary = gp.divine_fx.duplicate(true)
+	# випадкові збірки з підсиленнями вмінь і без: нижче стелі — біт у біт та сама формула, вище — стеля × повна / без умінь
+	var srng := RandomNumberGenerator.new()
+	srng.seed = 520
+	var n_low := 0
+	var n_high := 0
+	var same_low := true
+	var ok_high := true
+	for i in 400:
+		gp.stats["agi"] = stats0["agi"] + srng.randi_range(0, 120)
+		gp.divine_fx = {"fx": {"speed": srng.randf_range(0.0, 30.0)}} if srng.randf() < 0.4 else {}
+		gp.buffs = {}
+		if srng.randf() < 0.6:
+			gp.buffs["sp_a"] = {"t": 999.0, "fx": {"speed": srng.randf_range(-15.0, 60.0)}, "group": ""}
+		if srng.randf() < 0.4:
+			gp.buffs["sp_b"] = {"t": 999.0, "fx": {"speed": srng.randf_range(-15.0, 15.0), "dmg": 5.0}, "group": "stance"}
+		gp.recalc()
+		var sp_full: float = raw_speed.call()
+		var sp_base: float = raw_base.call()
+		if sp_base <= cap:
+			n_low += 1
+			same_low = same_low and gp.speed == sp_full
+		else:
+			n_high += 1
+			ok_high = ok_high and is_equal_approx(gp.speed, cap * sp_full / sp_base)
+	check(n_low > 80 and n_high > 80 and same_low and ok_high, "швидкість бігу на %d збірках під стелею біт у біт як була (%s), на %d понад стелю — стеля × бонус умінь (%s)" % [n_low, same_low, n_high, ok_high])
+	# понад стелю без бонусів умінь — рівно стеля
+	gp.buffs = {}
+	gp.divine_fx = divine0.duplicate(true)
+	gp.stats["agi"] = stats0["agi"] + 400
 	gp.skills["vovk"] = 1
 	gp.skills["battle_cry"] = 1
 	gp.recalc()
 	var high_raw: float = raw_speed.call()
-	check(high_raw > cap and gp.speed == cap, "герой понад стелю: формула дає %s, біжить %s" % [high_raw, gp.speed])
+	check(skill_sp.call() == 0.0 and high_raw > cap and gp.speed == cap and gp.speed_base == high_raw, "герой понад стелю: формула дає %s, біжить %s" % [high_raw, gp.speed])
 	tab = _hero_tab(UChar, game)
 	check(tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(cap), HS.SPEED_CAP_MARK], "на стелі екран героя показує «%s»" % tab["by"].get("Швидкість бігу", ""))
+	# підсилення вмінь так, як їх кладе шаблон «buff»: множать стелю, а коли спливуть — знову стеля
+	var ClsD = load("res://scripts/data/classes.gd")
+	var buff_am = gp._act_mech("buff")
+	var cast_buff := func(id: String) -> float:  # кладе підсилення третього рангу, повертає його fx.speed з даних
+		var n: Dictionary = ClsD.find_node(id)
+		buff_am.cast(n, n["act"], 3, 0.0, Color.WHITE)
+		return ClsD.val(n["act"]["fx"]["speed"], 3)
+	var sum_sp := 0.0
+	for id in ["vidskok", "vtecha_horamy", "trembita", "stiika_rukhlyva"]:
+		sum_sp += cast_buff.call(id)
+	var want_sp: float = cap * (1.0 + sum_sp / 100.0)
+	tab = _hero_tab(UChar, game)
+	check(sum_sp > 100.0 and gp.buffs.size() == 4 and is_equal_approx(gp.speed, want_sp) and tab["by"].get("Швидкість бігу", "") == "%d %s" % [int(gp.speed), HS.SPEED_CAP_MARK],
+		"«Відскік», «Втеча горами», «Трембіта» й «Стійка: рухливий» понад стелю: %s = стеля × (1 + %s / 100), на екрані «%s»" % [gp.speed, sum_sp, tab["by"].get("Швидкість бігу", "")])
+	for bid in gp.buffs:
+		gp.buffs[bid]["t"] = 0.0
+	gp._tick_buffs(0.01)
+	check(gp.buffs.is_empty() and gp.speed == cap, "підсилення спливли: знову стеля %s" % gp.speed)
+	var pen_sp: float = cast_buff.call("stiika_zasidky")
+	check(pen_sp < 0.0 and is_equal_approx(gp.speed, cap * (1.0 + pen_sp / 100.0)) and gp.speed < cap, "стійка зі штрафом сповільнює від стелі: %s" % gp.speed)
+	gp.buffs = {}
+	# божий дар і зачарування зі швидкістю — під стелею, понад неї не женуть
+	var Divd = load("res://scripts/data/divine.gd")
+	var horse_sp: float = float(Divd.def("skakun")["fx"]["speed"])
+	gp.divine_fx = {"fx": Divd.def("skakun")["fx"]}
+	gp.recalc()
+	var horse_ok: bool = horse_sp > 0.0 and gp.speed == cap
+	gp.divine_fx = divine0.duplicate(true)
+	var ench_t: Dictionary = GameDB._tables["enchants"]
+	var ench_test: Dictionary = ench_t.duplicate(true)
+	ench_test["t_speed"] = {"num": 0, "name": "Тест", "slots": [], "fx": {"speed": 50.0}}
+	GameDB._tables["enchants"] = ench_test
+	var es: String = str(gp.equipment.keys()[0])
+	var es_ench = gp.equipment[es].get("ench", null)
+	gp.equipment[es]["ench"] = "t_speed"
+	gp.recalc()
+	var ench_ok: bool = gp.fx("speed") > 0.0 and gp.speed == cap
+	GameDB._tables["enchants"] = ench_t
+	if es_ench == null:
+		gp.equipment[es].erase("ench")
+	else:
+		gp.equipment[es]["ench"] = es_ench
+	gp.recalc()
+	check(horse_ok and ench_ok and gp.speed == cap, "«%s» (+%s%%) і зачарування зі швидкістю понад стелю не женуть" % [Divd.def("skakun")["name"], horse_sp])
+	# пасивний вузол уміння: пластун із «Легкою ходою»
+	var job0: String = gp.job
+	var jl0: int = gp.job_level
+	var jx0 = gp.job_xp
+	gp.change_class("plastun")
+	gp.recalc()
+	var walk_cap: bool = gp.speed == cap
+	gp.skills["lehka_khoda"] = 3
+	gp.recalc()
+	var walk_sp: float = float(ClsD.find_node("lehka_khoda")["fx"]["speed"]) * 3
+	check(walk_cap and is_equal_approx(gp.speed, cap * (1.0 + walk_sp / 100.0)), "«Легка хода» (+%s%%) лишає героя на стелі вище за неї: %s" % [walk_sp, gp.speed])
+	gp.skills.erase("lehka_khoda")
+	gp.change_class(job0)
+	gp.job_level = jl0
+	gp.job_xp = jx0
+	gp.recalc()
 	# справжній біг: секунда кадрів із повним ходом праворуч
 	var arena0: Rect2 = c.arena
 	var input0: Callable = c.move_input
@@ -16657,6 +16798,8 @@ func _suite_hero_sheet() -> void:
 	gp.invuln = 0.0
 	gp.buffs = buffs0
 	gp.skills = skills0
+	gp.stats = stats0
+	gp.divine_fx = divine0
 	gp.recalc()
 	gp.position = c.arena.get_center()
 	_clear_enemies(game)
@@ -16829,7 +16972,8 @@ func _suite_hero_sheet() -> void:
 		"стаття: бонус досвіду з подвоєнням іде на рівень і майстерність, два рядки здобичі з їхніми джерелами")
 	var limits := ["%d%%" % roundi(Data.ARMOR_CAP * 100.0), "%d%%" % roundi(gp.CRIT_CAP * 100.0), "%d%%" % roundi(gp.SKILL_CD_MIN * 100.0), "%d%%" % roundi(gp.BLOCK_FX_CAP), "%d%%" % roundi(gp.WARD_FX_CAP), "%d%%" % roundi((1.0 - gp.DODGE_FX_MIN) * 100.0), str(gp.RANGED_MIN_CD).replace(".", ","), "%d очок" % int(Data.SPI_SOFT), "%d очок" % int(Data.AGI_ASPD_SOFT)]
 	check(limits.all(func(x): return x in art_text), "стаття називає межі з тих самих сталих, що й бій: %s" % str(limits))
-	check(("щонайбільше %d" % int(gp.SPEED_CAP)) in art_text and HS.SPEED_CAP_MARK in art_text and "«Вовча подоба»" in art_text and "«Бойовий клич»" in art_text and "понад стелю" in art_text, "стаття називає стелю швидкості бігу %d і два вміння понад неї" % int(gp.SPEED_CAP))
+	check(("зачарування й божі дари, разом не більше %d" % int(gp.SPEED_CAP)) in art_text and HS.SPEED_CAP_MARK in art_text and "Кожен бонус умінь, сталий чи на час, додає понад стелю" in art_text and "«Вовча подоба»" in art_text and "«Бойовий клич»" in art_text,
+		"стаття: стеля %d тримає Спритність, речі, душі, набори, зачарування й дари, а вміння додають понад неї" % int(gp.SPEED_CAP))
 	game.queue_free()
 	await _frames(3)
 	get_root().get_tree().paused = false
